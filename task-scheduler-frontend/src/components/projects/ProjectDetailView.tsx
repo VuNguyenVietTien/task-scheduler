@@ -6,8 +6,15 @@ import { TaskListView } from '@/components/tasks/TaskListView';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
 import { mockTasks } from '@/data/mockTasks';
 import type { ProjectData } from '@/types/project';
+import { DragDropContext } from 'react-beautiful-dnd';
 
 type ViewType = 'list' | 'kanban' | 'gantt';
+
+// Different contexts to prevent interference between drag & drop zones
+const DragContexts = {
+  TASKLIST: 'taskList',
+  GANTT: 'gantt'
+} as const;
 
 export function ProjectDetailView({ project }: { project: ProjectData }) {
   const [activeView, setActiveView] = useState<ViewType>('list');
@@ -86,20 +93,20 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
         </div>
       </div>
 
-      {/* View Content */}
-      <div className="h-[calc(100vh-240px)]">
-        {activeView === 'list' && <TaskListView tasks={mockTasks} />}
-        {activeView === 'kanban' && (
-          <div className="h-full overflow-x-auto">
-            <KanbanBoard tasks={mockTasks} />
-          </div>
-        )}
-        {activeView === 'gantt' && (
-          <div className="card h-full overflow-auto">
-            <Timeline tasks={mockTasks} />
-          </div>
-        )}
+  {/* View Content */}
+  <div className="h-[calc(100vh-240px)]">
+    {activeView === 'list' && <TaskListView tasks={mockTasks} />}
+    {activeView === 'kanban' && (
+      <div className="h-full overflow-x-auto">
+        <KanbanBoard tasks={mockTasks} />
       </div>
+    )}
+    {activeView === 'gantt' && (
+      <div className="card h-full overflow-auto">
+        <Timeline tasks={mockTasks} />
+      </div>
+    )}
+  </div>
     </div>
   );
 }
