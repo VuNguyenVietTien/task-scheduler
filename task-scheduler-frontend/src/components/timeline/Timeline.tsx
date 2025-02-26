@@ -38,12 +38,18 @@ interface DateRange {
 }
 
 const getTaskDurationDays = (task: Task): number => {
+  // Nếu task có effort, tính số ngày dựa trên effort/8
+  if (task.effortHours) {
+    return Math.ceil(task.effortHours / 8);
+  }
+  // Nếu không có effort nhưng có startDate và deadline, tính số ngày giữa 2 ngày
   if (task.startDate && task.deadline) {
     const start = new Date(task.startDate);
     const end = new Date(task.deadline);
     return Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
   }
-  return task.effortHours ? Math.ceil(task.effortHours / 8) : 1;
+  // Mặc định là 1 ngày
+  return 1;
 };
 
 export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProps) {
@@ -218,7 +224,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
             className="relative bg-white"
           >
             {/* Date Headers */}
-            <div className="sticky top-0 z-40 bg-white border-b border-slate-200">
+            <div className="sticky top-0 z-40 bg-white border-b border-slate-200"  style={{ zIndex:1}}>
               <div className="flex items-center justify-between p-2 border-b">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
@@ -319,9 +325,11 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
                   startIndex = 0;
                 }
 
-                const taskDuration = Math.ceil(
-                  (taskEnd.getTime() - Math.max(taskStart.getTime(), dateRange.startDate.getTime())) / (24 * 60 * 60 * 1000)
-                ) + 1;
+                const taskDuration = task.effortHours 
+                  ? Math.ceil(task.effortHours / 8)  // Sử dụng số ngày dựa trên effort 
+                  : Math.ceil(
+                      (taskEnd.getTime() - Math.max(taskStart.getTime(), dateRange.startDate.getTime())) / (24 * 60 * 60 * 1000)
+                    ) + 1;
 
                 return (
                   <div
