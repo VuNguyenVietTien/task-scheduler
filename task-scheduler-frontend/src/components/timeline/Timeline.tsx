@@ -1,10 +1,29 @@
+/**
+ * Timeline Component with integrated Gantt chart and priority task list.
+ * IMPORTANT: This component handles drag & drop reordering of tasks.
+ */
+
 import { Task } from '@/types/task';
 import { TaskBar } from './TaskBar';
 import { TimelineSkeleton } from './TimelineSkeleton';
 import { PriorityTaskList } from './PriorityTaskList';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { getDatesBetween } from '@/lib/utils';
-import { DragDropContext, DropResult } from 'react-beautiful-dnd';
+import {
+  DndContext,
+  DragEndEvent,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors
+} from '@dnd-kit/core';
+import { 
+  arrayMove,
+  sortableKeyboardCoordinates,
+  SortableContext,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable';
 import { useReorderTasks } from '@/hooks/useTasks';
 
 interface TimelineProps {
@@ -18,25 +37,79 @@ interface DateRange {
   endDate: Date;
 }
 
+const getTaskDurationDays = (task: Task): number => {
+  if (task.startDate && task.deadline) {
+    const start = new Date(task.startDate);
+    const end = new Date(task.deadline);
+    return Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
+  }
+  return task.effortHours ? Math.ceil(task.effortHours / 8) : 1;
+};
+
 export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: new Date(), endDate: new Date() });
+  const [orderedTasks, setOrderedTasks] = useState<Task[]>(tasks);
+  const reorderTasks = useReorderTasks();
 
   if (isLoading) {
     return <TimelineSkeleton rows={Math.min(tasks.length || 5, 10)} />;
   }
 
-  // State for managing ordered tasks
-  const [orderedTasks, setOrderedTasks] = useState<Task[]>(tasks);
-  const reorderTasks = useReorderTasks();
-
-  // Update orderedTasks when tasks prop changes
   useEffect(() => {
-    setOrderedTasks([...tasks].sort((a, b) => a.priorityOrder - b.priorityOrder));
+    if (!tasks || tasks.length === 0) return;
+
+    const processTasks = (inputTasks: Task[]): Task[] => {
+      const sortedTasks = [...inputTasks].sort((a, b) => {
+        const orderDiff = a.priorityOrder - b.priorityOrder;
+        if (orderDiff !== 0) return orderDiff;
+        return b.priority.localeCompare(a.priority);
+      });
+
+      let lastEndDate = new Date();
+      const processedTasks = sortedTasks.map(task => {
+        if (task.startDate && task.deadline) {
+          lastEndDate = new Date(task.deadline);
+          return task;
+        }
+
+        const taskDurationDays = getTaskDurationDays(task);
+        
+        if (!task.startDate) {
+          let nextStartDate: Date;
+          if (task.deadline) {
+            const deadlineDate = new Date(task.deadline);
+            nextStartDate = new Date(deadlineDate);
+            nextStartDate.setDate(nextStartDate.getDate() - taskDurationDays + 1);
+          } else {
+            nextStartDate = new Date(lastEndDate.getTime() + 24 * 60 * 60 * 1000);
+          }
+
+          const endDate = task.deadline
+            ? new Date(task.deadline)
+            : new Date(nextStartDate.getTime() + (taskDurationDays - 1) * 24 * 60 * 60 * 1000);
+            
+          lastEndDate = endDate;
+
+          return {
+            ...task,
+            startDate: nextStartDate.toISOString().split('T')[0],
+          };
+        }
+
+        const endDate = new Date(task.startDate);
+        endDate.setDate(endDate.getDate() + taskDurationDays - 1);
+        lastEndDate = endDate;
+        return task;
+      });
+
+      return processedTasks;
+    };
+
+    setOrderedTasks(processTasks(tasks));
   }, [tasks]);
 
-  // Calculate date range from tasks
   useEffect(() => {
     if (tasks.length === 0) return;
 
@@ -52,14 +125,12 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
     const startDate = new Date(Math.min(...dates.map(d => d.getTime())));
     const endDate = new Date(Math.max(...dates.map(d => d.getTime())));
 
-    // Add padding days
     startDate.setDate(startDate.getDate() - 2);
     endDate.setDate(endDate.getDate() + 2);
 
     setDateRange({ startDate, endDate });
   }, [tasks]);
 
-  // Update dimensions on resize
   useEffect(() => {
     if (!containerRef.current) return;
 
@@ -74,39 +145,46 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
 
   const days = getDatesBetween(dateRange.startDate, dateRange.endDate);
   const dayWidth = Math.max(80, dimensions.width / days.length);
-  const rowHeight = 48; // Increased row height
+  const rowHeight = 48;
 
-  const handleDragEnd = useCallback((result: DropResult) => {
-    if (!result.destination) return;
-    
-    // Only handle drags within priorityList
-    if (result.source.droppableId !== 'priorityList' || 
-        result.destination.droppableId !== 'priorityList') {
-      return;
+  const onDragStart = useCallback(() => {
+    if (window.navigator.vibrate) {
+      window.navigator.vibrate(100); // Tactile feedback
     }
+  }, []);
 
-    const { source, destination } = result;
-    if (source.index === destination.index) return;
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
-    // Create new ordered array
-    const newOrderedTasks = Array.from(orderedTasks);
-    const [movedTask] = newOrderedTasks.splice(source.index, 1);
-    newOrderedTasks.splice(destination.index, 0, movedTask);
+  const onDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
 
-    // Calculate new priority orders
-    const taskOrders = newOrderedTasks.map((task, index) => ({
-      taskId: task.id,
-      priorityOrder: index + 1
-    }));
+    if (over && active.id !== over.id) {
+      const oldIndex = orderedTasks.findIndex((task) => task.id === String(active.id));
+      const newIndex = orderedTasks.findIndex((task) => task.id === String(over.id));
 
-    // Update local state immediately for smooth animation
-    setOrderedTasks(newOrderedTasks);
-
-    // Update on server
-    reorderTasks.mutate({
-      projectId: tasks[0].projectId,
-      taskOrders
-    });
+      if (oldIndex !== -1 && newIndex !== -1) {
+        const reorderedTasks = arrayMove(orderedTasks, oldIndex, newIndex);
+  
+        const taskOrders = reorderedTasks.map((task, index) => ({
+          taskId: task.id,
+          priorityOrder: index + 1
+        }));
+  
+        setOrderedTasks(reorderedTasks);
+  
+        if (reorderTasks && tasks[0]?.projectId) {
+          reorderTasks.mutate({
+            projectId: tasks[0].projectId,
+            taskOrders
+          });
+        }
+      }
+    }
   }, [orderedTasks, tasks, reorderTasks]);
 
   if (tasks.length === 0) {
@@ -120,10 +198,17 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
     );
   }
 
-  return (
-    <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="flex gap-4">
-        <PriorityTaskList tasks={orderedTasks} />
+    return (
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={onDragStart}
+      onDragEnd={onDragEnd}
+    >
+      <div className="flex gap-4 h-full">
+        <div className="w-80 flex-shrink-0 overflow-hidden">
+          <PriorityTaskList tasks={orderedTasks} />
+        </div>
         <div className="flex-1 overflow-auto" ref={containerRef}>
           <div
             style={{ 
@@ -133,7 +218,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
             className="relative bg-white"
           >
             {/* Date Headers */}
-            <div className="sticky top-0 z-40 bg-white border-b border-slate-200" style={{ zIndex:1}}>
+            <div className="sticky top-0 z-40 bg-white border-b border-slate-200">
               <div className="flex items-center justify-between p-2 border-b">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-2">
@@ -169,7 +254,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
                 </div>
               </div>
               <div className="flex" style={{ height: '40px' }}>
-                {days.map((day, i) => (
+                {days.map((day) => (
                   <div
                     key={day.toISOString()}
                     style={{ width: `${dayWidth}px` }}
@@ -191,7 +276,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
             </div>
 
             {/* Grid Container */}
-            <div className="relative inset-0" /*style={{ top: '80px' }}*/>
+            <div className="relative inset-0">
               {/* Grid Background */}
               <div 
                 className="grid border-t border-slate-200"
@@ -223,21 +308,20 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
                   day.toISOString().split('T')[0] === task.startDate?.split('T')[0]
                 );
                 
-                // If task starts before the current view range
+                if (dayIndex === -1) return null;
+
                 const taskStart = new Date(task.startDate!);
-                const taskEnd = new Date(task.deadline!);
+                const taskEnd = task.deadline ? new Date(task.deadline) : new Date(taskStart);
+                taskEnd.setDate(taskEnd.getDate() + getTaskDurationDays(task) - 1);
+
                 let startIndex = dayIndex;
-                
-                // Adjust for tasks that start before the view range
                 if (taskStart < dateRange.startDate) {
                   startIndex = 0;
                 }
 
                 const taskDuration = Math.ceil(
                   (taskEnd.getTime() - Math.max(taskStart.getTime(), dateRange.startDate.getTime())) / (24 * 60 * 60 * 1000)
-                );
-
-                if (taskDuration <= 0) return null;
+                ) + 1;
 
                 return (
                   <div
@@ -252,7 +336,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
                       alignItems: 'center',
                       justifyContent: 'flex-start',
                       padding: '0 8px',
-                      pointerEvents: 'none' // This makes the container pass through clicks
+                      pointerEvents: 'none'
                     }}
                     className="z-30"
                   >
@@ -271,6 +355,6 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
           </div>
         </div>
       </div>
-    </DragDropContext>
+    </DndContext>
   );
 }
