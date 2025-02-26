@@ -1,6 +1,6 @@
 import { Task, TaskStatus, Priority, User } from '@/types/task';
 
-const mockUsers: User[] = [
+export const mockUsers: User[] = [
   {
     id: 'user1',
     name: 'John Doe',

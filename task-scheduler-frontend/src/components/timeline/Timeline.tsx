@@ -3,11 +3,11 @@
  * IMPORTANT: This component handles drag & drop reordering of tasks.
  */
 
-import { Task } from '@/types/task';
+import { Task, User } from '@/types/task';
 import { TaskBar } from './TaskBar';
 import { TimelineSkeleton } from './TimelineSkeleton';
 import { PriorityTaskList } from './PriorityTaskList';
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { getDatesBetween } from '@/lib/utils';
 import {
   DndContext,
@@ -30,7 +30,10 @@ interface TimelineProps {
   tasks: Task[];
   isLoading?: boolean;
   onTaskClick?: (taskId: string) => void;
+  users: User[];
 }
+
+type ViewMode = 'project' | 'user';
 
 interface DateRange {
   startDate: Date;
@@ -52,12 +55,26 @@ const getTaskDurationDays = (task: Task): number => {
   return 1;
 };
 
-export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProps) {
+export function Timeline({ tasks, isLoading = false, onTaskClick, users }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [dateRange, setDateRange] = useState<DateRange>({ startDate: new Date(), endDate: new Date() });
   const [orderedTasks, setOrderedTasks] = useState<Task[]>(tasks);
   const reorderTasks = useReorderTasks();
+  const [viewMode, setViewMode] = useState<ViewMode>('project');
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+
+  const filteredTasks = useMemo(() => {
+    if (viewMode === 'project') {
+      return orderedTasks;
+    } 
+    if (viewMode === 'user' && selectedUserId) {
+      return orderedTasks.filter(task => 
+        task.assignees.some(assignee => assignee.id === selectedUserId)
+      );
+    }
+    return [];
+  }, [orderedTasks, viewMode, selectedUserId]);
 
   if (isLoading) {
     return <TimelineSkeleton rows={Math.min(tasks.length || 5, 10)} />;
@@ -227,6 +244,44 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
             <div className="sticky top-0 z-40 bg-white border-b border-slate-200"  style={{ zIndex:1}}>
               <div className="flex items-center justify-between p-2 border-b">
                 <div className="flex items-center gap-4">
+                  <div className="flex items-center gap-4 mr-6">
+                    <div className="flex items-center space-x-2">
+                      <button
+                        onClick={() => setViewMode('project')}
+                        className={`px-3 py-1 rounded-l ${
+                          viewMode === 'project' 
+                            ? 'bg-blue-500 text-white' 
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        Project
+                      </button>
+                      <button
+                        onClick={() => setViewMode('user')}
+                        className={`px-3 py-1 rounded-r ${
+                          viewMode === 'user' 
+                            ? 'bg-blue-500 text-white' 
+                            : 'bg-gray-100 text-gray-600'
+                        }`}
+                      >
+                        User
+                      </button>
+                    </div>
+                    {viewMode === 'user' && (
+                      <select
+                        value={selectedUserId}
+                        onChange={(e) => setSelectedUserId(e.target.value)}
+                        className="px-2 py-1 border rounded text-sm"
+                      >
+                        <option value="">Select User</option>
+                        {users.map(user => (
+                          <option key={user.id} value={user.id}>
+                            {user.name}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
                   <div className="flex items-center gap-2">
                     <label className="text-sm text-slate-600">Start:</label>
                     <input
@@ -309,7 +364,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick }: TimelineProp
               </div>
 
               {/* Task Bars */}
-              {orderedTasks.map((task, rowIndex) => {
+              {filteredTasks.map((task: Task, rowIndex: number) => {
                 const dayIndex = days.findIndex(day => 
                   day.toISOString().split('T')[0] === task.startDate?.split('T')[0]
                 );

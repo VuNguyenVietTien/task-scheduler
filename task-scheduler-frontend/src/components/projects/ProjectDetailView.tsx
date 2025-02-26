@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Timeline } from '@/components/timeline/Timeline';
 import { TaskListView } from '@/components/tasks/TaskListView';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
-import { mockTasks } from '@/data/mockTasks';
+import { mockTasks, mockUsers } from '@/data/mockTasks';
 import type { ProjectData } from '@/types/project';
 import { DragDropContext } from 'react-beautiful-dnd';
 
@@ -110,7 +110,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
     )}
     {activeView === 'gantt' && (
       <div className="card h-full overflow-auto">
-        <Timeline tasks={mockTasks} />
+        <Timeline tasks={mockTasks} users={mockUsers} />
       </div>
     )}
   </div>
