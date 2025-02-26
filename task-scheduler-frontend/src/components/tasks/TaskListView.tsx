@@ -4,9 +4,8 @@ import { Task, TaskStatus, Priority, TaskFilter, User } from '@/types/task';
 import { TaskFilterBar } from './TaskFilterBar';
 import { TaskBulkActions } from './TaskBulkActions';
 import { useState, useMemo, useCallback } from 'react';
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd';
-import { useUpdateTaskPriorityOrder, useReorderTasks } from '@/hooks/useTasks';
-import Link from 'next/link';
+import { useUpdateTaskPriorityOrder } from '@/hooks/useTasks';
+
 
 interface TaskListViewProps {
   tasks: Task[];
@@ -124,105 +123,85 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
 
     return (
       <>
-        <Draggable 
-          key={task.id} 
-          draggableId={task.id} 
-          index={index}
-          isDragDisabled={task.status === TaskStatus.DONE || level > 0}
-        >
-          {(provided, snapshot) => (
-            <tr
-              ref={provided.innerRef}
-              {...provided.draggableProps}
-              className={`hover:bg-slate-50 ${snapshot.isDragging ? 'bg-blue-50' : ''} ${level > 0 ? 'bg-slate-50' : ''}`}
-            >
-              <td className="w-8 py-4 pl-4 pr-3">
-                <div className="flex items-center">
-                  {task.status !== TaskStatus.DONE && level === 0 && (
-                    <div {...provided.dragHandleProps} className="mr-2">
-                      <svg className="w-5 h-5 text-slate-400" viewBox="0 0 20 20" fill="currentColor">
-                        <path d="M7 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 2zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 7 14zm6-8a2 2 0 1 0-.001-4.001A2 2 0 0 0 13 6zm0 2a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 8zm0 6a2 2 0 1 0 .001 4.001A2 2 0 0 0 13 14z"/>
-                      </svg>
-                    </div>
-                  )}
-                  <input
-                    type="checkbox"
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    checked={selectedTasks.has(task.id)}
-                    onChange={(e) => toggleTaskSelection(task.id, e)}
-                  />
-                </div>
-              </td>
-              <td className="py-4 pl-4 pr-3 text-sm sm:pl-6" onClick={() => onTaskClick?.(task.id)}>
-                <div className="flex items-center">
-                  {level > 0 && (
-                    <span className="inline-block w-[20px] ml-[20px]" />
-                  )}
-                  {hasChildren && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        toggleTaskExpansion(task.id);
-                      }}
-                      className="mr-2 p-1 hover:bg-slate-200 rounded"
-                    >
-                      <svg
-                        className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-90' : ''}`}
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                      </svg>
-                    </button>
-                  )}
-                  <div>
-                    <div className="font-medium text-slate-900 cursor-pointer">{task.title}</div>
-                    <div className="text-slate-500">{task.description}</div>
-                  </div>
-                </div>
-              </td>
-              <td className="px-3 py-4 text-sm">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-                  {task.status.replace(/_/g, ' ')}
-                </span>
-              </td>
-              <td className="px-3 py-4 text-sm">
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
-                  {task.priority}
-                </span>
-              </td>
-              <td className="px-3 py-4 text-sm">
-                <div className="flex -space-x-2">
-                  {task.assignees.map((assignee) => (
-                    <img
-                      key={assignee.id}
-                      className="inline-block h-6 w-6 rounded-full ring-2 ring-white"
-                      src={assignee.avatarUrl}
-                      alt={assignee.name}
-                      title={assignee.name}
-                    />
-                  ))}
-                </div>
-              </td>
-              <td className="px-3 py-4 text-sm text-slate-500">
-                {task.deadline ? new Date(task.deadline).toLocaleDateString() : '-'}
-              </td>
-              <td className="px-3 py-4 text-sm text-slate-500">
-                {task.effortHours ? `${task.effortHours}h` : '-'}
-              </td>
-              <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-                <button className="text-blue-600 hover:text-blue-900">
-                  <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+        <tr className={`hover:bg-slate-50 ${level > 0 ? 'bg-slate-50' : ''}`}>
+          <td className="w-8 py-4 pl-4 pr-3">
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                checked={selectedTasks.has(task.id)}
+                onChange={(e) => toggleTaskSelection(task.id, e)}
+              />
+            </div>
+          </td>
+          <td className="py-4 pl-4 pr-3 text-sm sm:pl-6" onClick={() => onTaskClick?.(task.id)}>
+            <div className="flex items-center">
+              {level > 0 && (
+                <span className="inline-block w-[20px] ml-[20px]" />
+              )}
+              {hasChildren && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    toggleTaskExpansion(task.id);
+                  }}
+                  className="mr-2 p-1 hover:bg-slate-200 rounded"
+                >
+                  <svg
+                    className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-90' : ''}`}
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                   </svg>
                 </button>
-              </td>
-            </tr>
-          )}
-        </Draggable>
+              )}
+              <div>
+                <div className="font-medium text-slate-900 cursor-pointer">{task.title}</div>
+                <div className="text-slate-500">{task.description}</div>
+              </div>
+            </div>
+          </td>
+          <td className="px-3 py-4 text-sm">
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
+              {task.status.replace(/_/g, ' ')}
+            </span>
+          </td>
+          <td className="px-3 py-4 text-sm">
+            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
+              {task.priority}
+            </span>
+          </td>
+          <td className="px-3 py-4 text-sm">
+            <div className="flex -space-x-2">
+              {task.assignees.map((assignee) => (
+                <img
+                  key={assignee.id}
+                  className="inline-block h-6 w-6 rounded-full ring-2 ring-white"
+                  src={assignee.avatarUrl}
+                  alt={assignee.name}
+                  title={assignee.name}
+                />
+              ))}
+            </div>
+          </td>
+          <td className="px-3 py-4 text-sm text-slate-500">
+            {task.deadline ? new Date(task.deadline).toLocaleDateString() : '-'}
+          </td>
+          <td className="px-3 py-4 text-sm text-slate-500">
+            {task.effortHours ? `${task.effortHours}h` : '-'}
+          </td>
+          <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+            <button className="text-blue-600 hover:text-blue-900">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+              </svg>
+            </button>
+          </td>
+        </tr>
         {hasChildren && isExpanded && task.childTasks?.map((childTask, childIndex) => (
-          renderTaskRow(childTask, -1, level + 1) // Use -1 to prevent drag & drop for child tasks
+          renderTaskRow(childTask, -1, level + 1)
         ))}
       </>
     );
@@ -341,33 +320,6 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
   };
 
   const updateTaskPriorityOrder = useUpdateTaskPriorityOrder();
-  const reorderTasks = useReorderTasks();
-
-  const handleDragEnd = (result: any) => {
-    if (!result.destination) return;
-
-    const sourceIndex = result.source.index;
-    const destinationIndex = result.destination.index;
-
-    if (sourceIndex === destinationIndex) return;
-
-    // Only allow reordering within incomplete tasks
-    if (destinationIndex >= sortedIncompleteTasks.length) return;
-
-    const reorderedTasks = Array.from(sortedIncompleteTasks);
-    const [movedTask] = reorderedTasks.splice(sourceIndex, 1);
-    reorderedTasks.splice(destinationIndex, 0, movedTask);
-
-    const taskOrders = reorderedTasks.map((task, index) => ({
-      taskId: task.id,
-      priorityOrder: index + 1
-    }));
-
-    reorderTasks.mutate({
-      projectId: tasks[0].projectId,
-      taskOrders
-    });
-  };
 
   return (
     <div>
@@ -378,13 +330,6 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
           showCompletedTasks={showCompletedTasks}
           onToggleCompleted={() => setShowCompletedTasks(prev => !prev)}
         />
-        <Link 
-          href={`/projects/${tasks[0]?.projectId}/add-task`}
-          target="_blank"
-          className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          Add Task
-        </Link>
       </div>
       
       <TaskBulkActions
@@ -397,75 +342,64 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
       
       <div className="bg-white rounded-lg border border-slate-200">
         <div className="overflow-x-auto">
-          <DragDropContext onDragEnd={handleDragEnd}>
-            <table className="min-w-full divide-y divide-slate-200">
-              <thead>
-                <tr className="bg-slate-50">
-                  <th className="w-8 py-3.5 pl-4 pr-3">
-                    <input
-                      type="checkbox"
-                      className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                      checked={selectedTasks.size === displayedTasks.length && displayedTasks.length > 0}
-                      onChange={toggleAllTasks}
-                    />
-                  </th>
-                  <th 
-                    scope="col" 
-                    className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
-                    onClick={() => handleSort('title')}
-                  >
-                    Title <SortIcon columnKey="title" />
-                  </th>
-                  <th 
-                    scope="col" 
-                    className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
-                    onClick={() => handleSort('status')}
-                  >
-                    Status <SortIcon columnKey="status" />
-                  </th>
-                  <th 
-                    scope="col" 
-                    className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
-                    onClick={() => handleSort('priority')}
-                  >
-                    Priority <SortIcon columnKey="priority" />
-                  </th>
-                  <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">
-                    Assignees
-                  </th>
-                  <th 
-                    scope="col" 
-                    className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
-                    onClick={() => handleSort('deadline')}
-                  >
-                    Due Date <SortIcon columnKey="deadline" />
-                  </th>
-                  <th 
-                    scope="col" 
-                    className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
-                    onClick={() => handleSort('effortHours')}
-                  >
-                    Effort <SortIcon columnKey="effortHours" />
-                  </th>
-                  <th scope="col" className="relative py-3.5 pl-3 pr-4">
-                    <span className="sr-only">Actions</span>
-                  </th>
-                </tr>
-              </thead>
-              <Droppable droppableId="taskList">
-                {(provided) => (
-                  <tbody 
-                    {...provided.droppableProps} 
-                    ref={provided.innerRef}
-                    className="divide-y divide-slate-200"
-                  >
-                    {displayedTasks.map((task, index) => renderTaskRow(task, index))}
-                    {provided.placeholder}
-                  </tbody>
-                )}
-              </Droppable>
-            </table>
-          </DragDropContext>
+          <table className="min-w-full divide-y divide-slate-200">
+            <thead>
+              <tr className="bg-slate-50">
+                <th className="w-8 py-3.5 pl-4 pr-3">
+                  <input
+                    type="checkbox"
+                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    checked={selectedTasks.size === displayedTasks.length && displayedTasks.length > 0}
+                    onChange={toggleAllTasks}
+                  />
+                </th>
+                <th 
+                  scope="col" 
+                  className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
+                  onClick={() => handleSort('title')}
+                >
+                  Title <SortIcon columnKey="title" />
+                </th>
+                <th 
+                  scope="col" 
+                  className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
+                  onClick={() => handleSort('status')}
+                >
+                  Status <SortIcon columnKey="status" />
+                </th>
+                <th 
+                  scope="col" 
+                  className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
+                  onClick={() => handleSort('priority')}
+                >
+                  Priority <SortIcon columnKey="priority" />
+                </th>
+                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">
+                  Assignees
+                </th>
+                <th 
+                  scope="col" 
+                  className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
+                  onClick={() => handleSort('deadline')}
+                >
+                  Due Date <SortIcon columnKey="deadline" />
+                </th>
+                <th 
+                  scope="col" 
+                  className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
+                  onClick={() => handleSort('effortHours')}
+                >
+                  Effort <SortIcon columnKey="effortHours" />
+                </th>
+                <th scope="col" className="relative py-3.5 pl-3 pr-4">
+                  <span className="sr-only">Actions</span>
+                </th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {displayedTasks.map((task, index) => renderTaskRow(task, index))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
