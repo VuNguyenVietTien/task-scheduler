@@ -17,6 +17,20 @@ export const taskFormSchema = z.object({
     .min(1, 'Category is required'),
   type: z.string()
     .min(1, 'Task type is required'),
+  effort: z.number()
+    .min(0, 'Effort must be positive')
+    .optional(),
+  progressType: z.enum([
+    'study',
+    'investigate',
+    'code',
+    'test',
+    'review_code',
+    'review_test_report',
+    'release'
+  ], {
+    required_error: 'Progress type is required',
+  }),
   tags: z.array(z.string())
     .default([])
     .refine((tags) => tags.length <= 5, {
@@ -47,4 +61,14 @@ export const tagOptions = [
   'Low Priority',
   'In Progress',
   'Blocked',
+] as const;
+
+export const progressTypeOptions = [
+  'study',
+  'investigate', 
+  'code',
+  'test',
+  'review_code',
+  'review_test_report',
+  'release'
 ] as const;

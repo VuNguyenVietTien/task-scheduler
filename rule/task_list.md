@@ -1,44 +1,61 @@
 # Gantt Chart Enhancement Tasks
 
-### Priority Task List & Gantt Chart Layout
-[x] 1. Fix drag & drop functionality in PriorityTaskList:
-   - Ensure PriorityTaskCard can be dragged and reordered
-   - Maintain task order after drag & drop
-   - Improve drag & drop visual feedback
-[x] 2. Fix TaskBar rendering:
+### Current Priority Tasks (With Dates)
+[x] 1. Fix TaskBar rendering (Start: 20/02/2025):
    - Prevent overlapping with date headers
    - Center bars vertically within grid rows
-[x] 3. Add grid lines to Gantt chart
+   - Improve visual alignment
+[x] 2. Enhance weekend and current day highlighting (Start: 25/02/2025):
+   - Make weekend cells darker/more prominent 
+   - Highlight current day with distinct color
+   - Apply consistent highlighting across grid
 
-### Date Display and Grid Styling
-[x] 4. Simplify date display format to dd/MM in Gantt chart headers
-[x] 5. Enhance weekend and current day highlighting:
-   - Make weekend cells darker/more prominent throughout entire grid
-   - Highlight current day with distinct color from weekends
-   - Apply highlighting to both headers and grid cells
+### UI Enhancement Tasks
+- 3. Implement task status indicators:
+   - Add visual status badges
+   - Create color-coded priority markers
+   - Include progress percentage display
 
-### Task Scheduling & Display
-[x] 6. Improve task visibility:
-   - Show partial taskbars for tasks starting before view range
-   - Calculate correct taskbar width for partial visible tasks
-   - Ensure taskbars align with grid correctly
-[x] 7. Smart task scheduling:
-   - Skip weekends when calculating task dates
-   - Adjust task width to account for weekends
+- 4. Enhance task information display:
+   - Add tooltips for long task names
+   - Show assignee avatars on taskbars
+   - Display deadline indicators
 
-### Grid Layout
-[x] 8. Fix grid layout issues:
-   - Ensure consistent row heights
-   - Remove redundant horizontal lines
-   - Full-height column highlighting for weekends/current day
+### Interaction Improvements
+- 5. Advanced drag & drop features:
+   - Add multi-select drag capability
+   - Implement snap-to-grid functionality
+   - Provide visual guides during drag
 
-### Date Range Selection
-[x] 9. Add date range selection controls:
-   - Add start date picker above Gantt chart
-   - Add end date picker above Gantt chart
-   - Update Gantt chart view based on selected date range
+- 6. Timeline navigation enhancements:
+   - Add quick navigation shortcuts
+   - Implement zoom in/out controls
+   - Create timeline scrolling markers
 
-### Progress Tracking
+### Data Management
+- 7. Task dependencies system:
+   - Add dependency arrows between tasks
+   - Implement automatic scheduling adjustments
+   - Create dependency conflict resolution
+
+- 8. Resource allocation features:
+   - Add resource capacity tracking
+   - Implement workload visualization
+   - Create resource conflict alerts
+
+### Performance Optimization
+- 9. Rendering optimization:
+   - Implement virtual scrolling
+   - Add lazy loading for task details
+   - Optimize large dataset handling
+
+### Export & Integration
+- 10. Export capabilities:
+   - Add PDF export functionality
+   - Implement Excel export option
+   - Create timeline image export
+
+### Notes
 - Each task will be marked as [x] when completed
 - Updates to this file will reflect implementation progress
 - All changes will be documented with commit messages referencing task numbers

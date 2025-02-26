@@ -37,6 +37,8 @@ export interface Task {
   type?: string;
   createdAt: string;
   updatedAt: string;
+  parentTaskId?: string;
+  childTasks?: Task[];
 }
 
 export interface TaskFilter {

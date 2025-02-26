@@ -55,7 +55,14 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       <div className="mb-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">{project.name}</h1>
-          <button className="btn-primary">Add Task</button>
+          <a 
+            href={`/projects/${project.id}/add-task`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn-primary inline-block"
+          >
+            Add Task
+          </a>
         </div>
         <div className="flex gap-4 mt-2 text-slate-600">
           <div className="flex items-center">
