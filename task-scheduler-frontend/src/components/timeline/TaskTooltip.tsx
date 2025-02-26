@@ -33,7 +33,7 @@ export function TaskTooltip({ task, targetRef }: TaskTooltipProps) {
     top: `${position.y}px`,
     transform: 'translate(-50%, -100%)',
     marginTop: '-8px',
-    zIndex: 50,
+    zIndex: 1000, // Increased z-index to appear above header
   };
 
   const dateRange = formatDateRange(task.startDate, task.deadline);
@@ -72,7 +72,7 @@ export function TaskTooltip({ task, targetRef }: TaskTooltipProps) {
         )}
 
         {/* Assignees */}
-        {task.assignees.length > 0 && (
+        {task.assignees?.length > 0 && (
           <div className="flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />

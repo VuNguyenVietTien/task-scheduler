@@ -34,7 +34,6 @@ export const mockTasks: Task[] = [
     startDate: '2025-02-26',
     deadline: '2025-03-05',
     assignees: [mockUsers[0], mockUsers[1]],
-    createdBy: mockUsers[0],
     createdAt: '2025-02-20T09:00:00Z',
     updatedAt: '2025-02-26T09:00:00Z'
   },
@@ -50,7 +49,6 @@ export const mockTasks: Task[] = [
     startDate: '2025-03-01',
     deadline: '2025-03-10',
     assignees: [mockUsers[1]],
-    createdBy: mockUsers[0],
     createdAt: '2025-02-20T09:00:00Z',
     updatedAt: '2025-02-26T09:00:00Z'
   },
@@ -66,7 +64,6 @@ export const mockTasks: Task[] = [
     startDate: '2025-02-20',
     deadline: '2025-03-01',
     assignees: [mockUsers[2]],
-    createdBy: mockUsers[1],
     createdAt: '2025-02-15T09:00:00Z',
     updatedAt: '2025-02-25T09:00:00Z'
   },
@@ -82,7 +79,6 @@ export const mockTasks: Task[] = [
     startDate: '2025-02-15',
     deadline: '2025-02-20',
     assignees: [mockUsers[0], mockUsers[2]],
-    createdBy: mockUsers[1],
     createdAt: '2025-02-10T09:00:00Z',
     updatedAt: '2025-02-20T09:00:00Z'
   },
@@ -98,7 +94,6 @@ export const mockTasks: Task[] = [
     startDate: '2025-03-10',
     deadline: '2025-03-15',
     assignees: [mockUsers[2]],
-    createdBy: mockUsers[0],
     createdAt: '2025-02-25T09:00:00Z',
     updatedAt: '2025-02-25T09:00:00Z'
   }

@@ -50,20 +50,22 @@ export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
       <div
         ref={barRef}
         className={`${getStatusColor(task.status)} rounded shadow-sm cursor-pointer 
-          hover:brightness-110 transition-all duration-200`}
+          hover:brightness-110 transition-all duration-200 pointer-events-auto`}
         style={{
           position: 'absolute',
-          left: `${x}px`,
-          top: `${y}px`,
           width: `${width}px`,
           height: `${height}px`,
+          transform: 'translateY(-50%)',
+          top: `${y}px`,
+          left: `${x}px`,
+          zIndex: 999
         }}
         onMouseEnter={handleMouseEnter}
         onMouseLeave={handleMouseLeave}
         onClick={handleClick}
       >
         {width > 50 && (
-          <div className="px-2 py-1 text-xs text-white truncate">
+          <div className="px-2 py-1 text-xs text-white truncate flex items-center h-full">
             {task.title}
           </div>
         )}
