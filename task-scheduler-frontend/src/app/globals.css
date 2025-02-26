@@ -1,0 +1,152 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+@layer components {
+  .card {
+    @apply bg-white rounded-lg shadow-sm p-6 border border-slate-200;
+  }
+
+  .btn-primary {
+    @apply bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg 
+    font-medium transition-colors duration-200 inline-flex items-center justify-center;
+  }
+
+  .btn-secondary {
+    @apply bg-slate-100 hover:bg-slate-200 text-slate-700 px-4 py-2 rounded-lg 
+    font-medium transition-colors duration-200 inline-flex items-center justify-center;
+  }
+
+  .alert {
+    @apply p-4 rounded-lg mb-4;
+  }
+
+  .alert-error {
+    @apply bg-red-50 text-red-700 border border-red-200;
+  }
+
+  .alert-warning {
+    @apply bg-yellow-50 text-yellow-700 border border-yellow-200;
+  }
+
+  .alert-success {
+    @apply bg-green-50 text-green-700 border border-green-200;
+  }
+
+  .badge {
+    @apply px-2.5 py-1 rounded-full text-xs font-medium capitalize;
+  }
+
+  h1 {
+    @apply text-2xl font-bold text-slate-900;
+  }
+
+  h2 {
+    @apply text-xl font-bold text-slate-900;
+  }
+
+  h3 {
+    @apply text-lg font-medium text-slate-900;
+  }
+
+  .text-text-secondary {
+    @apply text-slate-600;
+  }
+}
+
+/* Rich Text Editor Styles */
+.quill {
+  @apply mb-4;
+}
+
+.ql-toolbar.ql-snow {
+  @apply rounded-t-md border-slate-300;
+}
+
+.ql-container.ql-snow {
+  @apply rounded-b-md border-slate-300 min-h-[200px];
+}
+
+/* Custom rich text styles replacing prose */
+.ql-editor {
+  @apply text-base leading-relaxed;
+}
+
+.ql-editor > * + * {
+  @apply mt-4;
+}
+
+.ql-editor h1 {
+  @apply text-3xl font-bold mb-4 text-slate-900;
+}
+
+.ql-editor h2 {
+  @apply text-2xl font-bold mb-3 text-slate-900;
+}
+
+.ql-editor h3 {
+  @apply text-xl font-bold mb-2 text-slate-900;
+}
+
+.ql-editor p {
+  @apply text-base text-slate-700 leading-relaxed;
+}
+
+.ql-editor ul {
+  @apply list-disc list-inside space-y-2 text-slate-700;
+}
+
+.ql-editor ol {
+  @apply list-decimal list-inside space-y-2 text-slate-700;
+}
+
+.ql-editor img {
+  @apply max-w-full h-auto rounded-lg my-4;
+}
+
+.ql-editor table {
+  @apply w-full border-collapse border border-slate-300 my-4;
+}
+
+.ql-editor td,
+.ql-editor th {
+  @apply border border-slate-300 p-2 text-slate-700;
+}
+
+.ql-editor th {
+  @apply bg-slate-50 font-semibold;
+}
+
+.ql-editor blockquote {
+  @apply border-l-4 border-slate-300 pl-4 italic my-4 text-slate-600;
+}
+
+.ql-editor pre {
+  @apply bg-slate-100 p-4 rounded-md font-mono text-sm overflow-x-auto my-4;
+}
+
+.ql-editor code {
+  @apply bg-slate-100 px-2 py-1 rounded-md font-mono text-sm text-slate-800;
+}
+
+.ql-editor strong {
+  @apply font-semibold text-slate-900;
+}
+
+.ql-editor em {
+  @apply italic text-slate-700;
+}
+
+.ql-editor a {
+  @apply text-blue-600 hover:text-blue-800 underline;
+}
+
+.ql-editor hr {
+  @apply my-6 border-t border-slate-200;
+}

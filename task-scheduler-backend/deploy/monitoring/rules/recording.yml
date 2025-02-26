@@ -1,0 +1,41 @@
+groups:
+  - name: app_metrics
+    interval: 1m
+    rules:
+      - record: task_scheduler:request_duration:avg_5m
+        expr: rate(http_request_duration_seconds_sum[5m]) / rate(http_request_duration_seconds_count[5m])
+
+      - record: task_scheduler:request_rate:5m
+        expr: rate(http_requests_total[5m])
+
+      - record: task_scheduler:error_rate:5m
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m])
+
+      - record: task_scheduler:memory_usage:percentage
+        expr: (node_memory_MemTotal_bytes - node_memory_MemAvailable_bytes) / node_memory_MemTotal_bytes * 100
+
+      - record: task_scheduler:cpu_usage:percentage
+        expr: 100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle"}[5m])) * 100)
+
+      - record: task_scheduler:db_connections:total
+        expr: pg_stat_activity_count
+
+      - record: task_scheduler:active_users:5m
+        expr: count(count by (user_id) (user_activity_total{action="login"}[5m]))
+
+      - record: task_scheduler:websocket_connections:total
+        expr: ws_connections_total
+
+      - record: task_scheduler:task_completion_rate:daily
+        expr: sum(increase(tasks_completed_total[24h])) / sum(increase(tasks_created_total[24h]))
+
+      - record: task_scheduler:response_status:ratio_5m
+        expr: |
+          sum by (status_code) (rate(http_requests_total[5m])) / 
+          sum(rate(http_requests_total[5m]))
+
+      - record: task_scheduler:api_latency:percentile_5m
+        expr: histogram_quantile(0.95, sum(rate(http_request_duration_seconds_bucket[5m])) by (le))
+
+      - record: task_scheduler:db_query_time:avg_5m
+        expr: rate(database_query_duration_seconds_sum[5m]) / rate(database_query_duration_seconds_count[5m])

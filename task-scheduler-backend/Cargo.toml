@@ -1,0 +1,43 @@
+[package]
+name = "task-scheduler-backend"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { version = "1.0", features = ["full"] }
+actix-web = "4.0"
+actix-web-actors = "4.1"
+actix = "0.13"
+sea-orm = { version = "0.12", features = ["sqlx-postgres", "runtime-tokio-native-tls", "macros"] }
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+async-graphql = { version = "6.0", features = ["chrono", "uuid"] }
+async-graphql-actix-web = "6.0"
+chrono = { version = "0.4", features = ["serde"] }
+uuid = { version = "1.0", features = ["serde", "v4"] }
+jsonwebtoken = "9.0"
+bcrypt = "0.10"
+lettre = { version = "0.11", features = ["tokio1", "tokio1-native-tls"] }
+reqwest = { version = "0.11", features = ["json"] }
+env_logger = "0.10"
+log = "0.4"
+sanitize-filename = "0.5"
+
+[dev-dependencies]
+mockall = "0.12"
+tokio-test = "0.4"
+pretty_assertions = "1.4"
+serial_test = "2.0"
+fake = { version = "2.9", features = ["uuid", "chrono"] }
+
+[dependencies.sea-orm-migration]
+version = "0.12"
+features = [
+    "runtime-tokio-native-tls",
+    "sqlx-postgres",
+]
+
+[features]
+default = []
+mock = []
+integration = []

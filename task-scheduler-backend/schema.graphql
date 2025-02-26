@@ -1,0 +1,351 @@
+# Schema Types
+
+"""
+User role in the system
+"""
+enum UserRole {
+  ADMIN
+  MANAGER
+  MEMBER
+}
+
+"""
+Task priority level
+"""
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+"""
+Task status
+"""
+enum TaskStatus {
+  BACKLOG
+  PLANNED
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+  CANCELLED
+}
+
+"""
+Project member role
+"""
+enum ProjectRole {
+  OWNER
+  MANAGER
+  EDITOR
+  VIEWER
+}
+
+"""
+Notification type
+"""
+enum NotificationType {
+  TASK_ASSIGNED
+  TASK_UPDATED
+  COMMENT_ADDED
+  PROJECT_INVITATION
+  DEADLINE_REMINDER
+}
+
+# Queries
+
+type Query {
+  """
+  Get current authenticated user
+  """
+  me: User!
+
+  """
+  Get a specific user by ID
+  """
+  user(id: ID!): User
+
+  """
+  Get a list of users with optional filters
+  """
+  users(role: UserRole): [User!]!
+
+  """
+  Get a specific project by ID
+  """
+  project(id: ID!): Project
+
+  """
+  Get all accessible projects for current user
+  """
+  projects: [Project!]!
+
+  """
+  Get a specific task by ID
+  """
+  task(id: ID!): Task
+
+  """
+  Get tasks with optional filters
+  """
+  tasks(
+    projectId: ID
+    status: TaskStatus
+    assigneeId: ID
+  ): [Task!]!
+
+  """
+  Get notifications for current user
+  """
+  notifications(includeRead: Boolean = false): [Notification!]!
+
+  """
+  Get count of unread notifications
+  """
+  unreadNotificationCount: Int!
+}
+
+# Mutations
+
+type Mutation {
+  """
+  Register a new user
+  """
+  register(input: RegisterInput!): AuthPayload!
+
+  """
+  Login with email and password
+  """
+  login(email: String!, password: String!): AuthPayload!
+
+  """
+  Refresh authentication token
+  """
+  refreshToken(refreshToken: String!): AuthPayload!
+
+  """
+  Create a new project
+  """
+  createProject(input: CreateProjectInput!): Project!
+
+  """
+  Update project details
+  """
+  updateProject(
+    id: ID!
+    name: String
+    description: String
+  ): Project!
+
+  """
+  Add member to project
+  """
+  addProjectMember(input: AddProjectMemberInput!): ProjectMember!
+
+  """
+  Create a new task
+  """
+  createTask(input: CreateTaskInput!): Task!
+
+  """
+  Update task status
+  """
+  updateTaskStatus(taskId: ID!, status: TaskStatus!): Task!
+
+  """
+  Assign task to user
+  """
+  assignTask(taskId: ID!, userId: ID!): Task!
+
+  """
+  Add comment to task
+  """
+  createComment(input: CreateCommentInput!): Comment!
+
+  """
+  Upload file attachment
+  """
+  uploadAttachment(taskId: ID!, file: Upload!): Attachment!
+
+  """
+  Delete attachment
+  """
+  deleteAttachment(id: ID!): ID!
+
+  """
+  Mark notification as read
+  """
+  markNotificationAsRead(id: ID!): Notification!
+
+  """
+  Mark all notifications as read
+  """
+  markAllNotificationsAsRead: Boolean!
+
+  """
+  Update task priority order
+  """
+  updateTaskPriorityOrder(taskId: ID!, newOrder: Int!): Task!
+
+  """
+  Reorder multiple tasks at once
+  """
+  reorderTasks(input: ReorderTasksInput!): [Task!]!
+}
+
+# Types
+
+type User {
+  id: ID!
+  email: String!
+  name: String!
+  role: UserRole!
+  workCapacity: Float!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type Project {
+  id: ID!
+  name: String!
+  description: String
+  createdBy: User!
+  members: [ProjectMember!]!
+  tasks: [Task!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type ProjectMember {
+  projectId: ID!
+  userId: ID!
+  user: User!
+  role: ProjectRole!
+  joinedAt: DateTime!
+}
+
+type Task {
+  id: ID!
+  projectId: ID!
+  project: Project!
+  parentTaskId: ID
+  parentTask: Task
+  subtasks: [Task!]!
+  title: String!
+  description: String
+  status: TaskStatus!
+  priority: TaskPriority!
+  priorityOrder: Int!
+  effortHours: Float
+  startDate: DateTime
+  deadline: DateTime
+  createdBy: User!
+  assignees: [User!]!
+  comments: [Comment!]!
+  attachments: [Attachment!]!
+  metadata: JSON
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type Comment {
+  id: ID!
+  taskId: ID!
+  task: Task!
+  userId: ID!
+  user: User!
+  content: String!
+  parentCommentId: ID
+  parentComment: Comment
+  replies: [Comment!]!
+  createdAt: DateTime!
+  updatedAt: DateTime!
+}
+
+type Attachment {
+  id: ID!
+  taskId: ID!
+  task: Task!
+  userId: ID!
+  user: User!
+  fileName: String!
+  fileSize: Int!
+  mimeType: String!
+  storagePath: String!
+  createdAt: DateTime!
+}
+
+type Notification {
+  id: ID!
+  userId: ID!
+  type: NotificationType!
+  content: JSON!
+  createdAt: DateTime!
+  readAt: DateTime
+}
+
+type AuthPayload {
+  accessToken: String!
+  refreshToken: String!
+  user: User!
+}
+
+# Input Types
+
+input RegisterInput {
+  email: String!
+  password: String!
+  name: String!
+}
+
+input CreateProjectInput {
+  name: String!
+  description: String
+}
+
+input AddProjectMemberInput {
+  projectId: ID!
+  userId: ID!
+  role: ProjectRole!
+}
+
+input CreateTaskInput {
+  projectId: ID!
+  parentTaskId: ID
+  title: String!
+  description: String
+  status: TaskStatus!
+  priority: TaskPriority!
+  effortHours: Float
+  startDate: DateTime
+  deadline: DateTime
+  assigneeIds: [ID!]!
+  priorityOrder: Int
+}
+
+input CreateCommentInput {
+  taskId: ID!
+  content: String!
+  parentCommentId: ID
+}
+
+"""
+Input for reordering multiple tasks
+"""
+input ReorderTasksInput {
+  projectId: ID!
+  taskOrders: [TaskOrderInput!]!
+}
+
+"""
+Input for specifying task order
+"""
+input TaskOrderInput {
+  taskId: ID!
+  priorityOrder: Int!
+}
+
+# Scalars
+scalar DateTime
+scalar JSON
+scalar Upload
