@@ -2,6 +2,45 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Drag & Drop Styles */
+[data-rbd-draggable-context-id] {
+  cursor: grab !important;
+  user-select: none;
+}
+
+[data-rbd-draggable-context-id][aria-disabled="true"] {
+  cursor: not-allowed !important;
+  opacity: 0.5;
+}
+
+body.dragging * {
+  cursor: grabbing !important;
+}
+
+body.dragging [data-rbd-draggable-context-id] {
+  opacity: 0.5;
+}
+
+body.dragging [data-rbd-draggable-context-id][aria-pressed="true"] {
+  opacity: 1;
+  transform: scale(1.05);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+}
+
+[data-rbd-droppable-id] {
+  transition: background-color 0.2s ease;
+  min-height: 100px;
+}
+
+body.dragging [data-rbd-droppable-id] {
+  background-color: rgba(241, 245, 249, 0.5);
+  border-radius: 0.5rem;
+}
+
+body.dragging [data-rbd-droppable-id][data-rbd-droppable-context-id][aria-label*="drop possible"] {
+  background-color: rgba(59, 130, 246, 0.1);
+}
+
 :root {
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;

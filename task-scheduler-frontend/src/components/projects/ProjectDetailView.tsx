@@ -4,20 +4,14 @@ import { useState } from 'react';
 import { Timeline } from '@/components/timeline/Timeline';
 import { TaskListView } from '@/components/tasks/TaskListView';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
-import { mockTasks, mockUsers } from '@/data/mockTasks';
+import { mockUsers } from '@/data/mockTasks';
+import { useProjectTasks } from '@/hooks/useProjectTasks';
 import type { ProjectData } from '@/types/project';
-import { DragDropContext } from 'react-beautiful-dnd';
-
 type ViewType = 'list' | 'kanban' | 'gantt';
-
-// Different contexts to prevent interference between drag & drop zones
-const DragContexts = {
-  TASKLIST: 'taskList',
-  GANTT: 'gantt'
-} as const;
 
 export function ProjectDetailView({ project }: { project: ProjectData }) {
   const [activeView, setActiveView] = useState<ViewType>('list');
+  const { data: tasks, isLoading } = useProjectTasks(project.id);
 
   const tabs = [
     {
@@ -100,20 +94,32 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
         </div>
       </div>
 
-  {/* View Content */}
-  <div className="h-[calc(100vh-240px)]">
-    {activeView === 'list' && <TaskListView tasks={mockTasks} />}
-    {activeView === 'kanban' && (
-      <div className="h-full overflow-x-auto">
-        <KanbanBoard tasks={mockTasks} />
+      {/* View Content */}
+      <div className="h-[calc(100vh-240px)]">
+        {isLoading ? (
+          <div className="h-full flex items-center justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          </div>
+        ) : !tasks ? (
+          <div className="h-full flex items-center justify-center text-slate-500">
+            No tasks found
+          </div>
+        ) : (
+          <>
+            {activeView === 'list' && <TaskListView tasks={tasks} />}
+            {activeView === 'kanban' && (
+              <div className="h-full overflow-x-auto">
+                <KanbanBoard tasks={tasks} projectId={project.id} />
+              </div>
+            )}
+            {activeView === 'gantt' && (
+              <div className="card h-full overflow-auto">
+                <Timeline tasks={tasks} users={mockUsers} />
+              </div>
+            )}
+          </>
+        )}
       </div>
-    )}
-    {activeView === 'gantt' && (
-      <div className="card h-full overflow-auto">
-        <Timeline tasks={mockTasks} users={mockUsers} />
-      </div>
-    )}
-  </div>
     </div>
   );
 }

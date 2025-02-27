@@ -1,15 +1,20 @@
+'use client';
+
 import { Task, TaskStatus } from '@/types/task';
-import React from 'react';
+import { useTaskStatusUpdate } from '@/hooks/useTaskStatusUpdate';
 import {
-  DragDropContext,
+  DragDropProvider,
   Droppable,
   Draggable,
-  DropResult
-} from 'react-beautiful-dnd';
+  type DroppableProvided,
+  type DraggableProvided,
+  type DraggableStateSnapshot,
+  type DropResult
+} from '@/components/dnd/DragDropProvider';
 
 interface KanbanBoardProps {
   tasks: Task[];
-  onTaskMove?: (taskId: string, newStatus: TaskStatus) => void;
+  projectId: string;
 }
 
 interface Column {
@@ -17,7 +22,8 @@ interface Column {
   label: string;
 }
 
-export function KanbanBoard({ tasks, onTaskMove }: KanbanBoardProps) {
+export function KanbanBoard({ tasks, projectId }: KanbanBoardProps) {
+  const updateTaskStatus = useTaskStatusUpdate();
   const columns: Column[] = [
     { id: TaskStatus.BACKLOG, label: 'Backlog' },
     { id: TaskStatus.PLANNED, label: 'Planned' },
@@ -59,23 +65,30 @@ export function KanbanBoard({ tasks, onTaskMove }: KanbanBoardProps) {
         return 'text-slate-600 bg-slate-50';
     }
   };
-  
+
   const handleDragEnd = (result: DropResult) => {
-    if (!result.destination || !onTaskMove) {
-      return;
-    }
+    if (!result.destination) return;
 
     const taskId = result.draggableId;
     const newStatus = result.destination.droppableId as TaskStatus;
-    onTaskMove(taskId, newStatus);
+    const previousStatus = result.source.droppableId as TaskStatus;
+
+    if (newStatus === previousStatus) return;
+
+    updateTaskStatus.mutate({
+      taskId,
+      newStatus,
+      previousStatus,
+      projectId,
+    });
   };
 
   return (
-    <DragDropContext onDragEnd={handleDragEnd}>
-      <div className="flex gap-4 h-full">
+    <DragDropProvider onDragEnd={handleDragEnd}>
+      <div className="flex gap-4 h-full overflow-x-auto p-4">
         {columns.map(column => (
-          <div key={column.id} className="flex-1 min-w-[280px]">
-            <div className="bg-slate-100 rounded-lg p-4">
+          <div key={column.id} className="flex-1 min-w-[280px] max-w-[280px]">
+            <div className="bg-slate-100 rounded-lg p-4 h-full">
               <div className="flex items-center justify-between mb-4">
                 <h3 className="font-medium text-slate-900">{column.label}</h3>
                 <span className="text-sm text-slate-600">
@@ -84,64 +97,77 @@ export function KanbanBoard({ tasks, onTaskMove }: KanbanBoardProps) {
               </div>
 
               <Droppable droppableId={column.id}>
-                {(provided) => (
+                {(provided: DroppableProvided, snapshot) => (
                   <div
                     ref={provided.innerRef}
                     {...provided.droppableProps}
-                    className="space-y-3"
+                    className={`min-h-[200px] rounded-lg transition-colors duration-200
+                      ${snapshot.isDraggingOver 
+                        ? 'outline outline-2 outline-blue-400 outline-dashed bg-blue-50/70' 
+                        : 'bg-transparent'
+                      }`}
                   >
-                    {getTasksByStatus(column.id).map((task, index) => (
-                      <Draggable
-                        key={task.id}
-                        draggableId={task.id}
-                        index={index}
-                      >
-                        {(provided, snapshot) => (
-                          <div
-                            ref={provided.innerRef}
-                            {...provided.draggableProps}
-                            {...provided.dragHandleProps}
-                            className={`p-3 rounded-lg border-l-4 bg-white shadow-sm
-                              ${getStatusColor(task.status)}
-                              ${snapshot.isDragging ? 'opacity-50' : ''}`}
-                          >
-                            <div className="flex items-start justify-between mb-2">
-                              <h4 className="font-medium text-slate-900">
-                                {task.title}
-                              </h4>
-                              <span
-                                className={`px-2 py-1 rounded-full text-xs font-medium
-                                  ${getPriorityColor(task.priority)}`}
-                              >
-                                {task.priority}
-                              </span>
-                            </div>
-
-                            <p className="text-sm text-slate-600 mb-3 line-clamp-2">
-                              {task.description}
-                            </p>
-
-                            <div className="flex justify-between items-center">
-                              <div className="flex -space-x-2">
-                                {task.assignees.map(assignee => (
-                                  <img
-                                    key={assignee.id}
-                                    src={assignee.avatarUrl}
-                                    alt={assignee.name}
-                                    className="w-6 h-6 rounded-full ring-2 ring-white"
-                                  />
-                                ))}
-                              </div>
-                              <div className="text-xs text-slate-500">
-                                {task.deadline && 
-                                  `Due ${new Date(task.deadline).toLocaleDateString()}`
+                    <div className="space-y-3 p-2">
+                      {getTasksByStatus(column.id).map((task, index) => (
+                        <Draggable
+                          key={task.id}
+                          draggableId={task.id}
+                          index={index}
+                          isDragDisabled={updateTaskStatus.isLoading}
+                        >
+                          {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
+                            <div
+                              ref={provided.innerRef}
+                              {...provided.draggableProps}
+                              {...provided.dragHandleProps}
+                              className={`p-3 rounded-lg border-l-4 bg-white
+                                ${getStatusColor(task.status)}
+                                ${snapshot.isDragging 
+                                  ? 'shadow-lg ring-2 ring-blue-400 rotate-[1deg]' 
+                                  : 'shadow-sm hover:shadow-md'
                                 }
+                                ${updateTaskStatus.isLoading && updateTaskStatus.variables?.taskId === task.id
+                                  ? 'animate-pulse'
+                                  : ''
+                                }
+                                cursor-grab active:cursor-grabbing
+                                transition-all duration-200`}
+                            >
+                              <div className="flex items-start justify-between mb-2">
+                                <h4 className="font-medium text-slate-900">
+                                  {task.title}
+                                </h4>
+                                <span className={`px-2 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
+                                  {task.priority}
+                                </span>
+                              </div>
+
+                              <p className="text-sm text-slate-600 mb-3 line-clamp-2">
+                                {task.description}
+                              </p>
+
+                              <div className="flex justify-between items-center">
+                                <div className="flex -space-x-2">
+                                  {task.assignees.map(assignee => (
+                                    <img
+                                      key={assignee.id}
+                                      src={assignee.avatarUrl}
+                                      alt={assignee.name}
+                                      className="w-6 h-6 rounded-full ring-2 ring-white"
+                                    />
+                                  ))}
+                                </div>
+                                <div className="text-xs text-slate-500">
+                                  {task.deadline && 
+                                    `Due ${new Date(task.deadline).toLocaleDateString()}`
+                                  }
+                                </div>
                               </div>
                             </div>
-                          </div>
-                        )}
-                      </Draggable>
-                    ))}
+                          )}
+                        </Draggable>
+                      ))}
+                    </div>
                     {provided.placeholder}
                   </div>
                 )}
@@ -150,6 +176,6 @@ export function KanbanBoard({ tasks, onTaskMove }: KanbanBoardProps) {
           </div>
         ))}
       </div>
-    </DragDropContext>
+    </DragDropProvider>
   );
 }
