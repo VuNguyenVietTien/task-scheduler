@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>Email Verification</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            color: #333333;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        .button {
+            background-color: #4CAF50;
+            border: none;
+            color: white;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Welcome to Task Scheduler!</h2>
+        <p>Hi {{name}},</p>
+        <p>Thank you for signing up. Please verify your email address by clicking the button below:</p>
+        
+        <p style="text-align: center;">
+            <a href="{{verification_link}}" class="button">Verify Email</a>
+        </p>
+
+        <p>Or copy and paste this link into your browser:</p>
+        <p>{{verification_link}}</p>
+
+        <p>This link will expire in 24 hours.</p>
+
+        <p>If you didn't create an account with us, please ignore this email.</p>
+
+        <p>Best regards,<br>The Task Scheduler Team</p>
+    </div>
+</body>
+</html>

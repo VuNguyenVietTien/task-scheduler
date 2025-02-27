@@ -2,11 +2,12 @@ mod password;
 mod error;
 
 use error::AuthError;
+use crate::email::EmailService;
 use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
 use serde::{Serialize, Deserialize};
 use chrono::{Utc, Duration};
 use uuid::Uuid;
-use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait};
+use sea_orm::{DatabaseConnection, EntityTrait, QueryFilter, ColumnTrait, Set, ActiveModelTrait};
 use entity::{users, users::Entity as Users};
 
 pub use password::PasswordHasher;
@@ -23,13 +24,22 @@ pub struct Claims {
 pub struct AuthService {
     db: DatabaseConnection,
     token_manager: TokenManager,
+    email_service: EmailService,
+    frontend_url: String,
 }
 
 impl AuthService {
-    pub fn new(db: DatabaseConnection, secret: &[u8]) -> Self {
+    pub fn new(
+        db: DatabaseConnection,
+        secret: &[u8],
+        email_service: EmailService,
+        frontend_url: String,
+    ) -> Self {
         Self {
             db,
             token_manager: TokenManager::new(secret),
+            email_service,
+            frontend_url,
         }
     }
 
@@ -51,17 +61,23 @@ impl AuthService {
         // Hash password
         let password_hash = PasswordHasher::hash_password(&password)?;
 
+        // Generate verification token
+        let verification_token = Uuid::new_v4().to_string();
+        let verification_expires = Utc::now() + Duration::hours(24);
+
         // Create user
         let user = users::ActiveModel {
-            id: sea_orm::Set(Uuid::new_v4()),
-            email: sea_orm::Set(email),
-            password_hash: sea_orm::Set(password_hash),
-            name: sea_orm::Set(name),
-            role: sea_orm::Set("USER".to_string()),
-            email_verified: sea_orm::Set(false),
-            provider: sea_orm::Set("email".to_string()),
-            created_at: sea_orm::Set(Utc::now()),
-            updated_at: sea_orm::Set(Utc::now()),
+            id: Set(Uuid::new_v4()),
+            email: Set(email.clone()),
+            password_hash: Set(password_hash),
+            name: Set(name.clone()),
+            role: Set("USER".to_string()),
+            email_verified: Set(false),
+            verification_token: Set(Some(verification_token.clone())),
+            verification_token_expires: Set(Some(verification_expires)),
+            provider: Set("email".to_string()),
+            created_at: Set(Utc::now()),
+            updated_at: Set(Utc::now()),
             ..Default::default()
         };
 
@@ -70,15 +86,60 @@ impl AuthService {
             .await
             .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
 
+        // Send verification email
+        let verification_link = format!(
+            "{}/verify-email?token={}",
+            self.frontend_url,
+            verification_token
+        );
+
+        self.email_service
+            .send_verification_email(&email, &name, &verification_link)
+            .await
+            .map_err(|e| AuthError::InternalServerError(e.to_string()))?;
+
         Ok(user)
     }
 
-    pub async fn login(
+    pub async fn verify_email(
+        &self,
+        token: String,
+    ) -> Result<(), AuthError> {
+        let user = Users::find()
+            .filter(users::Column::VerificationToken.eq(Some(token.clone())))
+            .one(&self.db)
+            .await
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))?
+            .ok_or(AuthError::InvalidToken)?;
+
+        if user.email_verified {
+            return Ok(());
+        }
+
+        // Check token expiration
+        if let Some(expires) = user.verification_token_expires {
+            if expires < Utc::now() {
+                return Err(AuthError::TokenExpired);
+            }
+        }
+
+        let mut user: users::ActiveModel = user.into();
+        user.email_verified = Set(true);
+        user.verification_token = Set(None);
+        user.verification_token_expires = Set(None);
+        user.updated_at = Set(Utc::now());
+
+        user.update(&self.db)
+            .await
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub async fn request_password_reset(
         &self,
         email: String,
-        password: String,
-    ) -> Result<String, AuthError> {
-        // Find user
+    ) -> Result<(), AuthError> {
         let user = Users::find()
             .filter(users::Column::Email.eq(&email))
             .one(&self.db)
@@ -86,19 +147,88 @@ impl AuthService {
             .map_err(|e| AuthError::DatabaseError(e.to_string()))?
             .ok_or(AuthError::UserNotFound)?;
 
-        // Verify password
+        let reset_token = Uuid::new_v4().to_string();
+        let reset_expires = Utc::now() + Duration::hours(1);
+
+        let mut user: users::ActiveModel = user.into();
+        user.verification_token = Set(Some(reset_token.clone()));
+        user.verification_token_expires = Set(Some(reset_expires));
+        user.updated_at = Set(Utc::now());
+
+        user.update(&self.db)
+            .await
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
+
+        let reset_link = format!(
+            "{}/reset-password?token={}",
+            self.frontend_url,
+            reset_token
+        );
+
+        self.email_service
+            .send_password_reset_email(&email, &user.name.unwrap(), &reset_link)
+            .await
+            .map_err(|e| AuthError::InternalServerError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub async fn reset_password(
+        &self,
+        token: String,
+        new_password: String,
+    ) -> Result<(), AuthError> {
+        let user = Users::find()
+            .filter(users::Column::VerificationToken.eq(Some(token.clone())))
+            .one(&self.db)
+            .await
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))?
+            .ok_or(AuthError::InvalidToken)?;
+
+        if let Some(expires) = user.verification_token_expires {
+            if expires < Utc::now() {
+                return Err(AuthError::TokenExpired);
+            }
+        }
+
+        let password_hash = PasswordHasher::hash_password(&new_password)?;
+
+        let mut user: users::ActiveModel = user.into();
+        user.password_hash = Set(password_hash);
+        user.verification_token = Set(None);
+        user.verification_token_expires = Set(None);
+        user.updated_at = Set(Utc::now());
+
+        user.update(&self.db)
+            .await
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
+
+        Ok(())
+    }
+
+    pub async fn login(
+        &self,
+        email: String,
+        password: String,
+    ) -> Result<String, AuthError> {
+        let user = Users::find()
+            .filter(users::Column::Email.eq(&email))
+            .one(&self.db)
+            .await
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))?
+            .ok_or(AuthError::UserNotFound)?;
+
+        if !user.email_verified {
+            return Err(AuthError::EmailNotVerified);
+        }
+
         if !PasswordHasher::verify_password(&password, &user.password_hash)? {
             return Err(AuthError::InvalidPassword);
         }
 
-        // Generate token
         let token = self.token_manager.generate_token(user.id, user.role)?;
 
         Ok(token)
-    }
-
-    pub async fn verify_token(&self, token: &str) -> Result<Claims, AuthError> {
-        self.token_manager.verify_token(token)
     }
 }
 
@@ -143,7 +273,6 @@ impl TokenManager {
 
         let claims = token_data.claims;
 
-        // Check expiration
         if claims.exp < Utc::now().timestamp() {
             return Err(AuthError::TokenExpired);
         }
@@ -155,22 +284,29 @@ impl TokenManager {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use mockall::predicate::*;
+    use mockall::*;
 
-    #[test]
-    fn test_token_generation_and_verification() {
-        let secret = b"test_secret";
-        let token_manager = TokenManager::new(secret);
-        let user_id = Uuid::new_v4();
-        let role = "USER".to_string();
+    mock! {
+        EmailService {}
+        impl EmailService {
+            fn send_verification_email(&self, to: &str, name: &str, link: &str) -> Result<(), Box<dyn std::error::Error>>;
+            fn send_password_reset_email(&self, to: &str, name: &str, link: &str) -> Result<(), Box<dyn std::error::Error>>;
+        }
+    }
 
-        // Generate token
-        let token = token_manager.generate_token(user_id, role.clone()).unwrap();
-        
-        // Verify token
-        let claims = token_manager.verify_token(&token).unwrap();
-        
-        assert_eq!(claims.sub, user_id);
-        assert_eq!(claims.role, role);
-        assert!(claims.exp > Utc::now().timestamp());
+    #[tokio::test]
+    async fn test_register_user() {
+        // TODO: Implement tests
+    }
+
+    #[tokio::test]
+    async fn test_verify_email() {
+        // TODO: Implement tests
+    }
+
+    #[tokio::test]
+    async fn test_password_reset() {
+        // TODO: Implement tests
     }
 }

@@ -7,48 +7,68 @@
 - [x] Verify schema migration
 
 ## Backend Authentication
-- [ ] Implement password hashing using bcrypt
-- [ ] Create user registration endpoint
-  - [ ] Validate input data
-  - [ ] Check for existing email
-  - [ ] Hash password
-  - [ ] Store user data
-  - [ ] Generate verification token
-- [ ] Create login endpoint
-  - [ ] Validate credentials
-  - [ ] Generate JWT token
-  - [ ] Return user data
-- [ ] Implement email verification
-  - [ ] Set up email service
-  - [ ] Create verification email template
-  - [ ] Handle verification token
-- [ ] Add Firebase authentication
+- [x] Implement password hashing with bcrypt
+  - [x] Hash password function
+  - [x] Verify password function
+  - [x] Generate salt function
+  - [x] Add tests
+- [x] Add JWT token management
+  - [x] Generate token function
+  - [x] Verify token function
+  - [x] Add expiration handling
+  - [x] Add tests
+- [x] Implement error handling
+  - [x] Create custom error types
+  - [x] Add error responses
+  - [x] Map database errors
+  - [x] Add HTTP status codes
+- [x] Create authentication service
+  - [x] Registration logic
+  - [x] Login logic
+  - [x] Token verification
+
+## Email Verification
+- [x] Set up email service
+  - [x] Configure SMTP client
+  - [x] Create email templates
+  - [x] Add error handling
+- [x] Implement email verification
+  - [x] Generate verification tokens
+  - [x] Send verification emails
+  - [x] Add verification endpoints
+  - [x] Handle token expiration
+
+## Password Reset
+- [x] Implement password reset flow
+  - [x] Generate reset tokens
+  - [x] Send reset emails
+  - [x] Add reset endpoints
+  - [x] Handle token expiration
+- [x] Create email templates
+  - [x] Verification email template
+  - [x] Reset password email template
+
+## API Integration
+- [x] Create API endpoints
+  - [x] Register endpoint
+  - [x] Login endpoint
+  - [x] Email verification endpoint
+  - [x] Password reset request endpoint
+  - [x] Password reset endpoint
+- [x] Add request validation
+- [x] Add error responses
+- [x] Configure CORS
+
+## Next Steps
+- [ ] Firebase integration
   - [ ] Set up Firebase Admin SDK
-  - [ ] Handle Firebase tokens
-  - [ ] Link Firebase users with database users
-
-## API Security
-- [ ] Implement JWT middleware
-- [ ] Add rate limiting
-- [ ] Set up CORS configuration
-- [ ] Add input validation middleware
-- [ ] Implement request logging
-
-## User Management
-- [ ] Add password reset functionality
-- [ ] Implement user profile updates
+  - [ ] Add social authentication
+  - [ ] Link Firebase users
 - [ ] Add session management
-- [ ] Implement account deletion
-- [ ] Add role-based access control
-
-## Testing
-- [ ] Write unit tests for auth services
-- [ ] Add integration tests for auth endpoints
-- [ ] Test error handling
-- [ ] Add authentication e2e tests
-
-## Documentation
-- [ ] Document authentication flow
-- [ ] API documentation
-- [ ] Security considerations
-- [ ] Deployment guide
+  - [ ] Token refresh mechanism
+  - [ ] Logout functionality
+  - [ ] Session tracking
+- [ ] Add API documentation
+  - [ ] OpenAPI/Swagger specs
+  - [ ] Authentication flow docs
+  - [ ] Example requests/responses

@@ -19,3 +19,19 @@ actix-web = "4"
 actix-cors = "0.6"
 env_logger = "0.10"
 log = "0.4"
+
+# Email dependencies
+lettre = { version = "0.10", features = ["builder", "smtp-transport", "tokio1", "tokio1-native-tls"] }
+handlebars = "4.3"
+
+# Firebase Admin SDK
+firebase-admin-sdk = "0.4"
+reqwest = { version = "0.11", features = ["json"] }
+
+# Session management
+redis = { version = "0.23", features = ["tokio-comp"] }
+async-session = "3.0"
+
+# Testing
+mockall = "0.11"
+async-trait = "0.1"

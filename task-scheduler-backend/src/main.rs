@@ -1,5 +1,6 @@
 mod auth;
 mod api;
+mod email;
 
 use actix_web::{web, App, HttpServer};
 use actix_cors::Cors;
@@ -7,6 +8,7 @@ use dotenv::dotenv;
 use sea_orm::Database;
 use std::env;
 use auth::AuthService;
+use email::EmailService;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -22,15 +24,36 @@ async fn main() -> std::io::Result<()> {
         .parse::<u16>()
         .expect("PORT must be a number");
 
+    // Email configuration
+    let smtp_host = env::var("SMTP_HOST").expect("SMTP_HOST must be set");
+    let smtp_port = env::var("SMTP_PORT").expect("SMTP_PORT must be set")
+        .parse::<u16>()
+        .expect("SMTP_PORT must be a number");
+    let smtp_username = env::var("SMTP_USERNAME").expect("SMTP_USERNAME must be set");
+    let smtp_password = env::var("SMTP_PASSWORD").expect("SMTP_PASSWORD must be set");
+    let from_email = env::var("FROM_EMAIL").expect("FROM_EMAIL must be set");
+    let frontend_url = env::var("FRONTEND_URL").expect("FRONTEND_URL must be set");
+
     // Connect to database
     let database = Database::connect(&database_url)
         .await
         .expect("Failed to connect to database");
 
+    // Initialize email service
+    let email_service = EmailService::new(
+        smtp_host,
+        smtp_port,
+        smtp_username,
+        smtp_password,
+        from_email,
+    ).expect("Failed to initialize email service");
+
     // Initialize auth service
     let auth_service = web::Data::new(AuthService::new(
         database.clone(),
         &jwt_secret,
+        email_service,
+        frontend_url,
     ));
 
     println!("Starting server at http://{}:{}", host, port);

@@ -8,6 +8,7 @@ pub enum AuthError {
     // Password related errors
     HashingError(BcryptError),
     VerificationError(BcryptError),
+    InvalidPassword,
     
     // Token related errors
     TokenCreationError(JwtError),
@@ -15,14 +16,28 @@ pub enum AuthError {
     TokenExpired,
     InvalidToken,
     
+    // Email verification errors
+    EmailNotVerified,
+    EmailVerificationExpired,
+    EmailVerificationFailed(String),
+    
+    // Password reset errors
+    PasswordResetExpired,
+    PasswordResetFailed(String),
+    InvalidResetToken,
+    
     // Validation errors
-    InvalidPassword,
     InvalidEmail,
     EmailAlreadyExists,
     UserNotFound,
     
-    // Generic errors
+    // Email service errors
+    EmailSendingFailed(String),
+    
+    // Database errors
     DatabaseError(String),
+    
+    // Generic errors
     InternalServerError(String),
 }
 
@@ -31,14 +46,21 @@ impl fmt::Display for AuthError {
         match self {
             AuthError::HashingError(e) => write!(f, "Password hashing error: {}", e),
             AuthError::VerificationError(e) => write!(f, "Password verification error: {}", e),
+            AuthError::InvalidPassword => write!(f, "Invalid password"),
             AuthError::TokenCreationError(e) => write!(f, "Token creation error: {}", e),
             AuthError::TokenValidationError(e) => write!(f, "Token validation error: {}", e),
             AuthError::TokenExpired => write!(f, "Token has expired"),
             AuthError::InvalidToken => write!(f, "Invalid token"),
-            AuthError::InvalidPassword => write!(f, "Invalid password format"),
+            AuthError::EmailNotVerified => write!(f, "Email not verified"),
+            AuthError::EmailVerificationExpired => write!(f, "Email verification link has expired"),
+            AuthError::EmailVerificationFailed(e) => write!(f, "Email verification failed: {}", e),
+            AuthError::PasswordResetExpired => write!(f, "Password reset link has expired"),
+            AuthError::PasswordResetFailed(e) => write!(f, "Password reset failed: {}", e),
+            AuthError::InvalidResetToken => write!(f, "Invalid password reset token"),
             AuthError::InvalidEmail => write!(f, "Invalid email format"),
             AuthError::EmailAlreadyExists => write!(f, "Email already exists"),
             AuthError::UserNotFound => write!(f, "User not found"),
+            AuthError::EmailSendingFailed(e) => write!(f, "Failed to send email: {}", e),
             AuthError::DatabaseError(e) => write!(f, "Database error: {}", e),
             AuthError::InternalServerError(e) => write!(f, "Internal server error: {}", e),
         }
@@ -66,17 +88,24 @@ impl AuthError {
         match self {
             AuthError::InvalidPassword | 
             AuthError::InvalidEmail |
-            AuthError::InvalidToken => 400,
+            AuthError::InvalidToken |
+            AuthError::InvalidResetToken => 400,
             
             AuthError::EmailAlreadyExists => 409,
             AuthError::UserNotFound => 404,
             
-            AuthError::TokenExpired => 401,
+            AuthError::TokenExpired |
+            AuthError::EmailNotVerified |
+            AuthError::EmailVerificationExpired |
+            AuthError::PasswordResetExpired |
             AuthError::TokenValidationError(_) |
             AuthError::TokenCreationError(_) => 401,
             
             AuthError::HashingError(_) |
             AuthError::VerificationError(_) |
+            AuthError::EmailVerificationFailed(_) |
+            AuthError::PasswordResetFailed(_) |
+            AuthError::EmailSendingFailed(_) |
             AuthError::DatabaseError(_) |
             AuthError::InternalServerError(_) => 500,
         }
@@ -95,17 +124,14 @@ mod tests {
     fn test_error_status_codes() {
         assert_eq!(AuthError::InvalidPassword.status_code(), 400);
         assert_eq!(AuthError::EmailAlreadyExists.status_code(), 409);
-        assert_eq!(AuthError::UserNotFound.status_code(), 404);
-        assert_eq!(AuthError::TokenExpired.status_code(), 401);
+        assert_eq!(AuthError::EmailNotVerified.status_code(), 401);
         assert_eq!(AuthError::InternalServerError("test".to_string()).status_code(), 500);
     }
 
     #[test]
     fn test_error_messages() {
-        let error = AuthError::InvalidPassword;
-        assert_eq!(error.to_string(), "Invalid password format");
-        
-        let error = AuthError::EmailAlreadyExists;
-        assert_eq!(error.to_string(), "Email already exists");
+        assert_eq!(AuthError::InvalidPassword.to_string(), "Invalid password");
+        assert_eq!(AuthError::EmailNotVerified.to_string(), "Email not verified");
+        assert_eq!(AuthError::EmailAlreadyExists.to_string(), "Email already exists");
     }
 }

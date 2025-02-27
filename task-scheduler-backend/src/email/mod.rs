@@ -1,152 +1,156 @@
-pub mod templates;
-pub mod sender;
-
-use lettre::message::{header, MultiPart, SinglePart};
+use lettre::message::{header, MessageBuilder, MultiPart, SinglePart};
 use lettre::transport::smtp::authentication::Credentials;
-use lettre::{SmtpTransport, Transport};
-use crate::error::AppResult;
-use crate::config::Config;
+use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
+use handlebars::Handlebars;
+use serde_json::json;
+use std::error::Error;
 
-#[derive(Debug)]
-pub struct EmailContent {
-    pub subject: String,
-    pub text_content: String,
-    pub html_content: String,
+pub struct EmailService {
+    smtp_transport: AsyncSmtpTransport<Tokio1Executor>,
+    handlebars: Handlebars<'static>,
+    from_email: String,
 }
 
-pub struct EmailSender {
-    transport: SmtpTransport,
-    from_address: String,
-}
-
-impl EmailSender {
-    pub fn new(config: &Config) -> AppResult<Self> {
-        let creds = Credentials::new(
-            config.smtp_username.clone(),
-            config.smtp_password.clone(),
-        );
-
-        let transport = SmtpTransport::relay(&config.smtp_host)?
-            .port(config.smtp_port)
+impl EmailService {
+    pub fn new(
+        smtp_host: String,
+        smtp_port: u16,
+        smtp_username: String,
+        smtp_password: String,
+        from_email: String,
+    ) -> Result<Self, Box<dyn Error>> {
+        let creds = Credentials::new(smtp_username, smtp_password);
+        
+        let smtp_transport = AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_host)?
+            .port(smtp_port)
             .credentials(creds)
             .build();
 
+        let mut handlebars = Handlebars::new();
+        // Register email templates
+        handlebars.register_template_string("verification", include_str!("templates/verification.hbs"))?;
+        handlebars.register_template_string("reset_password", include_str!("templates/reset_password.hbs"))?;
+
         Ok(Self {
-            transport,
-            from_address: config.smtp_username.clone(),
+            smtp_transport,
+            handlebars,
+            from_email,
         })
     }
 
-    pub async fn send_email(
+    pub async fn send_verification_email(
         &self,
-        to_address: &str,
-        content: EmailContent,
-    ) -> AppResult<()> {
-        let email = lettre::Message::builder()
-            .from(self.from_address.parse()?)
-            .to(to_address.parse()?)
-            .subject(content.subject)
+        to_email: &str,
+        name: &str,
+        verification_link: &str,
+    ) -> Result<(), Box<dyn Error>> {
+        let data = json!({
+            "name": name,
+            "verification_link": verification_link
+        });
+
+        let html_body = self.handlebars.render("verification", &data)?;
+        let text_body = format!(
+            "Welcome {}! Please verify your email by clicking this link: {}",
+            name, verification_link
+        );
+
+        self.send_email(
+            to_email,
+            "Verify your email",
+            &text_body,
+            &html_body,
+        ).await
+    }
+
+    pub async fn send_password_reset_email(
+        &self,
+        to_email: &str,
+        name: &str,
+        reset_link: &str,
+    ) -> Result<(), Box<dyn Error>> {
+        let data = json!({
+            "name": name,
+            "reset_link": reset_link
+        });
+
+        let html_body = self.handlebars.render("reset_password", &data)?;
+        let text_body = format!(
+            "Hi {}! Reset your password by clicking this link: {}",
+            name, reset_link
+        );
+
+        self.send_email(
+            to_email,
+            "Reset your password",
+            &text_body,
+            &html_body,
+        ).await
+    }
+
+    async fn send_email(
+        &self,
+        to_email: &str,
+        subject: &str,
+        text_body: &str,
+        html_body: &str,
+    ) -> Result<(), Box<dyn Error>> {
+        let email = MessageBuilder::new()
+            .from(self.from_email.parse()?)
+            .to(to_email.parse()?)
+            .subject(subject)
             .multipart(
                 MultiPart::alternative()
                     .singlepart(
-                        SinglePart::plain(content.text_content)
+                        SinglePart::builder()
+                            .header(header::ContentType::TEXT_PLAIN)
+                            .body(text_body.to_string())
                     )
                     .singlepart(
-                        SinglePart::html(content.html_content)
+                        SinglePart::builder()
+                            .header(header::ContentType::TEXT_HTML)
+                            .body(html_body.to_string())
                     )
             )?;
 
-        self.transport.send(&email)?;
-        
+        self.smtp_transport.send(email).await?;
         Ok(())
     }
-}
-
-// Email type definitions
-#[derive(Debug)]
-pub enum EmailType {
-    TaskAssigned {
-        task_id: uuid::Uuid,
-        task_title: String,
-        project_name: String,
-        assigned_by: String,
-    },
-    TaskUpdated {
-        task_id: uuid::Uuid,
-        task_title: String,
-        update_type: String,
-        updated_by: String,
-    },
-    CommentAdded {
-        task_id: uuid::Uuid,
-        task_title: String,
-        comment_by: String,
-        comment_preview: String,
-    },
-    ProjectInvitation {
-        project_id: uuid::Uuid,
-        project_name: String,
-        invited_by: String,
-        role: String,
-    },
-    DeadlineReminder {
-        task_id: uuid::Uuid,
-        task_title: String,
-        deadline: chrono::DateTime<chrono::Utc>,
-    },
-}
-
-// Helper functions for common email operations
-pub async fn send_task_notification(
-    email_sender: &EmailSender,
-    to_address: &str,
-    notification_type: EmailType,
-) -> AppResult<()> {
-    let content = templates::generate_email_content(notification_type)?;
-    email_sender.send_email(to_address, content).await
-}
-
-pub async fn send_welcome_email(
-    email_sender: &EmailSender,
-    to_address: &str,
-    user_name: &str,
-) -> AppResult<()> {
-    let content = templates::generate_welcome_email(user_name)?;
-    email_sender.send_email(to_address, content).await
-}
-
-pub async fn send_password_reset(
-    email_sender: &EmailSender,
-    to_address: &str,
-    reset_token: &str,
-) -> AppResult<()> {
-    let content = templates::generate_password_reset_email(reset_token)?;
-    email_sender.send_email(to_address, content).await
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::Config;
+    use mockall::predicate::*;
+    use mockall::*;
+
+    mock! {
+        SmtpTransport {}
+        #[async_trait]
+        impl AsyncTransport for SmtpTransport {
+            type Error = Box<dyn Error>;
+            async fn send(&self, email: lettre::Message) -> Result<(), Self::Error>;
+        }
+    }
 
     #[tokio::test]
-    async fn test_email_sending() {
-        let config = Config {
-            smtp_host: "smtp.mailtrap.io".to_string(),
-            smtp_port: 2525,
-            smtp_username: "test".to_string(),
-            smtp_password: "test".to_string(),
-            ..Default::default()
-        };
+    async fn test_send_verification_email() {
+        let email_service = EmailService::new(
+            "smtp.test.com".to_string(),
+            587,
+            "test".to_string(),
+            "password".to_string(),
+            "noreply@test.com".to_string(),
+        ).unwrap();
 
-        let sender = EmailSender::new(&config).unwrap();
-        let content = EmailContent {
-            subject: "Test Email".to_string(),
-            text_content: "Test content".to_string(),
-            html_content: "<p>Test content</p>".to_string(),
-        };
+        let result = email_service
+            .send_verification_email(
+                "test@example.com",
+                "Test User",
+                "http://localhost:3000/verify?token=123",
+            )
+            .await;
 
-        let result = sender.send_email("test@example.com", content).await;
         assert!(result.is_ok());
     }
 }
