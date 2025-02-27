@@ -1,46 +1,35 @@
-use async_graphql::dataloader::*;
+use async_trait::async_trait;
 use sea_orm::{DatabaseConnection, EntityTrait, ModelTrait};
 use std::collections::HashMap;
 use uuid::Uuid;
-
-use crate::db::entities::{user, task, project, comment, attachment};
+use crate::db::entities::*;
 use crate::error::AppResult;
 
-pub struct Loaders {
-    pub user: UserLoader,
-    pub task: TaskLoader,
-    pub project: ProjectLoader,
-    pub comment: CommentLoader,
-    pub attachment: AttachmentLoader,
-}
-
-impl Loaders {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self {
-            user: UserLoader::new(db.clone()),
-            task: TaskLoader::new(db.clone()),
-            project: ProjectLoader::new(db.clone()),
-            comment: CommentLoader::new(db.clone()),
-            attachment: AttachmentLoader::new(db.clone()),
-        }
-    }
-}
-
-// User loader
 pub struct UserLoader {
-    db: DatabaseConnection,
+    pub db: DatabaseConnection
 }
 
-impl UserLoader {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
+pub struct TaskLoader {
+    pub db: DatabaseConnection
 }
 
-#[async_trait::async_trait]
-impl Loader<Uuid> for UserLoader {
+pub struct ProjectLoader {
+    pub db: DatabaseConnection
+}
+
+pub struct CommentLoader {
+    pub db: DatabaseConnection
+}
+
+pub struct AttachmentLoader {
+    pub db: DatabaseConnection
+}
+
+#[async_trait]
+impl DataLoader for UserLoader {
+    type Key = Uuid;
     type Value = user::Model;
-    type Error = async_graphql::Error;
+    type Error = sea_orm::DbErr;
 
     async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
         let users = user::Entity::find()
@@ -52,21 +41,11 @@ impl Loader<Uuid> for UserLoader {
     }
 }
 
-// Task loader
-pub struct TaskLoader {
-    db: DatabaseConnection,
-}
-
-impl TaskLoader {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
-
-#[async_trait::async_trait]
-impl Loader<Uuid> for TaskLoader {
+#[async_trait]
+impl DataLoader for TaskLoader {
+    type Key = Uuid;
     type Value = task::Model;
-    type Error = async_graphql::Error;
+    type Error = sea_orm::DbErr;
 
     async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
         let tasks = task::Entity::find()
@@ -78,21 +57,11 @@ impl Loader<Uuid> for TaskLoader {
     }
 }
 
-// Project loader
-pub struct ProjectLoader {
-    db: DatabaseConnection,
-}
-
-impl ProjectLoader {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
-
-#[async_trait::async_trait]
-impl Loader<Uuid> for ProjectLoader {
+#[async_trait]
+impl DataLoader for ProjectLoader {
+    type Key = Uuid;
     type Value = project::Model;
-    type Error = async_graphql::Error;
+    type Error = sea_orm::DbErr;
 
     async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
         let projects = project::Entity::find()
@@ -104,21 +73,11 @@ impl Loader<Uuid> for ProjectLoader {
     }
 }
 
-// Comment loader
-pub struct CommentLoader {
-    db: DatabaseConnection,
-}
-
-impl CommentLoader {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
-
-#[async_trait::async_trait]
-impl Loader<Uuid> for CommentLoader {
+#[async_trait]
+impl DataLoader for CommentLoader {
+    type Key = Uuid;
     type Value = comment::Model;
-    type Error = async_graphql::Error;
+    type Error = sea_orm::DbErr;
 
     async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
         let comments = comment::Entity::find()
@@ -130,21 +89,11 @@ impl Loader<Uuid> for CommentLoader {
     }
 }
 
-// Attachment loader
-pub struct AttachmentLoader {
-    db: DatabaseConnection,
-}
-
-impl AttachmentLoader {
-    pub fn new(db: DatabaseConnection) -> Self {
-        Self { db }
-    }
-}
-
-#[async_trait::async_trait]
-impl Loader<Uuid> for AttachmentLoader {
+#[async_trait]
+impl DataLoader for AttachmentLoader {
+    type Key = Uuid;
     type Value = attachment::Model;
-    type Error = async_graphql::Error;
+    type Error = sea_orm::DbErr;
 
     async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
         let attachments = attachment::Entity::find()
@@ -154,4 +103,12 @@ impl Loader<Uuid> for AttachmentLoader {
 
         Ok(attachments.into_iter().map(|a| (a.id, a)).collect())
     }
+}
+
+pub trait DataLoader: Send + Sync {
+    type Key: Send + Sync + std::hash::Hash + Eq + Clone;
+    type Value: Send + Sync;
+    type Error: Send + Sync + std::fmt::Debug;
+
+    async fn load(&self, keys: &[Self::Key]) -> Result<HashMap<Self::Key, Self::Value>, Self::Error>;
 }

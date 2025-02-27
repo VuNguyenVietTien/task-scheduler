@@ -1,12 +1,13 @@
-pub mod user;
-pub mod task;
-pub mod project;
-pub mod comment;
 pub mod attachment;
+pub mod comment;
+pub mod notification;
+pub mod project;
+pub mod task;
+pub mod user;
 
-// Re-export entities
-pub use user::*;
-pub use task::*;
-pub use project::*;
-pub use comment::*;
 pub use attachment::*;
+pub use comment::*;
+pub use notification::*;
+pub use project::*;
+pub use task::*;
+pub use user::*;

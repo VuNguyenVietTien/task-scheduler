@@ -1,90 +1,23 @@
-### AI Agent Development Workflow Rules  
-To ensure efficient code updates, maintain project stability, and minimize unnecessary file scanning, follow these rules:  
+# Agent Rules for Project Requirements
 
----
+- When starting a requirement request, first scan all overview markdown files describing business rules, tech stack, screens, APIs, models, and source code structure in the project_root/rule/ directory.
 
-#### **1. Initial Setup**  
-```
+- Analyze the requirement and update existing files or create new ones in the appropriate folders. Content updates should be comprehensive yet concise to allow for quick scanning and understanding of project structure without consuming excessive tokens.
+
+- Create a task_list_[task].md file where [task] is a number or keyword summarizing the content of the work needed.
+
+- Write tasks in markdown format with unchecked boxes [] for pending items and checked boxes [x] for completed implementation tasks.
+
+- When coding, add thorough comments explaining your implementation based on requirements. Avoid deleting or modifying well-functioning code in ways that could degrade existing functionality.
+
+- The Git repository is located in the project root folder. When asked to push files to Git, execute Git commands from the project root directory. Always use 'git add .' when committing changes.
+
+# Project Structure
 project_root/rule/   
 ├── business_requirement/       # Business logic, user stories, feature specs  
 ├── tech_stack_requirement/     # Frameworks, libraries, tools, versions  
-├── source_code_structure/       # Codebase architecture, module/class definitions  
+├── source_code_structure/      # Codebase architecture, module/class definitions  
 ├── screens/                    # UI/UX specs, screen components, interactions  
 ├── apis/                       # API endpoints, request/response formats  
 ├── docs/                       # (Optional) Additional technical documentation  
-└── tests/                      # (Optional) Test cases, coverage reports  
-```  
-
----
-
-#### **2. Workflow Rules**  
-
-**A. Handling New Requests**  
-When a new task/requirement is received:  
-1. **Scan Priority Folders**:  
-   - The AI Agent **MUST** first read all files in these folders to understand context:  
-     - `rule/` (workflow rules)  
-     - `business_requirement/` (what the feature should achieve)  
-     - `tech_stack_requirement/` (how to implement it)  
-     - `source_code_structure/` (where to modify the code)  
-     - Relevant `screens/` or `apis/` subfolders (if UI/API changes are needed).  
-   - Example: For an API update, read `apis/user_management.md` and `source_code_structure/backend_services.md`.  
-
-2. **Avoid Unnecessary Scans**:  
-   - The AI Agent **MUST NOT** scan unrelated files/folders (e.g., third-party libraries, legacy modules).  
-   - Use `source_code_structure/` files to identify impacted code areas.  
-
-**B. Post-Task Completion (After User Approval)**  
-Once a task is marked "OK" by the user:  
-1. **GitHub Actions**:  
-   - Push changes to a **feature-specific branch** (e.g., `feat/user-auth-updates`).  
-   - Commit message format: `[Feature] <brief_description> - <task_ID>`.  
-
-2. **Update Documentation**:  
-   - **Mandatory Updates**:  
-     - `business_requirement/`: Add/revise feature specs.  
-     - `tech_stack_requirement/`: Note new dependencies or configs.  
-     - `source_code_structure/`: Document new/modified modules, classes, or functions.  
-   - **Conditional Updates**:  
-     - Update `screens/` if UI changes occur.  
-     - Update `apis/` if endpoints are added/modified.  
-
----
-
-#### **3. Critical Guidelines**  
-- **Naming Conventions**:  
-  - Use clear, consistent filenames (e.g., `user_registration_flow.md`, `payment_api_v2.md`).  
-  - Include timestamps or version tags in updated files (e.g., `tech_stack_requirement_20231001.md`).  
-
-- **Version Control**:  
-  - Treat documentation updates with the same priority as code changes.  
-  - Use pull requests for documentation reviews to ensure accuracy.  
-
-- **Stability Checks**:  
-  - Before finalizing tasks, the AI Agent **MUST** cross-reference:  
-    - `tests/` (if available) to ensure no test cases are broken.  
-    - `source_code_structure/` to confirm no unintended dependencies are introduced.  
-
----
-
-#### **4. Example Scenario**  
-*Task*: *"Add OAuth2 login to the user dashboard"*  
-1. **AI Agent Scans**:  
-   - `business_requirement/user_authentication.md`  
-   - `tech_stack_requirement/security.md`  
-   - `source_code_structure/auth_module.md`  
-   - `apis/identity_provider_api.md`  
-
-2. **After Implementation**:  
-   - Push code to `feat/oauth2-integration`.  
-   - Update `tech_stack_requirement/security.md` with OAuth2 library details.  
-   - Update `source_code_structure/auth_module.md` with new OAuth2 class definitions.  
-
----
-
-#### **5. Benefits**  
-- **Reduced Scanning Effort**: The AI Agent focuses only on relevant files.  
-- **Stability**: Clear documentation prevents accidental overrides of stable code.  
-- **Scalability**: As the project grows, the AI Agent avoids "needle-in-a-haystack" file searches.  
-
-Let me know if you want to refine specific sections! 🚀
+└── tests/                      # (Optional) Test cases, coverage reports

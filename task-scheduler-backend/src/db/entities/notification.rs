@@ -4,27 +4,32 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
-#[sea_orm(table_name = "projects")]
+#[sea_orm(table_name = "notifications")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
-    pub name: String,
+    pub user_id: Uuid,
+    pub title: String,
     #[sea_orm(column_type = "Text")]
-    pub description: Option<String>,
-    pub created_by: Uuid,
+    pub content: String,
+    pub read: bool,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::task::Entity")]
-    Tasks,
+    #[sea_orm(
+        belongs_to = "super::user::Entity",
+        from = "Column::UserId",
+        to = "super::user::Column::Id"
+    )]
+    User,
 }
 
-impl Related<super::task::Entity> for Entity {
+impl Related<super::user::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Tasks.def()
+        Relation::User.def()
     }
 }
 
