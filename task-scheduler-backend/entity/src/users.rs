@@ -15,6 +15,11 @@ pub struct Model {
     pub role: String,
     #[sea_orm(column_type = "Float", nullable)]
     pub work_capacity: Option<f32>,
+    pub email_verified: bool,
+    pub verification_token: Option<String>,
+    pub verification_token_expires: Option<DateTimeWithTimeZone>,
+    pub firebase_uid: Option<String>,
+    pub provider: String,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
 }

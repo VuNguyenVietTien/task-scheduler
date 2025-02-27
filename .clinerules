@@ -12,6 +12,8 @@
 
 - The Git repository is located in the project root folder. When asked to push files to Git, execute Git commands from the project root directory. Always use 'git add .' when committing changes.
 
+- Before running npm install for any package, check if the package is already listed in package.json to avoid duplicate installations. Only create an installation command for packages not already present.
+
 # Project Structure
 project_root/rule/   
 ├── business_requirement/       # Business logic, user stories, feature specs  

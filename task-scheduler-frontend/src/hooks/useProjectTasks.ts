@@ -1,41 +1,34 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type UseQueryOptions } from '@tanstack/react-query';
 import { Task } from '@/types/task';
 import { mockTasks } from '@/data/mockTasks';
 
+/**
+ * Fetches tasks for a specific project
+ */
 const fetchProjectTasks = async (projectId: string): Promise<Task[]> => {
   // For testing, return mock data with minimal delay
   await new Promise(resolve => setTimeout(resolve, 100));
   
-  // Deep clone mock tasks to avoid reference issues
-  const tasks = mockTasks.map(task => ({...task}));
+  // Filter mock tasks by project ID and deep clone them
+  const tasks = mockTasks
+    .filter(task => task.projectId === projectId)
+    .map(task => ({...task}));
   return tasks;
-
-  // Real implementation would be:
-  /*
-  const response = await fetch(`/api/projects/${projectId}/tasks`);
-  if (!response.ok) {
-    throw new Error('Failed to fetch tasks');
-  }
-  return response.json();
-  */
 };
 
+type QueryOptions = UseQueryOptions<Task[], Error, Task[], [string, string]>;
+
 export function useProjectTasks(projectId: string) {
-  return useQuery<Task[]>({
-    queryKey: ['tasks', projectId],
+  const queryOptions: QueryOptions = {
     queryFn: () => fetchProjectTasks(projectId),
-    staleTime: Infinity, // Keep data fresh until explicitly invalidated
-    cacheTime: 5 * 60 * 1000, // Cache for 5 minutes
+    queryKey: ['projectTasks', projectId],
+    staleTime: 5 * 60 * 1000, // Data is fresh for 5 minutes
+    cacheTime: 10 * 60 * 1000,   // Keep in cache for 10 minutes
     refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
-    select: (tasks) => {
-      // Ensure we return a new array to avoid reference issues
-      return tasks.map(task => ({...task}));
-    },
-    initialData: () => {
-      // Initialize with mock data for faster initial load
-      return mockTasks.map(task => ({...task}));
-    }
-  });
+    initialData: () => mockTasks
+      .filter(task => task.projectId === projectId)
+      .map(task => ({...task}))
+  };
+
+  return useQuery(queryOptions);
 }

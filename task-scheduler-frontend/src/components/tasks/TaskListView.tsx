@@ -1,12 +1,11 @@
 'use client';
 
+import React, { useState, useMemo, useCallback } from 'react';
 import { Task, TaskStatus, Priority, TaskFilter, User, TaskStatuses, Priorities } from '@/types/task';
 import { ProjectData } from '@/types/project';
 import { TaskFilterBar } from './TaskFilterBar';
 import { TaskBulkActions } from './TaskBulkActions';
-import { useState, useMemo, useCallback } from 'react';
 import { useUpdateTaskPriorityOrder } from '@/hooks/useTasks';
-
 
 interface TaskListViewProps {
   tasks: Task[];
@@ -18,7 +17,7 @@ interface SortConfig {
   direction: 'asc' | 'desc';
 }
 
-export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Element {
+export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
   const [filter, setFilter] = useState<TaskFilter>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'createdAt', direction: 'desc' });
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
@@ -40,7 +39,7 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
       if (task.projectId && !uniqueProjects.has(task.projectId)) {
         uniqueProjects.set(task.projectId, {
           id: task.projectId,
-          name: `Project ${task.projectId}`, // You might want to get actual project names from somewhere
+          name: `Project ${task.projectId}`,
           description: '',
           dueDate: '',
           members: 0,
@@ -139,12 +138,12 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
     });
   };
 
-  const renderTaskRow = (task: Task, index: number, level: number = 0): JSX.Element => {
+  const renderTaskRow = (task: Task, level: number = 0): JSX.Element => {
     const hasChildren = task.childTasks && task.childTasks.length > 0;
     const isExpanded = expandedTasks.has(task.id);
 
     return (
-      <>
+      <React.Fragment key={task.id}>
         <tr className={`hover:bg-slate-50 ${level > 0 ? 'bg-slate-50' : ''}`}>
           <td className="w-8 py-4 pl-4 pr-3">
             <div className="flex items-center">
@@ -222,13 +221,14 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
             </button>
           </td>
         </tr>
-        {hasChildren && isExpanded && task.childTasks?.map((childTask, childIndex) => (
-          renderTaskRow(childTask, -1, level + 1)
+        {hasChildren && isExpanded && task.childTasks?.map((childTask) => (
+          renderTaskRow(childTask, level + 1)
         ))}
-      </>
+      </React.Fragment>
     );
   };
 
+  // Continue with existing functions...
   const handleBulkStatusChange = useCallback((status: TaskStatus) => {
     console.log('Change status to', status, 'for tasks:', Array.from(selectedTasks));
   }, [selectedTasks]);
@@ -420,7 +420,7 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
-              {displayedTasks.map((task, index) => renderTaskRow(task, index))}
+              {displayedTasks.map((task) => renderTaskRow(task))}
             </tbody>
           </table>
         </div>
