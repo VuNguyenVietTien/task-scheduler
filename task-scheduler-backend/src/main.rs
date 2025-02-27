@@ -1,6 +1,7 @@
 mod auth;
 mod api;
 mod email;
+mod firebase;
 
 use actix_web::{web, App, HttpServer};
 use actix_cors::Cors;
@@ -9,6 +10,7 @@ use sea_orm::Database;
 use std::env;
 use auth::AuthService;
 use email::EmailService;
+use firebase::FirebaseService;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -34,6 +36,23 @@ async fn main() -> std::io::Result<()> {
     let from_email = env::var("FROM_EMAIL").expect("FROM_EMAIL must be set");
     let frontend_url = env::var("FRONTEND_URL").expect("FRONTEND_URL must be set");
 
+    // Firebase configuration (optional)
+    let firebase_service = if let Ok(service_account_path) = env::var("FIREBASE_SERVICE_ACCOUNT") {
+        match FirebaseService::new(&service_account_path).await {
+            Ok(service) => {
+                println!("Firebase service initialized successfully");
+                Some(service)
+            }
+            Err(e) => {
+                eprintln!("Failed to initialize Firebase service: {}", e);
+                None
+            }
+        }
+    } else {
+        println!("Firebase configuration not found, running without Firebase support");
+        None
+    };
+
     // Connect to database
     let database = Database::connect(&database_url)
         .await
@@ -53,6 +72,7 @@ async fn main() -> std::io::Result<()> {
         database.clone(),
         &jwt_secret,
         email_service,
+        firebase_service,
         frontend_url,
     ));
 

@@ -16,6 +16,11 @@ pub struct LoginRequest {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct FirebaseLoginRequest {
+    firebase_token: String,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct VerifyEmailRequest {
     token: String,
 }
@@ -51,6 +56,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         web::scope("/auth")
             .route("/register", web::post().to(register))
             .route("/login", web::post().to(login))
+            .route("/firebase/login", web::post().to(firebase_login))
             .route("/verify-email", web::post().to(verify_email))
             .route("/request-password-reset", web::post().to(request_password_reset))
             .route("/reset-password", web::post().to(reset_password)),
@@ -85,6 +91,20 @@ async fn login(
         request.email.clone(),
         request.password.clone(),
     ).await {
+        Ok(token) => HttpResponse::Ok().json(AuthResponse { token }),
+        Err(e) => {
+            let (status, message) = e.error_response();
+            HttpResponse::build(actix_web::http::StatusCode::from_u16(status).unwrap())
+                .json(ErrorResponse { error: message })
+        }
+    }
+}
+
+async fn firebase_login(
+    auth_service: web::Data<AuthService>,
+    request: web::Json<FirebaseLoginRequest>,
+) -> impl Responder {
+    match auth_service.firebase_login(&request.firebase_token).await {
         Ok(token) => HttpResponse::Ok().json(AuthResponse { token }),
         Err(e) => {
             let (status, message) = e.error_response();
@@ -151,17 +171,7 @@ mod tests {
     use actix_web::{test, App};
 
     #[actix_web::test]
-    async fn test_register_endpoint() {
-        // TODO: Implement tests with mock auth service
-    }
-
-    #[actix_web::test]
-    async fn test_verify_email_endpoint() {
-        // TODO: Implement tests
-    }
-
-    #[actix_web::test]
-    async fn test_password_reset_endpoints() {
-        // TODO: Implement tests
+    async fn test_firebase_login_endpoint() {
+        // TODO: Implement tests for Firebase login endpoint
     }
 }

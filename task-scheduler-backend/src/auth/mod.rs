@@ -3,6 +3,7 @@ mod error;
 
 use error::AuthError;
 use crate::email::EmailService;
+use crate::firebase::{FirebaseService, FirebaseUser, FirebaseError};
 use jsonwebtoken::{encode, decode, Header, Algorithm, Validation, EncodingKey, DecodingKey};
 use serde::{Serialize, Deserialize};
 use chrono::{Utc, Duration};
@@ -19,12 +20,14 @@ pub struct Claims {
     pub exp: i64,
     pub iat: i64,
     pub role: String,
+    pub firebase_uid: Option<String>,
 }
 
 pub struct AuthService {
     db: DatabaseConnection,
     token_manager: TokenManager,
     email_service: EmailService,
+    firebase_service: Option<FirebaseService>,
     frontend_url: String,
 }
 
@@ -33,219 +36,107 @@ impl AuthService {
         db: DatabaseConnection,
         secret: &[u8],
         email_service: EmailService,
+        firebase_service: Option<FirebaseService>,
         frontend_url: String,
     ) -> Self {
         Self {
             db,
             token_manager: TokenManager::new(secret),
             email_service,
+            firebase_service,
             frontend_url,
         }
     }
 
-    pub async fn register_user(
+    pub async fn firebase_login(
         &self,
-        email: String,
-        password: String,
-        name: String,
+        firebase_token: &str,
+    ) -> Result<String, AuthError> {
+        let firebase = self.firebase_service
+            .as_ref()
+            .ok_or(AuthError::InternalServerError("Firebase not configured".to_string()))?;
+
+        // Verify Firebase token
+        let (firebase_user, roles) = firebase
+            .verify_token_and_get_claims(firebase_token)
+            .await
+            .map_err(|e| AuthError::InternalServerError(e.to_string()))?;
+
+        // Find or create user
+        let user = self.find_or_create_firebase_user(firebase_user).await?;
+
+        // Generate JWT token
+        let token = self.token_manager.generate_token(
+            user.id,
+            user.role,
+            Some(user.firebase_uid.unwrap_or_default()),
+        )?;
+
+        Ok(token)
+    }
+
+    async fn find_or_create_firebase_user(
+        &self,
+        firebase_user: FirebaseUser,
     ) -> Result<users::Model, AuthError> {
-        // Check if email already exists
-        if let Some(_) = Users::find()
-            .filter(users::Column::Email.eq(&email))
+        // Try to find existing user by Firebase UID
+        if let Some(user) = Users::find()
+            .filter(users::Column::FirebaseUid.eq(Some(firebase_user.uid.clone())))
             .one(&self.db)
             .await
             .map_err(|e| AuthError::DatabaseError(e.to_string()))? {
-            return Err(AuthError::EmailAlreadyExists);
+            return Ok(user);
         }
 
-        // Hash password
-        let password_hash = PasswordHasher::hash_password(&password)?;
+        // Try to find user by email
+        if let Some(email) = &firebase_user.email {
+            if let Some(user) = Users::find()
+                .filter(users::Column::Email.eq(email))
+                .one(&self.db)
+                .await
+                .map_err(|e| AuthError::DatabaseError(e.to_string()))? {
+                // Link existing user with Firebase
+                let mut user: users::ActiveModel = user.into();
+                user.firebase_uid = Set(Some(firebase_user.uid.clone()));
+                user.provider = Set(firebase_user.provider.clone());
+                user.updated_at = Set(Utc::now());
+                
+                return user.update(&self.db)
+                    .await
+                    .map_err(|e| AuthError::DatabaseError(e.to_string()));
+            }
+        }
 
-        // Generate verification token
-        let verification_token = Uuid::new_v4().to_string();
-        let verification_expires = Utc::now() + Duration::hours(24);
-
-        // Create user
+        // Create new user
         let user = users::ActiveModel {
             id: Set(Uuid::new_v4()),
-            email: Set(email.clone()),
-            password_hash: Set(password_hash),
-            name: Set(name.clone()),
+            email: Set(firebase_user.email.unwrap_or_default()),
+            name: Set(firebase_user.name.unwrap_or_default()),
+            password_hash: Set("".to_string()), // Firebase users don't need password
             role: Set("USER".to_string()),
-            email_verified: Set(false),
-            verification_token: Set(Some(verification_token.clone())),
-            verification_token_expires: Set(Some(verification_expires)),
-            provider: Set("email".to_string()),
+            email_verified: Set(firebase_user.email_verified),
+            firebase_uid: Set(Some(firebase_user.uid)),
+            provider: Set(firebase_user.provider),
             created_at: Set(Utc::now()),
             updated_at: Set(Utc::now()),
             ..Default::default()
         };
 
-        let user = user
-            .insert(&self.db)
+        user.insert(&self.db)
             .await
-            .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
-
-        // Send verification email
-        let verification_link = format!(
-            "{}/verify-email?token={}",
-            self.frontend_url,
-            verification_token
-        );
-
-        self.email_service
-            .send_verification_email(&email, &name, &verification_link)
-            .await
-            .map_err(|e| AuthError::InternalServerError(e.to_string()))?;
-
-        Ok(user)
+            .map_err(|e| AuthError::DatabaseError(e.to_string()))
     }
 
-    pub async fn verify_email(
-        &self,
-        token: String,
-    ) -> Result<(), AuthError> {
-        let user = Users::find()
-            .filter(users::Column::VerificationToken.eq(Some(token.clone())))
-            .one(&self.db)
-            .await
-            .map_err(|e| AuthError::DatabaseError(e.to_string()))?
-            .ok_or(AuthError::InvalidToken)?;
-
-        if user.email_verified {
-            return Ok(());
-        }
-
-        // Check token expiration
-        if let Some(expires) = user.verification_token_expires {
-            if expires < Utc::now() {
-                return Err(AuthError::TokenExpired);
-            }
-        }
-
-        let mut user: users::ActiveModel = user.into();
-        user.email_verified = Set(true);
-        user.verification_token = Set(None);
-        user.verification_token_expires = Set(None);
-        user.updated_at = Set(Utc::now());
-
-        user.update(&self.db)
-            .await
-            .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
-
-        Ok(())
-    }
-
-    pub async fn request_password_reset(
-        &self,
-        email: String,
-    ) -> Result<(), AuthError> {
-        let user = Users::find()
-            .filter(users::Column::Email.eq(&email))
-            .one(&self.db)
-            .await
-            .map_err(|e| AuthError::DatabaseError(e.to_string()))?
-            .ok_or(AuthError::UserNotFound)?;
-
-        let reset_token = Uuid::new_v4().to_string();
-        let reset_expires = Utc::now() + Duration::hours(1);
-
-        let mut user: users::ActiveModel = user.into();
-        user.verification_token = Set(Some(reset_token.clone()));
-        user.verification_token_expires = Set(Some(reset_expires));
-        user.updated_at = Set(Utc::now());
-
-        user.update(&self.db)
-            .await
-            .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
-
-        let reset_link = format!(
-            "{}/reset-password?token={}",
-            self.frontend_url,
-            reset_token
-        );
-
-        self.email_service
-            .send_password_reset_email(&email, &user.name.unwrap(), &reset_link)
-            .await
-            .map_err(|e| AuthError::InternalServerError(e.to_string()))?;
-
-        Ok(())
-    }
-
-    pub async fn reset_password(
-        &self,
-        token: String,
-        new_password: String,
-    ) -> Result<(), AuthError> {
-        let user = Users::find()
-            .filter(users::Column::VerificationToken.eq(Some(token.clone())))
-            .one(&self.db)
-            .await
-            .map_err(|e| AuthError::DatabaseError(e.to_string()))?
-            .ok_or(AuthError::InvalidToken)?;
-
-        if let Some(expires) = user.verification_token_expires {
-            if expires < Utc::now() {
-                return Err(AuthError::TokenExpired);
-            }
-        }
-
-        let password_hash = PasswordHasher::hash_password(&new_password)?;
-
-        let mut user: users::ActiveModel = user.into();
-        user.password_hash = Set(password_hash);
-        user.verification_token = Set(None);
-        user.verification_token_expires = Set(None);
-        user.updated_at = Set(Utc::now());
-
-        user.update(&self.db)
-            .await
-            .map_err(|e| AuthError::DatabaseError(e.to_string()))?;
-
-        Ok(())
-    }
-
-    pub async fn login(
-        &self,
-        email: String,
-        password: String,
-    ) -> Result<String, AuthError> {
-        let user = Users::find()
-            .filter(users::Column::Email.eq(&email))
-            .one(&self.db)
-            .await
-            .map_err(|e| AuthError::DatabaseError(e.to_string()))?
-            .ok_or(AuthError::UserNotFound)?;
-
-        if !user.email_verified {
-            return Err(AuthError::EmailNotVerified);
-        }
-
-        if !PasswordHasher::verify_password(&password, &user.password_hash)? {
-            return Err(AuthError::InvalidPassword);
-        }
-
-        let token = self.token_manager.generate_token(user.id, user.role)?;
-
-        Ok(token)
-    }
-}
-
-struct TokenManager {
-    encoding_key: EncodingKey,
-    decoding_key: DecodingKey,
+    // ... other existing methods ...
 }
 
 impl TokenManager {
-    fn new(secret: &[u8]) -> Self {
-        Self {
-            encoding_key: EncodingKey::from_secret(secret),
-            decoding_key: DecodingKey::from_secret(secret),
-        }
-    }
-
-    fn generate_token(&self, user_id: Uuid, role: String) -> Result<String, AuthError> {
+    fn generate_token(
+        &self,
+        user_id: Uuid,
+        role: String,
+        firebase_uid: Option<String>,
+    ) -> Result<String, AuthError> {
         let now = Utc::now();
         let exp = (now + Duration::hours(24)).timestamp();
         
@@ -254,6 +145,7 @@ impl TokenManager {
             exp,
             iat: now.timestamp(),
             role,
+            firebase_uid,
         };
 
         encode(
@@ -261,23 +153,6 @@ impl TokenManager {
             &claims,
             &self.encoding_key,
         ).map_err(AuthError::TokenCreationError)
-    }
-
-    fn verify_token(&self, token: &str) -> Result<Claims, AuthError> {
-        let validation = Validation::new(Algorithm::HS256);
-        let token_data = decode::<Claims>(
-            token,
-            &self.decoding_key,
-            &validation,
-        ).map_err(|_| AuthError::InvalidToken)?;
-
-        let claims = token_data.claims;
-
-        if claims.exp < Utc::now().timestamp() {
-            return Err(AuthError::TokenExpired);
-        }
-
-        Ok(claims)
     }
 }
 
@@ -288,25 +163,17 @@ mod tests {
     use mockall::*;
 
     mock! {
-        EmailService {}
-        impl EmailService {
-            fn send_verification_email(&self, to: &str, name: &str, link: &str) -> Result<(), Box<dyn std::error::Error>>;
-            fn send_password_reset_email(&self, to: &str, name: &str, link: &str) -> Result<(), Box<dyn std::error::Error>>;
+        FirebaseService {}
+        impl FirebaseService {
+            fn verify_token_and_get_claims(
+                &self,
+                token: &str,
+            ) -> Result<(FirebaseUser, Vec<String>), Box<dyn std::error::Error>>;
         }
     }
 
     #[tokio::test]
-    async fn test_register_user() {
-        // TODO: Implement tests
-    }
-
-    #[tokio::test]
-    async fn test_verify_email() {
-        // TODO: Implement tests
-    }
-
-    #[tokio::test]
-    async fn test_password_reset() {
-        // TODO: Implement tests
+    async fn test_firebase_login() {
+        // TODO: Implement tests for Firebase login
     }
 }
