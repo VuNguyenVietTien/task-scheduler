@@ -1,8 +1,10 @@
-use actix_web::{web, HttpResponse};
+pub mod auth;
+
+use actix_web::web;
 
 pub fn config(cfg: &mut web::ServiceConfig) {
     cfg.service(
         web::scope("/api")
-            // Add API routes here
+            .configure(auth::config)
     );
 }

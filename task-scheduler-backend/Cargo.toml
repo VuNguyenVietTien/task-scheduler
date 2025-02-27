@@ -4,39 +4,18 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-tokio = { version = "1.0", features = ["full"] }
-actix-web = { version = "4.0", features = ["openssl"] }
-actix-cors = "0.6"
-dotenv = "0.15"
-actix-web-actors = "4.1"
-actix = "0.13"
-sea-orm = { version = "0.12", features = ["sqlx-postgres", "runtime-tokio-native-tls", "macros"] }
+tokio = { version = "1.28.2", features = ["full"] }
+sea-orm = { version = "0.12", features = ["sqlx-postgres", "runtime-tokio-native-tls", "macros", "debug-print"] }
+dotenv = "0.15.0"
+entity = { path = "entity" }
+migration = { path = "migration" }
+uuid = { version = "1.4.1", features = ["v4", "serde"] }
+chrono = { version = "0.4.26", features = ["serde"] }
+bcrypt = "0.10"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-async-graphql = { version = "6.0", features = ["chrono", "uuid"] }
-async-graphql-actix-web = "6.0"
-chrono = { version = "0.4", features = ["serde"] }
-uuid = { version = "1.0", features = ["serde", "v4"] }
-jsonwebtoken = "9.0"
-bcrypt = "0.10"
-lettre = { version = "0.11", features = ["tokio1", "tokio1-native-tls"] }
-reqwest = { version = "0.11", features = ["json"] }
+jsonwebtoken = "8.1"
+actix-web = "4"
+actix-cors = "0.6"
 env_logger = "0.10"
 log = "0.4"
-sanitize-filename = "0.5"
-thiserror = "1.0"
-async-trait = "0.1"
-migration = { path = "migration" }
-entity = { path = "entity" }
-
-[workspace]
-members = [
-    ".",
-    "entity",
-    "migration",
-]
-
-[features]
-default = []
-mock = []
-integration = []
