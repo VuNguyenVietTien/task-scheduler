@@ -1,4 +1,4 @@
-import { Task } from '@/types/task';
+import { Task, TaskStatus, TaskStatuses } from '@/types/task';
 import { TaskTooltip } from './TaskTooltip';
 import { useState, useCallback, useRef } from 'react';
 
@@ -15,17 +15,17 @@ export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
   const [showTooltip, setShowTooltip] = useState(false);
   const barRef = useRef<HTMLDivElement>(null);
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: TaskStatus) => {
     switch (status) {
-      case 'DONE':
+      case TaskStatuses.DONE:
         return 'bg-green-500';
-      case 'IN_PROGRESS':
+      case TaskStatuses.IN_PROGRESS:
         return 'bg-blue-500';
-      case 'IN_REVIEW':
+      case TaskStatuses.IN_REVIEW:
         return 'bg-purple-500';
-      case 'PLANNED':
+      case TaskStatuses.PLANNED:
         return 'bg-amber-500';
-      case 'BACKLOG':
+      case TaskStatuses.BACKLOG:
         return 'bg-slate-500';
       default:
         return 'bg-slate-300';

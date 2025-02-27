@@ -1,0 +1,8 @@
+[migration]
+entity_directory = "src/db/entities"
+migrations_directory = "src/db/migrations"
+
+[generator]
+database_url = "postgres://postgres:cachiusa1A!@db.ucjwvxldtpgxkzehqwlz.supabase.co:5432/postgres"
+database_schema = "public"
+generate_entity_model = true

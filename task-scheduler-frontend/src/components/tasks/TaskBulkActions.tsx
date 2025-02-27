@@ -1,4 +1,4 @@
-import { TaskStatus, Priority } from '@/types/task';
+import { TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
 
 interface TaskBulkActionsProps {
   selectedCount: number;
@@ -31,7 +31,7 @@ export function TaskBulkActions({
           defaultValue=""
         >
           <option value="" disabled>Change Status</option>
-          {Object.values(TaskStatus).map((status) => (
+          {Object.values(TaskStatuses).map((status) => (
             <option key={status} value={status}>
               {status.replace(/_/g, ' ')}
             </option>
@@ -45,7 +45,7 @@ export function TaskBulkActions({
           defaultValue=""
         >
           <option value="" disabled>Change Priority</option>
-          {Object.values(Priority).map((priority) => (
+          {Object.values(Priorities).map((priority) => (
             <option key={priority} value={priority}>
               {priority}
             </option>

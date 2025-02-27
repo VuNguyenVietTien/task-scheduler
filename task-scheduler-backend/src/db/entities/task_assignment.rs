@@ -2,20 +2,14 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
-#[sea_orm(table_name = "attachments")]
+#[sea_orm(table_name = "task_assignments")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: Uuid,
     pub task_id: Uuid,
+    #[sea_orm(primary_key, auto_increment = false)]
     pub user_id: Uuid,
-    #[sea_orm(column_type = "Text")]
-    pub file_name: String,
-    pub file_size: i64,
-    #[sea_orm(column_type = "Text")]
-    pub mime_type: String,
-    #[sea_orm(column_type = "Text")]
-    pub storage_path: String,
-    pub created_at: DateTimeWithTimeZone,
+    pub assigned_at: DateTimeWithTimeZone,
+    pub assigned_by: Uuid,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -23,8 +17,7 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::task::Entity",
         from = "Column::TaskId",
-        to = "super::task::Column::Id",
-        on_delete = "Cascade"
+        to = "super::task::Column::Id"
     )]
     Task,
     #[sea_orm(
@@ -33,6 +26,13 @@ pub enum Relation {
         to = "super::user::Column::Id"
     )]
     User,
+    #[sea_orm(
+        belongs_to = "super::user::Entity",
+        from = "Column::AssignedBy",
+        to = "super::user::Column::Id",
+        on_delete = "Cascade"
+    )]
+    Assigner,
 }
 
 impl Related<super::task::Entity> for Entity {

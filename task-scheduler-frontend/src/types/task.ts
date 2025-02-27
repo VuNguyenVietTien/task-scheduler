@@ -1,17 +1,20 @@
-export enum TaskStatus {
-  BACKLOG = 'BACKLOG',
-  PLANNED = 'PLANNED',
-  IN_PROGRESS = 'IN_PROGRESS',
-  IN_REVIEW = 'IN_REVIEW',
-  DONE = 'DONE'
-}
+export type TaskStatus = 'BACKLOG' | 'PLANNED' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE';
+export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
 
-export enum Priority {
-  LOW = 'LOW',
-  MEDIUM = 'MEDIUM',
-  HIGH = 'HIGH',
-  URGENT = 'URGENT'
-}
+export const TaskStatuses = {
+  BACKLOG: 'BACKLOG' as TaskStatus,
+  PLANNED: 'PLANNED' as TaskStatus,
+  IN_PROGRESS: 'IN_PROGRESS' as TaskStatus,
+  IN_REVIEW: 'IN_REVIEW' as TaskStatus,
+  DONE: 'DONE' as TaskStatus
+};
+
+export const Priorities = {
+  LOW: 'LOW' as Priority,
+  MEDIUM: 'MEDIUM' as Priority,
+  HIGH: 'HIGH' as Priority,
+  URGENT: 'URGENT' as Priority
+};
 
 export interface User {
   id: string;
@@ -48,6 +51,7 @@ export interface TaskFilter {
   assigneeId?: string;
   startDate?: string;
   endDate?: string;
+  projectId?: string;
 }
 
 export type TaskType = 'Feature' | 'Bug' | 'Enhancement' | 'Documentation';

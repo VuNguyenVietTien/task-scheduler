@@ -1,10 +1,12 @@
-import { TaskFilter, TaskStatus, Priority, User } from '@/types/task';
+import { TaskFilter, TaskStatus, Priority, User, TaskStatuses, Priorities } from '../../types/task';
+import { ProjectData } from '../../types/project';
 import { useState } from 'react';
-import { Dialog } from '@/components/ui/Dialog';
+import { Dialog } from '../ui/Dialog';
 
 interface TaskFilterBarProps {
   onFilterChange: (filter: TaskFilter) => void;
   assignees: User[];
+  projects: ProjectData[];
   showCompletedTasks: boolean;
   onToggleCompleted: () => void;
 }
@@ -12,6 +14,7 @@ interface TaskFilterBarProps {
 export function TaskFilterBar({ 
   onFilterChange, 
   assignees, 
+  projects,
   showCompletedTasks, 
   onToggleCompleted 
 }: TaskFilterBarProps) {
@@ -19,6 +22,7 @@ export function TaskFilterBar({
   const [selectedStatus, setSelectedStatus] = useState<TaskStatus | undefined>();
   const [selectedPriority, setSelectedPriority] = useState<Priority | undefined>();
   const [selectedAssignee, setSelectedAssignee] = useState<string>('');
+  const [selectedProject, setSelectedProject] = useState<string>('');
   const [dateRange, setDateRange] = useState({ start: '', end: '' });
   const [isOpen, setIsOpen] = useState(false);
 
@@ -28,6 +32,7 @@ export function TaskFilterBar({
       status?: TaskStatus;
       priority?: Priority;
       assigneeId?: string;
+      projectId?: string;
       dateRange?: { start: string; end: string };
     }
   ) => {
@@ -36,6 +41,7 @@ export function TaskFilterBar({
     const currentStatus = updates.status !== undefined ? updates.status : selectedStatus;
     const currentPriority = updates.priority !== undefined ? updates.priority : selectedPriority;
     const currentAssignee = updates.assigneeId !== undefined ? updates.assigneeId : selectedAssignee;
+    const currentProject = updates.projectId !== undefined ? updates.projectId : selectedProject;
     const currentDateRange = updates.dateRange || dateRange;
 
     if (currentSearchQuery) {
@@ -52,6 +58,10 @@ export function TaskFilterBar({
 
     if (currentAssignee) {
       newFilter.assigneeId = currentAssignee;
+    }
+
+    if (currentProject) {
+      newFilter.projectId = currentProject;
     }
 
     if (currentDateRange.start) {
@@ -75,7 +85,7 @@ export function TaskFilterBar({
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
         </svg>
         Filter Tasks
-        {(selectedStatus || selectedPriority || selectedAssignee || dateRange.start || dateRange.end || searchQuery) && (
+        {(selectedStatus || selectedPriority || selectedAssignee || selectedProject || dateRange.start || dateRange.end || searchQuery) && (
           <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">Active Filters</span>
         )}
       </button>
@@ -135,13 +145,18 @@ export function TaskFilterBar({
                   className="block w-full rounded-lg border-slate-300 border-2 focus:border-blue-500 focus:ring focus:ring-blue-200 py-2"
                   value={selectedStatus || ''}
                   onChange={(e) => {
-                    const value = e.target.value as TaskStatus;
-                    setSelectedStatus(value || undefined);
-                    handleFilterChange({ status: value || undefined });
+                    const value = e.target.value;
+                    if (value === '') {
+                      setSelectedStatus(undefined);
+                      handleFilterChange({ status: undefined });
+                    } else {
+                      setSelectedStatus(value as TaskStatus);
+                      handleFilterChange({ status: value as TaskStatus });
+                    }
                   }}
                 >
                   <option value="">All Statuses</option>
-                  {Object.values(TaskStatus).map((status) => (
+                  {Object.values(TaskStatuses).map((status) => (
                     <option key={status} value={status}>
                       {status.replace(/_/g, ' ')}
                     </option>
@@ -158,13 +173,18 @@ export function TaskFilterBar({
                   className="block w-full rounded-lg border-slate-300 border-2 focus:border-blue-500 focus:ring focus:ring-blue-200 py-2"
                   value={selectedPriority || ''}
                   onChange={(e) => {
-                    const value = e.target.value as Priority;
-                    setSelectedPriority(value || undefined);
-                    handleFilterChange({ priority: value || undefined });
+                    const value = e.target.value;
+                    if (value === '') {
+                      setSelectedPriority(undefined);
+                      handleFilterChange({ priority: undefined });
+                    } else {
+                      setSelectedPriority(value as Priority);
+                      handleFilterChange({ priority: value as Priority });
+                    }
                   }}
                 >
                   <option value="">All Priorities</option>
-                  {Object.values(Priority).map((priority) => (
+                  {Object.values(Priorities).map((priority) => (
                     <option key={priority} value={priority}>
                       {priority}
                     </option>
@@ -174,27 +194,55 @@ export function TaskFilterBar({
             </div>
           </div>
 
-          {/* Assignee Group */}
+          {/* Project & Assignee Group */}
           <div className="space-y-4 pb-6 border-b border-slate-200">
-            <h3 className="text-base font-medium text-slate-900">Assignee</h3>
-            <div>
-              <select
-                id="assignee"
-                className="block w-full rounded-lg border-slate-300 border-2 focus:border-blue-500 focus:ring focus:ring-blue-200 py-2"
-                value={selectedAssignee}
-                onChange={(e) => {
-                  const value = e.target.value;
-                  setSelectedAssignee(value);
-                  handleFilterChange({ assigneeId: value });
-                }}
-              >
-                <option value="">All Assignees</option>
-                {assignees.map((assignee) => (
-                  <option key={assignee.id} value={assignee.id}>
-                    {assignee.name}
-                  </option>
-                ))}
-              </select>
+            <h3 className="text-base font-medium text-slate-900">Project & Assignee</h3>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label htmlFor="project" className="block text-sm font-medium text-slate-700 mb-1">
+                  Project
+                </label>
+                <select
+                  id="project"
+                  className="block w-full rounded-lg border-slate-300 border-2 focus:border-blue-500 focus:ring focus:ring-blue-200 py-2"
+                  value={selectedProject}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSelectedProject(value);
+                    handleFilterChange({ projectId: value });
+                  }}
+                >
+                  <option value="">All Projects</option>
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label htmlFor="assignee" className="block text-sm font-medium text-slate-700 mb-1">
+                  Assignee
+                </label>
+                <select
+                  id="assignee"
+                  className="block w-full rounded-lg border-slate-300 border-2 focus:border-blue-500 focus:ring focus:ring-blue-200 py-2"
+                  value={selectedAssignee}
+                  onChange={(e) => {
+                    const value = e.target.value;
+                    setSelectedAssignee(value);
+                    handleFilterChange({ assigneeId: value });
+                  }}
+                >
+                  <option value="">All Assignees</option>
+                  {assignees.map((assignee) => (
+                    <option key={assignee.id} value={assignee.id}>
+                      {assignee.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -259,6 +307,7 @@ export function TaskFilterBar({
                 setSelectedStatus(undefined);
                 setSelectedPriority(undefined);
                 setSelectedAssignee('');
+                setSelectedProject('');
                 setDateRange({ start: '', end: '' });
                 onFilterChange({});
                 setIsOpen(false);

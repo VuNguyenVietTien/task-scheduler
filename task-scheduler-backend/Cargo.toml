@@ -26,19 +26,14 @@ log = "0.4"
 sanitize-filename = "0.5"
 thiserror = "1.0"
 async-trait = "0.1"
+migration = { path = "migration" }
+entity = { path = "entity" }
 
-[dev-dependencies]
-mockall = "0.12"
-tokio-test = "0.4"
-pretty_assertions = "1.4"
-serial_test = "2.0"
-fake = { version = "2.9", features = ["uuid", "chrono"] }
-
-[dependencies.sea-orm-migration]
-version = "0.12"
-features = [
-    "runtime-tokio-native-tls",
-    "sqlx-postgres",
+[workspace]
+members = [
+    ".",
+    "entity",
+    "migration",
 ]
 
 [features]

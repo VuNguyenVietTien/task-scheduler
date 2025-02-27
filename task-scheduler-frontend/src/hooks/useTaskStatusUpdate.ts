@@ -1,5 +1,5 @@
 import { useMutation } from '@tanstack/react-query';
-import { Task, TaskStatus } from '@/types/task';
+import { Task, TaskStatus, TaskStatuses } from '@/types/task';
 import { queryClient } from '@/lib/queryClient';
 
 interface UpdateTaskStatusVariables {

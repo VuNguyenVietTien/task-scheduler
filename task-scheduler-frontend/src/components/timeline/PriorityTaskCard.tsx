@@ -9,7 +9,7 @@
  * - Effort hours
  */
 
-import { Task, TaskStatus, Priority } from '@/types/task';
+import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
@@ -34,13 +34,13 @@ export function PriorityTaskCard({ task }: PriorityTaskCardProps) {
 
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
-      case Priority.URGENT:
+      case Priorities.URGENT:
         return 'border-l-4 border-l-red-600';
-      case Priority.HIGH:
+      case Priorities.HIGH:
         return 'border-l-4 border-l-orange-600';
-      case Priority.MEDIUM:
+      case Priorities.MEDIUM:
         return 'border-l-4 border-l-amber-600';
-      case Priority.LOW:
+      case Priorities.LOW:
         return 'border-l-4 border-l-green-600';
       default:
         return 'border-l-4 border-l-slate-600';
@@ -49,15 +49,15 @@ export function PriorityTaskCard({ task }: PriorityTaskCardProps) {
 
   const getStatusColor = (status: TaskStatus) => {
     switch (status) {
-      case TaskStatus.DONE:
+      case TaskStatuses.DONE:
         return 'text-green-600 bg-green-50';
-      case TaskStatus.IN_PROGRESS:
+      case TaskStatuses.IN_PROGRESS:
         return 'text-blue-600 bg-blue-50';
-      case TaskStatus.IN_REVIEW:
+      case TaskStatuses.IN_REVIEW:
         return 'text-purple-600 bg-purple-50';
-      case TaskStatus.PLANNED:
+      case TaskStatuses.PLANNED:
         return 'text-amber-600 bg-amber-50';
-      case TaskStatus.BACKLOG:
+      case TaskStatuses.BACKLOG:
         return 'text-slate-600 bg-slate-50';
       default:
         return 'text-slate-600 bg-slate-50';

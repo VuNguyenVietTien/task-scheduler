@@ -1,44 +1,34 @@
-mod config;
-mod graphql;
-mod db;
-mod api;
-mod auth;
-mod error;
-
-use actix_cors::Cors;
-use actix_web::{web, App, HttpServer};
+use sea_orm::{Database, DbConn, EntityTrait, Set, ActiveModelTrait};
 use dotenv::dotenv;
-use log::info;
+use entity::prelude::*;
+use uuid::Uuid;
 
-use crate::config::Config;
-
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
-    // Load environment variables
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     dotenv().ok();
-    
-    // Initialize logging
-    env_logger::init();
-    
-    // Load configuration
-    let config = Config::from_env();
-    
-    info!("Starting server at {}:{}", config.host, config.port);
-    
-    // Start HTTP server
-    HttpServer::new(move || {
-        // Configure CORS
-        let cors = Cors::default()
-            .allow_any_origin()
-            .allow_any_method()
-            .allow_any_header()
-            .max_age(3600);
-            
-        App::new()
-            .wrap(cors)
-            // Add routes and middleware here
-    })
-    .bind((config.host, config.port))?
-    .run()
-    .await
+    let database_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
+    let db: DbConn = Database::connect(database_url).await?;
+
+    // Create a test user
+    let user = users::ActiveModel {
+        id: Set(Uuid::new_v4()),
+        email: Set("test@example.com".to_string()),
+        name: Set("Test User".to_string()),
+        password_hash: Set("dummy_hash".to_string()),
+        role: Set("MEMBER".to_string()),
+        work_capacity: Set(Some(8.0)),
+        ..Default::default()
+    };
+
+    // Insert user
+    let user = user.insert(&db).await?;
+    println!("Created user: {:?}", user);
+
+    // Query user
+    let found_user = Users::find_by_id(user.id)
+        .one(&db)
+        .await?;
+    println!("Found user: {:?}", found_user);
+
+    Ok(())
 }

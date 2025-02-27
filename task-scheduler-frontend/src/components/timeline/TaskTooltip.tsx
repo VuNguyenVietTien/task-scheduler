@@ -1,10 +1,18 @@
-import { Task } from '@/types/task';
+import { Task, TaskStatus, Priority } from '@/types/task';
 import { formatDateRange } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 
 interface TaskTooltipProps {
   task: Task;
   targetRef: React.RefObject<HTMLDivElement>;
+}
+
+type StatusDisplayProps = {
+  status: TaskStatus;
+}
+
+type PriorityDisplayProps = {
+  priority: Priority;
 }
 
 export function TaskTooltip({ task, targetRef }: TaskTooltipProps) {

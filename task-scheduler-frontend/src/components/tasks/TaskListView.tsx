@@ -1,6 +1,7 @@
 'use client';
 
-import { Task, TaskStatus, Priority, TaskFilter, User } from '@/types/task';
+import { Task, TaskStatus, Priority, TaskFilter, User, TaskStatuses, Priorities } from '@/types/task';
+import { ProjectData } from '@/types/project';
 import { TaskFilterBar } from './TaskFilterBar';
 import { TaskBulkActions } from './TaskBulkActions';
 import { useState, useMemo, useCallback } from 'react';
@@ -24,17 +25,34 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
 
-  // Get unique assignees from all tasks
-  const assignees = useMemo(() => {
+  // Get unique assignees and projects from all tasks
+  const { assignees, projects } = useMemo(() => {
     const uniqueAssignees = new Map<string, User>();
+    const uniqueProjects = new Map<string, ProjectData>();
+    
     tasks.forEach(task => {
       task.assignees.forEach(assignee => {
         if (!uniqueAssignees.has(assignee.id)) {
           uniqueAssignees.set(assignee.id, assignee);
         }
       });
+      
+      if (task.projectId && !uniqueProjects.has(task.projectId)) {
+        uniqueProjects.set(task.projectId, {
+          id: task.projectId,
+          name: `Project ${task.projectId}`, // You might want to get actual project names from somewhere
+          description: '',
+          dueDate: '',
+          members: 0,
+          status: 'active'
+        });
+      }
     });
-    return Array.from(uniqueAssignees.values());
+    
+    return {
+      assignees: Array.from(uniqueAssignees.values()),
+      projects: Array.from(uniqueProjects.values())
+    };
   }, [tasks]);
 
   // Separate tasks by completion status and apply filters
@@ -71,12 +89,16 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
         return false;
       }
 
+      if (filter.projectId && task.projectId !== filter.projectId) {
+        return false;
+      }
+
       return true;
     });
 
     return {
-      completedTasks: filteredTasks.filter(task => task.status === TaskStatus.DONE),
-      incompleteTasks: filteredTasks.filter(task => task.status !== TaskStatus.DONE),
+      completedTasks: filteredTasks.filter(task => task.status === TaskStatuses.DONE),
+      incompleteTasks: filteredTasks.filter(task => task.status !== TaskStatuses.DONE),
     };
   }, [tasks, filter]);
 
@@ -272,13 +294,13 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
 
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
-      case Priority.URGENT:
+      case Priorities.URGENT:
         return 'text-red-600 bg-red-50';
-      case Priority.HIGH:
+      case Priorities.HIGH:
         return 'text-orange-600 bg-orange-50';
-      case Priority.MEDIUM:
+      case Priorities.MEDIUM:
         return 'text-amber-600 bg-amber-50';
-      case Priority.LOW:
+      case Priorities.LOW:
         return 'text-green-600 bg-green-50';
       default:
         return 'text-slate-600 bg-slate-50';
@@ -287,15 +309,15 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
 
   const getStatusColor = (status: TaskStatus) => {
     switch (status) {
-      case TaskStatus.DONE:
+      case TaskStatuses.DONE:
         return 'text-green-600 bg-green-50';
-      case TaskStatus.IN_PROGRESS:
+      case TaskStatuses.IN_PROGRESS:
         return 'text-blue-600 bg-blue-50';
-      case TaskStatus.IN_REVIEW:
+      case TaskStatuses.IN_REVIEW:
         return 'text-purple-600 bg-purple-50';
-      case TaskStatus.PLANNED:
+      case TaskStatuses.PLANNED:
         return 'text-amber-600 bg-amber-50';
-      case TaskStatus.BACKLOG:
+      case TaskStatuses.BACKLOG:
         return 'text-slate-600 bg-slate-50';
       default:
         return 'text-red-600 bg-red-50';
@@ -326,7 +348,8 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps): JSX.Ele
       <div className="flex justify-between items-center mb-4">
         <TaskFilterBar 
           onFilterChange={setFilter} 
-          assignees={assignees} 
+          assignees={assignees}
+          projects={projects} 
           showCompletedTasks={showCompletedTasks}
           onToggleCompleted={() => setShowCompletedTasks(prev => !prev)}
         />

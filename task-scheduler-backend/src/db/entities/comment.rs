@@ -1,6 +1,5 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "comments")]
@@ -11,9 +10,10 @@ pub struct Model {
     pub user_id: Uuid,
     #[sea_orm(column_type = "Text")]
     pub content: String,
-    pub parent_comment_id: Option<Uuid>,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
+    #[sea_orm(nullable)]
+    pub parent_comment_id: Option<Uuid>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -21,24 +21,22 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::task::Entity",
         from = "Column::TaskId",
-        to = "super::task::Column::Id"
+        to = "super::task::Column::Id",
+        on_delete = "Cascade"
     )]
     Task,
-    
     #[sea_orm(
         belongs_to = "super::user::Entity",
         from = "Column::UserId",
         to = "super::user::Column::Id"
     )]
     User,
-    
     #[sea_orm(
         belongs_to = "Entity",
         from = "Column::ParentCommentId",
         to = "Column::Id"
     )]
     ParentComment,
-    
     #[sea_orm(has_many = "Entity")]
     Replies,
 }
@@ -55,12 +53,4 @@ impl Related<super::user::Entity> for Entity {
     }
 }
 
-impl ActiveModelBehavior for ActiveModel {
-    fn before_save(mut self, insert: bool) -> Result<Self, DbErr> {
-        if insert {
-            self.created_at = Set(chrono::Utc::now().into());
-        }
-        self.updated_at = Set(chrono::Utc::now().into());
-        Ok(self)
-    }
-}
+impl ActiveModelBehavior for ActiveModel {}

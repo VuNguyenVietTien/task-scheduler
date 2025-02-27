@@ -2,31 +2,25 @@ use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
-#[sea_orm(table_name = "attachments")]
+#[sea_orm(table_name = "project_members")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
-    pub id: Uuid,
-    pub task_id: Uuid,
+    pub project_id: Uuid,
+    #[sea_orm(primary_key, auto_increment = false)]
     pub user_id: Uuid,
     #[sea_orm(column_type = "Text")]
-    pub file_name: String,
-    pub file_size: i64,
-    #[sea_orm(column_type = "Text")]
-    pub mime_type: String,
-    #[sea_orm(column_type = "Text")]
-    pub storage_path: String,
-    pub created_at: DateTimeWithTimeZone,
+    pub role: String, // 'OWNER', 'EDITOR', 'VIEWER'
+    pub joined_at: DateTimeWithTimeZone,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::task::Entity",
-        from = "Column::TaskId",
-        to = "super::task::Column::Id",
-        on_delete = "Cascade"
+        belongs_to = "super::project::Entity",
+        from = "Column::ProjectId",
+        to = "super::project::Column::Id"
     )]
-    Task,
+    Project,
     #[sea_orm(
         belongs_to = "super::user::Entity",
         from = "Column::UserId",
@@ -35,9 +29,9 @@ pub enum Relation {
     User,
 }
 
-impl Related<super::task::Entity> for Entity {
+impl Related<super::project::Entity> for Entity {
     fn to() -> RelationDef {
-        Relation::Task.def()
+        Relation::Project.def()
     }
 }
 
