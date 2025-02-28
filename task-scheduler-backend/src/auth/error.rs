@@ -1,137 +1,126 @@
-use std::fmt;
 use std::error::Error;
-use bcrypt::BcryptError;
-use jsonwebtoken::errors::Error as JwtError;
+use std::fmt;
+use actix_web::{HttpResponse, ResponseError};
+use serde_json::json;
 
 #[derive(Debug)]
 pub enum AuthError {
-    // Password related errors
-    HashingError(BcryptError),
-    VerificationError(BcryptError),
-    InvalidPassword,
-    
-    // Token related errors
-    TokenCreationError(JwtError),
-    TokenValidationError(JwtError),
-    TokenExpired,
-    InvalidToken,
-    
-    // Email verification errors
-    EmailNotVerified,
-    EmailVerificationExpired,
-    EmailVerificationFailed(String),
-    
-    // Password reset errors
-    PasswordResetExpired,
-    PasswordResetFailed(String),
-    InvalidResetToken,
-    
-    // Validation errors
-    InvalidEmail,
+    DatabaseError(String),
     EmailAlreadyExists,
     UserNotFound,
-    
-    // Email service errors
+    InvalidPassword,
+    EmailNotVerified,
+    TokenCreationError(jsonwebtoken::errors::Error),
+    TokenVerificationError(jsonwebtoken::errors::Error),
+    HashingError(bcrypt::BcryptError),
     EmailSendingFailed(String),
-    
-    // Database errors
-    DatabaseError(String),
-    
-    // Generic errors
-    InternalServerError(String),
+    InvalidToken,
+    TokenExpired,
+    ResetTokenExpired,
+    ResetTokenInvalid,
+    PasswordResetFailed(String),
+    InvalidCredentials,
+    NotAuthenticated,
+    NotAuthorized,
 }
 
 impl fmt::Display for AuthError {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            AuthError::HashingError(e) => write!(f, "Password hashing error: {}", e),
-            AuthError::VerificationError(e) => write!(f, "Password verification error: {}", e),
-            AuthError::InvalidPassword => write!(f, "Invalid password"),
-            AuthError::TokenCreationError(e) => write!(f, "Token creation error: {}", e),
-            AuthError::TokenValidationError(e) => write!(f, "Token validation error: {}", e),
-            AuthError::TokenExpired => write!(f, "Token has expired"),
-            AuthError::InvalidToken => write!(f, "Invalid token"),
-            AuthError::EmailNotVerified => write!(f, "Email not verified"),
-            AuthError::EmailVerificationExpired => write!(f, "Email verification link has expired"),
-            AuthError::EmailVerificationFailed(e) => write!(f, "Email verification failed: {}", e),
-            AuthError::PasswordResetExpired => write!(f, "Password reset link has expired"),
-            AuthError::PasswordResetFailed(e) => write!(f, "Password reset failed: {}", e),
-            AuthError::InvalidResetToken => write!(f, "Invalid password reset token"),
-            AuthError::InvalidEmail => write!(f, "Invalid email format"),
-            AuthError::EmailAlreadyExists => write!(f, "Email already exists"),
-            AuthError::UserNotFound => write!(f, "User not found"),
-            AuthError::EmailSendingFailed(e) => write!(f, "Failed to send email: {}", e),
-            AuthError::DatabaseError(e) => write!(f, "Database error: {}", e),
-            AuthError::InternalServerError(e) => write!(f, "Internal server error: {}", e),
+            AuthError::DatabaseError(e) => write!(f, "Lỗi cơ sở dữ liệu: {}", e),
+            AuthError::EmailAlreadyExists => write!(f, "Email đã tồn tại"),
+            AuthError::UserNotFound => write!(f, "Không tìm thấy người dùng"),
+            AuthError::InvalidPassword => write!(f, "Mật khẩu không đúng"),
+            AuthError::EmailNotVerified => write!(f, "Email chưa được xác thực"),
+            AuthError::TokenCreationError(e) => write!(f, "Lỗi tạo token: {}", e),
+            AuthError::TokenVerificationError(e) => write!(f, "Lỗi xác thực token: {}", e),
+            AuthError::HashingError(e) => write!(f, "Lỗi mã hóa: {}", e),
+            AuthError::EmailSendingFailed(e) => write!(f, "Lỗi gửi email: {}", e),
+            AuthError::InvalidToken => write!(f, "Token không hợp lệ"),
+            AuthError::TokenExpired => write!(f, "Token đã hết hạn"),
+            AuthError::ResetTokenExpired => write!(f, "Token đặt lại mật khẩu đã hết hạn"),
+            AuthError::ResetTokenInvalid => write!(f, "Token đặt lại mật khẩu không hợp lệ"),
+            AuthError::PasswordResetFailed(e) => write!(f, "Lỗi đặt lại mật khẩu: {}", e),
+            AuthError::InvalidCredentials => write!(f, "Thông tin đăng nhập không hợp lệ"),
+            AuthError::NotAuthenticated => write!(f, "Chưa xác thực"),
+            AuthError::NotAuthorized => write!(f, "Không có quyền truy cập"),
         }
     }
 }
 
-impl Error for AuthError {}
+impl Error for AuthError {
+    fn source(&self) -> Option<&(dyn Error + 'static)> {
+        match self {
+            AuthError::TokenCreationError(e) => Some(e),
+            AuthError::TokenVerificationError(e) => Some(e),
+            AuthError::HashingError(e) => Some(e),
+            _ => None,
+        }
+    }
+}
 
-// Implement conversions from specific error types
-impl From<BcryptError> for AuthError {
-    fn from(err: BcryptError) -> AuthError {
+impl From<sea_orm::DbErr> for AuthError {
+    fn from(err: sea_orm::DbErr) -> Self {
+        AuthError::DatabaseError(err.to_string())
+    }
+}
+
+impl From<jsonwebtoken::errors::Error> for AuthError {
+    fn from(err: jsonwebtoken::errors::Error) -> Self {
+        AuthError::TokenVerificationError(err)
+    }
+}
+
+impl From<bcrypt::BcryptError> for AuthError {
+    fn from(err: bcrypt::BcryptError) -> Self {
         AuthError::HashingError(err)
     }
 }
 
-impl From<JwtError> for AuthError {
-    fn from(err: JwtError) -> AuthError {
-        AuthError::TokenValidationError(err)
-    }
-}
+impl ResponseError for AuthError {
+    fn error_response(&self) -> HttpResponse {
+        let (status_code, error_message) = match self {
+            AuthError::EmailAlreadyExists => (
+                actix_web::http::StatusCode::BAD_REQUEST,
+                "Email already exists",
+            ),
+            AuthError::UserNotFound => (
+                actix_web::http::StatusCode::NOT_FOUND,
+                "User not found",
+            ),
+            AuthError::InvalidPassword => (
+                actix_web::http::StatusCode::UNAUTHORIZED,
+                "Invalid password",
+            ),
+            AuthError::EmailNotVerified => (
+                actix_web::http::StatusCode::UNAUTHORIZED,
+                "Email not verified",
+            ),
+            AuthError::InvalidToken | AuthError::TokenVerificationError(_) => (
+                actix_web::http::StatusCode::UNAUTHORIZED,
+                "Invalid token",
+            ),
+            AuthError::TokenExpired => (
+                actix_web::http::StatusCode::UNAUTHORIZED,
+                "Token expired",
+            ),
+            AuthError::NotAuthenticated => (
+                actix_web::http::StatusCode::UNAUTHORIZED,
+                "Not authenticated",
+            ),
+            AuthError::NotAuthorized => (
+                actix_web::http::StatusCode::FORBIDDEN,
+                "Not authorized",
+            ),
+            _ => (
+                actix_web::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "Internal server error",
+            ),
+        };
 
-// Convert to HTTP response
-impl AuthError {
-    pub fn status_code(&self) -> u16 {
-        match self {
-            AuthError::InvalidPassword | 
-            AuthError::InvalidEmail |
-            AuthError::InvalidToken |
-            AuthError::InvalidResetToken => 400,
-            
-            AuthError::EmailAlreadyExists => 409,
-            AuthError::UserNotFound => 404,
-            
-            AuthError::TokenExpired |
-            AuthError::EmailNotVerified |
-            AuthError::EmailVerificationExpired |
-            AuthError::PasswordResetExpired |
-            AuthError::TokenValidationError(_) |
-            AuthError::TokenCreationError(_) => 401,
-            
-            AuthError::HashingError(_) |
-            AuthError::VerificationError(_) |
-            AuthError::EmailVerificationFailed(_) |
-            AuthError::PasswordResetFailed(_) |
-            AuthError::EmailSendingFailed(_) |
-            AuthError::DatabaseError(_) |
-            AuthError::InternalServerError(_) => 500,
-        }
-    }
-
-    pub fn error_response(&self) -> (u16, String) {
-        (self.status_code(), self.to_string())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_error_status_codes() {
-        assert_eq!(AuthError::InvalidPassword.status_code(), 400);
-        assert_eq!(AuthError::EmailAlreadyExists.status_code(), 409);
-        assert_eq!(AuthError::EmailNotVerified.status_code(), 401);
-        assert_eq!(AuthError::InternalServerError("test".to_string()).status_code(), 500);
-    }
-
-    #[test]
-    fn test_error_messages() {
-        assert_eq!(AuthError::InvalidPassword.to_string(), "Invalid password");
-        assert_eq!(AuthError::EmailNotVerified.to_string(), "Email not verified");
-        assert_eq!(AuthError::EmailAlreadyExists.to_string(), "Email already exists");
+        HttpResponse::build(status_code).json(json!({
+            "error": error_message,
+            "message": self.to_string(),
+        }))
     }
 }

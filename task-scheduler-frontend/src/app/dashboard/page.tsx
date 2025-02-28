@@ -19,8 +19,8 @@ export default function DashboardPage() {
   return (
     <div className="p-6">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Welcome back, {user.name}!</h1>
-        <p className="text-gray-600">Here's an overview of your tasks</p>
+        <h1 className="text-2xl font-bold text-gray-900">Welcome back, {user.name}&excl;</h1>
+        <p className="text-gray-600">Here&apos;s an overview of your tasks</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -29,7 +29,7 @@ export default function DashboardPage() {
           <div className="p-6">
             <h2 className="text-lg font-semibold mb-4">Priority Tasks</h2>
             <div className="h-[400px]">
-              <PriorityTaskList />
+              <PriorityTaskList tasks={tasks || []} />
             </div>
           </div>
         </div>
@@ -55,7 +55,7 @@ export default function DashboardPage() {
                       <h3 className="font-medium text-gray-900">{task.title}</h3>
                       <span className={`
                         text-xs px-2 py-1 rounded-full
-                        ${task.status === 'DONE' 
+                        ${task.status === 'done' 
                           ? 'bg-green-100 text-green-800' 
                           : 'bg-blue-100 text-blue-800'
                         }

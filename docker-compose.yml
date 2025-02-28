@@ -5,12 +5,33 @@ services:
     build:
       context: ./task-scheduler-frontend
       dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+        NEXT_PUBLIC_FIREBASE_API_KEY: ${NEXT_PUBLIC_FIREBASE_API_KEY}
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: ${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: ${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: ${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
+        NEXT_PUBLIC_FIREBASE_APP_ID: ${NEXT_PUBLIC_FIREBASE_APP_ID}
+      cache_from:
+        - task-scheduler-frontend:latest
+    image: task-scheduler-frontend:latest
     environment:
       - NODE_ENV=production
       - NEXT_PUBLIC_API_URL=http://localhost/api
       - NEXT_PUBLIC_GRAPHQL_URL=http://localhost/graphql
+      - NEXT_PUBLIC_FIREBASE_API_KEY=${NEXT_PUBLIC_FIREBASE_API_KEY}
+      - NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN}
+      - NEXT_PUBLIC_FIREBASE_PROJECT_ID=${NEXT_PUBLIC_FIREBASE_PROJECT_ID}
+      - NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET}
+      - NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID}
+      - NEXT_PUBLIC_FIREBASE_APP_ID=${NEXT_PUBLIC_FIREBASE_APP_ID}
     depends_on:
       - backend
+    deploy:
+      resources:
+        limits:
+          memory: 512M
     networks:
       - app-network
 
@@ -18,13 +39,35 @@ services:
     build:
       context: ./task-scheduler-backend
       dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      cache_from:
+        - task-scheduler-backend:latest
+    image: task-scheduler-backend:latest
     environment:
       - RUST_LOG=info
-      - DATABASE_URL=postgres://postgres:postgres@db:5432/taskdb
-      - JWT_SECRET=your_jwt_secret_here
+      - HOST=0.0.0.0
+      - PORT=4000
+      - DATABASE_URL=postgresql://postgres.ucjwvxldtpgxkzehqwlz:cachiusa1A!@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
+      - JWT_SECRET=task-scheduler-secret-key-2024
       - CORS_ORIGIN=http://localhost
-    depends_on:
-      - db
+      - SUPABASE_URL=https://ucjwvxldtpgxkzehqwlz.supabase.co
+      - SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVjand2eGxkdHBneGt6ZWhxd2x6Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NDA0OTY5MjEsImV4cCI6MjA1NjA3MjkyMX0.XFuErFyphsA2KjowPqGWtZVm-uc6hZ65KmIte6IR4z0
+      - MAX_FILE_SIZE=10485760
+    env_file:
+      - ./task-scheduler-backend/.env
+    deploy:
+      resources:
+        limits:
+          memory: 512M
+    restart: unless-stopped
+    command: ["./task-scheduler-backend"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
     networks:
       - app-network
 
@@ -32,28 +75,25 @@ services:
     build:
       context: ./nginx
       dockerfile: Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+      cache_from:
+        - task-scheduler-nginx:latest
+    image: task-scheduler-nginx:latest
     ports:
       - "80:80"
     depends_on:
-      - frontend
-      - backend
-    networks:
-      - app-network
-
-  db:
-    image: postgres:14-alpine
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=taskdb
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    deploy:
+      resources:
+        limits:
+          memory: 128M
     networks:
       - app-network
 
 networks:
   app-network:
     driver: bridge
-
-volumes:
-  postgres_data:

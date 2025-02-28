@@ -1,5 +1,15 @@
-import { initializeApp, getApps } from 'firebase/app';
-import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { initializeApp, getApp, FirebaseApp } from 'firebase/app';
+import {
+  getAuth,
+  signInWithPopup,
+  GoogleAuthProvider,
+  signOut,
+  onAuthStateChanged,
+  User as FirebaseUser,
+  Auth,
+} from 'firebase/auth';
+
+let app: FirebaseApp;
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -8,14 +18,65 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
-  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
 
-// Initialize Firebase only if it hasn't been initialized already
-const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApps()[0];
+try {
+  app = getApp();
+} catch {
+  app = initializeApp(firebaseConfig);
+}
 
-// Initialize Firebase Authentication and get a reference to the service
 export const auth = getAuth(app);
-export const googleProvider = new GoogleAuthProvider();
+const googleProvider = new GoogleAuthProvider();
 
-export default app;
+export async function signInWithGoogle() {
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    const idToken = await result.user.getIdToken();
+    return {
+      token: idToken,
+      user: result.user,
+    };
+  } catch (error) {
+    console.error('Error signing in with Google', error);
+    throw error;
+  }
+}
+
+export async function signOutUser() {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error('Error signing out', error);
+    throw error;
+  }
+}
+
+export function onAuthStateChange(
+  onChange: (user: FirebaseUser | null) => void
+) {
+  return onAuthStateChanged(auth, onChange);
+}
+
+export async function getCurrentUser() {
+  return new Promise<FirebaseUser | null>((resolve, reject) => {
+    const unsubscribe = onAuthStateChanged(
+      auth,
+      (user) => {
+        unsubscribe();
+        resolve(user);
+      },
+      reject
+    );
+  });
+}
+
+export async function getIdToken() {
+  const user = await getCurrentUser();
+  if (!user) {
+    return null;
+  }
+  return user.getIdToken();
+}
+
+export type { FirebaseUser, Auth };

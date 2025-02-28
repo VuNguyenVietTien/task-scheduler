@@ -1,23 +1,22 @@
 import { NextResponse } from 'next/server';
-import { mockProjects } from '@/data/mockProjects';
-import { storage } from '@/utils/storage';
 
 export async function GET() {
   try {
-    // In a real app, fetch from database
-    await new Promise(resolve => setTimeout(resolve, 100));
+    const response = await fetch(`${process.env.BACKEND_URL}/api/projects`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
 
-    // Initialize localStorage with mock data if empty
-    const storedProjects = storage.getProjects();
-    if (storedProjects.length === 0) {
-      storage.saveProjects(mockProjects);
+    if (!response.ok) {
+      throw new Error('Failed to fetch projects');
     }
 
-    // Return data from localStorage
-    const projects = storage.getProjects();
-    return NextResponse.json({ projects });
+    const data = await response.json();
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('Error fetching projects:', error);
+    console.error('Fetch projects error:', error);
     return NextResponse.json(
       { error: 'Failed to fetch projects' },
       { status: 500 }
@@ -28,32 +27,23 @@ export async function GET() {
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { name, description, dueDate, members } = body;
 
-    if (!name || !dueDate) {
-      return NextResponse.json(
-        { error: 'Name and due date are required' },
-        { status: 400 }
-      );
+    const response = await fetch(`${process.env.BACKEND_URL}/api/projects`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to create project');
     }
 
-    // Create new project
-    const newProject = {
-      id: crypto.randomUUID(),
-      name,
-      description: description || '',
-      dueDate,
-      members: members || 1,
-      status: 'active' as const,
-      tasks: []
-    };
-
-    // Save to localStorage
-    storage.addProject(newProject);
-
-    return NextResponse.json(newProject, { status: 201 });
+    const data = await response.json();
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('Error creating project:', error);
+    console.error('Create project error:', error);
     return NextResponse.json(
       { error: 'Failed to create project' },
       { status: 500 }

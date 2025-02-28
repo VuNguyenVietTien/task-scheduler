@@ -1,5 +1,5 @@
 import React from 'react';
-import { Task, TaskStatus } from '@/types/task';
+import { Task, TaskStatus, Priority } from '@/types/task';
 import { formatDate } from '@/lib/utils';
 import clsx from 'clsx';
 
@@ -23,11 +23,10 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onStatusChang
     [TaskStatus.CANCELLED]: 'bg-red-100 text-red-800',
   };
 
-  const priorityColors = {
-    HIGH: 'bg-red-100 text-red-800',
-    MEDIUM: 'bg-yellow-100 text-yellow-800',
-    LOW: 'bg-green-100 text-green-800',
-    URGENT: 'bg-red-500 text-white',
+  const priorityColors: Record<Priority, string> = {
+    high: 'bg-red-100 text-red-800',
+    medium: 'bg-yellow-100 text-yellow-800',
+    low: 'bg-green-100 text-green-800'
   };
 
   return (

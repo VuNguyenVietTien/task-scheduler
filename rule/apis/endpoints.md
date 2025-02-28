@@ -1,247 +1,127 @@
-# API Endpoints Documentation
+# API Endpoints
 
-## Task Management APIs
+## Projects
 
-### Query Tasks
-**Endpoint**: `GET /api/projects/:projectId/tasks`
-**GraphQL Query**:
-```graphql
-query GetTasks($projectId: ID!, $filters: TaskFilters) {
-  tasks(projectId: $projectId, filters: $filters) {
-    id
-    title
-    description
-    status
-    priority
-    priorityOrder
-    effortHours
-    startDate
-    deadline
-    assignees {
-      id
-      name
-      avatarUrl
-    }
-    createdAt
-    updatedAt
+### POST /api/projects
+Tạo project mới
+- Request: { name: string, description?: string }
+- Response: { id: string, name: string, description: string, createdAt: string }
+
+### PUT /api/projects/:id
+Cập nhật thông tin project
+- Request: { name?: string, description?: string }
+- Response: { id: string, name: string, description: string, updatedAt: string }
+
+### DELETE /api/projects/:id
+Xóa project
+- Response: 204 No Content
+
+## Tasks
+
+### POST /api/projects/:projectId/tasks
+Tạo task mới
+- Request: {
+    title: string,
+    description?: string,
+    status: string,
+    priority: string,
+    deadline?: string,
+    assigneeIds?: string[],
+    effortHours?: number,
+    startDate?: string
   }
-}
-```
+- Response: Task object
 
-### Create Task
-**Endpoint**: `POST /api/projects/:projectId/tasks`
-**GraphQL Mutation**:
-```graphql
-mutation CreateTask($input: CreateTaskInput!) {
-  createTask(input: $input) {
-    id
-    title
-    description
-    status
-    priority
-    priorityOrder
-    effortHours
-    startDate
-    deadline
-    assignees {
-      id
-      name
-    }
+### PUT /api/projects/:projectId/tasks/:taskId
+Cập nhật thông tin task
+- Request: {
+    title?: string,
+    description?: string,
+    status?: string,
+    priority?: string,
+    deadline?: string,
+    assigneeIds?: string[],
+    effortHours?: number,
+    startDate?: string
   }
-}
-```
+- Response: Task object
 
-### Update Task Status
-**Endpoint**: `PATCH /api/tasks/:taskId/status`
-**GraphQL Mutation**:
-```graphql
-mutation UpdateTaskStatus($taskId: ID!, $status: TaskStatus!) {
-  updateTaskStatus(taskId: $taskId, status: $status) {
-    id
-    status
-    startDate    # Auto-updated for IN_PROGRESS
-    deadline     # Auto-updated for DONE
-    updatedAt
+### DELETE /api/projects/:projectId/tasks/:taskId
+Xóa task
+- Response: 204 No Content
+
+### PUT /api/projects/:projectId/tasks/:taskId/status
+Cập nhật status của task (Kanban)
+- Request: { status: string }
+- Response: Task object
+
+### PUT /api/projects/:projectId/tasks/:taskId/priority
+Cập nhật priority của task (Gantt)
+- Request: { priority: string }
+- Response: Task object
+
+### POST /api/projects/:projectId/tasks/:taskId/subtasks
+Tạo subtask
+- Request: {
+    title: string,
+    description?: string,
+    status: string
   }
-}
-```
+- Response: Task object
 
-### Update Task Priority Order
-**Endpoint**: `PATCH /api/tasks/:taskId/priority-order`
-**GraphQL Mutation**:
-```graphql
-mutation UpdateTaskPriorityOrder($taskId: ID!, $newOrder: Int!) {
-  updateTaskPriorityOrder(taskId: $taskId, newOrder: $newOrder) {
-    id
-    priorityOrder
-    updatedAt
+## Kanban
+
+### PUT /api/projects/:projectId/kanban/reorder
+Cập nhật thứ tự các task trong kanban
+- Request: {
+    sourceStatus: string,
+    destinationStatus: string,
+    taskId: string,
+    newIndex: number
   }
-}
-```
+- Response: { success: true }
 
-### Reorder Multiple Tasks
-**Endpoint**: `POST /api/projects/:projectId/reorder-tasks`
-**GraphQL Mutation**:
-```graphql
-mutation ReorderTasks($input: ReorderTasksInput!) {
-  reorderTasks(input: $input) {
-    tasks {
-      id
-      priorityOrder
-    }
-  }
-}
-```
+## Comments
 
-## Data Types
+### POST /api/projects/:projectId/tasks/:taskId/comments
+Thêm comment mới
+- Request: { content: string }
+- Response: Comment object
 
-### Inputs
-```graphql
-input TaskFilters {
-  status: TaskStatus
-  priority: TaskPriority
-  assigneeId: ID
-  startDate: DateTime
-  endDate: DateTime
-  searchQuery: String
-}
+### PUT /api/projects/:projectId/tasks/:taskId/comments/:commentId
+Cập nhật comment
+- Request: { content: string }
+- Response: Comment object
 
-input CreateTaskInput {
-  projectId: ID!
-  title: String!
-  description: String
-  status: TaskStatus!
-  priority: TaskPriority!
-  effortHours: Float
-  startDate: DateTime
-  deadline: DateTime
-  assigneeIds: [ID!]
-}
+### DELETE /api/projects/:projectId/tasks/:taskId/comments/:commentId
+Xóa comment
+- Response: 204 No Content
 
-input ReorderTasksInput {
-  projectId: ID!
-  taskOrders: [TaskOrderInput!]!
-}
+## Attachments
 
-input TaskOrderInput {
-  taskId: ID!
-  priorityOrder: Int!
-}
-```
+### POST /api/projects/:projectId/tasks/:taskId/attachments 
+Upload file đính kèm
+- Request: FormData với file
+- Response: Attachment object
 
-### Types
-```graphql
-type Task {
-  id: ID!
-  projectId: ID!
-  title: String!
-  description: String
-  status: TaskStatus!
-  priority: TaskPriority!
-  priorityOrder: Int!
-  effortHours: Float
-  startDate: DateTime
-  deadline: DateTime
-  assignees: [User!]!
-  createdBy: User!
-  createdAt: DateTime!
-  updatedAt: DateTime!
-}
+### DELETE /api/projects/:projectId/tasks/:taskId/attachments/:attachmentId
+Xóa file đính kèm
+- Response: 204 No Content
 
-type User {
-  id: ID!
-  name: String!
-  avatarUrl: String
-}
-```
+## Error Responses
+Tất cả các endpoints trên đều có thể trả về các error responses sau:
 
-### Enums
-```graphql
-enum TaskStatus {
-  BACKLOG
-  PLANNED
-  IN_PROGRESS
-  IN_REVIEW
-  DONE
-  CANCELLED
-}
+- 400 Bad Request: Request không hợp lệ
+- 401 Unauthorized: Chưa đăng nhập
+- 403 Forbidden: Không có quyền truy cập
+- 404 Not Found: Resource không tồn tại
+- 500 Internal Server Error: Lỗi server
 
-enum TaskPriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
-}
-```
-
-## Business Rules
-
-### Status Changes
-```typescript
-// When status changes to IN_PROGRESS
-if (newStatus === TaskStatus.IN_PROGRESS && !task.startDate) {
-  task.startDate = new Date();
-}
-
-// When status changes to DONE
-if (newStatus === TaskStatus.DONE) {
-  task.deadline = new Date();
-}
-```
-
-### Priority Ordering
-- Tasks are ordered by priorityOrder within each project
-- Only non-completed tasks participate in priority ordering
-- Reordering updates all affected task priorities
-- New tasks get max(priorityOrder) + 1
-
-## Error Handling
-
-### Common Errors
-```graphql
-type Error {
-  code: ErrorCode!
-  message: String!
-  field: String
-  details: JSON
-}
-
-enum ErrorCode {
-  TASK_NOT_FOUND
-  INVALID_STATUS_TRANSITION
-  DUPLICATE_PRIORITY_ORDER
-  INVALID_PROJECT
-  UNAUTHORIZED
-}
-```
-
-## Optimizations
-
-### Caching
-```typescript
-// Cache Configuration
+Mỗi error response có định dạng:
+```json
 {
-  // Cache task lists by project with filters
-  [`tasks:${projectId}:${filterHash}`]: TaskList
-  
-  // Cache individual tasks
-  [`task:${taskId}`]: Task
-  
-  // Invalidate on changes
-  invalidatePattern: `tasks:${projectId}:*`
-}
-```
-
-### Batch Operations
-```graphql
-mutation BulkUpdateTasks($input: BulkTaskUpdateInput!) {
-  bulkUpdateTasks(input: $input) {
-    successCount
-    failureCount
-    errors {
-      taskId
-      code
-      message
-    }
+  "error": {
+    "code": "ERROR_CODE",
+    "message": "Error message"
   }
 }

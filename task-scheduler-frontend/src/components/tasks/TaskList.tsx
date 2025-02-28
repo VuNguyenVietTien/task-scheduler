@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Task, TaskStatus, TaskFilter, Priority } from '@/types/task';
+import { Task, TaskStatus, TaskFilter } from '@/types/task';
 import { TaskCard } from './TaskCard';
 import clsx from 'clsx';
 
@@ -25,11 +25,10 @@ const FilterButtons: React.FC<{
     [TaskStatus.CANCELLED]: 'Cancelled',
   };
 
-  const priorityLabels: Record<Priority, string> = {
-    [Priority.HIGH]: 'High',
-    [Priority.MEDIUM]: 'Medium',
-    [Priority.LOW]: 'Low',
-    [Priority.URGENT]: 'Urgent',
+  const priorityLabels: Record<string, string> = {
+    high: 'High',
+    medium: 'Medium',
+    low: 'Low'
   };
 
   return (
@@ -52,13 +51,13 @@ const FilterButtons: React.FC<{
       </div>
 
       <div role="group" aria-label="Filter by priority" className="flex gap-2">
-        {[Priority.HIGH, Priority.MEDIUM].map(priority => (
+        {(['high', 'medium'] as const).map(priority => (
           <button
             key={priority}
             onClick={() => onFilterChange({ priority })}
             className={clsx(
               'px-3 py-1 rounded-full text-sm font-medium',
-              priority === Priority.HIGH ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
+              priority === 'high' ? 'bg-red-100 text-red-800' : 'bg-yellow-100 text-yellow-800'
             )}
           >
             {priorityLabels[priority]}
@@ -126,6 +125,7 @@ export const TaskList: React.FC<TaskListProps> = ({
   }, []);
 
   if (!isClient) return null;
+
   const statusOrder = [
     TaskStatus.IN_PROGRESS,
     TaskStatus.PLANNED,

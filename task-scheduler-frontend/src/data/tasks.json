@@ -1,26 +1,83 @@
 [
   {
-    "task_id": 1,
-    "task_name": "Task A",
-    "effort": 16,
-    "priority_order": 1,
-    "employee_id": "user1",
-    "status": "doing"
+    "id": "1",
+    "title": "Task A",
+    "status": "in-progress",
+    "priority": "high",
+    "deadline": "2025-03-10",
+    "priorityOrder": 1,
+    "projectId": "project-1",
+    "description": "Implementation of Task A",
+    "effortHours": 16,
+    "assignees": [
+      {
+        "id": "user1",
+        "name": "John Doe",
+        "email": "john@example.com",
+        "avatarUrl": "https://ui-avatars.com/api/?name=John+Doe"
+      }
+    ],
+    "createdBy": {
+      "id": "user1",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "avatarUrl": "https://ui-avatars.com/api/?name=John+Doe"
+    },
+    "createdAt": "2025-02-20T09:00:00Z",
+    "updatedAt": "2025-02-26T09:00:00Z"
   },
   {
-    "task_id": 2,
-    "task_name": "Task B",
-    "effort": 32,
-    "priority_order": 2,
-    "employee_id": "user1",
-    "status": "todo"
+    "id": "2",
+    "title": "Task B",
+    "status": "planned",
+    "priority": "medium",
+    "deadline": "2025-03-15",
+    "priorityOrder": 2,
+    "projectId": "project-1",
+    "description": "Implementation of Task B",
+    "effortHours": 32,
+    "assignees": [
+      {
+        "id": "user1",
+        "name": "John Doe",
+        "email": "john@example.com",
+        "avatarUrl": "https://ui-avatars.com/api/?name=John+Doe"
+      }
+    ],
+    "createdBy": {
+      "id": "user1",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "avatarUrl": "https://ui-avatars.com/api/?name=John+Doe"
+    },
+    "createdAt": "2025-02-20T09:00:00Z",
+    "updatedAt": "2025-02-26T09:00:00Z"
   },
   {
-    "task_id": 3,
-    "task_name": "Task C",
-    "effort": 24,
-    "priority_order": 3,
-    "employee_id": "user1",
-    "status": "todo"
+    "id": "3",
+    "title": "Task C",
+    "status": "planned",
+    "priority": "low",
+    "deadline": "2025-03-20",
+    "priorityOrder": 3,
+    "projectId": "project-1",
+    "description": "Implementation of Task C",
+    "effortHours": 24,
+    "assignees": [
+      {
+        "id": "user1",
+        "name": "John Doe",
+        "email": "john@example.com",
+        "avatarUrl": "https://ui-avatars.com/api/?name=John+Doe"
+      }
+    ],
+    "createdBy": {
+      "id": "user1",
+      "name": "John Doe",
+      "email": "john@example.com",
+      "avatarUrl": "https://ui-avatars.com/api/?name=John+Doe"
+    },
+    "createdAt": "2025-02-20T09:00:00Z",
+    "updatedAt": "2025-02-26T09:00:00Z"
   }
 ]

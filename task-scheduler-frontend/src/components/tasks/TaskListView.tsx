@@ -294,13 +294,11 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
 
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
-      case Priorities.URGENT:
+      case 'high':
         return 'text-red-600 bg-red-50';
-      case Priorities.HIGH:
-        return 'text-orange-600 bg-orange-50';
-      case Priorities.MEDIUM:
+      case 'medium':
         return 'text-amber-600 bg-amber-50';
-      case Priorities.LOW:
+      case 'low':
         return 'text-green-600 bg-green-50';
       default:
         return 'text-slate-600 bg-slate-50';

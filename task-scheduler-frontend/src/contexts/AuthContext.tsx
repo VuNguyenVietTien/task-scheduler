@@ -1,53 +1,77 @@
 'use client';
 
-import { createContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { signInWithGoogle, signOutUser } from '@/lib/firebase';
 
-interface User {
+interface ProviderData {
+  providerId: string;
+  uid: string;
+  displayName: string | null;
+  email: string | null;
+  phoneNumber: string | null;
+  photoURL: string | null;
+}
+
+export interface User {
   id: string;
   email: string;
   name: string;
-  emailVerified: boolean;
+  role: string;
+  emailVerified?: boolean;
+  providerData: ProviderData[];
 }
 
 export interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signInWithEmail: (email: string, password: string) => Promise<void>;
-  signUpWithEmail: (email: string, password: string) => Promise<void>;
+  error: string | null;
+  login: (email: string, password: string) => Promise<void>;
+  register: (email: string, password: string, name: string) => Promise<void>;
+  loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  clearError: () => void;
+  sendVerificationEmail: () => Promise<void>;
 }
 
-export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
+export function useAuth() {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+}
+
+export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const router = useRouter();
 
-  // Check auth status on mount
   useEffect(() => {
-    checkAuthStatus();
+    checkAuth();
   }, []);
 
-  const checkAuthStatus = async () => {
+  const checkAuth = async () => {
     try {
       const response = await fetch('/api/auth/me');
       if (response.ok) {
         const data = await response.json();
-        if (data.user) {
-          setUser(data.user);
-        }
+        setUser(data.user);
       }
     } catch (error) {
-      console.error('Auth status check failed:', error);
+      console.error('Auth check failed:', error);
+      setError('Authentication check failed');
     } finally {
       setLoading(false);
     }
   };
 
-  const signInWithEmail = async (email: string, password: string) => {
+  const login = async (email: string, password: string) => {
     try {
+      setLoading(true);
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -57,60 +81,144 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Login failed');
+        throw new Error('Login failed');
       }
 
       const data = await response.json();
       setUser(data.user);
       router.push('/dashboard');
     } catch (error) {
-      console.error('Login error:', error);
-      throw error;
+      setError('Invalid email or password');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const signUpWithEmail = async (email: string, password: string) => {
+  const register = async (email: string, password: string, name: string) => {
     try {
+      setLoading(true);
       const response = await fetch('/api/auth/register', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, name }),
       });
 
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || 'Registration failed');
+        throw new Error('Registration failed');
       }
 
-      const data = await response.json();
-      router.push('/auth?verifyEmail=true');
+      await login(email, password);
     } catch (error) {
-      console.error('Registration error:', error);
-      throw error;
+      setError('Registration failed. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loginWithGoogle = async () => {
+    try {
+      setLoading(true);
+      
+      // Sign in with Firebase
+      const { token, user: firebaseUser } = await signInWithGoogle();
+      
+      // Sync with backend
+      const response = await fetch('/api/auth/firebase/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ token })
+      });
+
+      if (!response.ok) {
+        // Sign out from Firebase if backend sync fails
+        await signOutUser();
+        throw new Error('Google login failed');
+      }
+
+      // Update user state and redirect
+      await checkAuth();
+      router.push('/dashboard'); 
+
+    } catch (error) {
+      setError('Google login failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
   const logout = async () => {
     try {
-      await fetch('/api/auth/logout', { method: 'POST' });
+      setLoading(true);
+      await signOutUser(); // Sign out from Firebase
+      const response = await fetch('/api/auth/logout', {
+        credentials: 'include',
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        throw new Error('Logout failed');
+      }
+
       setUser(null);
       router.push('/auth');
     } catch (error) {
-      console.error('Logout error:', error);
-      throw error;
+      setError('Logout failed');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const value = {
+  const sendVerificationEmail = async () => {
+    try {
+      setLoading(true);
+      const response = await fetch('/api/auth/send-verification', {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to send verification email');
+      }
+
+      // Success message can be handled by the component
+    } catch (error) {
+      setError('Failed to send verification email. Please try again.');
+      throw error;
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const clearError = () => setError(null);
+
+  const value: AuthContextType = {
     user,
     loading,
-    signInWithEmail,
-    signUpWithEmail,
+    error,
+    login,
+    register,
+    loginWithGoogle,
     logout,
+    clearError,
+    sendVerificationEmail
   };
+
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 }
+
+export { AuthContext };

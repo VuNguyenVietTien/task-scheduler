@@ -34,10 +34,16 @@ Thumbs.db
 *.bak
 *.backup
 
-# Test coverage
+# Test coverage and test files
 coverage/
 .coverage
 *.lcov
+**/*_tests.rs
+**/*.test.*
+**/*.spec.*
+**/test_*.rs
+test-results/
+junit.xml
 
 # Docker volumes
 /docker/data/

@@ -8,6 +8,7 @@ import { usePathname } from 'next/navigation';
 import Header from '@/components/ui/navigation/Header';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { SideNav } from '@/components/ui/navigation/SideNav';
+import { SyncProvider } from '@/providers/SyncProvider';
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -35,7 +36,7 @@ function ErrorFallback() {
             Something went wrong
           </h2>
           <p className="mt-2 text-gray-600">
-            We\'ve encountered an unexpected error. Our team has been notified.
+            We&apos;ve encountered an unexpected error. Our team has been notified.
           </p>
           <button
             onClick={() => window.location.reload()}
@@ -63,17 +64,19 @@ export default function RootLayout({
         <ErrorBoundary fallback={<ErrorFallback />}>
           <QueryClientProvider>
             <AuthProvider>
-              <div className="min-h-screen bg-gray-50">
-                {!isPublicRoute && <Header />}
-                <div className="flex">
-                  {!isPublicRoute && <SideNav />}
-                  <main className={`flex-1 ${!isPublicRoute ? 'ml-64 pt-16' : ''}`}>
-                    <ErrorBoundary>
-                      {children}
-                    </ErrorBoundary>
-                  </main>
+              <SyncProvider>
+                <div className="min-h-screen bg-gray-50">
+                  {!isPublicRoute && <Header />}
+                  <div className="flex">
+                    {!isPublicRoute && <SideNav />}
+                    <main className={`flex-1 ${!isPublicRoute ? 'ml-64 pt-16' : ''}`}>
+                      <ErrorBoundary>
+                        {children}
+                      </ErrorBoundary>
+                    </main>
+                  </div>
                 </div>
-              </div>
+              </SyncProvider>
             </AuthProvider>
           </QueryClientProvider>
         </ErrorBoundary>

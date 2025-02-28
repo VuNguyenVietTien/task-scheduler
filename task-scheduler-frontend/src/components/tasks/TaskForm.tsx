@@ -1,8 +1,8 @@
 import React from 'react';
 import { useForm, Controller, ControllerRenderProps } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Task, TaskStatus, Priority, User } from '@/types/task';
-import { taskFormSchema, type TaskFormSchema } from '@/schemas/taskForm';
+import { Task, TaskStatus, User } from '@/types/task';
+import { taskFormSchema, TaskFormSchema } from '@/schemas/taskForm';
 import clsx from 'clsx';
 
 export interface TaskFormProps {
@@ -13,22 +13,12 @@ export interface TaskFormProps {
   isSubmitting?: boolean;
 }
 
-interface TaskFormFieldProps {
+interface ControllerFieldProps {
   field: ControllerRenderProps<TaskFormSchema, 'assigneeIds'>;
   fieldState: {
     invalid: boolean;
     isTouched: boolean;
     isDirty: boolean;
-  };
-  formState: {
-    isDirty: boolean;
-    dirtyFields: Record<string, boolean>;
-    touchedFields: Record<string, boolean>;
-    isSubmitted: boolean;
-    isSubmitting: boolean;
-    isSubmitSuccessful: boolean;
-    isValid: boolean;
-    errors: Record<string, unknown>;
   };
 }
 
@@ -59,7 +49,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         }
       : {
           status: TaskStatus.PLANNED,
-          priority: Priority.MEDIUM,
+          priority: 'medium' as const,
           assigneeIds: [],
         },
   });
@@ -154,7 +144,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                 : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
             )}
           >
-            {Object.values(Priority).map(priority => (
+            {(['high', 'medium', 'low'] as const).map(priority => (
               <option key={priority} value={priority}>
                 {priority}
               </option>
@@ -237,7 +227,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
         <Controller
           name="assigneeIds"
           control={control}
-          render={({ field }: TaskFormFieldProps) => (
+          render={({ field }) => (
             <select
               id="assignees"
               multiple

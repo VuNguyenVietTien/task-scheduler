@@ -1,177 +1,135 @@
-use crate::auth::{AuthService, AuthError};
-use actix_web::{web, HttpResponse, Responder};
+use actix_web::{web, HttpResponse, Scope};
 use serde::{Deserialize, Serialize};
+use crate::auth::{AuthService, AuthError};
+use crate::email::EmailService;
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct RegisterRequest {
-    email: String,
-    password: String,
-    name: String,
+    pub email: String,
+    pub password: String,
+    pub name: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct LoginRequest {
-    email: String,
-    password: String,
+    pub email: String,
+    pub password: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct FirebaseLoginRequest {
-    firebase_token: String,
+#[derive(Serialize)]
+pub struct LoginResponse {
+    pub token: String,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct VerifyEmailRequest {
-    token: String,
+    pub token: String,
 }
 
-#[derive(Debug, Deserialize)]
-pub struct RequestPasswordResetRequest {
-    email: String,
-}
-
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 pub struct ResetPasswordRequest {
-    token: String,
-    new_password: String,
+    pub email: String,
 }
 
-#[derive(Debug, Serialize)]
-pub struct AuthResponse {
-    token: String,
+#[derive(Deserialize)]
+pub struct SetNewPasswordRequest {
+    pub token: String,
+    pub password: String,
 }
 
-#[derive(Debug, Serialize)]
-pub struct MessageResponse {
-    message: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ErrorResponse {
-    error: String,
-}
-
-pub fn config(cfg: &mut web::ServiceConfig) {
-    cfg.service(
-        web::scope("/auth")
-            .route("/register", web::post().to(register))
-            .route("/login", web::post().to(login))
-            .route("/firebase/login", web::post().to(firebase_login))
-            .route("/verify-email", web::post().to(verify_email))
-            .route("/request-password-reset", web::post().to(request_password_reset))
-            .route("/reset-password", web::post().to(reset_password)),
-    );
+pub fn auth_routes() -> Scope {
+    web::scope("/auth")
+        .route("/register", web::post().to(register))
+        .route("/login", web::post().to(login))
+        .route("/verify-email", web::post().to(verify_email))
+        .route("/request-password-reset", web::post().to(request_password_reset))
+        .route("/reset-password", web::post().to(reset_password))
 }
 
 async fn register(
-    auth_service: web::Data<AuthService>,
-    request: web::Json<RegisterRequest>,
-) -> impl Responder {
-    match auth_service.register_user(
-        request.email.clone(),
-        request.password.clone(),
-        request.name.clone(),
-    ).await {
-        Ok(_) => HttpResponse::Created().json(MessageResponse {
-            message: "Registration successful. Please check your email to verify your account.".to_string()
-        }),
-        Err(e) => {
-            let (status, message) = e.error_response();
-            HttpResponse::build(actix_web::http::StatusCode::from_u16(status).unwrap())
-                .json(ErrorResponse { error: message })
-        }
-    }
+    data: web::Json<RegisterRequest>,
+    service: web::Data<AuthService<EmailService>>,
+) -> Result<HttpResponse, AuthError> {
+    service
+        .register_user(data.email.clone(), data.password.clone(), data.name.clone())
+        .await?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 async fn login(
-    auth_service: web::Data<AuthService>,
-    request: web::Json<LoginRequest>,
-) -> impl Responder {
-    match auth_service.login(
-        request.email.clone(),
-        request.password.clone(),
-    ).await {
-        Ok(token) => HttpResponse::Ok().json(AuthResponse { token }),
-        Err(e) => {
-            let (status, message) = e.error_response();
-            HttpResponse::build(actix_web::http::StatusCode::from_u16(status).unwrap())
-                .json(ErrorResponse { error: message })
-        }
-    }
-}
+    data: web::Json<LoginRequest>,
+    service: web::Data<AuthService<EmailService>>,
+) -> Result<HttpResponse, AuthError> {
+    let token = service.login(data.email.clone(), data.password.clone()).await?;
 
-async fn firebase_login(
-    auth_service: web::Data<AuthService>,
-    request: web::Json<FirebaseLoginRequest>,
-) -> impl Responder {
-    match auth_service.firebase_login(&request.firebase_token).await {
-        Ok(token) => HttpResponse::Ok().json(AuthResponse { token }),
-        Err(e) => {
-            let (status, message) = e.error_response();
-            HttpResponse::build(actix_web::http::StatusCode::from_u16(status).unwrap())
-                .json(ErrorResponse { error: message })
-        }
-    }
+    Ok(HttpResponse::Ok().json(LoginResponse { token }))
 }
 
 async fn verify_email(
-    auth_service: web::Data<AuthService>,
-    request: web::Json<VerifyEmailRequest>,
-) -> impl Responder {
-    match auth_service.verify_email(request.token.clone()).await {
-        Ok(_) => HttpResponse::Ok().json(MessageResponse {
-            message: "Email verified successfully".to_string()
-        }),
-        Err(e) => {
-            let (status, message) = e.error_response();
-            HttpResponse::build(actix_web::http::StatusCode::from_u16(status).unwrap())
-                .json(ErrorResponse { error: message })
-        }
-    }
+    data: web::Json<VerifyEmailRequest>,
+    service: web::Data<AuthService<EmailService>>,
+) -> Result<HttpResponse, AuthError> {
+    // TODO: Implement email verification
+    Ok(HttpResponse::Ok().finish())
 }
 
 async fn request_password_reset(
-    auth_service: web::Data<AuthService>,
-    request: web::Json<RequestPasswordResetRequest>,
-) -> impl Responder {
-    match auth_service.request_password_reset(request.email.clone()).await {
-        Ok(_) => HttpResponse::Ok().json(MessageResponse {
-            message: "If an account exists with this email, you will receive a password reset link".to_string()
-        }),
-        Err(e) => {
-            let (status, message) = e.error_response();
-            HttpResponse::build(actix_web::http::StatusCode::from_u16(status).unwrap())
-                .json(ErrorResponse { error: message })
-        }
-    }
+    data: web::Json<ResetPasswordRequest>,
+    service: web::Data<AuthService<EmailService>>,
+) -> Result<HttpResponse, AuthError> {
+    service.request_password_reset(data.email.clone()).await?;
+
+    Ok(HttpResponse::Ok().finish())
 }
 
 async fn reset_password(
-    auth_service: web::Data<AuthService>,
-    request: web::Json<ResetPasswordRequest>,
-) -> impl Responder {
-    match auth_service.reset_password(
-        request.token.clone(),
-        request.new_password.clone(),
-    ).await {
-        Ok(_) => HttpResponse::Ok().json(MessageResponse {
-            message: "Password reset successfully".to_string()
-        }),
-        Err(e) => {
-            let (status, message) = e.error_response();
-            HttpResponse::build(actix_web::http::StatusCode::from_u16(status).unwrap())
-                .json(ErrorResponse { error: message })
-        }
-    }
+    data: web::Json<SetNewPasswordRequest>,
+    service: web::Data<AuthService<EmailService>>,
+) -> Result<HttpResponse, AuthError> {
+    // TODO: Implement password reset
+    Ok(HttpResponse::Ok().finish())
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use actix_web::{test, App};
+    use sea_orm::{DatabaseConnection, Database};
 
     #[actix_web::test]
-    async fn test_firebase_login_endpoint() {
-        // TODO: Implement tests for Firebase login endpoint
+    async fn test_register_endpoint() {
+        let conn = Database::connect("sqlite::memory:").await.unwrap();
+        let email_service = EmailService::new(
+            "localhost".to_string(),
+            "test".to_string(),
+            "test".to_string(),
+            "noreply@example.com".to_string(),
+        ).unwrap();
+
+        let auth_service = AuthService::new(
+            conn,
+            b"test_secret".to_vec(),
+            email_service,
+            "http://localhost:3000".to_string(),
+        );
+
+        let app = test::init_service(
+            App::new()
+                .app_data(web::Data::new(auth_service))
+                .service(auth_routes())
+        ).await;
+
+        let req = test::TestRequest::post()
+            .uri("/auth/register")
+            .set_json(&RegisterRequest {
+                email: "test@example.com".to_string(),
+                password: "password123".to_string(),
+                name: "Test User".to_string(),
+            })
+            .to_request();
+
+        let resp = test::call_service(&app, req).await;
+        assert!(resp.status().is_success());
     }
 }

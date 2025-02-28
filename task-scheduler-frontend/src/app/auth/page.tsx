@@ -13,7 +13,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   
-  const { signInWithEmail, signUpWithEmail } = useAuth();
+  const { login, register } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const verifyEmail = searchParams.get('verifyEmail');
@@ -25,10 +25,10 @@ export default function AuthPage() {
 
     try {
       if (isLogin) {
-        await signInWithEmail(email, password);
+        await login(email, password);
         router.push('/dashboard');
       } else {
-        await signUpWithEmail(email, password);
+        await register(email, password, email.split('@')[0]); // Using part before @ as default name
         // Redirect to email verification page is handled by the auth context
       }
     } catch (error) {

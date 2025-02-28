@@ -1,0 +1,41 @@
+# Version control
+.git
+.gitignore
+
+# Build artifacts
+target/
+**/target/
+dist/
+build/
+
+# Development files
+.env
+.env.*
+!.env.example
+*.log
+*.tmp
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# IDE specific
+.idea/
+.vscode/
+*.sublime-*
+*.swp
+*.swo
+
+# Test files
+**/*spec.rs
+**/*test.rs
+!src/**/tests.rs
+
+# Temporary files
+**/*.rs.bk
+**/*.rs.formatted
+
+# OS specific
+.DS_Store
+Thumbs.db

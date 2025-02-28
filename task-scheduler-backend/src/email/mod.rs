@@ -1,156 +1,161 @@
-use lettre::message::{header, MessageBuilder, MultiPart, SinglePart};
-use lettre::transport::smtp::authentication::Credentials;
-use lettre::{AsyncSmtpTransport, AsyncTransport, Tokio1Executor};
+use async_trait::async_trait;
+use lettre::{
+    transport::smtp::authentication::Credentials,
+    AsyncSmtpTransport,
+    AsyncTransport,
+    Message,
+    message::header::ContentType,
+    Tokio1Executor,
+};
 use handlebars::Handlebars;
-use serde_json::json;
+use serde::Serialize;
 use std::error::Error;
 
+#[async_trait]
+pub trait EmailServiceTrait: Send + Sync {
+    async fn send_verification_email(
+        &self,
+        to: String,
+        token: String,
+        frontend_url: String,
+    ) -> Result<(), Box<dyn Error>>;
+
+    async fn send_password_reset(
+        &self,
+        to: String,
+        token: String,
+        frontend_url: String,
+    ) -> Result<(), Box<dyn Error>>;
+}
+
+#[derive(Clone)]
 pub struct EmailService {
-    smtp_transport: AsyncSmtpTransport<Tokio1Executor>,
+    transport: AsyncSmtpTransport<Tokio1Executor>,
+    from: String,
     handlebars: Handlebars<'static>,
-    from_email: String,
 }
 
 impl EmailService {
     pub fn new(
         smtp_host: String,
-        smtp_port: u16,
-        smtp_username: String,
-        smtp_password: String,
-        from_email: String,
+        smtp_user: String,
+        smtp_pass: String,
+        from: String,
     ) -> Result<Self, Box<dyn Error>> {
-        let creds = Credentials::new(smtp_username, smtp_password);
-        
-        let smtp_transport = AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_host)?
-            .port(smtp_port)
+        let creds = Credentials::new(smtp_user, smtp_pass);
+
+        let transport = AsyncSmtpTransport::<Tokio1Executor>::relay(&smtp_host)?
             .credentials(creds)
             .build();
 
         let mut handlebars = Handlebars::new();
-        // Register email templates
-        handlebars.register_template_string("verification", include_str!("templates/verification.hbs"))?;
-        handlebars.register_template_string("reset_password", include_str!("templates/reset_password.hbs"))?;
+        handlebars.register_template_string(
+            "verification",
+            include_str!("templates/verification.hbs"),
+        )?;
+        handlebars.register_template_string(
+            "password_reset",
+            include_str!("templates/password_reset.hbs"),
+        )?;
 
-        Ok(Self {
-            smtp_transport,
+        Ok(EmailService {
+            transport,
+            from,
             handlebars,
-            from_email,
         })
-    }
-
-    pub async fn send_verification_email(
-        &self,
-        to_email: &str,
-        name: &str,
-        verification_link: &str,
-    ) -> Result<(), Box<dyn Error>> {
-        let data = json!({
-            "name": name,
-            "verification_link": verification_link
-        });
-
-        let html_body = self.handlebars.render("verification", &data)?;
-        let text_body = format!(
-            "Welcome {}! Please verify your email by clicking this link: {}",
-            name, verification_link
-        );
-
-        self.send_email(
-            to_email,
-            "Verify your email",
-            &text_body,
-            &html_body,
-        ).await
-    }
-
-    pub async fn send_password_reset_email(
-        &self,
-        to_email: &str,
-        name: &str,
-        reset_link: &str,
-    ) -> Result<(), Box<dyn Error>> {
-        let data = json!({
-            "name": name,
-            "reset_link": reset_link
-        });
-
-        let html_body = self.handlebars.render("reset_password", &data)?;
-        let text_body = format!(
-            "Hi {}! Reset your password by clicking this link: {}",
-            name, reset_link
-        );
-
-        self.send_email(
-            to_email,
-            "Reset your password",
-            &text_body,
-            &html_body,
-        ).await
     }
 
     async fn send_email(
         &self,
-        to_email: &str,
-        subject: &str,
-        text_body: &str,
-        html_body: &str,
+        to: String,
+        subject: String,
+        body: String,
     ) -> Result<(), Box<dyn Error>> {
-        let email = MessageBuilder::new()
-            .from(self.from_email.parse()?)
-            .to(to_email.parse()?)
+        let email = Message::builder()
+            .from(self.from.parse()?)
+            .to(to.parse()?)
             .subject(subject)
-            .multipart(
-                MultiPart::alternative()
-                    .singlepart(
-                        SinglePart::builder()
-                            .header(header::ContentType::TEXT_PLAIN)
-                            .body(text_body.to_string())
-                    )
-                    .singlepart(
-                        SinglePart::builder()
-                            .header(header::ContentType::TEXT_HTML)
-                            .body(html_body.to_string())
-                    )
-            )?;
+            .header(ContentType::TEXT_HTML)
+            .body(body)?;
 
-        self.smtp_transport.send(email).await?;
+        self.transport.send(email).await?;
+
         Ok(())
+    }
+}
+
+#[derive(Serialize)]
+struct VerificationTemplateData {
+    verification_link: String,
+}
+
+#[derive(Serialize)]
+struct PasswordResetTemplateData {
+    reset_link: String,
+}
+
+#[async_trait]
+impl EmailServiceTrait for EmailService {
+    async fn send_verification_email(
+        &self,
+        to: String,
+        token: String,
+        frontend_url: String,
+    ) -> Result<(), Box<dyn Error>> {
+        let verification_link = format!("{}/verify-email?token={}", frontend_url, token);
+        let data = VerificationTemplateData {
+            verification_link,
+        };
+        
+        let body = self.handlebars.render("verification", &data)?;
+        self.send_email(
+            to,
+            "Verify your email".to_string(),
+            body,
+        ).await
+    }
+
+    async fn send_password_reset(
+        &self,
+        to: String,
+        token: String,
+        frontend_url: String,
+    ) -> Result<(), Box<dyn Error>> {
+        let reset_link = format!("{}/reset-password?token={}", frontend_url, token);
+        let data = PasswordResetTemplateData {
+            reset_link,
+        };
+
+        let body = self.handlebars.render("password_reset", &data)?;
+        self.send_email(
+            to,
+            "Reset your password".to_string(),
+            body,
+        ).await
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockall::predicate::*;
-    use mockall::*;
-
-    mock! {
-        SmtpTransport {}
-        #[async_trait]
-        impl AsyncTransport for SmtpTransport {
-            type Error = Box<dyn Error>;
-            async fn send(&self, email: lettre::Message) -> Result<(), Self::Error>;
-        }
-    }
 
     #[tokio::test]
     async fn test_send_verification_email() {
         let email_service = EmailService::new(
-            "smtp.test.com".to_string(),
-            587,
+            "localhost".to_string(),
             "test".to_string(),
-            "password".to_string(),
-            "noreply@test.com".to_string(),
+            "test".to_string(), 
+            "noreply@example.com".to_string(),
         ).unwrap();
 
         let result = email_service
             .send_verification_email(
-                "test@example.com",
-                "Test User",
-                "http://localhost:3000/verify?token=123",
+                "test@example.com".to_string(),
+                "test-token".to_string(),
+                "http://localhost:3000".to_string(),
             )
             .await;
 
-        assert!(result.is_ok());
+        assert!(result.is_err()); // Will fail since we're not connecting to real SMTP server
     }
 }

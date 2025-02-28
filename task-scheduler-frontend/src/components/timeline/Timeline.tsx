@@ -1,13 +1,10 @@
-/**
- * Timeline Component with integrated Gantt chart and priority task list.
- * IMPORTANT: This component handles drag & drop reordering of tasks.
- */
+'use client';
 
+import React, { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Task, User } from '@/types/task';
 import { TaskBar } from './TaskBar';
 import { TimelineSkeleton } from './TimelineSkeleton';
 import { PriorityTaskList } from './PriorityTaskList';
-import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { getDatesBetween } from '@/lib/utils';
 import {
   DndContext,
@@ -21,8 +18,6 @@ import {
 import { 
   arrayMove,
   sortableKeyboardCoordinates,
-  SortableContext,
-  verticalListSortingStrategy
 } from '@dnd-kit/sortable';
 import { useReorderTasks } from '@/hooks/useTasks';
 
@@ -41,17 +36,14 @@ interface DateRange {
 }
 
 const getTaskDurationDays = (task: Task): number => {
-  // Nếu task có effort, tính số ngày dựa trên effort/8
   if (task.effortHours) {
     return Math.ceil(task.effortHours / 8);
   }
-  // Nếu không có effort nhưng có startDate và deadline, tính số ngày giữa 2 ngày
   if (task.startDate && task.deadline) {
     const start = new Date(task.startDate);
     const end = new Date(task.deadline);
     return Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
   }
-  // Mặc định là 1 ngày
   return 1;
 };
 
@@ -76,18 +68,14 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     return [];
   }, [orderedTasks, viewMode, selectedUserId]);
 
-  if (isLoading) {
-    return <TimelineSkeleton rows={Math.min(tasks.length || 5, 10)} />;
-  }
-
   useEffect(() => {
     if (!tasks || tasks.length === 0) return;
 
     const processTasks = (inputTasks: Task[]): Task[] => {
       const sortedTasks = [...inputTasks].sort((a, b) => {
-        const orderDiff = a.priorityOrder - b.priorityOrder;
+        const orderDiff = (a.priorityOrder || 0) - (b.priorityOrder || 0);
         if (orderDiff !== 0) return orderDiff;
-        return b.priority.localeCompare(a.priority);
+        return (b.priority || '').localeCompare(a.priority || '');
       });
 
       let lastEndDate = new Date();
@@ -134,6 +122,18 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
   }, [tasks]);
 
   useEffect(() => {
+    if (!containerRef.current) return;
+
+    const observer = new ResizeObserver((entries: ResizeObserverEntry[]) => {
+      const { width, height } = entries[0].contentRect;
+      setDimensions({ width, height });
+    });
+
+    observer.observe(containerRef.current);
+    return () => observer.disconnect();
+  }, []);
+
+  useEffect(() => {
     if (tasks.length === 0) return;
 
     const dates = tasks
@@ -154,34 +154,18 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     setDateRange({ startDate, endDate });
   }, [tasks]);
 
-  useEffect(() => {
-    if (!containerRef.current) return;
-
-    const observer = new ResizeObserver(entries => {
-      const { width, height } = entries[0].contentRect;
-      setDimensions({ width, height });
-    });
-
-    observer.observe(containerRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  const days = getDatesBetween(dateRange.startDate, dateRange.endDate);
-  const dayWidth = Math.max(80, dimensions.width / days.length);
-  const rowHeight = 48;
-
-  const onDragStart = useCallback(() => {
-    if (window.navigator.vibrate) {
-      window.navigator.vibrate(100); // Tactile feedback
-    }
-  }, []);
-
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  const onDragStart = useCallback(() => {
+    if (window.navigator.vibrate) {
+      window.navigator.vibrate(100);
+    }
+  }, []);
 
   const onDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
@@ -210,6 +194,14 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     }
   }, [orderedTasks, tasks, reorderTasks]);
 
+  const days = getDatesBetween(dateRange.startDate, dateRange.endDate);
+  const dayWidth = Math.max(80, dimensions.width / days.length);
+  const rowHeight = 48;
+
+  if (isLoading) {
+    return <TimelineSkeleton rows={Math.min(tasks.length || 5, 10)} />;
+  }
+
   if (tasks.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 bg-white rounded-lg border border-slate-200">
@@ -221,7 +213,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     );
   }
 
-    return (
+  return (
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
@@ -241,7 +233,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
             className="relative bg-white"
           >
             {/* Date Headers */}
-            <div className="sticky top-0 z-40 bg-white border-b border-slate-200"  style={{ zIndex:1}}>
+            <div className="sticky top-0 z-40 bg-white border-b border-slate-200">
               <div className="flex items-center justify-between p-2 border-b">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-4 mr-6">
@@ -381,7 +373,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                 }
 
                 const taskDuration = task.effortHours 
-                  ? Math.ceil(task.effortHours / 8)  // Sử dụng số ngày dựa trên effort 
+                  ? Math.ceil(task.effortHours / 8)
                   : Math.ceil(
                       (taskEnd.getTime() - Math.max(taskStart.getTime(), dateRange.startDate.getTime())) / (24 * 60 * 60 * 1000)
                     ) + 1;

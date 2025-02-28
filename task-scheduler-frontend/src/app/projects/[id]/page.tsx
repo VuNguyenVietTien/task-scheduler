@@ -3,18 +3,25 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ConfirmationModal } from '@/components/ui/ConfirmationModal';
+import { StatusUpdateModal } from '@/components/project/StatusUpdateModal';
 import { useProject } from '@/hooks/useProject';
+import { useProjectStatus } from '@/hooks/useStorageSync';
+import { withSync } from '@/providers/SyncProvider';
 
-export default function ProjectDetailPage({ params }: { params: { id: string } }) {
+function ProjectDetailPage({ params }: { params: { id: string } }) {
   const router = useRouter();
   const { project, isLoading, error: fetchError } = useProject(params.id);
+  const { updateStatus } = useProjectStatus(params.id);
+  
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const handleDelete = async () => {
     setIsDeleting(true);
-    setDeleteError(null);
+    setError(null);
 
     try {
       const response = await fetch(`/api/projects/${params.id}`, {
@@ -29,10 +36,27 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
       router.push('/projects');
       router.refresh();
     } catch (err) {
-      setDeleteError(err instanceof Error ? err.message : 'Failed to delete project');
+      setError(err instanceof Error ? err.message : 'Failed to delete project');
       setIsDeleteModalOpen(false);
     } finally {
       setIsDeleting(false);
+    }
+  };
+
+  const handleStatusUpdate = async (newStatus: 'active' | 'completed' | 'on-hold') => {
+    setIsUpdating(true);
+    setError(null);
+
+    try {
+      const success = await updateStatus(newStatus);
+      if (!success) {
+        throw new Error('Failed to update project status');
+      }
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update status');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -86,11 +110,15 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         <div>
           <div className="flex items-center gap-4">
             <h1 className="text-2xl font-bold text-gray-900">{project.name}</h1>
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
-              statusColors[project.status]
-            }`}>
+            <button
+              onClick={() => setIsStatusModalOpen(true)}
+              className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium capitalize ${
+                statusColors[project.status]
+              } hover:opacity-75 transition-opacity`}
+              disabled={isUpdating}
+            >
               {project.status}
-            </span>
+            </button>
           </div>
           <p className="text-gray-600 mt-2">{project.description}</p>
         </div>
@@ -120,7 +148,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         </div>
       </div>
 
-      {deleteError && (
+      {error && (
         <div className="mb-6 bg-red-50 border border-red-200 rounded-lg p-4">
           <div className="flex">
             <div className="flex-shrink-0">
@@ -130,7 +158,7 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
             </div>
             <div className="ml-3">
               <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <p className="mt-2 text-sm text-red-700">{deleteError}</p>
+              <p className="mt-2 text-sm text-red-700">{error}</p>
             </div>
           </div>
         </div>
@@ -164,6 +192,16 @@ export default function ProjectDetailPage({ params }: { params: { id: string } }
         cancelLabel="Cancel"
         isDestructive={true}
       />
+
+      <StatusUpdateModal
+        isOpen={isStatusModalOpen}
+        onClose={() => setIsStatusModalOpen(false)}
+        onUpdate={handleStatusUpdate}
+        currentStatus={project.status}
+      />
     </div>
   );
 }
+
+// Wrap with sync provider to enable cross-tab updates
+export default withSync(ProjectDetailPage);

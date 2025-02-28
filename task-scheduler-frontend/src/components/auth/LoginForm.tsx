@@ -11,7 +11,7 @@ export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { signInWithEmail, signInWithGoogle } = useAuth();
+  const { login, loginWithGoogle } = useAuth();
 
   const handleEmailLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,7 +19,7 @@ export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
     setLoading(true);
 
     try {
-      await signInWithEmail(email, password);
+      await login(email, password);
       onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in');
@@ -33,7 +33,7 @@ export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
     setLoading(true);
 
     try {
-      await signInWithGoogle();
+      await loginWithGoogle();
       onSuccess?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in with Google');
@@ -107,7 +107,7 @@ export function LoginForm({ onSuccess, onRegisterClick }: LoginFormProps) {
       </form>
 
       <div className="text-center text-sm text-gray-600">
-        Don't have an account?{' '}
+        Don&apos;t have an account?{' '}
         <button
           type="button"
           onClick={onRegisterClick}

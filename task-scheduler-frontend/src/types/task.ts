@@ -1,63 +1,109 @@
-export type TaskStatus = 'BACKLOG' | 'PLANNED' | 'IN_PROGRESS' | 'IN_REVIEW' | 'DONE';
-export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-
-export const TaskStatuses = {
-  BACKLOG: 'BACKLOG' as TaskStatus,
-  PLANNED: 'PLANNED' as TaskStatus,
-  IN_PROGRESS: 'IN_PROGRESS' as TaskStatus,
-  IN_REVIEW: 'IN_REVIEW' as TaskStatus,
-  DONE: 'DONE' as TaskStatus
-};
-
-export const Priorities = {
-  LOW: 'LOW' as Priority,
-  MEDIUM: 'MEDIUM' as Priority,
-  HIGH: 'HIGH' as Priority,
-  URGENT: 'URGENT' as Priority
-};
-
 export interface User {
   id: string;
   name: string;
   email: string;
-  avatarUrl: string;
+  avatarUrl?: string;
 }
 
 export interface Task {
   id: string;
   title: string;
-  description?: string;
   status: TaskStatus;
   priority: Priority;
-  assignees: User[];
-  deadline?: string;
+  deadline: string;
+  assignee?: string;
+  description?: string;
+  startDate?: string;
   effortHours?: number;
   priorityOrder: number;
   projectId: string;
-  startDate?: string;
-  tags?: string[];
-  category?: string;
-  type?: string;
+  assignees: User[];
+  createdBy: User;
   createdAt: string;
-  updatedAt: string;
+  updatedAt?: string;
   parentTaskId?: string;
   childTasks?: Task[];
 }
+
+export enum TaskStatus {
+  BACKLOG = 'backlog',
+  PLANNED = 'planned',
+  IN_PROGRESS = 'in-progress',
+  IN_REVIEW = 'in-review',
+  DONE = 'done',
+  CANCELLED = 'cancelled'
+}
+
+export type Priority = 'high' | 'medium' | 'low';
+
+export const TaskStatuses = {
+  BACKLOG: TaskStatus.BACKLOG,
+  PLANNED: TaskStatus.PLANNED,
+  IN_PROGRESS: TaskStatus.IN_PROGRESS,
+  IN_REVIEW: TaskStatus.IN_REVIEW,
+  DONE: TaskStatus.DONE,
+  CANCELLED: TaskStatus.CANCELLED
+};
+
+export const Priorities = {
+  HIGH: 'high' as const,
+  MEDIUM: 'medium' as const,
+  LOW: 'low' as const
+};
+
+export interface TaskUpdate extends Partial<Task> {
+  id: string;
+}
+
+export interface TaskMetadata {
+  totalCount: number;
+  completedCount: number;
+  overdueCount: number;
+  byPriority: {
+    [K in Priority]: number;
+  };
+  byStatus: {
+    [K in TaskStatus]: number;
+  };
+}
+
+export const TASK_CATEGORIES = [
+  'Development',
+  'Design',
+  'Testing',
+  'Documentation',
+  'Planning',
+  'Research',
+  'Maintenance'
+] as const;
+
+export const TASK_TYPES = [
+  'Feature',
+  'Bug',
+  'Enhancement',
+  'Task',
+  'Epic',
+  'Story',
+  'Subtask'
+] as const;
+
+export const TASK_TAGS = [
+  'Frontend',
+  'Backend',
+  'UI/UX',
+  'Database',
+  'API',
+  'Security',
+  'Performance',
+  'DevOps'
+] as const;
 
 export interface TaskFilter {
   searchQuery?: string;
   status?: TaskStatus;
   priority?: Priority;
   assigneeId?: string;
+  projectId?: string;
   startDate?: string;
   endDate?: string;
-  projectId?: string;
 }
-
-export type TaskType = 'Feature' | 'Bug' | 'Enhancement' | 'Documentation';
-export type TaskCategory = 'Frontend' | 'Backend' | 'Design' | 'Testing' | 'DevOps';
-export type TaskTag = 'Urgent' | 'High Priority' | 'Low Priority' | 'In Progress' | 'Blocked';
-
-export const TASK_TYPES: TaskType[] = ['Feature', 'Bug', 'Enhancement', 'Documentation'];
-export const TASK_CATEGORIES: TaskCategory[] = ['Frontend', 'Backend', 'Design', 'Testing', 'DevOps'];
-export const TASK_TAGS: TaskTag[] = ['Urgent', 'High Priority', 'Low Priority', 'In Progress', 'Blocked'];

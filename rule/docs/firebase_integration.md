@@ -1,94 +1,106 @@
-# Firebase Integration Design
+# Firebase Authentication Integration
 
 ## Overview
-Tích hợp Firebase Authentication để cho phép người dùng đăng nhập bằng các phương thức xã hội (Google, Facebook, etc.)
+This document describes how Firebase Authentication is integrated with our backend system and how users are synchronized with our database.
 
 ## Architecture
-```
-Client (Next.js) <-> Firebase Auth <-> Backend (Rust) <-> Database
-```
-
-## Components
 
 ### Frontend
-1. Firebase Configuration
-   - Initialize Firebase App
-   - Set up Authentication providers
-   - Handle auth state changes
-
-2. Authentication Flow
-   - Social sign-in buttons
-   - Handle OAuth redirects
-   - Manage tokens and sessions
-   - Error handling
-
-3. User Profile
-   - Sync Firebase user data
-   - Link accounts
-   - Update profile information
+1. Firebase SDK handles the authentication flow
+2. After successful auth, frontend gets Firebase ID token
+3. Token is sent to backend for verification and user sync
+4. JWT token from backend is stored in HTTP-only cookie
 
 ### Backend
-1. Firebase Admin SDK
-   - Verify Firebase tokens
-   - Manage user sessions
-   - Handle custom claims
+1. Verifies Firebase ID token
+2. Creates or updates user in database
+3. Issues JWT token for subsequent requests
 
-2. User Management
-   - Link Firebase users with database users
-   - Handle user creation/updates
-   - Manage roles and permissions
+## Setup Requirements
 
-## Implementation Steps
+### Frontend Environment Variables
+```env
+NEXT_PUBLIC_FIREBASE_API_KEY=
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=
+NEXT_PUBLIC_FIREBASE_APP_ID=
+```
 
-### Backend Tasks
-- [ ] Cài đặt Firebase Admin SDK
-- [ ] Tạo service để verify Firebase tokens
-- [ ] Thêm middleware cho Firebase auth
-- [ ] Cập nhật user model để hỗ trợ Firebase
-- [ ] Xử lý việc link tài khoản
+### Backend Environment Variables
+```env
+FIREBASE_PROJECT_ID=
+FIREBASE_SERVICE_ACCOUNT_PATH=
+```
 
-### Frontend Tasks
-- [ ] Cài đặt Firebase client SDK
-- [ ] Tạo các components cho social login
-- [ ] Cập nhật auth context
-- [ ] Xử lý session management
-- [ ] Handle OAuth redirects
+## Authentication Flow
 
-## Security Considerations
-1. Token Validation
-   - Verify token signature
-   - Check token expiration
-   - Validate claims
+1. User Login
+```mermaid
+sequenceDiagram
+    User->>Frontend: Click Google Login
+    Frontend->>Firebase: Open auth popup
+    Firebase-->>Frontend: Return auth result
+    Frontend->>Backend: Send Firebase token
+    Backend->>Firebase: Verify token
+    Backend->>Database: Create/Update user
+    Backend-->>Frontend: Return JWT token
+    Frontend-->>User: Redirect to dashboard
+```
 
-2. User Data Protection
-   - Secure user linking
-   - Prevent unauthorized access
-   - Handle token revocation
+2. User Logout
+```mermaid
+sequenceDiagram
+    User->>Frontend: Click Logout
+    Frontend->>Firebase: Sign out
+    Frontend->>Backend: Logout request
+    Backend-->>Frontend: Clear auth cookie
+    Frontend-->>User: Redirect to login
+```
+
+## Database Schema
+
+User table includes these Firebase-related fields:
+- `firebase_uid`: Unique identifier from Firebase
+- `email_verified`: Boolean indicating email verification status 
+- `provider`: Authentication provider (google, email, etc.)
 
 ## Error Handling
-1. Authentication Errors
-   - Invalid tokens
-   - Expired tokens
-   - Network issues
-   - Provider errors
 
-2. User Management Errors
-   - Duplicate accounts
-   - Missing information
-   - Database conflicts
+1. Invalid/Expired Token
+- Backend returns 401 Unauthorized
+- Frontend redirects to login page
 
-## Testing Strategy
+2. Firebase Service Unavailable
+- Backend returns 503 Service Unavailable
+- Frontend shows error message
+
+## Testing
+
 1. Unit Tests
-   - Token validation
-   - User management
-   - Error handling
+- Token verification
+- User synchronization
+- Error scenarios
 
 2. Integration Tests
-   - Authentication flow
-   - Account linking
-   - Session management
+- Complete auth flow
+- Token refresh
+- Logout flow
 
-3. E2E Tests
-   - Complete login flows
-   - Error scenarios
-   - Edge cases
+## Security Considerations
+
+1. Token Validation
+- Verify issuer (iss)
+- Verify audience (aud)
+- Check token expiration
+- Validate signature
+
+2. Cookie Security
+- HTTP-only flag
+- Secure flag in production
+- SameSite attribute
+
+3. CORS Configuration
+- Restrict to known domains
+- Handle preflight requests

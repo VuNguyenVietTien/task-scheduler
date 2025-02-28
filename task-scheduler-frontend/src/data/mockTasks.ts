@@ -21,9 +21,7 @@ export const mockUsers: User[] = [
   }
 ];
 
-// Tasks for testing Gantt chart functionality and drag & drop ordering
 export const mockTasks: Task[] = [
-  // Parent task with child tasks
   {
     id: '1',
     projectId: 'project-1',
@@ -36,6 +34,7 @@ export const mockTasks: Task[] = [
     startDate: '2025-02-26',
     deadline: '2025-03-05',
     assignees: [mockUsers[0], mockUsers[1]],
+    createdBy: mockUsers[0],
     createdAt: '2025-02-20T09:00:00Z',
     updatedAt: '2025-02-26T09:00:00Z',
     childTasks: [
@@ -51,6 +50,7 @@ export const mockTasks: Task[] = [
         startDate: '2025-02-26',
         deadline: '2025-02-27',
         assignees: [mockUsers[1]],
+        createdBy: mockUsers[0],
         createdAt: '2025-02-20T09:00:00Z',
         updatedAt: '2025-02-26T09:00:00Z',
         parentTaskId: '1'
@@ -67,13 +67,13 @@ export const mockTasks: Task[] = [
         startDate: '2025-02-27',
         deadline: '2025-03-01',
         assignees: [mockUsers[0]],
+        createdBy: mockUsers[0],
         createdAt: '2025-02-20T09:00:00Z',
         updatedAt: '2025-02-26T09:00:00Z',
         parentTaskId: '1'
       }
     ]
   },
-  // Parent task with child tasks
   {
     id: '2',
     projectId: 'project-1',
@@ -85,6 +85,7 @@ export const mockTasks: Task[] = [
     effortHours: 4,
     deadline: '2025-03-10',
     assignees: [mockUsers[1]],
+    createdBy: mockUsers[0],
     createdAt: '2025-02-20T09:00:00Z',
     updatedAt: '2025-02-26T09:00:00Z',
     childTasks: [
@@ -99,6 +100,7 @@ export const mockTasks: Task[] = [
         effortHours: 2,
         deadline: '2025-03-08',
         assignees: [mockUsers[1]],
+        createdBy: mockUsers[0],
         createdAt: '2025-02-20T09:00:00Z',
         updatedAt: '2025-02-26T09:00:00Z',
         parentTaskId: '2'
@@ -114,6 +116,7 @@ export const mockTasks: Task[] = [
         effortHours: 2,
         deadline: '2025-03-10',
         assignees: [mockUsers[1]],
+        createdBy: mockUsers[0],
         createdAt: '2025-02-20T09:00:00Z',
         updatedAt: '2025-02-26T09:00:00Z',
         parentTaskId: '2'
@@ -132,6 +135,7 @@ export const mockTasks: Task[] = [
     startDate: '2025-02-28',
     deadline: '2025-03-03',
     assignees: [mockUsers[2]],
+    createdBy: mockUsers[1],
     createdAt: '2025-02-15T09:00:00Z',
     updatedAt: '2025-02-25T09:00:00Z'
   },
@@ -144,7 +148,9 @@ export const mockTasks: Task[] = [
     priority: Priorities.MEDIUM,
     priorityOrder: 4,
     effortHours: 8,
+    deadline: '2025-03-15',
     assignees: [mockUsers[0], mockUsers[2]],
+    createdBy: mockUsers[2],
     createdAt: '2025-02-10T09:00:00Z',
     updatedAt: '2025-02-20T09:00:00Z'
   }

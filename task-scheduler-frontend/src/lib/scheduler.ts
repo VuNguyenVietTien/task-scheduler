@@ -2,14 +2,23 @@ import { Task } from '@/types/task';
 
 export const HOURS_PER_DAY = 8;
 
-export const calculateSchedule = (tasks: Task[]): Task[] => {
+interface TaskInterval {
+  start: Date;
+  end: Date;
+}
+
+interface ScheduledTask extends Task {
+  intervals: TaskInterval[];
+}
+
+export const calculateSchedule = (tasks: Task[]): ScheduledTask[] => {
   let currentDate = new Date();
   
   return tasks
-    .sort((a, b) => a.priority_order - b.priority_order)
+    .sort((a, b) => a.priorityOrder - b.priorityOrder)
     .map(task => {
-      const days = Math.ceil(task.effort / HOURS_PER_DAY);
-      const start = task.start_date || currentDate;
+      const days = Math.ceil((task.effortHours || 0) / HOURS_PER_DAY);
+      const start = task.startDate ? new Date(task.startDate) : currentDate;
       const end = new Date(start);
       end.setDate(start.getDate() + days);
       
@@ -17,9 +26,9 @@ export const calculateSchedule = (tasks: Task[]): Task[] => {
       
       return {
         ...task,
-        start_date: start,
-        end_date: end,
-        intervals: task.intervals || [{ start, end }]
+        startDate: start.toISOString(),
+        endDate: end.toISOString(),
+        intervals: [{ start, end }]
       };
     });
 };
