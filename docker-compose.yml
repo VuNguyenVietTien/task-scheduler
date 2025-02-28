@@ -47,7 +47,7 @@ services:
     environment:
       - RUST_LOG=info
       - HOST=0.0.0.0
-      - PORT=4000
+      - PORT=8080
       - DATABASE_URL=postgresql://postgres.ucjwvxldtpgxkzehqwlz:cachiusa1A!@aws-0-ap-southeast-1.pooler.supabase.com:6543/postgres
       - JWT_SECRET=task-scheduler-secret-key-2024
       - CORS_ORIGIN=http://localhost
@@ -63,7 +63,7 @@ services:
     restart: unless-stopped
     command: ["./task-scheduler-backend"]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:4000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
       interval: 10s
       timeout: 5s
       retries: 3

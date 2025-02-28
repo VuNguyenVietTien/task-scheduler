@@ -1,6 +1,7 @@
-use sea_orm::{DatabaseConnection, Set, EntityTrait, IntoActiveModel};
+use sea_orm::{DatabaseConnection, Set, EntityTrait, IntoActiveModel, ActiveModelTrait, QueryFilter, ColumnTrait};
 use crate::auth::{AuthError, token::Claims};
 use crate::email::EmailServiceTrait;
+use entity::users::Model as UserModel;
 use entity::users::{Entity as Users, ActiveModel as UserActiveModel};
 use chrono::{Duration, Utc, FixedOffset};
 use uuid::Uuid;
@@ -95,6 +96,63 @@ impl<E: Clone + Send + Sync + EmailServiceTrait + 'static> AuthService<E> {
 
         Ok(token)
     }
+    pub async fn register_firebase_user(
+        &self,
+        email: String,
+        name: String,
+        firebase_uid: String,
+    ) -> Result<String, AuthError> {
+        // Check if user already exists
+        if let Some(mut user) = super::find_by_email(&self.db, &email).await? {
+            // If user exists but doesn't have firebase_uid, update it
+            if user.firebase_uid.is_none() {
+                let mut user_am: UserActiveModel = user.clone().into();
+                user_am.firebase_uid = Set(Some(firebase_uid));
+                user_am.update(&self.db).await?;
+            }
+            // Generate token for existing user
+            return Ok(Claims::new(user.id, user.email, user.role)
+                .create_token(&self.jwt_secret)?);
+        }
+
+        // Create new user
+        let user = UserActiveModel {
+            id: Set(Uuid::new_v4()),
+            email: Set(email.clone()),
+            password_hash: Set("".to_string()), // No password for Firebase users
+            name: Set(name),
+            email_verified: Set(true), // Firebase handles email verification
+            verification_token: Set(None),
+            verification_token_expires: Set(None),
+            role: Set("user".to_string()),
+            work_capacity: Set(None),
+            firebase_uid: Set(Some(firebase_uid)),
+            created_at: Set(Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap())),
+            updated_at: Set(Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap())),
+            provider: Set("firebase".to_string())
+        };
+
+        // Save user to database
+        let user = Users::insert(user)
+            .exec(&self.db)
+            .await?;
+
+        // Generate token for new user
+        let token = Claims::new(user.last_insert_id, email, "user".to_string())
+            .create_token(&self.jwt_secret)?;
+
+        Ok(token)
+    }
+
+    pub async fn get_user_by_firebase_uid(&self, firebase_uid: String) -> Result<Option<UserModel>, AuthError> {
+        let user = Users::find()
+            .filter(entity::users::Column::FirebaseUid.eq(Some(firebase_uid)))
+            .one(&self.db)
+            .await?;
+        Ok(user)
+    }
+
+
 
     pub async fn request_password_reset(&self, email: String) -> Result<(), AuthError> {
         let mut user = super::find_by_email(&self.db, &email)

@@ -2,6 +2,14 @@
 
 ## Projects
 
+### GET /api/projects
+Lấy danh sách tất cả projects
+- Response: Project[]
+
+### GET /api/projects/:id
+Lấy thông tin chi tiết của một project
+- Response: { id: string, name: string, description: string, createdAt: string, updatedAt: string }
+
 ### POST /api/projects
 Tạo project mới
 - Request: { name: string, description?: string }

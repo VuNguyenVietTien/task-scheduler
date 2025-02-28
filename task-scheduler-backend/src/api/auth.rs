@@ -37,13 +37,22 @@ pub struct SetNewPasswordRequest {
     pub password: String,
 }
 
+#[derive(Deserialize)]
+pub struct FirebaseLoginRequest {
+    pub firebase_token: String,
+    pub email: String,
+    pub name: String,
+    pub firebase_uid: String,
+}
+
 pub fn auth_routes() -> Scope {
     web::scope("/auth")
         .route("/register", web::post().to(register))
         .route("/login", web::post().to(login))
         .route("/verify-email", web::post().to(verify_email))
         .route("/request-password-reset", web::post().to(request_password_reset))
-        .route("/reset-password", web::post().to(reset_password))
+        .route("/reset-password", web::post().to(reset_password)) 
+        .route("/firebase/login", web::post().to(firebase_login))
 }
 
 async fn register(
@@ -89,6 +98,21 @@ async fn reset_password(
 ) -> Result<HttpResponse, AuthError> {
     // TODO: Implement password reset
     Ok(HttpResponse::Ok().finish())
+}
+
+async fn firebase_login(
+    data: web::Json<FirebaseLoginRequest>,
+    service: web::Data<AuthService<EmailService>>,
+) -> Result<HttpResponse, AuthError> {
+    // TODO: Verify Firebase token
+    
+    let token = service.register_firebase_user(
+        data.email.clone(),
+        data.name.clone(), 
+        data.firebase_uid.clone()
+    ).await?;
+
+    Ok(HttpResponse::Ok().json(LoginResponse { token }))
 }
 
 #[cfg(test)]

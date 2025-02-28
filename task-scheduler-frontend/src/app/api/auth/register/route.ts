@@ -1,26 +1,50 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@/lib/firebase';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const { email, password } = body;
+    const { email, password, name } = body;
 
-    // In a real app, you would:
-    // 1. Validate input
-    // 2. Check if user exists
-    // 3. Hash password
-    // 4. Create user in database
-    // 5. Send verification email
+    // Validate input
+    if (!email || !password || !name) {
+      return NextResponse.json(
+        { error: 'Email, password and name are required' },
+        { status: 400 }
+      );
+    }
+
+    // Create user in Firebase
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const firebaseUser = userCredential.user;
+
+    // Get Firebase ID token
+    const token = await firebaseUser.getIdToken();
+
+    // Register user in backend
+    const response = await fetch(`${process.env.BACKEND_URL}/api/auth/register`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email,
+        name,
+        firebase_uid: firebaseUser.uid,
+        firebase_token: token
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error('Failed to register user in backend');
+    }
 
     return NextResponse.json({
       success: true,
-      message: 'Registration successful. Please check your email for verification.'
+      message: 'Registration successful'
     });
   } catch (error) {
-    console.error('Registration error:', error);
-    return NextResponse.json(
-      { success: false, error: 'Registration failed' },
-      { status: 500 }
-    );
+    throw error;
   }
 }

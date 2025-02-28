@@ -86,10 +86,19 @@ async fn main() -> std::io::Result<()> {
             .app_data(db_data.clone())
             .app_data(auth_service.clone())
     })
-    .bind(("127.0.0.1", 8080))?
+    .bind((
+        env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
+        env::var("PORT")
+            .unwrap_or_else(|_| "8080".to_string())
+            .parse::<u16>()
+            .expect("PORT must be a valid number")
+    ))?
     .run();
 
-    println!("Server running at http://127.0.0.1:8080/");
+    println!("Server running at http://{}:{}/",
+        env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
+        env::var("PORT").unwrap_or_else(|_| "8080".to_string())
+    );
 
     server.await
 }
