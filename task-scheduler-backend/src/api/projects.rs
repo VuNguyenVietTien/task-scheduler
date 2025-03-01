@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use sea_orm::{DatabaseConnection, EntityTrait, Set, ActiveModelTrait};
 use entity::{projects, projects::Entity as Projects};
-use log::info;
+use log::{info, error};
 use chrono::{DateTime, Utc};
 use validator::Validate;
 use serde_json::Value as JsonValue;
@@ -81,8 +81,13 @@ pub fn config(cfg: &mut web::ServiceConfig) {
     );
 }
 
-async fn get_projects(db: web::Data<DatabaseConnection>) -> impl Responder {
-    info!("[API] GET /projects - Fetching all projects");
+async fn get_projects(
+    db: web::Data<DatabaseConnection>,
+    user: web::ReqData<AuthenticatedUser>
+) -> impl Responder {
+    info!("[API] GET /projects - Request received from user {}", user.id);
+    info!("[API] GET /projects - Starting database query");
+
     match Projects::find().all(db.get_ref()).await {
         Ok(projects) => {
             let response: Vec<ProjectResponse> = projects
@@ -105,11 +110,12 @@ async fn get_projects(db: web::Data<DatabaseConnection>) -> impl Responder {
                     progress: p.progress,
                 })
                 .collect();
-            info!("[API] GET /projects - Successfully fetched {} projects", response.len());
+            info!("[API] GET /projects - Successfully fetched {} projects for user {}", 
+                response.len(), user.id);
             HttpResponse::Ok().json(response)
         }
         Err(e) => {
-            info!("[API] GET /projects - Error: {}", e);
+            error!("[API] GET /projects - Database error for user {}: {}", user.id, e);
             HttpResponse::InternalServerError().json(format!("Could not fetch projects: {}", e))
         }
     }

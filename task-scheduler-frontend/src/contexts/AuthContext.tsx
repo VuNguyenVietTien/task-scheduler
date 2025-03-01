@@ -56,14 +56,75 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const checkAuth = async () => {
     try {
+      console.log('[Auth] Checking current authentication status...');
       const response = await fetch('/api/auth/me');
       if (response.ok) {
         const data = await response.json();
+        console.log('[Auth] Current user:', data.user);
         setUser(data.user);
+      } else {
+        console.log('[Auth] No authenticated user found');
       }
     } catch (error) {
-      console.error('Auth check failed:', error);
+      console.error('[Auth] Authentication check failed:', error);
       setError('Authentication check failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loginWithGoogle = async () => {
+    try {
+      setLoading(true);
+      console.log('[Auth] Starting Google login process...');
+      
+      // Call Firebase for Google authentication
+      console.log('[Auth] Calling Firebase signInWithGoogle...');
+      const { token, user: firebaseUser } = await signInWithGoogle();
+      console.log('[Auth] Firebase auth successful:', {
+        email: firebaseUser.email,
+        uid: firebaseUser.uid,
+        token: `${token.substring(0, 10)}...`
+      });
+      
+      // Call our API endpoint
+      console.log('[Auth] Calling backend sync API...');
+      const apiUrl = '/api/auth/firebase/login';
+      console.log(`[Auth] API URL: ${apiUrl}`);
+      
+      const response = await fetch(apiUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          firebase_token: token,
+          email: firebaseUser.email,
+          name: firebaseUser.displayName || 'Unnamed User',
+          firebase_uid: firebaseUser.uid
+        })
+      });
+
+      console.log(`[Auth] API Response Status: ${response.status}`);
+      const data = await response.json();
+      
+      if (!response.ok) {
+        console.error('[Auth] Backend sync failed:', data.error);
+        // Sign out from Firebase if backend sync fails
+        await signOutUser();
+        throw new Error(data.error || 'Google login failed');
+      }
+
+      console.log('[Auth] Backend sync successful. User data:', data.user);
+
+      // Update local state
+      setUser(data.user);
+      console.log('[Auth] Local state updated, redirecting to dashboard');
+      router.push('/dashboard');
+
+    } catch (error) {
+      console.error('[Auth] Google login error:', error);
+      setError('Google login failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -117,39 +178,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const loginWithGoogle = async () => {
-    try {
-      setLoading(true);
-      
-      // Sign in with Firebase
-      const { token, user: firebaseUser } = await signInWithGoogle();
-      
-      // Sync with backend
-      const response = await fetch('/api/auth/firebase/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({ token })
-      });
-
-      if (!response.ok) {
-        // Sign out from Firebase if backend sync fails
-        await signOutUser();
-        throw new Error('Google login failed');
-      }
-
-      // Update user state and redirect
-      await checkAuth();
-      router.push('/dashboard'); 
-
-    } catch (error) {
-      setError('Google login failed. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   const logout = async () => {
     try {
       setLoading(true);
@@ -186,8 +214,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!response.ok) {
         throw new Error('Failed to send verification email');
       }
-
-      // Success message can be handled by the component
     } catch (error) {
       setError('Failed to send verification email. Please try again.');
       throw error;

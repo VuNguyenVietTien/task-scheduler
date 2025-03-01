@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { type Project } from '@/data/mockProjects';
+import { apiClient } from '@/lib/config';
 
 export function useProjects() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -12,14 +13,10 @@ export function useProjects() {
         setIsLoading(true);
         setError(null);
 
-        const response = await fetch('/api/projects');
-        
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || 'Failed to fetch projects');
-        }
-
-        const projectsData = await response.json();
+        console.log('Fetching projects...');
+        const response = await apiClient.get<{ projects: Project[] }>('/api/projects');
+        console.log('Projects response:', response);
+        const projectsData = response.projects || [];
         setProjects(projectsData);
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to load projects');

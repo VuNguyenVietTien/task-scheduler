@@ -8,23 +8,23 @@ const config: Config = {
   ],
   theme: {
     extend: {
-      colors: {
-        primary: 'var(--color-primary)',
-        'primary-dark': 'var(--color-primary-dark)',
-        secondary: 'var(--color-secondary)',
-        accent: 'var(--color-accent)',
-        background: 'var(--color-background)',
-        surface: 'var(--color-surface)',
-        text: 'var(--color-text)',
-        'text-secondary': 'var(--color-text-secondary)',
-        border: 'var(--color-border)',
-        error: 'var(--color-error)',
-        warning: 'var(--color-warning)',
-        success: 'var(--color-success)',
+      keyframes: {
+        'accordion-down': {
+          from: { height: '0' },
+          to: { height: 'var(--radix-accordion-content-height)' },
+        },
+        'accordion-up': {
+          from: { height: 'var(--radix-accordion-content-height)' },
+          to: { height: '0' },
+        },
+      },
+      animation: {
+        'accordion-down': 'accordion-down 0.2s ease-out',
+        'accordion-up': 'accordion-up 0.2s ease-out',
       },
     },
   },
-  plugins: [require('@tailwindcss/typography')],
+  plugins: [],
 };
 
 export default config;

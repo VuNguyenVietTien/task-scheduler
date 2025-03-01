@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { fetchApi } from '@/lib/api';
 import { PlusCircle, FolderPlus, Loader2 } from 'lucide-react';
 
 interface Project {
@@ -23,16 +24,17 @@ export default function ProjectList() {
 
   const fetchProjects = async () => {
     try {
-      const response = await fetch('/api/projects');
-      const data = await response.json();
-
-      if (response.ok) {
-        setProjects(data.projects || []);
-      } else {
-        setError(data.error || 'Failed to fetch projects');
-      }
+      const data = await fetchApi('/api/projects');
+      setProjects(data || []);
+      setError(null);
     } catch (err) {
-      setError('Failed to fetch projects');
+      console.error('[Projects] Error fetching projects:', err);
+      if (err instanceof Error && err.name === 'AuthenticationError') {
+        window.location.href = '/auth';
+      } else {
+        setError('Failed to fetch projects');
+        setProjects([]);
+      }
     } finally {
       setLoading(false);
     }

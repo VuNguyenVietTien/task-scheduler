@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
-import { signInWithGoogle } from '@/lib/googleAuth';
 
 export default function AuthPage() {
   const [isLogin, setIsLogin] = useState(true);
@@ -13,7 +12,7 @@ export default function AuthPage() {
   const [loading, setLoading] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   
-  const { login, register } = useAuth();
+  const { login, register, loginWithGoogle } = useAuth();
   const router = useRouter();
   const searchParams = useSearchParams();
   const verifyEmail = searchParams.get('verifyEmail');
@@ -42,8 +41,7 @@ export default function AuthPage() {
     setError('');
     setGoogleLoading(true);
     try {
-      await signInWithGoogle();
-      router.push('/dashboard');
+      await loginWithGoogle();
     } catch (error) {
       setError(error instanceof Error ? error.message : 'Google authentication failed');
     } finally {

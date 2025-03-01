@@ -6,6 +6,7 @@ const publicPaths = [
   '/auth',
   '/api/auth/login',
   '/api/auth/register',
+  '/api/auth/firebase/login',
   '/api/auth/me',
   '/_next',
   '/favicon.ico'
@@ -21,7 +22,15 @@ export function middleware(request: NextRequest) {
   const authToken = request.cookies.get('auth-token');
   const userSession = request.cookies.get('user-session');
 
+  console.log('[Middleware] Checking auth:', {
+    path: request.nextUrl.pathname,
+    hasAuthToken: !!authToken,
+    hasUserSession: !!userSession
+  });
+
   if (!authToken || !userSession) {
+    console.log('[Middleware] Missing required cookies:', 
+      !authToken ? 'auth-token' : 'user-session');
     // Redirect to login if no auth token is present
     const redirectUrl = new URL('/auth', request.url);
     return NextResponse.redirect(redirectUrl);
@@ -29,9 +38,13 @@ export function middleware(request: NextRequest) {
 
   try {
     // Validate session
-    JSON.parse(userSession.value);
+    const session = JSON.parse(userSession.value);
+    console.log('[Middleware] Valid user session:', session);
     return NextResponse.next();
   } catch (error) {
+    const err = error as Error;
+    console.error('[Middleware] Invalid user session - Error:', err.message);
+
     // Invalid session, redirect to login
     const response = NextResponse.redirect(new URL('/auth', request.url));
     
@@ -52,6 +65,6 @@ export const config = {
      * 2. /_next/** (Next.js internals)
      * 3. /favicon.ico, /site.webmanifest, etc.
      */
-    '/((?!api/auth|_next|favicon.ico).*)',
+    '/((?!api/auth/|_next/|favicon.ico).*)',
   ],
 }

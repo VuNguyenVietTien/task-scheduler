@@ -137,7 +137,7 @@ impl<E: Clone + Send + Sync + EmailServiceTrait + 'static> AuthService<E> {
         };
 
         // Save user to database
-        let saved_user = Users::insert(user)
+        let _saved_user = Users::insert(user)
             .exec(&self.db)
             .await?;
 

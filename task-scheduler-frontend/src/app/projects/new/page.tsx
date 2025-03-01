@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { fetchApi } from '@/lib/api';
 import { validateProjectForm, type ProjectFormData } from '@/schemas/projectForm';
 
 type ValidationError = {
@@ -38,20 +39,10 @@ export default function NewProjectPage() {
     }
 
     try {
-      const response = await fetch('/api/projects', {
+      const project = await fetchApi('/api/projects', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(validation.data),
+        body: validation.data
       });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.error || 'Failed to create project');
-      }
-
-      const project = await response.json();
       router.push(`/projects/${project.id}`);
     } catch (err) {
       setErrors([

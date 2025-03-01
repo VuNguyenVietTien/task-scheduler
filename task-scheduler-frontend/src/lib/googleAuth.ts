@@ -29,15 +29,21 @@ googleProvider.setCustomParameters({
 
 export const signInWithGoogle = async () => {
   try {
+    console.log('[GoogleAuth] Starting Google sign in...');
     const result: UserCredential = await signInWithPopup(auth, googleProvider);
-    const token = await result.user.getIdToken();
+    console.log('[GoogleAuth] Google sign in successful for:', result.user.email);
     
-    // Send token to our backend
+    const token = await result.user.getIdToken();
+    console.log('[GoogleAuth] Got Firebase ID token');
+    
+    // Send token to Next.js API
+    console.log('[GoogleAuth] Calling Next.js API route /api/auth/google');
     const response = await fetch('/api/auth/google', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
       },
+      credentials: 'include',
       body: JSON.stringify({
         token,
         user: {
@@ -50,13 +56,17 @@ export const signInWithGoogle = async () => {
     });
 
     if (!response.ok) {
+      console.error('[GoogleAuth] Backend authentication failed:', response.status);
       const error = await response.json();
-      throw new Error(error.message || 'Failed to authenticate with Google');
+      throw new Error(error.message || 'Failed to authenticate with backend');
     }
 
-    return await response.json();
+    const data = await response.json();
+    console.log('[GoogleAuth] Authentication successful');
+    return data;
+
   } catch (error) {
-    console.error('Google sign in error:', error);
+    console.error('[GoogleAuth] Error:', error);
     throw error;
   }
 };

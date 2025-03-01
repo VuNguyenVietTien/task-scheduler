@@ -7,7 +7,8 @@ pub mod middleware;
 
 pub use service::AuthService;
 pub use error::AuthError;
-pub use middleware::Auth;
+// Re-exported for use in API route configuration
+pub use middleware::Auth; 
 
 use entity::users::{
     Entity as Users, 

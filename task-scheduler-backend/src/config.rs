@@ -39,7 +39,7 @@ impl Config {
             .map(|s| s.trim().to_string())
             .collect();
 
-        let app_env = env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
+        let _app_env = env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
         
         Self {
             host: env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),

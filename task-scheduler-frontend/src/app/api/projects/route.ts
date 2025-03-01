@@ -1,162 +1,93 @@
 import { NextResponse } from 'next/server';
-import { z } from 'zod';
+import { revalidatePath } from 'next/cache';
+import { cookies } from 'next/headers';
 
-// Validation schemas
-const createProjectSchema = z.object({
-  name: z.string().min(1).max(100),
-  description: z.string().max(500).optional(),
-});
-
-const updateProjectSchema = z.object({
-  name: z.string().min(1).max(100).optional(),
-  description: z.string().max(500).optional(),
-}).refine(data => data.name || data.description, {
-  message: "At least one field must be provided"
-});
-
-export async function GET() {
+export async function POST(req: Request) {
   try {
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+    const body = await req.json();
+    const cookieStore = cookies();
+    const token = cookieStore.get('auth_token');
 
-    if (!response.ok) {
-      throw new Error('Failed to fetch projects');
-    }
-
-    const data = await response.json();
-    
-    // Handle empty projects array
-    if (Array.isArray(data) && data.length === 0) {
-      return NextResponse.json({ projects: [], message: 'No projects found' });
-    }
-
-    return NextResponse.json({ projects: data });
-  } catch (error) {
-    console.error('Fetch projects error:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch projects' },
-      { status: 500 }
-    );
-  }
-}
-
-export async function POST(request: Request) {
-  try {
-    const body = await request.json();
-
-    // Validate input
-    const validatedData = createProjectSchema.safeParse(body);
-    if (!validatedData.success) {
+    if (!token) {
       return NextResponse.json(
-        { error: validatedData.error.errors },
-        { status: 400 }
+        { error: 'Authentication required' },
+        { status: 401 }
       );
     }
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`, {
+    // Format dates for API
+    const formattedBody = {
+      ...body,
+      start_date: body.start_date ? new Date(body.start_date).toISOString() : null,
+      due_date: body.due_date ? new Date(body.due_date).toISOString() : null,
+    };
+
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token.value}`,
       },
-      body: JSON.stringify(validatedData.data),
+      body: JSON.stringify(formattedBody),
     });
 
+    const data = await response.json();
+    
     if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to create project');
+      console.error('API Error:', data);
+      return NextResponse.json(
+        { error: data.message || 'Failed to create project' },
+        { status: response.status }
+      );
     }
 
-    const data = await response.json();
+    // Log successful response
+    console.log('Project created successfully:', data);
+
+    revalidatePath('/projects');
+    
     return NextResponse.json(data);
   } catch (error) {
     console.error('Create project error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to create project' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }
 }
 
-export async function PUT(request: Request) {
+export async function GET(req: Request) {
   try {
-    const url = new URL(request.url);
-    const id = url.pathname.split('/').pop();
+    const cookieStore = cookies();
+    const token = cookieStore.get('auth_token');
 
-    if (!id) {
+    if (!token) {
       return NextResponse.json(
-        { error: 'Project ID is required' },
-        { status: 400 }
+        { error: 'Authentication required' },
+        { status: 401 }
       );
     }
 
-    const body = await request.json();
-
-    // Validate input
-    const validatedData = updateProjectSchema.safeParse(body);
-    if (!validatedData.success) {
-      return NextResponse.json(
-        { error: validatedData.error.errors },
-        { status: 400 }
-      );
-    }
-
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects/${id}`, {
-      method: 'PUT',
+    const response = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/api/projects`, {
       headers: {
-        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${token.value}`,
       },
-      body: JSON.stringify(validatedData.data),
     });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to update project');
-    }
 
     const data = await response.json();
-    return NextResponse.json(data);
-  } catch (error) {
-    console.error('Update project error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to update project' },
-      { status: 500 }
-    );
-  }
-}
 
-export async function DELETE(request: Request) {
-  try {
-    const url = new URL(request.url);
-    const id = url.pathname.split('/').pop();
-
-    if (!id) {
+    if (!response.ok) {
       return NextResponse.json(
-        { error: 'Project ID is required' },
-        { status: 400 }
+        { error: data.message || 'Failed to fetch projects' },
+        { status: response.status }
       );
     }
 
-    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects/${id}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(errorData.message || 'Failed to delete project');
-    }
-
-    return new NextResponse(null, { status: 204 });
+    return NextResponse.json(data);
   } catch (error) {
-    console.error('Delete project error:', error);
+    console.error('Fetch projects error:', error);
     return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Failed to delete project' },
+      { error: 'Internal server error' },
       { status: 500 }
     );
   }

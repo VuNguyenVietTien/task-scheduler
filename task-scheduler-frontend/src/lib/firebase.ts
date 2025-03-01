@@ -31,23 +31,35 @@ const googleProvider = new GoogleAuthProvider();
 
 export async function signInWithGoogle() {
   try {
+    console.log('[Firebase] Initiating Google sign in popup...');
     const result = await signInWithPopup(auth, googleProvider);
+    
+    console.log('[Firebase] Google sign in successful:', {
+      uid: result.user.uid,
+      email: result.user.email,
+      displayName: result.user.displayName
+    });
+    
     const idToken = await result.user.getIdToken();
+    console.log('[Firebase] Retrieved ID token');
+
     return {
       token: idToken,
       user: result.user,
     };
   } catch (error) {
-    console.error('Error signing in with Google', error);
+    console.error('[Firebase] Error signing in with Google:', error);
     throw error;
   }
 }
 
 export async function signOutUser() {
   try {
+    console.log('[Firebase] Signing out user...');
     await signOut(auth);
+    console.log('[Firebase] User signed out successfully');
   } catch (error) {
-    console.error('Error signing out', error);
+    console.error('[Firebase] Error signing out:', error);
     throw error;
   }
 }

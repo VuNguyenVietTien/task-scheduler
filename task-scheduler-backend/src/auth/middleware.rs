@@ -2,6 +2,7 @@ use actix_web::{
     dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
     Error, HttpMessage,
 };
+use log::{info, error};
 use futures_util::future::LocalBoxFuture;
 use std::future::{ready, Ready};
 use crate::auth::token::Claims;
@@ -51,31 +52,42 @@ where
         let svc = self.service.clone();
 
         Box::pin(async move {
-            let auth_header = req
-                .headers()
-                .get("Authorization")
-                .ok_or_else(|| ErrorUnauthorized("No authorization header"))?;
+            info!("[Auth] Incoming request: Method={} Path={}", req.method(), req.path());
 
-            let auth_str = auth_header
-                .to_str()
-                .map_err(|_| ErrorUnauthorized("Invalid authorization header"))?;
+            // Check for auth token in cookies
+            let token = req.cookie("auth-token")
+                .ok_or_else(|| {
+                    error!("[Auth] No auth-token cookie found for request to: {}", req.path());
+                    // Safely handle cookies Result and log them
+                    if let Ok(cookies) = req.cookies() {
+                        let cookie_list: Vec<_> = cookies.iter().collect();
+                        info!("[Auth] Available cookies: {:?}", cookie_list);
+                    }
+                    ErrorUnauthorized("Authentication required")
+                })?
+                .value()
+                .to_string();
 
-            if !auth_str.starts_with("Bearer ") {
-                return Err(ErrorUnauthorized("Invalid authorization scheme"));
-            }
-
-            let token = &auth_str["Bearer ".len()..];
+            info!("[Auth] Found auth-token cookie");
 
             let config = Config::from_env();
-            let claims = Claims::decode_token(token, config.jwt_secret.as_bytes())
-                .map_err(|e| ErrorUnauthorized(e.to_string()))?;
+            let claims = Claims::decode_token(&token, config.jwt_secret.as_bytes())
+                .map_err(|e| {
+                    error!("[Auth] Token validation failed for path {}: {}", req.path(), e);
+                    ErrorUnauthorized(e.to_string())
+                })?;
+
+            info!("[Auth] Token validated successfully for user: {}", claims.sub);
 
             // Insert user info into request extensions
             req.extensions_mut().insert(AuthenticatedUser {
                 id: claims.sub,
             });
 
+            // Get path before req is moved
+            let path = req.path().to_string();
             let res = svc.call(req).await?;
+            info!("[Auth] Request authorized successfully for user {} to path {}", claims.sub, path);
             Ok(res)
         })
     }
