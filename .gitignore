@@ -21,10 +21,21 @@ out/
 .env
 .env.local
 .env.*.local
+.env.development
+.env.test
+.env.production
 
 # Logs
 *.log
 
+# Rust specific
+target/
+**/*.rs.bk
+Cargo.lock
+
+# Firebase
+task-scheduler-backend/config/firebase-service-account.json
+task-scheduler-backend/config/projectmanager-e13cb-firebase-adminsdk-fbsvc-*.json
+
 # Cline specific
 .clinerules
-task-scheduler-backend/config/firebase-service-account.json
