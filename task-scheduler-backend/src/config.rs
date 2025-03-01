@@ -12,14 +12,39 @@ pub struct Config {
     pub smtp_port: u16,
     pub smtp_username: String,
     pub smtp_password: String,
+    pub frontend_url: String,
+    pub allowed_origins: Vec<String>,
+    pub app_env: String,
+    pub max_file_size: usize,
+    pub firebase_service_account_path: String,
 }
 
 impl Config {
     pub fn from_env() -> Self {
+        // Load environment-specific .env file
+        if let Ok(app_env) = env::var("APP_ENV") {
+            let env_file = format!(".env.{}", app_env);
+            if let Err(err) = dotenv::from_filename(&env_file) {
+                eprintln!("Warning: Could not load {}: {}", env_file, err);
+            }
+        }
+        // Fallback to default .env
+        if let Err(err) = dotenv::dotenv() {
+            eprintln!("Warning: Could not load .env: {}", err);
+        }
+
+        let allowed_origins = env::var("ALLOWED_ORIGINS")
+            .unwrap_or_else(|_| "http://localhost:3000".to_string())
+            .split(',')
+            .map(|s| s.trim().to_string())
+            .collect();
+
+        let app_env = env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
+        
         Self {
             host: env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
             port: env::var("PORT")
-                .unwrap_or_else(|_| "8080".to_string())
+                .unwrap_or_else(|_| "3002".to_string())
                 .parse()
                 .expect("PORT must be a number"),
             database_url: env::var("DATABASE_URL")
@@ -40,6 +65,16 @@ impl Config {
                 .expect("SMTP_USERNAME must be set"),
             smtp_password: env::var("SMTP_PASSWORD")
                 .expect("SMTP_PASSWORD must be set"),
+            frontend_url: env::var("FRONTEND_URL")
+                .unwrap_or_else(|_| "http://localhost:3000".to_string()),
+            allowed_origins,
+            app_env: env::var("APP_ENV").unwrap_or_else(|_| "development".to_string()),
+            max_file_size: env::var("MAX_FILE_SIZE")
+                .unwrap_or_else(|_| "10485760".to_string()) // 10MB default
+                .parse()
+                .expect("MAX_FILE_SIZE must be a number"),
+            firebase_service_account_path: env::var("FIREBASE_SERVICE_ACCOUNT_PATH")
+                .unwrap_or_else(|_| format!("config/firebase-service-account.json")),
         }
     }
 }
@@ -48,7 +83,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             host: "127.0.0.1".to_string(),
-            port: 8080,
+            port: 3002,
             database_url: "postgres://postgres:postgres@localhost:5432/task_scheduler".to_string(),
             jwt_secret: "default-secret-key".to_string(),
             supabase_url: "".to_string(),
@@ -57,6 +92,11 @@ impl Default for Config {
             smtp_port: 587,
             smtp_username: "".to_string(),
             smtp_password: "".to_string(),
+            frontend_url: "http://localhost:3000".to_string(),
+            allowed_origins: vec!["http://localhost:3000".to_string()],
+            app_env: "development".to_string(),
+            max_file_size: 10485760, // 10MB
+            firebase_service_account_path: "config/firebase-service-account.json".to_string(),
         }
     }
 }

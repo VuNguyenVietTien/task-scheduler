@@ -52,3 +52,5 @@ junit.xml
 # Rust specific
 **/*.rs.bk
 *.pdb
+config/firebase-service-account.json
+config/projectmanager-e13cb-firebase-adminsdk-fbsvc-d4930d4085.json

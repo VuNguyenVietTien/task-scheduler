@@ -3,10 +3,11 @@ mod error;
 mod token;
 #[cfg(test)]
 mod tests;
+pub mod middleware;
 
 pub use service::AuthService;
 pub use error::AuthError;
-pub use token::Claims;
+pub use middleware::Auth;
 
 use entity::users::{
     Entity as Users, 

@@ -78,7 +78,7 @@ impl<E: Clone + Send + Sync + EmailServiceTrait + 'static> AuthService<E> {
         Ok(())
     }
 
-    pub async fn login(&self, email: String, password: String) -> Result<String, AuthError> {
+    pub async fn login(&self, email: String, password: String) -> Result<(String, UserModel), AuthError> {
         let user = super::find_by_email(&self.db, &email)
             .await?
             .ok_or(AuthError::InvalidCredentials)?;
@@ -91,33 +91,37 @@ impl<E: Clone + Send + Sync + EmailServiceTrait + 'static> AuthService<E> {
             return Err(AuthError::InvalidPassword);
         }
 
-        let token = Claims::new(user.id, user.email, user.role)
+        let token = Claims::new(user.id, user.email.clone(), user.role.clone())
             .create_token(&self.jwt_secret)?;
 
-        Ok(token)
+        Ok((token, user))
     }
+
     pub async fn register_firebase_user(
         &self,
         email: String,
         name: String,
         firebase_uid: String,
-    ) -> Result<String, AuthError> {
+    ) -> Result<(String, UserModel), AuthError> {
         // Check if user already exists
         if let Some(mut user) = super::find_by_email(&self.db, &email).await? {
             // If user exists but doesn't have firebase_uid, update it
             if user.firebase_uid.is_none() {
                 let mut user_am: UserActiveModel = user.clone().into();
                 user_am.firebase_uid = Set(Some(firebase_uid));
-                user_am.update(&self.db).await?;
+                user_am.email_verified = Set(true);
+                user = user_am.update(&self.db).await?;
             }
             // Generate token for existing user
-            return Ok(Claims::new(user.id, user.email, user.role)
-                .create_token(&self.jwt_secret)?);
+            let token = Claims::new(user.id, user.email.clone(), user.role.clone())
+                .create_token(&self.jwt_secret)?;
+            return Ok((token, user));
         }
 
         // Create new user
+        let user_id = Uuid::new_v4();
         let user = UserActiveModel {
-            id: Set(Uuid::new_v4()),
+            id: Set(user_id),
             email: Set(email.clone()),
             password_hash: Set("".to_string()), // No password for Firebase users
             name: Set(name),
@@ -133,15 +137,21 @@ impl<E: Clone + Send + Sync + EmailServiceTrait + 'static> AuthService<E> {
         };
 
         // Save user to database
-        let user = Users::insert(user)
+        let saved_user = Users::insert(user)
             .exec(&self.db)
             .await?;
 
+        // Get complete user model
+        let user = Users::find_by_id(user_id)
+            .one(&self.db)
+            .await?
+            .ok_or(AuthError::DatabaseError("Failed to retrieve saved user".into()))?;
+
         // Generate token for new user
-        let token = Claims::new(user.last_insert_id, email, "user".to_string())
+        let token = Claims::new(user.id, user.email.clone(), user.role.clone())
             .create_token(&self.jwt_secret)?;
 
-        Ok(token)
+        Ok((token, user))
     }
 
     pub async fn get_user_by_firebase_uid(&self, firebase_uid: String) -> Result<Option<UserModel>, AuthError> {
@@ -151,8 +161,6 @@ impl<E: Clone + Send + Sync + EmailServiceTrait + 'static> AuthService<E> {
             .await?;
         Ok(user)
     }
-
-
 
     pub async fn request_password_reset(&self, email: String) -> Result<(), AuthError> {
         let mut user = super::find_by_email(&self.db, &email)

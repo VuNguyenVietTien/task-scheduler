@@ -1,104 +1,89 @@
 use actix_web::{web, App, HttpServer};
-use dotenv::dotenv;
+use actix_cors::Cors;
 use sea_orm::Database;
-use std::env;
 
 mod api;
 mod auth;
+mod config;
 mod email;
 mod firebase;
 
-use api::auth::auth_routes;
 use auth::AuthService;
+use firebase::FirebaseService;
+use config::Config;
 use email::EmailService;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    dotenv().ok();
-
     // Set up logging
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
+    // Load configuration
+    let config = Config::from_env();
+    
+    // Clone config values we need before wrapping in web::Data
+    let host = config.host.clone();
+    let port = config.port;
+    let config = web::Data::new(config);
+    
     // Database connection
-    let database_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let db = Database::connect(&database_url)
+    let db = Database::connect(&config.database_url)
         .await
         .expect("Failed to connect to database");
 
-    // SMTP settings
-    let smtp_host = env::var("SMTP_HOST").unwrap_or_else(|_| "localhost".to_string());
-    let smtp_username = env::var("SMTP_USERNAME").unwrap_or_else(|_| "".to_string());
-    let smtp_password = env::var("SMTP_PASSWORD").unwrap_or_else(|_| "".to_string());
-    let smtp_from = env::var("SMTP_FROM").expect("SMTP_FROM must be set");
-
-    // JWT secret
-    let jwt_secret = env::var("JWT_SECRET")
-        .expect("JWT_SECRET must be set")
-        .into_bytes();
-
-    // Frontend URL
-    let frontend_url = env::var("FRONTEND_URL").expect("FRONTEND_URL must be set");
-
-    // Firebase service account
-    let firebase_service = match env::var("FIREBASE_SERVICE_ACCOUNT") {
-        Ok(service_account_path) => {
-            Some(firebase::FirebaseService::new(service_account_path)
-                .expect("Failed to initialize Firebase"))
-        }
-        Err(_) => None,
-    };
-
     // Email service
-    let email_service = match env::var("SMTP_HOST") {
-        Ok(_) => EmailService::new(
-            smtp_host,
-            smtp_username,
-            smtp_password,
-            smtp_from,
-        ).expect("Failed to create email service"),
-        Err(_) => EmailService::new(
-            "localhost".to_string(),
-            "test".to_string(),
-            "test".to_string(),
-            "noreply@example.com".to_string(),
-        ).expect("Failed to create email service"),
-    };
+    let email_service = EmailService::new(
+        config.smtp_host.clone(),
+        config.smtp_username.clone(),
+        config.smtp_password.clone(),
+        "noreply@example.com".to_string(), // TODO: Add smtp_from to Config struct
+    ).expect("Failed to create email service");
 
     // Auth service
     let auth_service = web::Data::new(AuthService::new(
-        db,
-        jwt_secret,
+        db.clone(),
+        config.jwt_secret.clone().into_bytes(),
         email_service,
-        frontend_url,
+        config.frontend_url.clone(),
     ));
 
-    // Create a new database connection for the web server
-    let server_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let server_db = Database::connect(&server_url)
-        .await
-        .expect("Failed to connect to database");
-    let db_data = web::Data::new(server_db);
+    let db_data = web::Data::new(db);
+    // Initialize Firebase service
+    let firebase_service = web::Data::new(
+        FirebaseService::new(config.firebase_service_account_path.clone())
+            .expect("Failed to initialize Firebase service")
+    );
+
+    let config_clone = config.clone();
+    let firebase_service_clone = firebase_service.clone();
 
     let server = HttpServer::new(move || {
+        // Configure CORS based on environment
+        let cors = Cors::default()
+            .allowed_origin(&config_clone.frontend_url)
+            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
+            .allowed_headers(vec![
+                "Authorization",
+                "Content-Type",
+                "X-Requested-With",
+                "Accept",
+            ])
+            .supports_credentials()
+            .max_age(3600);
+
         App::new()
-            .wrap(actix_cors::Cors::permissive()) // Configure CORS for development
+            .wrap(cors)
             .configure(api::init)
             .app_data(db_data.clone())
             .app_data(auth_service.clone())
+            .app_data(config_clone.clone())
+            .app_data(firebase_service_clone.clone())
     })
-    .bind((
-        env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
-        env::var("PORT")
-            .unwrap_or_else(|_| "8080".to_string())
-            .parse::<u16>()
-            .expect("PORT must be a valid number")
-    ))?
+    .bind((host.clone(), port))?
     .run();
 
-    println!("Server running at http://{}:{}/",
-        env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
-        env::var("PORT").unwrap_or_else(|_| "8080".to_string())
-    );
+    println!("Server running at http://{}:{}/", host, port);
+    println!("Environment: {}", config.app_env);
 
     server.await
 }

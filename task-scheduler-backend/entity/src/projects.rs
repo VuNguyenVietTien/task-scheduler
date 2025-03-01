@@ -2,8 +2,9 @@
 
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use super::{project_members, tasks, users};
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
+#[derive(DeriveEntityModel, Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[sea_orm(table_name = "projects")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -14,6 +15,18 @@ pub struct Model {
     pub created_by: Uuid,
     pub created_at: DateTimeWithTimeZone,
     pub updated_at: DateTimeWithTimeZone,
+    pub start_date: Option<DateTimeWithTimeZone>,
+    pub due_date: Option<DateTimeWithTimeZone>,
+    pub status: String,  // 'NEW', 'IN_PROGRESS', 'ON_HOLD', 'COMPLETED', 'CANCELLED'
+    pub priority: String, // 'LOW', 'MEDIUM', 'HIGH', 'URGENT'
+    #[sea_orm(column_type = "Text", nullable)]
+    pub category: Option<String>,
+    #[sea_orm(column_type = "Json", nullable)]
+    pub metadata: Option<Json>,
+    pub visibility: String, // 'PUBLIC', 'PRIVATE', 'TEAM'
+    #[sea_orm(column_type = "JsonBinary", nullable)]
+    pub tags: Option<Vec<String>>,
+    pub progress: f32,  // 0-100%
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -32,24 +45,24 @@ pub enum Relation {
     Users,
 }
 
-impl Related<super::project_members::Entity> for Entity {
+impl Related<project_members::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::ProjectMembers.def()
     }
 }
 
-impl Related<super::tasks::Entity> for Entity {
+impl Related<tasks::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Tasks.def()
     }
 }
 
-impl Related<super::users::Entity> for Entity {
+impl Related<users::Entity> for Entity {
     fn to() -> RelationDef {
-        super::project_members::Relation::Users.def()
+        project_members::Relation::Users.def()
     }
     fn via() -> Option<RelationDef> {
-        Some(super::project_members::Relation::Projects.def().rev())
+        Some(project_members::Relation::Projects.def().rev())
     }
 }
 

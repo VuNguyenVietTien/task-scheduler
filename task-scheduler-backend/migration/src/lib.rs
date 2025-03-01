@@ -2,6 +2,7 @@ pub use sea_orm_migration::prelude::*;
 
 mod m20250227_000001_create_schema;
 mod m20250227_000002_add_auth_fields;
+mod m20250301_000001_add_project_fields;
 
 pub struct Migrator;
 
@@ -11,6 +12,7 @@ impl MigratorTrait for Migrator {
         vec![
             Box::new(m20250227_000001_create_schema::Migration),
             Box::new(m20250227_000002_add_auth_fields::Migration),
+            Box::new(m20250301_000001_add_project_fields::Migration),
         ]
     }
 }

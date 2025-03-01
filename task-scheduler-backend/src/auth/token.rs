@@ -1,5 +1,5 @@
 use chrono::{Duration, Utc};
-use jsonwebtoken::{encode, EncodingKey, Header};
+use jsonwebtoken::{encode, decode, EncodingKey, DecodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use crate::auth::AuthError;
@@ -36,6 +36,16 @@ impl Claims {
             &EncodingKey::from_secret(secret),
         )
         .map_err(|e| AuthError::TokenCreationError(e))
+    }
+
+    pub fn decode_token(token: &str, secret: &[u8]) -> AuthResult<Self> {
+        decode(
+            token,
+            &DecodingKey::from_secret(secret),
+            &Validation::default()
+        )
+        .map(|token_data| token_data.claims)
+        .map_err(|e| AuthError::TokenVerificationError(e))
     }
 }
 

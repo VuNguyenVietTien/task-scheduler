@@ -2,8 +2,9 @@
 
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use super::{projects, users};
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "project_members")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
@@ -17,30 +18,30 @@ pub struct Model {
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
     #[sea_orm(
-        belongs_to = "super::projects::Entity",
+        belongs_to = "projects::Entity",
         from = "Column::ProjectId",
-        to = "super::projects::Column::Id",
+        to = "projects::Column::Id",
         on_update = "NoAction",
         on_delete = "Cascade"
     )]
     Projects,
     #[sea_orm(
-        belongs_to = "super::users::Entity",
-        from = "Column::UserId",
-        to = "super::users::Column::Id",
+        belongs_to = "users::Entity",
+        from = "Column::UserId", 
+        to = "users::Column::Id",
         on_update = "NoAction",
         on_delete = "Cascade"
     )]
     Users,
 }
 
-impl Related<super::projects::Entity> for Entity {
+impl Related<projects::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Projects.def()
     }
 }
 
-impl Related<super::users::Entity> for Entity {
+impl Related<users::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Users.def()
     }

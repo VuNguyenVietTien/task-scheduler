@@ -2,6 +2,8 @@ use actix_web::{web, HttpResponse, Scope};
 use serde::{Deserialize, Serialize};
 use crate::auth::{AuthService, AuthError};
 use crate::email::EmailService;
+use crate::firebase::FirebaseService;
+use log::{info, error};
 
 #[derive(Deserialize)]
 pub struct RegisterRequest {
@@ -17,8 +19,17 @@ pub struct LoginRequest {
 }
 
 #[derive(Serialize)]
+pub struct UserResponse {
+    pub id: String,
+    pub email: String,
+    pub name: String,
+    pub role: String,
+}
+
+#[derive(Serialize)]
 pub struct LoginResponse {
     pub token: String,
+    pub user: UserResponse,
 }
 
 #[derive(Deserialize)]
@@ -37,7 +48,7 @@ pub struct SetNewPasswordRequest {
     pub password: String,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct FirebaseLoginRequest {
     pub firebase_token: String,
     pub email: String,
@@ -51,7 +62,7 @@ pub fn auth_routes() -> Scope {
         .route("/login", web::post().to(login))
         .route("/verify-email", web::post().to(verify_email))
         .route("/request-password-reset", web::post().to(request_password_reset))
-        .route("/reset-password", web::post().to(reset_password)) 
+        .route("/reset-password", web::post().to(reset_password))
         .route("/firebase/login", web::post().to(firebase_login))
 }
 
@@ -70,14 +81,22 @@ async fn login(
     data: web::Json<LoginRequest>,
     service: web::Data<AuthService<EmailService>>,
 ) -> Result<HttpResponse, AuthError> {
-    let token = service.login(data.email.clone(), data.password.clone()).await?;
+    let (token, user) = service.login(data.email.clone(), data.password.clone()).await?;
 
-    Ok(HttpResponse::Ok().json(LoginResponse { token }))
+    Ok(HttpResponse::Ok().json(LoginResponse {
+        token,
+        user: UserResponse {
+            id: user.id.to_string(),
+            email: user.email,
+            name: user.name,
+            role: user.role,
+        },
+    }))
 }
 
 async fn verify_email(
-    data: web::Json<VerifyEmailRequest>,
-    service: web::Data<AuthService<EmailService>>,
+    _data: web::Json<VerifyEmailRequest>,
+    _service: web::Data<AuthService<EmailService>>,
 ) -> Result<HttpResponse, AuthError> {
     // TODO: Implement email verification
     Ok(HttpResponse::Ok().finish())
@@ -93,8 +112,8 @@ async fn request_password_reset(
 }
 
 async fn reset_password(
-    data: web::Json<SetNewPasswordRequest>,
-    service: web::Data<AuthService<EmailService>>,
+    _data: web::Json<SetNewPasswordRequest>,
+    _service: web::Data<AuthService<EmailService>>,
 ) -> Result<HttpResponse, AuthError> {
     // TODO: Implement password reset
     Ok(HttpResponse::Ok().finish())
@@ -103,16 +122,43 @@ async fn reset_password(
 async fn firebase_login(
     data: web::Json<FirebaseLoginRequest>,
     service: web::Data<AuthService<EmailService>>,
+    firebase_service: web::Data<FirebaseService>,
 ) -> Result<HttpResponse, AuthError> {
-    // TODO: Verify Firebase token
-    
-    let token = service.register_firebase_user(
-        data.email.clone(),
-        data.name.clone(), 
-        data.firebase_uid.clone()
-    ).await?;
+    info!("[Firebase Login] Received request: {:?}", data);
 
-    Ok(HttpResponse::Ok().json(LoginResponse { token }))
+    // Verify Firebase token
+    info!("[Firebase Login] Verifying Firebase token...");
+    firebase_service
+        .verify_id_token(&data.firebase_token)
+        .await
+        .map_err(|e| {
+            error!("[Firebase Login] Token verification failed: {}", e);
+            AuthError::InvalidToken(e.to_string())
+        })?;
+    info!("[Firebase Login] Firebase token verified successfully");
+    
+    // Register user in our system
+    info!("[Firebase Login] Registering user in our system...");
+    let (token, user) = service.register_firebase_user(
+        data.email.clone(),
+        data.name.clone(),
+        data.firebase_uid.clone()
+    ).await.map_err(|e| {
+        error!("[Firebase Login] User registration failed: {}", e);
+        e
+    })?;
+
+    info!("[Firebase Login] User registered successfully: {}", user.email);
+
+    Ok(HttpResponse::Ok().json(LoginResponse {
+        token,
+        user: UserResponse {
+            id: user.id.to_string(),
+            email: user.email,
+            name: user.name,
+            role: user.role,
+        },
+    }))
 }
 
 #[cfg(test)]

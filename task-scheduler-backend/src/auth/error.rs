@@ -14,7 +14,7 @@ pub enum AuthError {
     TokenVerificationError(jsonwebtoken::errors::Error),
     HashingError(bcrypt::BcryptError),
     EmailSendingFailed(String),
-    InvalidToken,
+    InvalidToken(String),
     TokenExpired,
     ResetTokenExpired,
     ResetTokenInvalid,
@@ -36,7 +36,7 @@ impl fmt::Display for AuthError {
             AuthError::TokenVerificationError(e) => write!(f, "Lỗi xác thực token: {}", e),
             AuthError::HashingError(e) => write!(f, "Lỗi mã hóa: {}", e),
             AuthError::EmailSendingFailed(e) => write!(f, "Lỗi gửi email: {}", e),
-            AuthError::InvalidToken => write!(f, "Token không hợp lệ"),
+            AuthError::InvalidToken(msg) => write!(f, "Token không hợp lệ: {}", msg),
             AuthError::TokenExpired => write!(f, "Token đã hết hạn"),
             AuthError::ResetTokenExpired => write!(f, "Token đặt lại mật khẩu đã hết hạn"),
             AuthError::ResetTokenInvalid => write!(f, "Token đặt lại mật khẩu không hợp lệ"),
@@ -96,7 +96,7 @@ impl ResponseError for AuthError {
                 actix_web::http::StatusCode::UNAUTHORIZED,
                 "Email not verified",
             ),
-            AuthError::InvalidToken | AuthError::TokenVerificationError(_) => (
+            AuthError::InvalidToken(_) | AuthError::TokenVerificationError(_) => (
                 actix_web::http::StatusCode::UNAUTHORIZED,
                 "Invalid token",
             ),

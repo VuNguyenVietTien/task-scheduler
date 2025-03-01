@@ -2,6 +2,7 @@
 
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use super::{attachments, comments, projects, task_assignments, users};
 
 #[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
 #[sea_orm(table_name = "tasks")]
@@ -27,19 +28,19 @@ pub struct Model {
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
 pub enum Relation {
-    #[sea_orm(has_many = "super::attachments::Entity")]
+    #[sea_orm(has_many = "attachments::Entity")]
     Attachments,
-    #[sea_orm(has_many = "super::comments::Entity")]
+    #[sea_orm(has_many = "comments::Entity")]
     Comments,
     #[sea_orm(
-        belongs_to = "super::projects::Entity",
+        belongs_to = "projects::Entity",
         from = "Column::ProjectId",
-        to = "super::projects::Column::Id",
+        to = "projects::Column::Id",
         on_update = "NoAction",
         on_delete = "Cascade"
     )]
     Projects,
-    #[sea_orm(has_many = "super::task_assignments::Entity")]
+    #[sea_orm(has_many = "task_assignments::Entity")]
     TaskAssignments,
     #[sea_orm(
         belongs_to = "Entity",
@@ -50,40 +51,40 @@ pub enum Relation {
     )]
     SelfRef,
     #[sea_orm(
-        belongs_to = "super::users::Entity",
+        belongs_to = "users::Entity",
         from = "Column::CreatedBy",
-        to = "super::users::Column::Id",
+        to = "users::Column::Id",
         on_update = "NoAction",
         on_delete = "Restrict"
     )]
     Users,
 }
 
-impl Related<super::attachments::Entity> for Entity {
+impl Related<attachments::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Attachments.def()
     }
 }
 
-impl Related<super::comments::Entity> for Entity {
+impl Related<comments::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Comments.def()
     }
 }
 
-impl Related<super::projects::Entity> for Entity {
+impl Related<projects::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Projects.def()
     }
 }
 
-impl Related<super::task_assignments::Entity> for Entity {
+impl Related<task_assignments::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::TaskAssignments.def()
     }
 }
 
-impl Related<super::users::Entity> for Entity {
+impl Related<users::Entity> for Entity {
     fn to() -> RelationDef {
         Relation::Users.def()
     }
