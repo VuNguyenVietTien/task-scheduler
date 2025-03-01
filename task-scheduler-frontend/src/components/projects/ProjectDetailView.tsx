@@ -109,7 +109,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
             {activeView === 'list' && <TaskListView tasks={tasks} />}
             {activeView === 'kanban' && (
               <div className="h-full overflow-x-auto">
-                <KanbanBoard tasks={tasks} />
+                <KanbanBoard tasks={tasks} projectId={project.id} />
               </div>
             )}
             {activeView === 'gantt' && (

@@ -34,11 +34,13 @@ export function PriorityTaskCard({ task }: PriorityTaskCardProps) {
 
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
-      case 'high':
+      case Priorities.URGENT:
         return 'border-l-4 border-l-red-600';
-      case 'medium':
+      case Priorities.HIGH:
+        return 'border-l-4 border-l-orange-600';
+      case Priorities.MEDIUM:
         return 'border-l-4 border-l-amber-600';
-      case 'low':
+      case Priorities.LOW:
         return 'border-l-4 border-l-green-600';
       default:
         return 'border-l-4 border-l-slate-600';

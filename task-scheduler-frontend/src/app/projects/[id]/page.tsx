@@ -1,106 +1,96 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import type { ProjectData } from '@/types/project';
+import { ProjectDetailView } from '@/components/projects/ProjectDetailView';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
-interface Project {
-  id: string;
-  name: string;
-  description: string;
-  status: string;
-  // ... other fields
+function LoadingFallback() {
+  return (
+    <div className="p-6">
+      <div className="animate-pulse">
+        <div className="h-8 bg-slate-200 rounded w-1/4 mb-4"></div>
+        <div className="h-4 bg-slate-200 rounded w-1/2 mb-6"></div>
+        <div className="space-y-3">
+          <div className="h-4 bg-slate-200 rounded"></div>
+          <div className="h-4 bg-slate-200 rounded"></div>
+          <div className="h-4 bg-slate-200 rounded"></div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-export default function ProjectDetailPage({ params }: { params: { id: string } }) {
-  const router = useRouter();
-  const [project, setProject] = useState<Project | null>(null);
-  const [error, setError] = useState<string | null>(null);
+export default function ProjectDetail({ params }: { params: { id: string } }) {
+  return (
+    <ProtectedRoute>
+      <Suspense fallback={<LoadingFallback />}>
+        <ProjectPage id={params.id} />
+      </Suspense>
+    </ProtectedRoute>
+  );
+}
+
+function ProjectPage({ id }: { id: string }) {
+  const [project, setProject] = useState<ProjectData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const fetchProject = async () => {
+    async function fetchProject() {
       try {
-        const response = await fetch(`/api/projects/${params.id}`);
-        const data = await response.json();
+        // Simulate API call
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const projectData: ProjectData = {
+          id,
+          name: 'Website Redesign',
+          description: 'Modernizing the company website with new design system',
+          dueDate: '2025-03-15',
+          members: 5,
+          status: 'active'
+        };
 
-        if (!response.ok) {
-          throw new Error(data.error || 'Failed to fetch project');
-        }
-
-        setProject(data);
+        setProject(projectData);
+        setError(null);
       } catch (err) {
-        setError('Failed to fetch project');
-        console.error('Error fetching project:', err);
+        setError('Failed to load project details');
+        console.error('Error loading project:', err);
       } finally {
         setLoading(false);
       }
-    };
+    }
 
     fetchProject();
-  }, [params.id]);
+  }, [id]);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="text-gray-600">Loading...</div>
-      </div>
-    );
+    return <LoadingFallback />;
   }
 
   if (error) {
     return (
-      <div className="max-w-4xl mx-auto p-6">
-        <div className="bg-red-50 border-l-4 border-red-400 p-4">
-          <div className="flex">
-            <div className="ml-3">
-              <h3 className="text-sm font-medium text-red-800">Error</h3>
-              <div className="mt-2 text-sm text-red-700">
-                {error}
-              </div>
-              <div className="mt-4">
-                <button
-                  type="button"
-                  onClick={() => router.push('/projects')}
-                  className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-red-700 bg-red-50 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
-                >
-                  Back to Projects
-                </button>
-              </div>
-            </div>
-          </div>
+      <div className="p-6">
+        <div className="card">
+          <h1 className="text-xl text-red-600">Error</h1>
+          <p className="text-slate-600">{error}</p>
         </div>
       </div>
     );
   }
 
   if (!project) {
-    return null;
-  }
-
-  return (
-    <div className="max-w-4xl mx-auto p-6">
-      <div className="bg-white shadow-sm rounded-lg">
-        <div className="px-4 py-5 sm:p-6">
-          <h2 className="text-2xl font-bold text-gray-900 mb-4">{project.name}</h2>
-          <div className="prose max-w-none">
-            <p className="text-gray-600">{project.description}</p>
-          </div>
-          <div className="mt-6">
-            <div className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-              {project.status}
-            </div>
-          </div>
+    return (
+      <div className="p-6">
+        <div className="card">
+          <h1 className="text-xl text-red-600">Project not found</h1>
+          <p className="text-slate-600">
+            The project you're looking for doesn't exist or has been deleted.
+          </p>
         </div>
       </div>
-      <div className="mt-6 flex justify-end">
-        <button
-          type="button"
-          onClick={() => router.push('/projects')}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-        >
-          Back to Projects
-        </button>
-      </div>
-    </div>
-  );
+    );
+  }
+
+  return <ProjectDetailView project={project} />;
 }

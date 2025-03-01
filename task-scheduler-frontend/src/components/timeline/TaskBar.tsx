@@ -1,7 +1,6 @@
-'use client';
-
-import React from 'react';
-import { Task, TaskStatus } from '@/types/task';
+import { Task, TaskStatus, TaskStatuses } from '@/types/task';
+import { TaskTooltip } from './TaskTooltip';
+import { useState, useCallback, useRef } from 'react';
 
 interface TaskBarProps {
   task: Task;
@@ -13,69 +12,71 @@ interface TaskBarProps {
 }
 
 export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
-  const getStatusColor = () => {
-    switch (task.status) {
-      case TaskStatus.PLANNED:
-        return 'bg-slate-100 border-slate-300';
-      case TaskStatus.IN_PROGRESS:
-        return 'bg-blue-100 border-blue-300';
-      case TaskStatus.DONE:
-        return 'bg-green-100 border-green-300';
+  const [showTooltip, setShowTooltip] = useState(false);
+  const barRef = useRef<HTMLDivElement>(null);
+
+  const getStatusColor = (status: TaskStatus) => {
+    switch (status) {
+      case TaskStatuses.DONE:
+        return 'bg-green-500';
+      case TaskStatuses.IN_PROGRESS:
+        return 'bg-blue-500';
+      case TaskStatuses.IN_REVIEW:
+        return 'bg-purple-500';
+      case TaskStatuses.PLANNED:
+        return 'bg-amber-500';
+      case TaskStatuses.BACKLOG:
+        return 'bg-slate-500';
       default:
-        return 'bg-slate-100 border-slate-300';
+        return 'bg-slate-300';
     }
   };
 
-  const getPriorityColor = () => {
-    switch (task.priority) {
-      case 'high':
-        return 'bg-red-100';
-      case 'medium':
-        return 'bg-yellow-100';
-      case 'low':
-        return 'bg-green-100';
-      default:
-        return 'bg-slate-100';
-    }
-  };
+  const handleMouseEnter = useCallback(() => {
+    setShowTooltip(true);
+  }, []);
+
+  const handleMouseLeave = useCallback(() => {
+    setShowTooltip(false);
+  }, []);
+
+  const handleClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    e.stopPropagation();
+    onClick?.(task.id);
+  }, [task.id, onClick]);
 
   return (
-    <div
-      role="button"
-      tabIndex={0}
-      onClick={() => onClick?.(task.id)}
-      onKeyPress={(e) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-          onClick?.(task.id);
-        }
-      }}
-      style={{
-        width: `${width}px`,
-        height: `${height}px`,
-        transform: `translate(${x}px, ${y - height/2}px)`,
-      }}
-      className={`
-        relative flex items-center rounded-md border shadow-sm cursor-pointer
-        hover:shadow-md transition-shadow
-        ${getStatusColor()}
-      `}
-    >
-      <div className="absolute inset-0 flex items-center px-2 truncate">
-        <div className="flex items-center gap-2 min-w-0">
-          <span className={`
-            flex-shrink-0 w-2 h-2 rounded-full
-            ${getPriorityColor()}
-          `} />
-          <span className="truncate text-sm font-medium">
+    <>
+      <div
+        ref={barRef}
+        className={`${getStatusColor(task.status)} rounded shadow-sm cursor-pointer 
+          hover:brightness-110 transition-all duration-200 pointer-events-auto`}
+        style={{
+          position: 'absolute',
+          width: `${width}px`,
+          height: `${height}px`,
+          transform: 'translateY(-50%)',
+          top: `${y}px`,
+          left: `${x}px`,
+          zIndex: 999
+        }}
+        onMouseEnter={handleMouseEnter}
+        onMouseLeave={handleMouseLeave}
+        onClick={handleClick}
+      >
+        {width > 50 && (
+          <div className="px-2 py-1 text-xs text-white truncate flex items-center h-full">
             {task.title}
-          </span>
-          {task.assignees?.length > 0 && (
-            <span className="flex-shrink-0 text-xs text-slate-500">
-              {task.assignees[0].name}
-            </span>
-          )}
-        </div>
+          </div>
+        )}
       </div>
-    </div>
+
+      {showTooltip && (
+        <TaskTooltip
+          task={task}
+          targetRef={barRef}
+        />
+      )}
+    </>
   );
 }

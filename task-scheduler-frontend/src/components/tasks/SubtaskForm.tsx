@@ -2,29 +2,22 @@ import React from 'react';
 import { useForm, Controller, ControllerRenderProps } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { Task, TaskStatus, User } from '@/types/task';
-import { z } from 'zod';
+import { taskFormSchema } from '@/schemas/taskForm';
 import clsx from 'clsx';
 
 type SubtaskFormData = {
   title: string;
   description?: string;
-  effort?: number;
-  assignee: string;
+  effortHours?: number;
+  assigneeIds: string[];
   status?: TaskStatus;
 };
 
-// Create a separate schema for subtasks with their specific requirements
-const subtaskFormSchema = z.object({
-  title: z.string()
-    .min(1, 'Title is required')
-    .max(200, 'Title must be less than 200 characters'),
-  description: z.string()
-    .optional(),
-  effort: z.number()
-    .min(0, 'Effort must be positive')
-    .optional(),
-  assignee: z.string()
-    .min(1, 'Assignee is required')
+const subtaskFormSchema = taskFormSchema.pick({
+  title: true,
+  description: true,
+  effortHours: true,
+  assigneeIds: true,
 });
 
 export interface SubtaskFormProps {
@@ -35,8 +28,8 @@ export interface SubtaskFormProps {
   isSubmitting?: boolean;
 }
 
-interface AssigneeFieldProps {
-  field: ControllerRenderProps<SubtaskFormData, 'assignee'>;
+interface AssigneesFieldProps {
+  field: ControllerRenderProps<SubtaskFormData, 'assigneeIds'>;
 }
 
 export const SubtaskForm: React.FC<SubtaskFormProps> = ({
@@ -57,13 +50,13 @@ export const SubtaskForm: React.FC<SubtaskFormProps> = ({
       ? {
           title: subtask.title,
           description: subtask.description,
-          effort: subtask.effortHours,
-          assignee: subtask.assignees[0]?.id || '',
+          effortHours: subtask.effortHours,
+          assigneeIds: subtask.assignees.map(a => a.id),
           status: subtask.status,
         }
       : {
           status: TaskStatus.PLANNED,
-          assignee: '',
+          assigneeIds: [],
         },
   });
 
@@ -121,46 +114,46 @@ export const SubtaskForm: React.FC<SubtaskFormProps> = ({
       </div>
 
       <div>
-        <label htmlFor="effort" className="block text-sm font-medium text-gray-700">
+        <label htmlFor="effortHours" className="block text-sm font-medium text-gray-700">
           Effort Hours
         </label>
         <input
           type="number"
-          id="effort"
+          id="effortHours"
           min="0"
           step="0.5"
-          {...register('effort', { valueAsNumber: true })}
+          {...register('effortHours', { valueAsNumber: true })}
           className={clsx(
             'mt-1 block w-full rounded-md shadow-sm sm:text-sm',
-            errors.effort
+            errors.effortHours
               ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
               : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
           )}
         />
-        {errors.effort && (
-          <p className="mt-1 text-sm text-red-600">{errors.effort.message}</p>
+        {errors.effortHours && (
+          <p className="mt-1 text-sm text-red-600">{errors.effortHours.message}</p>
         )}
       </div>
 
       <div>
-        <label htmlFor="assignee" className="block text-sm font-medium text-gray-700">
-          Assignee
+        <label htmlFor="assignees" className="block text-sm font-medium text-gray-700">
+          Assignees
         </label>
         <Controller
-          name="assignee"
+          name="assigneeIds"
           control={control}
-          render={({ field }: AssigneeFieldProps) => (
+          render={({ field }: AssigneesFieldProps) => (
             <select
-              id="assignee"
+              id="assignees"
+              multiple
               {...field}
               className={clsx(
                 'mt-1 block w-full rounded-md shadow-sm sm:text-sm',
-                errors.assignee
+                errors.assigneeIds
                   ? 'border-red-300 focus:border-red-500 focus:ring-red-500'
                   : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
               )}
             >
-              <option value="">Select an assignee</option>
               {users.map(user => (
                 <option key={user.id} value={user.id}>
                   {user.name}
@@ -169,8 +162,8 @@ export const SubtaskForm: React.FC<SubtaskFormProps> = ({
             </select>
           )}
         />
-        {errors.assignee && (
-          <p className="mt-1 text-sm text-red-600">{errors.assignee.message}</p>
+        {errors.assigneeIds && (
+          <p className="mt-1 text-sm text-red-600">{errors.assigneeIds.message}</p>
         )}
       </div>
 

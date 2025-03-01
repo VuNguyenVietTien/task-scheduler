@@ -65,7 +65,7 @@ export function EmailVerification({ onVerified }: EmailVerificationProps) {
           <div className="mt-2 text-sm text-yellow-700">
             <p>Please verify your email address to access all features.</p>
             <p className="mt-1">
-              We&apos;ve sent a verification link to {user.email}. Check your inbox and spam folder.
+              We've sent a verification link to {user.email}. Check your inbox and spam folder.
             </p>
           </div>
           <div className="mt-4">
