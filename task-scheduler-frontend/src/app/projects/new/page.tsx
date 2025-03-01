@@ -3,7 +3,8 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { fetchApi } from '@/lib/api';
-import { validateProjectForm, type ProjectFormData } from '@/schemas/projectForm';
+import { validateProjectForm, type ProjectFormData, ProjectPriority, ProjectVisibility } from '@/schemas/projectForm';
+import { XCircle } from 'lucide-react';
 
 type ValidationError = {
   path: string;
@@ -17,9 +18,11 @@ export default function NewProjectPage() {
   const [formData, setFormData] = useState<ProjectFormData>({
     name: '',
     description: '',
-    dueDate: '',
-    members: 1
+    priority: ProjectPriority.MEDIUM,
+    visibility: ProjectVisibility.PRIVATE,
+    tags: []
   });
+  const [newTag, setNewTag] = useState('');
 
   const getFieldError = (fieldName: string) => {
     return errors.find(error => error.path === fieldName)?.message;
@@ -57,12 +60,38 @@ export default function NewProjectPage() {
   };
 
   const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
   ) => {
-    const { name, value, type } = e.target;
+    const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: type === 'number' ? Number(value) : value
+      [name]: value
+    }));
+  };
+
+  const handleAddTag = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && newTag.trim()) {
+      e.preventDefault();
+      if (formData.tags.length >= 10) {
+        setErrors(prev => [...prev, { path: 'tags', message: 'Maximum 10 tags allowed' }]);
+        return;
+      }
+      if (newTag.length > 30) {
+        setErrors(prev => [...prev, { path: 'tags', message: 'Tag must be less than 30 characters' }]);
+        return;
+      }
+      setFormData(prev => ({
+        ...prev,
+        tags: [...prev.tags, newTag.trim()]
+      }));
+      setNewTag('');
+    }
+  };
+
+  const removeTag = (tagToRemove: string) => {
+    setFormData(prev => ({
+      ...prev,
+      tags: prev.tags.filter(tag => tag !== tagToRemove)
     }));
   };
 
@@ -130,41 +159,76 @@ export default function NewProjectPage() {
         </div>
 
         <div>
-          <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700">
-            Due Date *
+          <label htmlFor="priority" className="block text-sm font-medium text-gray-700">
+            Priority *
           </label>
-          <input
-            type="date"
-            name="dueDate"
-            id="dueDate"
+          <select
+            name="priority"
+            id="priority"
             required
-            value={formData.dueDate}
+            value={formData.priority}
             onChange={handleChange}
-            min={new Date().toISOString().split('T')[0]}
-            className={`mt-1 block w-full rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500
-              ${getFieldError('dueDate') ? 'border-red-300' : 'border-gray-300'}`}
-          />
-          {getFieldError('dueDate') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('dueDate')}</p>
-          )}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+          >
+            {Object.entries(ProjectPriority).map(([key, value]) => (
+              <option key={key} value={value}>{key}</option>
+            ))}
+          </select>
         </div>
 
         <div>
-          <label htmlFor="members" className="block text-sm font-medium text-gray-700">
-            Initial Team Size
+          <label htmlFor="visibility" className="block text-sm font-medium text-gray-700">
+            Visibility *
+          </label>
+          <select
+            name="visibility"
+            id="visibility"
+            required
+            value={formData.visibility}
+            onChange={handleChange}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+          >
+            {Object.entries(ProjectVisibility).map(([key, value]) => (
+              <option key={key} value={value}>{key}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="tags" className="block text-sm font-medium text-gray-700">
+            Tags (Press Enter to add)
           </label>
           <input
-            type="number"
-            name="members"
-            id="members"
-            min="1"
-            value={formData.members}
-            onChange={handleChange}
-            className={`mt-1 block w-full rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500
-              ${getFieldError('members') ? 'border-red-300' : 'border-gray-300'}`}
+            type="text"
+            id="tags"
+            value={newTag}
+            onChange={(e) => setNewTag(e.target.value)}
+            onKeyDown={handleAddTag}
+            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            placeholder="Add tags..."
           />
-          {getFieldError('members') && (
-            <p className="mt-1 text-sm text-red-600">{getFieldError('members')}</p>
+          {getFieldError('tags') && (
+            <p className="mt-1 text-sm text-red-600">{getFieldError('tags')}</p>
+          )}
+          {formData.tags.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-2">
+              {formData.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                >
+                  {tag}
+                  <button
+                    type="button"
+                    onClick={() => removeTag(tag)}
+                    className="ml-1 inline-flex items-center"
+                    aria-label={`Remove tag ${tag}`}
+                  >
+                    <XCircle className="h-3 w-3" />
+                  </button>
+                </span>
+              ))}
+            </div>
           )}
         </div>
 

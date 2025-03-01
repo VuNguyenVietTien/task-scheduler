@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { fetchApi } from '@/lib/api';
-import { PlusCircle, FolderPlus, Loader2 } from 'lucide-react';
+import { PlusCircle, FolderPlus, Loader2, Users, Calendar } from 'lucide-react';
 
 interface Project {
   id: string;
@@ -11,7 +11,33 @@ interface Project {
   description?: string;
   created_at: string;
   updated_at: string;
+  status: string;
+  priority: string;
+  visibility: string;
+  tags: string[];
+  member_count: number;
 }
+
+const getPriorityColor = (priority: string) => {
+  const colors = {
+    URGENT: 'bg-red-100 text-red-800',
+    HIGH: 'bg-orange-100 text-orange-800',
+    MEDIUM: 'bg-yellow-100 text-yellow-800',
+    LOW: 'bg-green-100 text-green-800'
+  };
+  return colors[priority as keyof typeof colors] || colors.MEDIUM;
+};
+
+const getStatusColor = (status: string) => {
+  const colors = {
+    NEW: 'bg-blue-100 text-blue-800',
+    IN_PROGRESS: 'bg-indigo-100 text-indigo-800',
+    ON_HOLD: 'bg-yellow-100 text-yellow-800',
+    COMPLETED: 'bg-green-100 text-green-800',
+    CANCELLED: 'bg-gray-100 text-gray-800'
+  };
+  return colors[status as keyof typeof colors] || colors.NEW;
+};
 
 export default function ProjectList() {
   const [projects, setProjects] = useState<Project[]>([]);
@@ -97,18 +123,59 @@ export default function ProjectList() {
         <Link
           key={project.id}
           href={`/projects/${project.id}`}
-          className="block p-6 bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
+          className="group block p-6 bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
         >
-          <h3 className="text-lg font-semibold text-gray-800 mb-2">
-            {project.name}
-          </h3>
+          {/* Project Header */}
+          <div className="flex items-start justify-between mb-3">
+            <h3 className="text-lg font-semibold text-gray-800 group-hover:text-blue-600 transition-colors">
+              {project.name}
+            </h3>
+            <div className="flex gap-2">
+              <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(project.priority)}`}>
+                {project.priority}
+              </span>
+              <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(project.status)}`}>
+                {project.status.replace('_', ' ')}
+              </span>
+            </div>
+          </div>
+
+          {/* Project Description */}
           {project.description && (
             <p className="text-gray-500 text-sm mb-4 line-clamp-2">
               {project.description}
             </p>
           )}
-          <div className="text-xs text-gray-400">
-            Created {new Date(project.created_at).toLocaleDateString()}
+
+          {/* Project Tags */}
+          {project.tags && project.tags.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 mb-4">
+              {project.tags.map((tag) => (
+                <span
+                  key={tag}
+                  className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
+                >
+                  {tag}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Project Footer */}
+          <div className="flex items-center justify-between text-xs text-gray-500 mt-4">
+            <div className="flex items-center gap-4">
+              <div className="flex items-center gap-1">
+                <Users className="w-4 h-4" />
+                <span>{project.member_count}</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <Calendar className="w-4 h-4" />
+                <span>{new Date(project.created_at).toLocaleDateString()}</span>
+              </div>
+            </div>
+            <span className={`px-2 py-1 rounded text-xs ${project.visibility === 'PRIVATE' ? 'bg-gray-100' : 'bg-green-100'}`}>
+              {project.visibility}
+            </span>
           </div>
         </Link>
       ))}

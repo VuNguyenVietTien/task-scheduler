@@ -44,7 +44,7 @@ impl Config {
         Self {
             host: env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
             port: env::var("PORT")
-                .unwrap_or_else(|_| "3002".to_string())
+                .unwrap_or_else(|_| "8080".to_string())
                 .parse()
                 .expect("PORT must be a number"),
             database_url: env::var("DATABASE_URL")
@@ -83,7 +83,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             host: "127.0.0.1".to_string(),
-            port: 3002,
+            port: 8080,
             database_url: "postgres://postgres:postgres@localhost:5432/task_scheduler".to_string(),
             jwt_secret: "default-secret-key".to_string(),
             supabase_url: "".to_string(),

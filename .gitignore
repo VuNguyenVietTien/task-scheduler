@@ -27,3 +27,4 @@ out/
 
 # Cline specific
 .clinerules
+task-scheduler-backend/config/firebase-service-account.json
