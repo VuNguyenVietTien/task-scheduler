@@ -91,19 +91,23 @@ export default function ProjectList() {
   if (projects.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-center px-4">
-        <FolderPlus className="w-16 h-16 text-gray-400 mb-4" />
-        <h3 className="text-xl font-semibold text-gray-700 mb-2">
-          No Projects Yet
+        <div className="relative">
+          <FolderPlus className="w-20 h-20 text-blue-500 mb-6 transform transition-transform hover:scale-110" />
+          <div className="absolute -top-2 -right-2 w-8 h-8 bg-blue-100 rounded-full animate-pulse" />
+        </div>
+        <h3 className="text-2xl font-bold text-gray-800 mb-3">
+          Start Your First Project
         </h3>
-        <p className="text-gray-500 mb-6 max-w-md">
-          Get started by creating your first project to track tasks and collaborate with your team.
+        <p className="text-gray-600 mb-8 max-w-md leading-relaxed">
+          Create a project to organize tasks, collaborate with your team, and track progress all in one place.
         </p>
         <Link
           href="/projects/new"
-          className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+          className="group relative inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-blue-200 transition-all duration-300 hover:-translate-y-0.5"
         >
-          <PlusCircle className="w-5 h-5" />
+          <PlusCircle className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
           Create Project
+          <span className="absolute inset-0 rounded-xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
         </Link>
       </div>
     );
@@ -113,17 +117,18 @@ export default function ProjectList() {
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
       <Link
         href="/projects/new"
-        className="flex flex-col items-center justify-center p-6 border-2 border-dashed border-gray-300 rounded-lg hover:border-blue-500 transition-colors group min-h-[200px]"
+        className="relative flex flex-col items-center justify-center p-6 bg-gradient-to-b from-blue-50 to-white border border-blue-100 rounded-xl hover:shadow-xl transition-all duration-300 group min-h-[200px] overflow-hidden"
       >
-        <PlusCircle className="w-12 h-12 text-gray-400 group-hover:text-blue-500 mb-4" />
-        <span className="text-gray-500 group-hover:text-blue-500">Create New Project</span>
+        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/5 to-blue-500/0 transform -skew-y-12 group-hover:animate-shine" />
+        <PlusCircle className="w-12 h-12 text-blue-500 group-hover:scale-110 transition-transform duration-300 mb-4" />
+        <span className="font-medium text-blue-600 group-hover:text-blue-700">Create New Project</span>
       </Link>
 
       {projects.map((project) => (
         <Link
           key={project.id}
           href={`/projects/${project.id}`}
-          className="group block p-6 bg-white shadow-sm border border-gray-200 rounded-lg hover:shadow-md transition-shadow"
+          className="group block p-6 bg-white rounded-xl border border-gray-200 hover:shadow-xl hover:border-blue-100 transition-all duration-300 transform hover:-translate-y-1"
         >
           {/* Project Header */}
           <div className="flex items-start justify-between mb-3">
@@ -131,10 +136,10 @@ export default function ProjectList() {
               {project.name}
             </h3>
             <div className="flex gap-2">
-              <span className={`px-2 py-1 rounded text-xs font-medium ${getPriorityColor(project.priority)}`}>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getPriorityColor(project.priority)} transition-transform group-hover:scale-105`}>
                 {project.priority}
               </span>
-              <span className={`px-2 py-1 rounded text-xs font-medium ${getStatusColor(project.status)}`}>
+              <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(project.status)} transition-transform group-hover:scale-105`}>
                 {project.status.replace('_', ' ')}
               </span>
             </div>
@@ -153,7 +158,7 @@ export default function ProjectList() {
               {project.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="px-2 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600"
+                  className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
                 >
                   {tag}
                 </span>
@@ -173,7 +178,7 @@ export default function ProjectList() {
                 <span>{new Date(project.created_at).toLocaleDateString()}</span>
               </div>
             </div>
-            <span className={`px-2 py-1 rounded text-xs ${project.visibility === 'PRIVATE' ? 'bg-gray-100' : 'bg-green-100'}`}>
+            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${project.visibility === 'PRIVATE' ? 'bg-gray-100 text-gray-700' : 'bg-green-100 text-green-700'}`}>
               {project.visibility}
             </span>
           </div>

@@ -1,5 +1,6 @@
 pub mod auth;
 pub mod projects;
+pub mod logging;
 // pub mod tasks;
 // pub mod comments;
 // pub mod project_members;
@@ -15,6 +16,8 @@ pub fn init(cfg: &mut web::ServiceConfig) {
             .wrap(Logger::default())
             // Auth routes không cần Auth middleware
             .service(auth::auth_routes())
+            // Logging routes không cần Auth middleware
+            .service(logging::logging_routes())
             // Các routes khác cần Auth middleware
             .service(
                 web::scope("")

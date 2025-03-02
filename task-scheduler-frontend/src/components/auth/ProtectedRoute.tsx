@@ -16,7 +16,7 @@ export function ProtectedRoute({ children, requireVerification = true }: Protect
       if (!user) {
         // No user is signed in
         router.push('/auth');
-      } else if (requireVerification && !user.emailVerified && user.providerData[0]?.providerId === 'password') {
+      } else if (requireVerification && !user.emailVerified && user.providerData?.[0]?.providerId === 'password') {
         // User needs to verify email (only for email/password auth)
         router.push('/auth');
       }
@@ -35,7 +35,7 @@ export function ProtectedRoute({ children, requireVerification = true }: Protect
     return null;
   }
 
-  if (requireVerification && !user.emailVerified && user.providerData[0]?.providerId === 'password') {
+  if (requireVerification && !user.emailVerified && user.providerData?.[0]?.providerId === 'password') {
     return null;
   }
 

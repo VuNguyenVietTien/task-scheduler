@@ -62,6 +62,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         const data = await response.json();
         console.log('[Auth] Current user:', data.user);
         setUser(data.user);
+        
+        // Get auth token from cookies and store in localStorage
+        const cookies = document.cookie.split(';');
+        const authTokenCookie = cookies.find(cookie => cookie.trim().startsWith('auth-token='));
+        if (authTokenCookie) {
+          const token = authTokenCookie.split('=')[1];
+          console.log('[Auth] Storing token in localStorage');
+          localStorage.setItem('token', token);
+        }
       } else {
         console.log('[Auth] No authenticated user found');
       }
@@ -147,6 +156,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const data = await response.json();
       setUser(data.user);
+      
+      // Get auth token from cookies and store in localStorage
+      const cookies = document.cookie.split(';');
+      const authTokenCookie = cookies.find(cookie => cookie.trim().startsWith('auth-token='));
+      if (authTokenCookie) {
+        const token = authTokenCookie.split('=')[1];
+        console.log('[Auth] Storing token in localStorage after login');
+        localStorage.setItem('token', token);
+      }
+      
       router.push('/dashboard');
     } catch (error) {
       setError('Invalid email or password');
@@ -192,6 +211,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUser(null);
+      localStorage.removeItem('token'); // Clear token on logout
+      document.cookie = 'auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'; // Clear auth cookie
       router.push('/auth');
     } catch (error) {
       setError('Logout failed');

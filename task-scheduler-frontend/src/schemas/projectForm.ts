@@ -1,6 +1,13 @@
 import { z } from 'zod';
 
-// Define project priority and visibility as enums
+// Define project status, priority and visibility as enums
+export const ProjectStatus = {
+  NEW: 'NEW',
+  IN_PROGRESS: 'IN_PROGRESS',
+  COMPLETED: 'COMPLETED',
+  ON_HOLD: 'ON_HOLD'
+} as const;
+
 export const ProjectPriority = {
   LOW: 'LOW',
   MEDIUM: 'MEDIUM', 
@@ -15,6 +22,9 @@ export const ProjectVisibility = {
 } as const;
 
 export const projectFormSchema = z.object({
+  status: z
+    .enum([ProjectStatus.NEW, ProjectStatus.IN_PROGRESS, ProjectStatus.COMPLETED, ProjectStatus.ON_HOLD])
+    .default(ProjectStatus.NEW),
   name: z
     .string()
     .min(3, 'Project name must be at least 3 characters')

@@ -1,8 +1,8 @@
 pub use sea_orm_migration::prelude::*;
 
-mod m20250227_000001_create_schema;
-mod m20250227_000002_add_auth_fields;
-mod m20250301_000001_add_project_fields;
+mod m20250227_000001_create_core_tables;
+mod m20250227_000002_create_task_tables; 
+mod m20250227_000003_create_notification_tables;
 
 pub struct Migrator;
 
@@ -10,9 +10,14 @@ pub struct Migrator;
 impl MigratorTrait for Migrator {
     fn migrations() -> Vec<Box<dyn MigrationTrait>> {
         vec![
-            Box::new(m20250227_000001_create_schema::Migration),
-            Box::new(m20250227_000002_add_auth_fields::Migration),
-            Box::new(m20250301_000001_add_project_fields::Migration),
+            Box::new(m20250227_000001_create_core_tables::Migration),
+            Box::new(m20250227_000002_create_task_tables::Migration),
+            Box::new(m20250227_000003_create_notification_tables::Migration),
         ]
     }
 }
+
+// Re-export migrations for use in other crates
+pub use m20250227_000001_create_core_tables::*;
+pub use m20250227_000002_create_task_tables::*;
+pub use m20250227_000003_create_notification_tables::*;

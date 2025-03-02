@@ -2,6 +2,7 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import type { ProjectData } from '@/types/project';
+import { fetchApi } from '@/lib/api';
 import { ProjectDetailView } from '@/components/projects/ProjectDetailView';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
@@ -39,16 +40,20 @@ function ProjectPage({ id }: { id: string }) {
   useEffect(() => {
     async function fetchProject() {
       try {
-        // Simulate API call
-        await new Promise(resolve => setTimeout(resolve, 1000));
+        const response = await fetchApi(`/api/projects/${id}`);
         
+        // Transform API response to match ProjectData interface
         const projectData: ProjectData = {
-          id,
-          name: 'Website Redesign',
-          description: 'Modernizing the company website with new design system',
-          dueDate: '2025-03-15',
-          members: 5,
-          status: 'active'
+          id: response.id,
+          name: response.name,
+          description: response.description || '',
+          // Using created_at as dueDate for now since API doesn't have dueDate
+          dueDate: response.created_at,
+          members: response.member_count || 0,
+          // Map API status to UI status
+          status: response.status.toLowerCase() === 'completed' ? 'completed' :
+                 response.status.toLowerCase() === 'on_hold' ? 'on-hold' :
+                 'active'
         };
 
         setProject(projectData);

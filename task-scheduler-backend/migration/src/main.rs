@@ -1,13 +1,27 @@
 use sea_orm_migration::prelude::*;
-use dotenv::dotenv;
 
-#[async_std::main]
+mod m20250227_000001_create_core_tables;
+mod m20250227_000002_create_task_tables;
+mod m20250227_000003_create_notification_tables;
+
+pub struct Migrator;
+
+#[async_trait::async_trait]
+impl MigratorTrait for Migrator {
+    fn migrations() -> Vec<Box<dyn MigrationTrait>> {
+        vec![
+            Box::new(m20250227_000001_create_core_tables::Migration),
+            Box::new(m20250227_000002_create_task_tables::Migration),
+            Box::new(m20250227_000003_create_notification_tables::Migration),
+        ]
+    }
+}
+
+#[tokio::main]
 async fn main() {
-    dotenv().ok();
-    let db_url = std::env::var("DATABASE_URL").expect("DATABASE_URL must be set");
-    let db = sea_orm::Database::connect(&db_url).await.unwrap();
-
-    println!("Running migrations...");
-    migration::Migrator::up(&db, None).await.unwrap();
-    println!("Migrations completed successfully!");
+    // Load environment variables from .env file
+    dotenv::dotenv().ok();
+    
+    // Run migrations using CLI
+    cli::run_cli(Migrator).await;
 }

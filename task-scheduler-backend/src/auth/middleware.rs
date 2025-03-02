@@ -55,20 +55,56 @@ where
             info!("[Auth] Incoming request: Method={} Path={}", req.method(), req.path());
 
             // Check for auth token in cookies
-            let token = req.cookie("auth-token")
-                .ok_or_else(|| {
-                    error!("[Auth] No auth-token cookie found for request to: {}", req.path());
-                    // Safely handle cookies Result and log them
-                    if let Ok(cookies) = req.cookies() {
-                        let cookie_list: Vec<_> = cookies.iter().collect();
-                        info!("[Auth] Available cookies: {:?}", cookie_list);
+            // First try to get token from Authorization header
+            // Try to get token from Authorization header first
+            let token = if let Some(auth_header) = req.headers().get("Authorization") {
+                info!("🔑 [Auth] Found Authorization header: {:?}", auth_header);
+                
+                match auth_header.to_str() {
+                    Ok(header_str) if header_str.starts_with("Bearer ") => {
+                        let token = &header_str[7..];
+                        if token == "null" || token.is_empty() {
+                            info!("⚠️ [Auth] Empty or null token in Authorization header, trying cookie...");
+                            None
+                        } else {
+                            info!("✅ [Auth] Valid Bearer token format in header");
+                            Some(token.to_string())
+                        }
+                    },
+                    _ => {
+                        info!("⚠️ [Auth] Invalid Authorization header format, trying cookie...");
+                        None
                     }
-                    ErrorUnauthorized("Authentication required")
-                })?
-                .value()
-                .to_string();
+                }
+            } else {
+                info!("🔍 [Auth] No Authorization header, trying cookie...");
+                None
+            };
 
-            info!("[Auth] Found auth-token cookie");
+            // If no valid Authorization header token, try cookie
+            let token = if let Some(token) = token {
+                token
+            } else {
+                req.cookie("auth-token")
+                    .map(|cookie| {
+                        info!("🍪 [Auth] Found auth-token cookie with value");
+                        cookie.value().to_string()
+                    })
+                    .ok_or_else(|| {
+                        error!("❌ [Auth] No valid authentication found");
+                        if let Ok(cookies) = req.cookies() {
+                            info!("📋 [Auth] Available cookies: {:?}", cookies.iter().collect::<Vec<_>>());
+                        }
+                        ErrorUnauthorized("No valid authentication token found")
+                    })?
+            };
+
+            if token.is_empty() {
+                error!("❌ [Auth] Empty token");
+                return Err(ErrorUnauthorized("Empty authentication token"));
+            }
+
+            info!("🔒 [Auth] Token obtained successfully");
 
             let config = Config::from_env();
             let claims = Claims::decode_token(&token, config.jwt_secret.as_bytes())

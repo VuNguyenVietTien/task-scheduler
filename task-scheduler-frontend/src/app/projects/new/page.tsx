@@ -1,10 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { fetchApi } from '@/lib/api';
-import { validateProjectForm, type ProjectFormData, ProjectPriority, ProjectVisibility } from '@/schemas/projectForm';
+import { fetchApi, getAuthHeaders } from '@/lib/api';
+import { validateProjectForm, type ProjectFormData, ProjectPriority, ProjectVisibility, ProjectStatus } from '@/schemas/projectForm';
 import { XCircle } from 'lucide-react';
+import { useAuth } from '@/contexts/AuthContext';
 
 type ValidationError = {
   path: string;
@@ -13,11 +14,29 @@ type ValidationError = {
 
 export default function NewProjectPage() {
   const router = useRouter();
+  const { user, loading } = useAuth();
+  const API_URL = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`;
+
+  useEffect(() => {
+    if (!loading && !user) {
+      router.push('/auth');
+    }
+  }, [user, loading, router]);
+
+  if (loading || !user) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-gray-900"></div>
+      </div>
+    );
+  }
+
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [formData, setFormData] = useState<ProjectFormData>({
     name: '',
     description: '',
+    status: ProjectStatus.NEW,
     priority: ProjectPriority.MEDIUM,
     visibility: ProjectVisibility.PRIVATE,
     tags: []
@@ -41,13 +60,51 @@ export default function NewProjectPage() {
       return;
     }
 
+    const requestData = {
+      status: formData.status,
+      name: formData.name,
+      description: formData.description,
+      priority: formData.priority,
+      visibility: formData.visibility,
+      tags: formData.tags
+    };
+
     try {
-      const project = await fetchApi('/api/projects', {
+      // Log request as curl command for debugging
+      console.log([
+        '🚀 Create Project Request:',
+        `curl -X POST ${API_URL} \\`,
+        '  -H "Content-Type: application/json" \\',
+        `  -H "Authorization: ${getAuthHeaders().Authorization}" \\`,
+        `  -d '${JSON.stringify(requestData, null, 2)}' \\`,
+        '  -v'
+      ].join('\n'));
+
+      const project = await fetchApi(API_URL, {
         method: 'POST',
-        body: validation.data
+        body: requestData,
+        headers: getAuthHeaders()
       });
+
       router.push(`/projects/${project.id}`);
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.error([
+        '❌ Create Project Error:',
+        `Error: ${errorMsg}`,
+        '',
+        'Request Details:',
+        `curl -X POST ${API_URL} \\`,
+        '  -H "Content-Type: application/json" \\',
+        `  -H "Authorization: ${getAuthHeaders().Authorization}" \\`,
+        `  -d '${JSON.stringify(requestData, null, 2)}' \\`,
+        '  -v'
+      ].join('\n'));
+
+      if (err instanceof Error && err.name === 'AuthenticationError') {
+        router.push('/auth');
+        return;
+      }
       setErrors([
         {
           path: 'form',
@@ -132,8 +189,12 @@ export default function NewProjectPage() {
             required
             value={formData.name}
             onChange={handleChange}
-            className={`mt-1 block w-full rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500
-              ${getFieldError('name') ? 'border-red-300' : 'border-gray-300'}`}
+            className={`mt-2 block w-full px-4 py-3 text-base rounded-lg border shadow-sm transition-colors
+              ${getFieldError('name') 
+                ? 'border-red-300 focus:ring-red-500 focus:border-red-500' 
+                : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+              } 
+              hover:border-gray-400`}
           />
           {getFieldError('name') && (
             <p className="mt-1 text-sm text-red-600">{getFieldError('name')}</p>
@@ -150,8 +211,12 @@ export default function NewProjectPage() {
             rows={4}
             value={formData.description || ''}
             onChange={handleChange}
-            className={`mt-1 block w-full rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500
-              ${getFieldError('description') ? 'border-red-300' : 'border-gray-300'}`}
+            className={`mt-2 block w-full px-4 py-3 text-base rounded-lg border shadow-sm transition-colors
+              ${getFieldError('description')
+                ? 'border-red-300 focus:ring-red-500 focus:border-red-500'
+                : 'border-gray-300 focus:ring-blue-500 focus:border-blue-500'
+              }
+              hover:border-gray-400 resize-none`}
           />
           {getFieldError('description') && (
             <p className="mt-1 text-sm text-red-600">{getFieldError('description')}</p>
@@ -168,9 +233,27 @@ export default function NewProjectPage() {
             required
             value={formData.priority}
             onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            className="mt-2 block w-full px-4 py-3 text-base rounded-lg border border-gray-300 shadow-sm transition-colors focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400"
           >
             {Object.entries(ProjectPriority).map(([key, value]) => (
+              <option key={key} value={value}>{key}</option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label htmlFor="status" className="block text-sm font-medium text-gray-700">
+            Status *
+          </label>
+          <select
+            name="status"
+            id="status"
+            required
+            value={formData.status}
+            onChange={handleChange}
+            className="mt-2 block w-full px-4 py-3 text-base rounded-lg border border-gray-300 shadow-sm transition-colors focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400"
+          >
+            {Object.entries(ProjectStatus).map(([key, value]) => (
               <option key={key} value={value}>{key}</option>
             ))}
           </select>
@@ -186,7 +269,7 @@ export default function NewProjectPage() {
             required
             value={formData.visibility}
             onChange={handleChange}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            className="mt-2 block w-full px-4 py-3 text-base rounded-lg border border-gray-300 shadow-sm transition-colors focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400"
           >
             {Object.entries(ProjectVisibility).map(([key, value]) => (
               <option key={key} value={value}>{key}</option>
@@ -204,7 +287,7 @@ export default function NewProjectPage() {
             value={newTag}
             onChange={(e) => setNewTag(e.target.value)}
             onKeyDown={handleAddTag}
-            className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:ring-blue-500 focus:border-blue-500"
+            className="mt-2 block w-full px-4 py-3 text-base rounded-lg border border-gray-300 shadow-sm transition-colors focus:ring-blue-500 focus:border-blue-500 hover:border-gray-400"
             placeholder="Add tags..."
           />
           {getFieldError('tags') && (
@@ -215,7 +298,7 @@ export default function NewProjectPage() {
               {formData.tags.map((tag) => (
                 <span
                   key={tag}
-                  className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800"
+                  className="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors"
                 >
                   {tag}
                   <button
@@ -236,14 +319,14 @@ export default function NewProjectPage() {
           <button
             type="button"
             onClick={() => router.back()}
-            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="px-6 py-3 text-base font-medium text-gray-700 bg-white border border-gray-300 rounded-lg shadow-sm hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isLoading}
-            className={`px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md shadow-sm hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
+            className={`px-6 py-3 text-base font-medium text-white bg-blue-600 border border-transparent rounded-lg shadow-sm hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 ${
               isLoading ? 'opacity-50 cursor-not-allowed' : ''
             }`}
           >
