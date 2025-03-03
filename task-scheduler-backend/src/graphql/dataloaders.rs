@@ -1,114 +1,139 @@
-use async_trait::async_trait;
-use sea_orm::{DatabaseConnection, EntityTrait, ModelTrait};
+use async_graphql::dataloader::*;
+use sea_orm::{DatabaseConnection, EntityTrait, ColumnTrait, QueryFilter};
 use std::collections::HashMap;
+use std::sync::Arc;
 use uuid::Uuid;
-use crate::db::entities::*;
-use crate::error::AppResult;
 
-pub struct UserLoader {
-    pub db: DatabaseConnection
+use crate::db::entities::{
+    TaskEntity, TaskModel,
+    ProjectEntity, ProjectModel,
+    UserEntity, UserModel,
+    CommentEntity, CommentModel,
+    task::Column as TaskColumn,
+    project::Column as ProjectColumn,
+    user::Column as UserColumn,
+    comment::Column as CommentColumn,
+};
+
+#[derive(Clone)]
+pub struct Loaders {
+    pub task: TaskLoader,
+    pub project: ProjectLoader,
+    pub user: UserLoader,
+    pub comment: CommentLoader,
 }
 
+impl Loaders {
+    pub fn new(db: Arc<DatabaseConnection>) -> Self {
+        Self {
+            task: TaskLoader::new(db.clone()),
+            project: ProjectLoader::new(db.clone()),
+            user: UserLoader::new(db.clone()),
+            comment: CommentLoader::new(db),
+        }
+    }
+}
+
+#[derive(Clone)]
 pub struct TaskLoader {
-    pub db: DatabaseConnection
+    db: Arc<DatabaseConnection>,
 }
 
+impl TaskLoader {
+    pub fn new(db: Arc<DatabaseConnection>) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait::async_trait]
+impl Loader<Uuid> for TaskLoader {
+    type Value = TaskModel;
+    type Error = async_graphql::Error;
+
+    async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
+        let tasks = TaskEntity::find()
+            .filter(TaskColumn::Id.is_in(keys.to_vec()))
+            .all(&*self.db)
+            .await?;
+
+        Ok(tasks.into_iter().map(|task| (task.id, task)).collect())
+    }
+}
+
+#[derive(Clone)]
 pub struct ProjectLoader {
-    pub db: DatabaseConnection
+    db: Arc<DatabaseConnection>,
 }
 
+impl ProjectLoader {
+    pub fn new(db: Arc<DatabaseConnection>) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait::async_trait]
+impl Loader<Uuid> for ProjectLoader {
+    type Value = ProjectModel;
+    type Error = async_graphql::Error;
+
+    async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
+        let projects = ProjectEntity::find()
+            .filter(ProjectColumn::Id.is_in(keys.to_vec()))
+            .all(&*self.db)
+            .await?;
+
+        Ok(projects.into_iter().map(|project| (project.id, project)).collect())
+    }
+}
+
+#[derive(Clone)]
+pub struct UserLoader {
+    db: Arc<DatabaseConnection>,
+}
+
+impl UserLoader {
+    pub fn new(db: Arc<DatabaseConnection>) -> Self {
+        Self { db }
+    }
+}
+
+#[async_trait::async_trait]
+impl Loader<Uuid> for UserLoader {
+    type Value = UserModel;
+    type Error = async_graphql::Error;
+
+    async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
+        let users = UserEntity::find()
+            .filter(UserColumn::Id.is_in(keys.to_vec()))
+            .all(&*self.db)
+            .await?;
+
+        Ok(users.into_iter().map(|user| (user.id, user)).collect())
+    }
+}
+
+#[derive(Clone)]
 pub struct CommentLoader {
-    pub db: DatabaseConnection
+    db: Arc<DatabaseConnection>,
 }
 
-pub struct AttachmentLoader {
-    pub db: DatabaseConnection
-}
-
-#[async_trait]
-impl DataLoader for UserLoader {
-    type Key = Uuid;
-    type Value = user::Model;
-    type Error = sea_orm::DbErr;
-
-    async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
-        let users = user::Entity::find()
-            .filter(user::Column::Id.is_in(keys.to_vec()))
-            .all(&self.db)
-            .await?;
-
-        Ok(users.into_iter().map(|u| (u.id, u)).collect())
+impl CommentLoader {
+    pub fn new(db: Arc<DatabaseConnection>) -> Self {
+        Self { db }
     }
 }
 
-#[async_trait]
-impl DataLoader for TaskLoader {
-    type Key = Uuid;
-    type Value = task::Model;
-    type Error = sea_orm::DbErr;
+#[async_trait::async_trait]
+impl Loader<Uuid> for CommentLoader {
+    type Value = CommentModel;
+    type Error = async_graphql::Error;
 
     async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
-        let tasks = task::Entity::find()
-            .filter(task::Column::Id.is_in(keys.to_vec()))
-            .all(&self.db)
+        let comments = CommentEntity::find()
+            .filter(CommentColumn::TaskId.is_in(keys.to_vec()))
+            .all(&*self.db)
             .await?;
 
-        Ok(tasks.into_iter().map(|t| (t.id, t)).collect())
+        Ok(comments.into_iter().map(|comment| (comment.id, comment)).collect())
     }
-}
-
-#[async_trait]
-impl DataLoader for ProjectLoader {
-    type Key = Uuid;
-    type Value = project::Model;
-    type Error = sea_orm::DbErr;
-
-    async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
-        let projects = project::Entity::find()
-            .filter(project::Column::Id.is_in(keys.to_vec()))
-            .all(&self.db)
-            .await?;
-
-        Ok(projects.into_iter().map(|p| (p.id, p)).collect())
-    }
-}
-
-#[async_trait]
-impl DataLoader for CommentLoader {
-    type Key = Uuid;
-    type Value = comment::Model;
-    type Error = sea_orm::DbErr;
-
-    async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
-        let comments = comment::Entity::find()
-            .filter(comment::Column::Id.is_in(keys.to_vec()))
-            .all(&self.db)
-            .await?;
-
-        Ok(comments.into_iter().map(|c| (c.id, c)).collect())
-    }
-}
-
-#[async_trait]
-impl DataLoader for AttachmentLoader {
-    type Key = Uuid;
-    type Value = attachment::Model;
-    type Error = sea_orm::DbErr;
-
-    async fn load(&self, keys: &[Uuid]) -> Result<HashMap<Uuid, Self::Value>, Self::Error> {
-        let attachments = attachment::Entity::find()
-            .filter(attachment::Column::Id.is_in(keys.to_vec()))
-            .all(&self.db)
-            .await?;
-
-        Ok(attachments.into_iter().map(|a| (a.id, a)).collect())
-    }
-}
-
-pub trait DataLoader: Send + Sync {
-    type Key: Send + Sync + std::hash::Hash + Eq + Clone;
-    type Value: Send + Sync;
-    type Error: Send + Sync + std::fmt::Debug;
-
-    async fn load(&self, keys: &[Self::Key]) -> Result<HashMap<Self::Key, Self::Value>, Self::Error>;
 }

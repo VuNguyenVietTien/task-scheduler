@@ -1,89 +1,99 @@
-use actix_web::{web, App, HttpServer};
-use actix_cors::Cors;
-use sea_orm::Database;
-
-mod api;
 mod auth;
 mod config;
-mod email;
-mod firebase;
+mod db;
+mod error;
+mod graphql;
+mod utils;
+mod websocket;
 
-use auth::AuthService;
-use firebase::FirebaseService;
-use config::Config;
-use email::EmailService;
+use actix_cors::Cors;
+use actix_web::{guard, web, App, HttpServer};
+use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
+use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
+use dotenv::dotenv;
+use sea_orm::{ConnectOptions, Database};
+use std::sync::Arc;
+use std::time::Duration;
+
+use crate::{
+    config::Config,
+    graphql::schema::{create_schema, Schema},
+    websocket::{ws_connect, NotificationBroadcaster},
+};
+
+async fn graphql_handler(
+    schema: web::Data<Schema>,
+    req: GraphQLRequest,
+) -> GraphQLResponse {
+    schema.execute(req.into_inner()).await.into()
+}
+
+async fn graphql_playground() -> actix_web::Result<actix_web::HttpResponse> {
+    Ok(actix_web::HttpResponse::Ok()
+        .content_type("text/html; charset=utf-8")
+        .body(playground_source(
+            GraphQLPlaygroundConfig::new("/graphql").subscription_endpoint("/ws"),
+        )))
+}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
-    // Set up logging
-    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+    dotenv().ok();
+    env_logger::init();
 
-    // Load configuration
     let config = Config::from_env();
-    
-    // Clone config values we need before wrapping in web::Data
-    let host = config.host.clone();
-    let port = config.port;
-    let config = web::Data::new(config);
-    
+    let addr = format!("{}:{}", config.host, config.port);
+
     // Database connection
-    let db = Database::connect(&config.database_url)
+    let mut opt = ConnectOptions::new(&config.database_url);
+    opt.max_connections(100)
+        .min_connections(5)
+        .connect_timeout(Duration::from_secs(8))
+        .acquire_timeout(Duration::from_secs(8))
+        .idle_timeout(Duration::from_secs(8))
+        .max_lifetime(Duration::from_secs(8))
+        .sqlx_logging(true);
+
+    let db = Arc::new(Database::connect(opt)
         .await
-        .expect("Failed to connect to database");
+        .expect("Failed to connect to database"));
 
-    // Email service
-    let email_service = EmailService::new(
-        config.smtp_host.clone(),
-        config.smtp_username.clone(),
-        config.smtp_password.clone(),
-        "noreply@example.com".to_string(), // TODO: Add smtp_from to Config struct
-    ).expect("Failed to create email service");
+    // Setup schema
+    let schema = create_schema(Arc::clone(&db));
 
-    // Auth service
-    let auth_service = web::Data::new(AuthService::new(
-        db.clone(),
-        config.jwt_secret.clone().into_bytes(),
-        email_service,
-        config.frontend_url.clone(),
-    ));
+    // Setup notification broadcaster
+    let broadcaster = Arc::new(NotificationBroadcaster::new(100));
 
-    let db_data = web::Data::new(db);
-    // Initialize Firebase service
-    let firebase_service = web::Data::new(
-        FirebaseService::new(config.firebase_service_account_path.clone())
-            .expect("Failed to initialize Firebase service")
-    );
-
-    let config_clone = config.clone();
-    let firebase_service_clone = firebase_service.clone();
-
-    let server = HttpServer::new(move || {
-        // Configure CORS based on environment
+    // Start HTTP server
+    HttpServer::new(move || {
         let cors = Cors::default()
-            .allowed_origin(&config_clone.frontend_url)
-            .allowed_methods(vec!["GET", "POST", "PUT", "DELETE"])
-            .allowed_headers(vec![
-                "Authorization",
-                "Content-Type",
-                "X-Requested-With",
-                "Accept",
-            ])
-            .supports_credentials()
+            .allow_any_origin()
+            .allow_any_method()
+            .allow_any_header()
             .max_age(3600);
 
         App::new()
             .wrap(cors)
-            .configure(api::init)
-            .app_data(db_data.clone())
-            .app_data(auth_service.clone())
-            .app_data(config_clone.clone())
-            .app_data(firebase_service_clone.clone())
+            .app_data(web::Data::new(schema.clone()))
+            .app_data(web::Data::new(Arc::clone(&broadcaster)))
+            .app_data(web::Data::new(config.clone()))
+            .service(
+                web::resource("/graphql")
+                    .guard(guard::Post())
+                    .to(graphql_handler),
+            )
+            .service(
+                web::resource("/playground")
+                    .guard(guard::Get())
+                    .to(graphql_playground),
+            )
+            .service(
+                web::resource("/ws")
+                    .guard(guard::Get())
+                    .to(ws_connect),
+            )
     })
-    .bind((host.clone(), port))?
-    .run();
-
-    println!("Server running at http://{}:{}/", host, port);
-    println!("Environment: {}", config.app_env);
-
-    server.await
+    .bind(addr)?
+    .run()
+    .await
 }

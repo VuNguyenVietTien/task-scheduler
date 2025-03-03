@@ -1,0 +1,38 @@
+# 1. Xem danh sách projects
+curl -X GET "http://localhost:8080/api/projects" \
+-H "Content-Type: application/json" | jq
+
+# 2. Kiểm tra tasks của project
+curl -X GET "http://localhost:8080/api/projects/6dde2542-6827-425c-b8ac-a0475b63c82c/tasks" \
+-H "Content-Type: application/json" | jq
+
+# 3. Kiểm tra members của project
+curl -X GET "http://localhost:8080/api/projects/6dde2542-6827-425c-b8ac-a0475b63c82c/members" \
+-H "Content-Type: application/json" | jq
+
+# 4. Tạo task mới
+curl -X POST "http://localhost:8080/api/projects/6dde2542-6827-425c-b8ac-a0475b63c82c/tasks" \
+-H "Content-Type: application/json" \
+-d '{
+    "title": "Test Task",
+    "description": "A test task",
+    "status": "TODO",
+    "priority": "HIGH",
+    "effort_hours": 2.5
+}' | jq
+
+# 5. Thêm member mới
+curl -X POST "http://localhost:8080/api/projects/6dde2542-6827-425c-b8ac-a0475b63c82c/members" \
+-H "Content-Type: application/json" \
+-d '{
+    "user_id": "7541b39e-4f4f-449e-82a2-ea22e8d6a580",
+    "role": "MEMBER"
+}' | jq
+
+# 6. Kiểm tra lại tasks sau khi tạo
+curl -X GET "http://localhost:8080/api/projects/6dde2542-6827-425c-b8ac-a0475b63c82c/tasks" \
+-H "Content-Type: application/json" | jq
+
+# 7. Kiểm tra lại members sau khi thêm
+curl -X GET "http://localhost:8080/api/projects/6dde2542-6827-425c-b8ac-a0475b63c82c/members" \
+-H "Content-Type: application/json" | jq

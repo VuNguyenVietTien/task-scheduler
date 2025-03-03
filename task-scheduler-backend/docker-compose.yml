@@ -1,55 +1,42 @@
 version: '3.8'
 
 services:
+  db:
+    image: postgres:15
+    container_name: task-scheduler-db
+    environment:
+      POSTGRES_DB: task_scheduler
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   api:
     build:
       context: .
       dockerfile: Dockerfile
-    ports:
-      - "8080:8080"
-    depends_on:
-      - db
+    container_name: task-scheduler-api
     environment:
       - HOST=0.0.0.0
       - PORT=8080
       - DATABASE_URL=postgres://postgres:postgres@db:5432/task_scheduler
-      - JWT_SECRET=${JWT_SECRET}
-      - SUPABASE_URL=${SUPABASE_URL}
-      - SUPABASE_KEY=${SUPABASE_KEY}
-    volumes:
-      - .:/usr/src/app
-      - cargo-cache:/usr/local/cargo/registry
-      - target-cache:/usr/src/app/target
-    restart: unless-stopped
-
-  db:
-    image: postgres:14-alpine
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key}
+      - CORS_ORIGIN=${CORS_ORIGIN:-http://localhost:3000}
+      - RUST_LOG=info
     ports:
-      - "5432:5432"
-    environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=task_scheduler
+      - "8080:8080"
     volumes:
-      - postgres-data:/var/lib/postgresql/data
-    restart: unless-stopped
-
-  # Optional: PgAdmin for database management
-  pgadmin:
-    image: dpage/pgadmin4
+      - ./uploads:/usr/src/app/uploads
     depends_on:
-      - db
-    ports:
-      - "5050:80"
-    environment:
-      - PGADMIN_DEFAULT_EMAIL=admin@example.com
-      - PGADMIN_DEFAULT_PASSWORD=admin
-    volumes:
-      - pgadmin-data:/var/lib/pgadmin
-    restart: unless-stopped
+      db:
+        condition: service_healthy
 
 volumes:
-  postgres-data:
-  pgadmin-data:
-  cargo-cache:
-  target-cache:
+  postgres_data:

@@ -1,0 +1,79 @@
+use sea_orm_migration::prelude::*;
+
+#[derive(DeriveMigrationName)]
+pub struct Migration;
+
+#[async_trait::async_trait]
+impl MigrationTrait for Migration {
+    async fn up(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .create_table(
+                Table::create()
+                    .table(Comments::Table)
+                    .if_not_exists()
+                    .col(ColumnDef::new(Comments::Id).uuid().not_null().primary_key())
+                    .col(ColumnDef::new(Comments::TaskId).uuid().not_null())
+                    .col(ColumnDef::new(Comments::UserId).uuid().not_null())
+                    .col(ColumnDef::new(Comments::ParentCommentId).uuid())
+                    .col(ColumnDef::new(Comments::Content).text().not_null())
+                    .col(ColumnDef::new(Comments::CreatedAt).timestamp().not_null())
+                    .col(ColumnDef::new(Comments::UpdatedAt).timestamp().not_null())
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_comment_task")
+                            .from(Comments::Table, Comments::TaskId)
+                            .to(Tasks::Table, Tasks::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_comment_user")
+                            .from(Comments::Table, Comments::UserId)
+                            .to(Users::Table, Users::Id)
+                            .on_delete(ForeignKeyAction::Cascade)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .foreign_key(
+                        ForeignKey::create()
+                            .name("fk_comment_parent")
+                            .from(Comments::Table, Comments::ParentCommentId)
+                            .to(Comments::Table, Comments::Id)
+                            .on_delete(ForeignKeyAction::SetNull)
+                            .on_update(ForeignKeyAction::Cascade),
+                    )
+                    .to_owned(),
+            )
+            .await
+    }
+
+    async fn down(&self, manager: &SchemaManager) -> Result<(), DbErr> {
+        manager
+            .drop_table(Table::drop().table(Comments::Table).to_owned())
+            .await
+    }
+}
+
+#[derive(DeriveIden)]
+enum Comments {
+    Table,
+    Id,
+    TaskId,
+    UserId,
+    ParentCommentId,
+    Content,
+    CreatedAt,
+    UpdatedAt,
+}
+
+#[derive(DeriveIden)]
+enum Tasks {
+    Table,
+    Id,
+}
+
+#[derive(DeriveIden)]
+enum Users {
+    Table,
+    Id,
+}

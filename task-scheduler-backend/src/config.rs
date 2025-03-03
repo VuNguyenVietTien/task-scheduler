@@ -1,82 +1,16 @@
 use std::env;
+use serde::Deserialize;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Deserialize)]
 pub struct Config {
     pub host: String,
     pub port: u16,
     pub database_url: String,
     pub jwt_secret: String,
-    pub supabase_url: String,
-    pub supabase_key: String,
-    pub smtp_host: String,
-    pub smtp_port: u16,
-    pub smtp_username: String,
-    pub smtp_password: String,
-    pub frontend_url: String,
-    pub allowed_origins: Vec<String>,
-    pub app_env: String,
-    pub max_file_size: usize,
-    pub firebase_service_account_path: String,
-}
-
-impl Config {
-    pub fn from_env() -> Self {
-        // Load environment-specific .env file
-        if let Ok(app_env) = env::var("APP_ENV") {
-            let env_file = format!(".env.{}", app_env);
-            if let Err(err) = dotenv::from_filename(&env_file) {
-                eprintln!("Warning: Could not load {}: {}", env_file, err);
-            }
-        }
-        // Fallback to default .env
-        if let Err(err) = dotenv::dotenv() {
-            eprintln!("Warning: Could not load .env: {}", err);
-        }
-
-        let allowed_origins = env::var("ALLOWED_ORIGINS")
-            .unwrap_or_else(|_| "http://localhost:3000".to_string())
-            .split(',')
-            .map(|s| s.trim().to_string())
-            .collect();
-
-        let _app_env = env::var("APP_ENV").unwrap_or_else(|_| "development".to_string());
-        
-        Self {
-            host: env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
-            port: env::var("PORT")
-                .unwrap_or_else(|_| "8080".to_string())
-                .parse()
-                .expect("PORT must be a number"),
-            database_url: env::var("DATABASE_URL")
-                .expect("DATABASE_URL must be set"),
-            jwt_secret: env::var("JWT_SECRET")
-                .expect("JWT_SECRET must be set"),
-            supabase_url: env::var("SUPABASE_URL")
-                .expect("SUPABASE_URL must be set"),
-            supabase_key: env::var("SUPABASE_KEY")
-                .expect("SUPABASE_KEY must be set"),
-            smtp_host: env::var("SMTP_HOST")
-                .expect("SMTP_HOST must be set"),
-            smtp_port: env::var("SMTP_PORT")
-                .unwrap_or_else(|_| "587".to_string())
-                .parse()
-                .expect("SMTP_PORT must be a number"),
-            smtp_username: env::var("SMTP_USERNAME")
-                .expect("SMTP_USERNAME must be set"),
-            smtp_password: env::var("SMTP_PASSWORD")
-                .expect("SMTP_PASSWORD must be set"),
-            frontend_url: env::var("FRONTEND_URL")
-                .unwrap_or_else(|_| "http://localhost:3000".to_string()),
-            allowed_origins,
-            app_env: env::var("APP_ENV").unwrap_or_else(|_| "development".to_string()),
-            max_file_size: env::var("MAX_FILE_SIZE")
-                .unwrap_or_else(|_| "10485760".to_string()) // 10MB default
-                .parse()
-                .expect("MAX_FILE_SIZE must be a number"),
-            firebase_service_account_path: env::var("FIREBASE_SERVICE_ACCOUNT_PATH")
-                .unwrap_or_else(|_| format!("config/firebase-service-account.json")),
-        }
-    }
+    pub jwt_expiry: i64,
+    pub cors_origin: String,
+    pub upload_dir: String,
+    pub max_upload_size: i64,
 }
 
 impl Default for Config {
@@ -85,18 +19,71 @@ impl Default for Config {
             host: "127.0.0.1".to_string(),
             port: 8080,
             database_url: "postgres://postgres:postgres@localhost:5432/task_scheduler".to_string(),
-            jwt_secret: "default-secret-key".to_string(),
-            supabase_url: "".to_string(),
-            supabase_key: "".to_string(),
-            smtp_host: "smtp.gmail.com".to_string(),
-            smtp_port: 587,
-            smtp_username: "".to_string(),
-            smtp_password: "".to_string(),
-            frontend_url: "http://localhost:3000".to_string(),
-            allowed_origins: vec!["http://localhost:3000".to_string()],
-            app_env: "development".to_string(),
-            max_file_size: 10485760, // 10MB
-            firebase_service_account_path: "config/firebase-service-account.json".to_string(),
+            jwt_secret: "your-secret-key".to_string(),
+            jwt_expiry: 24 * 60 * 60, // 24 hours
+            cors_origin: "http://localhost:3000".to_string(),
+            upload_dir: "uploads".to_string(),
+            max_upload_size: 10 * 1024 * 1024, // 10MB
         }
+    }
+}
+
+impl Config {
+    pub fn from_env() -> Self {
+        Self {
+            host: env::var("HOST").unwrap_or_else(|_| "127.0.0.1".to_string()),
+            port: env::var("PORT")
+                .unwrap_or_else(|_| "8080".to_string())
+                .parse()
+                .expect("PORT must be a number"),
+            database_url: env::var("DATABASE_URL").expect("DATABASE_URL must be set"),
+            jwt_secret: env::var("JWT_SECRET").expect("JWT_SECRET must be set"),
+            jwt_expiry: env::var("JWT_EXPIRY")
+                .unwrap_or_else(|_| "86400".to_string()) // 24 hours
+                .parse()
+                .expect("JWT_EXPIRY must be a number"),
+            cors_origin: env::var("CORS_ORIGIN")
+                .unwrap_or_else(|_| "http://localhost:3000".to_string()),
+            upload_dir: env::var("UPLOAD_DIR").unwrap_or_else(|_| "uploads".to_string()),
+            max_upload_size: env::var("MAX_UPLOAD_SIZE")
+                .unwrap_or_else(|_| "10485760".to_string()) // 10MB
+                .parse()
+                .expect("MAX_UPLOAD_SIZE must be a number"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_default_config() {
+        let config = Config::default();
+        assert_eq!(config.host, "127.0.0.1");
+        assert_eq!(config.port, 8080);
+        assert_eq!(config.jwt_expiry, 86400);
+    }
+
+    #[test]
+    fn test_config_from_env() {
+        env::set_var("HOST", "0.0.0.0");
+        env::set_var("PORT", "3000");
+        env::set_var("DATABASE_URL", "postgres://test:test@localhost/test");
+        env::set_var("JWT_SECRET", "test-secret");
+        env::set_var("JWT_EXPIRY", "3600");
+        env::set_var("CORS_ORIGIN", "http://localhost:8000");
+        env::set_var("UPLOAD_DIR", "test-uploads");
+        env::set_var("MAX_UPLOAD_SIZE", "5242880");
+
+        let config = Config::from_env();
+        assert_eq!(config.host, "0.0.0.0");
+        assert_eq!(config.port, 3000);
+        assert_eq!(config.database_url, "postgres://test:test@localhost/test");
+        assert_eq!(config.jwt_secret, "test-secret");
+        assert_eq!(config.jwt_expiry, 3600);
+        assert_eq!(config.cors_origin, "http://localhost:8000");
+        assert_eq!(config.upload_dir, "test-uploads");
+        assert_eq!(config.max_upload_size, 5242880);
     }
 }

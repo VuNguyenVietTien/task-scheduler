@@ -1,191 +1,135 @@
 # Task Scheduler Backend
 
-A Rust-based backend for the task scheduling and project management system, built with:
-- GraphQL API using async-graphql
-- PostgreSQL database with SeaORM
-- Supabase for file storage
-- Authentication with JWT
-- Real-time updates using WebSocket
+Backend service cho ứng dụng quản lý công việc và dự án, được xây dựng với Rust, GraphQL và PostgreSQL.
 
-## Prerequisites
+## Tính năng
 
-- Rust (latest stable version)
-- PostgreSQL (14.x or later)
-- Node.js (for running migration scripts)
-- Docker (optional, for containerized development)
+- Xác thực và phân quyền người dùng
+- Quản lý dự án và thành viên dự án
+- Quản lý công việc với các tính năng:
+  - Phân công công việc
+  - Phụ thuộc giữa các công việc
+  - Bình luận và trao đổi
+  - Tải lên tài liệu đính kèm
+- Thông báo realtime qua WebSocket
+- GraphQL API với playground để thử nghiệm
 
-## Development Setup
+## Yêu cầu
 
-1. Clone the repository:
+- Rust 1.70+ và Cargo
+- PostgreSQL 15+
+- Docker (tùy chọn)
+
+## Cài đặt
+
+1. Clone repository:
 ```bash
-git clone <repository-url>
+git clone https://github.com/your-username/task-scheduler-backend.git
 cd task-scheduler-backend
 ```
 
-2. Copy the environment template:
+2. Cài đặt các dependencies:
+```bash
+cargo build
+```
+
+3. Thiết lập cơ sở dữ liệu:
+```bash
+# Với PostgreSQL cài đặt local
+createdb task_scheduler
+
+# Hoặc sử dụng Docker
+docker run -d \
+  --name task-scheduler-db \
+  -e POSTGRES_DB=task_scheduler \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -p 5432:5432 \
+  postgres:15
+```
+
+4. Tạo file .env:
 ```bash
 cp .env.example .env
 ```
 
-3. Update the `.env` file with your configuration:
-- Set a secure `JWT_SECRET`
-- Configure your PostgreSQL connection in `DATABASE_URL`
-- Add your Supabase credentials
-
-4. Create the database:
+5. Chạy migrations:
 ```bash
-psql -U postgres
-CREATE DATABASE task_scheduler;
+cargo run --bin migrate
 ```
 
-5. Run database migrations:
-```bash
-cargo run --bin migration
-```
+## Chạy ứng dụng
 
-6. Start the development server:
+1. Development mode:
 ```bash
 cargo run
 ```
 
-The server will start at `http://localhost:8080` by default.
-
-## Project Structure
-
+2. Production mode:
+```bash
+cargo run --release
 ```
-src/
-├── auth/             # Authentication and authorization
-├── db/               # Database models and migrations
-│   ├── entities/     # SeaORM entity definitions
-│   └── migrations/   # Database migrations
-├── graphql/          # GraphQL schema and resolvers
-│   ├── resolvers/    # Query and mutation implementations
-│   ├── types/       # GraphQL type definitions
-│   └── dataloaders/ # Efficient data loading
-├── error.rs         # Error handling
-├── config.rs        # Configuration management
-└── main.rs          # Application entry point
+
+Ứng dụng sẽ chạy tại: http://localhost:8080
+
+GraphQL playground: http://localhost:8080/playground
+
+## API Endpoints
+
+- `/graphql` - GraphQL API endpoint
+- `/playground` - GraphQL playground
+- `/ws` - WebSocket endpoint cho thông báo realtime
+
+## Cấu hình môi trường
+
+File `.env`:
+
+```env
+HOST=127.0.0.1
+PORT=8080
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/task_scheduler
+JWT_SECRET=your-secret-key
+JWT_EXPIRY=86400
+CORS_ORIGIN=http://localhost:3000
+UPLOAD_DIR=uploads
+MAX_UPLOAD_SIZE=10485760
 ```
 
 ## Testing
 
-Run the test suite:
+Chạy unit tests:
 ```bash
 cargo test
 ```
 
-Run specific tests:
-```bash
-cargo test test_name
-```
+## Docker
 
-## GraphQL API
-
-The GraphQL playground is available at `http://localhost:8080/graphql` when running in development mode.
-
-### Key Queries
-```graphql
-query Me {
-  me {
-    id
-    email
-    name
-    role
-  }
-}
-
-query Tasks($projectId: ID!) {
-  tasks(projectId: $projectId) {
-    id
-    title
-    status
-    priority
-    assignees {
-      name
-    }
-  }
-}
-```
-
-### Key Mutations
-```graphql
-mutation CreateTask($input: CreateTaskInput!) {
-  createTask(input: $input) {
-    id
-    title
-    status
-  }
-}
-
-mutation UpdateTaskStatus($taskId: ID!, $status: String!) {
-  updateTaskStatus(taskId: $taskId, status: $status) {
-    id
-    status
-  }
-}
-```
-
-## Development Guidelines
-
-1. Code Style
-- Follow Rust standard formatting (use `cargo fmt`)
-- Run `cargo clippy` to catch common mistakes
-- Document public APIs using rustdoc
-
-2. Error Handling
-- Use the `AppError` type for error handling
-- Provide descriptive error messages
-- Handle all Result types appropriately
-
-3. Database
-- Add migrations for schema changes
-- Use transactions for multi-step operations
-- Write tests for database operations
-
-4. Security
-- Validate all user input
-- Use prepared statements for database queries
-- Keep dependencies updated
-
-## Deployment
-
-1. Build the release version:
-```bash
-cargo build --release
-```
-
-2. Run database migrations on the production database:
-```bash
-cargo run --bin migration -- up
-```
-
-3. Configure environment variables for production.
-
-4. Start the server:
-```bash
-./target/release/task-scheduler-backend
-```
-
-## Docker Support
-
-Build the Docker image:
+Build image:
 ```bash
 docker build -t task-scheduler-backend .
 ```
 
-Run the container:
+Chạy container:
 ```bash
-docker run -p 8080:8080 --env-file .env task-scheduler-backend
+docker run -d \
+  --name task-scheduler-backend \
+  -p 8080:8080 \
+  --env-file .env \
+  task-scheduler-backend
 ```
+
+## Tài liệu API
+
+Chi tiết API có thể xem trong GraphQL playground hoặc tại thư mục `docs/`
 
 ## Contributing
 
-1. Fork the repository
-2. Create a feature branch
-3. Add your changes
-4. Run tests
-5. Submit a pull request
+1. Fork repository
+2. Tạo branch cho tính năng mới (`git checkout -b feature/amazing-feature`)
+3. Commit thay đổi (`git commit -m 'Add some amazing feature'`)
+4. Push lên branch (`git push origin feature/amazing-feature`)
+5. Tạo Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License

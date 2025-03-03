@@ -1,5 +1,4 @@
 use sea_orm_migration::prelude::*;
-use sea_orm_migration::sea_orm::DbConn;
 
 mod m20250227_000001_create_users;
 mod m20250227_000002_create_projects;
@@ -31,6 +30,44 @@ impl MigratorTrait for Migrator {
 }
 
 // Helper function to run migrations
-pub async fn run_migrations(connection: &DbConn) -> Result<(), DbErr> {
-    Migrator::up(connection, None).await
+pub async fn run_migrations(db: &SchemaManager<'_>) -> Result<(), DbErr> {
+    for migration in Migrator::migrations() {
+        migration.up(db).await?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sea_orm::{Database, DatabaseConnection};
+
+    async fn setup_test_db() -> DatabaseConnection {
+        let db_url = std::env::var("DATABASE_URL")
+            .unwrap_or_else(|_| "postgres://postgres:postgres@localhost:5432/task_scheduler_test".to_string());
+            
+        Database::connect(&db_url)
+            .await
+            .expect("Failed to connect to test database")
+    }
+
+    #[tokio::test]
+    async fn test_migrations() {
+        let db = setup_test_db().await;
+        let schema_manager = SchemaManager::new(&db);
+
+        run_migrations(&schema_manager)
+            .await
+            .expect("Failed to run migrations");
+
+        // Check if tables exist
+        let has_users = schema_manager
+            .has_table("users")
+            .await
+            .expect("Failed to check users table");
+
+        assert!(has_users, "Users table should exist");
+        assert!(schema_manager.has_table("projects").await.unwrap(), "Projects table should exist");
+        assert!(schema_manager.has_table("tasks").await.unwrap(), "Tasks table should exist");
+    }
 }

@@ -1,20 +1,19 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use chrono::{DateTime, FixedOffset};
 use serde_json::Value;
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize, DeriveActiveModelBehavior)]
 #[sea_orm(table_name = "notifications")]
 pub struct Model {
     #[sea_orm(primary_key, auto_increment = false)]
     pub id: Uuid,
     pub user_id: Uuid,
-    #[sea_orm(column_type = "Text")]
-    pub type_: String,  // 'TASK_ASSIGNED', 'COMMENT_ADDED', etc.
-    #[sea_orm(column_type = "JsonBinary")]
+    pub type_: String,
+    #[sea_orm(column_type = "Json")]
     pub content: Value,
-    #[sea_orm(nullable)]
-    pub read_at: Option<DateTimeWithTimeZone>,
-    pub created_at: DateTimeWithTimeZone,
+    pub created_at: DateTime<FixedOffset>,
+    pub read_at: Option<DateTime<FixedOffset>>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -23,6 +22,7 @@ pub enum Relation {
         belongs_to = "super::user::Entity",
         from = "Column::UserId",
         to = "super::user::Column::Id",
+        on_update = "Cascade",
         on_delete = "Cascade"
     )]
     User,
@@ -33,5 +33,3 @@ impl Related<super::user::Entity> for Entity {
         Relation::User.def()
     }
 }
-
-impl ActiveModelBehavior for ActiveModel {}

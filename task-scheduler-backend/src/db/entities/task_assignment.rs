@@ -1,15 +1,15 @@
 use sea_orm::entity::prelude::*;
 use serde::{Deserialize, Serialize};
+use chrono::{DateTime, FixedOffset};
 
-#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, DeriveEntityModel, Serialize, Deserialize, DeriveActiveModelBehavior)]
 #[sea_orm(table_name = "task_assignments")]
 pub struct Model {
-    #[sea_orm(primary_key, auto_increment = false)]
+    #[sea_orm(primary_key)]
     pub task_id: Uuid,
-    #[sea_orm(primary_key, auto_increment = false)]
+    #[sea_orm(primary_key)] 
     pub user_id: Uuid,
-    pub assigned_at: DateTimeWithTimeZone,
-    pub assigned_by: Uuid,
+    pub assigned_at: DateTime<FixedOffset>,
 }
 
 #[derive(Copy, Clone, Debug, EnumIter, DeriveRelation)]
@@ -17,22 +17,20 @@ pub enum Relation {
     #[sea_orm(
         belongs_to = "super::task::Entity",
         from = "Column::TaskId",
-        to = "super::task::Column::Id"
+        to = "super::task::Column::Id",
+        on_update = "Cascade",
+        on_delete = "Cascade"
     )]
     Task,
+
     #[sea_orm(
         belongs_to = "super::user::Entity",
         from = "Column::UserId",
-        to = "super::user::Column::Id"
-    )]
-    User,
-    #[sea_orm(
-        belongs_to = "super::user::Entity",
-        from = "Column::AssignedBy",
         to = "super::user::Column::Id",
+        on_update = "Cascade",
         on_delete = "Cascade"
     )]
-    Assigner,
+    User,
 }
 
 impl Related<super::task::Entity> for Entity {
@@ -46,5 +44,3 @@ impl Related<super::user::Entity> for Entity {
         Relation::User.def()
     }
 }
-
-impl ActiveModelBehavior for ActiveModel {}
