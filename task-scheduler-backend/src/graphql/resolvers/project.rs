@@ -18,8 +18,9 @@ use crate::{
         context::ContextExt,
         map_db_err,
         resolvers::mutation_utils::current_time_db,
-        types::{Project, ProjectMember, ProjectRole, CreateProjectInput, UpdateProjectInput, AddProjectMemberInput,
+        types::{Project, ProjectMember, ProjectRole, CreateProjectInput, UpdateProjectInput,
             ProjectStatusEnum, ProjectPriorityEnum, ProjectVisibilityEnum},
+        resolvers::project_member::AddProjectMemberInput,
     },
 };
 

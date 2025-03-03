@@ -150,12 +150,6 @@ pub struct ProjectMember {
     pub joined_at: DateTime<FixedOffset>,
 }
 
-#[derive(InputObject)]
-pub struct AddProjectMemberInput {
-    pub project_id: ID,
-    pub user_id: ID,
-    pub role: String,
-}
 
 // Task Types
 #[derive(SimpleObject)]

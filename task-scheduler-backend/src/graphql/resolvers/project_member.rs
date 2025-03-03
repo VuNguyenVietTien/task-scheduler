@@ -136,9 +136,9 @@ impl ProjectMemberMutation {
 
 #[derive(async_graphql::InputObject)]
 pub struct AddProjectMemberInput {
-    project_id: ID,
-    user_id: ID,
-    role: ProjectRole,
+    pub project_id: ID,
+    pub user_id: ID,
+    pub role: ProjectRole,
 }
 
 #[cfg(test)]
