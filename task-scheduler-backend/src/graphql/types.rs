@@ -1,5 +1,6 @@
 use async_graphql::*;
 use chrono::{DateTime, FixedOffset};
+use std::fmt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
@@ -33,6 +34,73 @@ pub enum ProjectVisibilityEnum {
     Private,
     Team,
     Public,
+}
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[graphql(rename_items = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum ProjectRole {
+    Owner,
+    Manager,
+    Editor,
+    Viewer,
+}
+
+impl fmt::Display for ProjectRole {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Owner => write!(f, "OWNER"),
+            Self::Manager => write!(f, "MANAGER"),
+            Self::Editor => write!(f, "EDITOR"),
+            Self::Viewer => write!(f, "VIEWER"),
+        }
+    }
+}
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[graphql(rename_items = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TaskStatus {
+    Backlog,
+    Planned,
+    InProgress,
+    InReview,
+    Done,
+    Cancelled,
+}
+
+impl fmt::Display for TaskStatus {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Backlog => write!(f, "BACKLOG"),
+            Self::Planned => write!(f, "PLANNED"),
+            Self::InProgress => write!(f, "IN_PROGRESS"),
+            Self::InReview => write!(f, "IN_REVIEW"),
+            Self::Done => write!(f, "DONE"),
+            Self::Cancelled => write!(f, "CANCELLED"),
+        }
+    }
+}
+
+impl fmt::Display for TaskPriority {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Self::Low => write!(f, "LOW"),
+            Self::Medium => write!(f, "MEDIUM"), 
+            Self::High => write!(f, "HIGH"),
+            Self::Urgent => write!(f, "URGENT"),
+        }
+    }
+}
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[graphql(rename_items = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum TaskPriority {
+    Low,
+    Medium,
+    High,
+    Urgent,
 }
 
 // Project Types
@@ -78,7 +146,7 @@ pub struct UpdateProjectInput {
 pub struct ProjectMember {
     pub project_id: ID,
     pub user_id: ID,
-    pub role: String,
+    pub role: ProjectRole,
     pub joined_at: DateTime<FixedOffset>,
 }
 
@@ -97,8 +165,8 @@ pub struct Task {
     pub parent_task_id: Option<ID>,
     pub title: String,
     pub description: String,
-    pub status: String,
-    pub priority: i32,
+    pub status: TaskStatus,
+    pub priority: TaskPriority,
     pub effort_hours: Option<f64>,
     pub start_date: Option<DateTime<FixedOffset>>,
     pub deadline: Option<DateTime<FixedOffset>>,
@@ -113,8 +181,8 @@ pub struct CreateTaskInput {
     pub parent_task_id: Option<ID>,
     pub title: String,
     pub description: String,
-    pub status: String,
-    pub priority: i32,
+    pub status: TaskStatus,
+    pub priority: TaskPriority,
     pub effort_hours: Option<f64>,
     pub start_date: Option<DateTime<FixedOffset>>,
     pub deadline: Option<DateTime<FixedOffset>>,

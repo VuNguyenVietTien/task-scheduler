@@ -7,6 +7,9 @@ edition = "2021"
 name = "task_scheduler_backend"
 path = "src/lib.rs"
 
+[workspace]
+members = ["entity"]
+
 [dependencies]
 actix-cors = "0.6"
 actix-web = "4"
@@ -29,3 +32,4 @@ tokio = { version = "1", features = ["full"] }
 uuid = { version = "1.6", features = ["serde", "v4"] }
 strum = "0.25"
 strum_macros = "0.25"
+entity = { path = "entity" }

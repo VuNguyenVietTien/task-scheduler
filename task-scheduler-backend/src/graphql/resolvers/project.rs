@@ -18,7 +18,7 @@ use crate::{
         context::ContextExt,
         map_db_err,
         resolvers::mutation_utils::current_time_db,
-        types::{Project, ProjectMember, CreateProjectInput, UpdateProjectInput, AddProjectMemberInput,
+        types::{Project, ProjectMember, ProjectRole, CreateProjectInput, UpdateProjectInput, AddProjectMemberInput,
             ProjectStatusEnum, ProjectPriorityEnum, ProjectVisibilityEnum},
     },
 };
@@ -94,7 +94,7 @@ impl ProjectMutation {
         let member = ProjectMemberActiveModel {
             project_id: Set(project.id),
             user_id: Set(user_id),
-            role: Set("admin".to_string()),
+            role: Set(ProjectRole::Owner.to_string()),
             joined_at: Set(current_time_db()),
         };
 
@@ -117,7 +117,7 @@ impl ProjectMutation {
         let new_member = ProjectMemberActiveModel {
             project_id: Set(project_id),
             user_id: Set(member_id),
-            role: Set(input.role),
+            role: Set(input.role.to_string()),
             joined_at: Set(current_time_db()),
         };
 
@@ -209,11 +209,15 @@ impl From<ProjectModel> for Project {
 
 impl From<ProjectMemberModel> for ProjectMember {
     fn from(model: ProjectMemberModel) -> Self {
+        let role: ProjectRole = match model.role.as_str() {
+            "OWNER" => ProjectRole::Owner,
+            "MANAGER" => ProjectRole::Manager,
+            "EDITOR" => ProjectRole::Editor,
+            _ => ProjectRole::Viewer,
+        };
+
         ProjectMember {
-            project_id: model.project_id.into(),
-            user_id: model.user_id.into(),
-            role: model.role,
-            joined_at: model.joined_at,
+            project_id: model.project_id.into(), user_id: model.user_id.into(), role, joined_at: model.joined_at,
         }
     }
 }

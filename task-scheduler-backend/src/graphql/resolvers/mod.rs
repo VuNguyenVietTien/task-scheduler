@@ -2,6 +2,7 @@ use async_graphql::*;
 
 mod task;
 mod project;
+mod project_member;
 mod comment;
 mod attachment;
 mod notification;
@@ -9,6 +10,7 @@ mod notification;
 pub use task::{TaskQuery, TaskMutation};
 pub use project::{ProjectQuery, ProjectMutation};
 pub use comment::{CommentQuery, CommentMutation}; 
+pub use project_member::{ProjectMemberQuery, ProjectMemberMutation};
 pub use attachment::{AttachmentQuery, AttachmentMutation};
 pub use notification::{NotificationQuery, NotificationMutation};
 
@@ -70,6 +72,7 @@ pub mod guards {
 #[derive(MergedObject, Default)]
 pub struct Query(
     TaskQuery,
+    ProjectMemberQuery,
     ProjectQuery,
     CommentQuery,
     AttachmentQuery,
@@ -79,6 +82,7 @@ pub struct Query(
 #[derive(MergedObject, Default)]
 pub struct Mutation(
     TaskMutation,
+    ProjectMemberMutation,
     ProjectMutation,
     CommentMutation,
     AttachmentMutation,
