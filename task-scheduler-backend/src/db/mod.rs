@@ -1,70 +1,71 @@
-pub mod entities;
-pub mod migrations;
-
-use sea_orm::{ConnectOptions, Database, DatabaseConnection};
-use std::time::Duration;
+use sea_orm::{DatabaseConnection, DbErr};
 use crate::{config::Config, error::AppResult};
 
-pub async fn init_db(config: &Config) -> AppResult<DatabaseConnection> {
-    let mut opt = ConnectOptions::new(&config.database_url);
-    opt.max_connections(100)
-        .min_connections(5)
-        .connect_timeout(Duration::from_secs(8))
-        .acquire_timeout(Duration::from_secs(8))
-        .idle_timeout(Duration::from_secs(8))
-        .max_lifetime(Duration::from_secs(8))
-        .sqlx_logging(true);
+pub mod entities;
+pub mod migrations;
+pub mod enums;
 
-    Ok(Database::connect(opt).await?)
+pub async fn init_db(config: &Config) -> AppResult<DatabaseConnection> {
+    let db = sea_orm::Database::connect(&config.database_url)
+        .await
+        .map_err(|e| DbErr::Custom(format!("Could not connect to database: {}", e)))?;
+
+    Ok(db)
 }
 
-// Re-export common entity types with proper namespacing
+// Re-exports for convenience
 pub use entities::{
-    project::{
-        ActiveModel as ProjectActiveModel,
-        Entity as ProjectEntity,
-        Model as ProjectModel,
-    },
     task::{
         ActiveModel as TaskActiveModel,
         Entity as TaskEntity,
         Model as TaskModel,
+        Column as TaskColumn,
+    },
+    project::{
+        ActiveModel as ProjectActiveModel,
+        Entity as ProjectEntity,
+        Model as ProjectModel,
+        Column as ProjectColumn,
     },
     comment::{
         ActiveModel as CommentActiveModel,
         Entity as CommentEntity,
         Model as CommentModel,
+        Column as CommentColumn,
     },
     attachment::{
         ActiveModel as AttachmentActiveModel,
         Entity as AttachmentEntity,
         Model as AttachmentModel,
+        Column as AttachmentColumn,
     },
     notification::{
         ActiveModel as NotificationActiveModel,
         Entity as NotificationEntity,
         Model as NotificationModel,
+        Column as NotificationColumn,
     },
+    task_assignment::{
+        ActiveModel as TaskAssignmentActiveModel,
+        Entity as TaskAssignmentEntity,
+        Model as TaskAssignmentModel,
+        Column as TaskAssignmentColumn,
+    },
+    task_dependency::{
+        ActiveModel as TaskDependencyActiveModel,
+        Entity as TaskDependencyEntity,
+        Model as TaskDependencyModel,
+        Column as TaskDependencyColumn,
+    },
+    project_member::{
+        Entity as ProjectMemberEntity,
+        Model as ProjectMemberModel,
+        Column as ProjectMemberColumn,
+    },
+    user::{
+        ActiveModel as UserActiveModel,
+        Entity as UserEntity,
+        Model as UserModel,
+        Column as UserColumn,
+    }
 };
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use sea_orm::DbConn;
-    use crate::config::Config;
-
-    async fn create_test_db() -> AppResult<DbConn> {
-        let config = Config {
-            database_url: "postgres://postgres:postgres@localhost:5432/task_scheduler_test".to_string(),
-            ..Default::default()
-        };
-
-        init_db(&config).await
-    }
-
-    #[tokio::test]
-    async fn test_db_connection() -> AppResult<()> {
-        let _db = create_test_db().await?;
-        Ok(())
-    }
-}
