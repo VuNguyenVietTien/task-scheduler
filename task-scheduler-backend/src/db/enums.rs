@@ -28,6 +28,35 @@ pub enum ProjectVisibility {
     Public,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize, EnumString, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum TaskStatus {
+    Backlog,
+    Planned,
+    InProgress,
+    InReview,
+    Done,
+    Cancelled,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, EnumString, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum TaskPriority {
+    Low,
+    Medium,
+    High,
+    Urgent,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, EnumString, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub enum MemberRole {
+    Owner,
+    Manager,
+    Editor,
+    Viewer,
+}
+
 impl Default for ProjectStatus {
     fn default() -> Self {
         Self::NotStarted
@@ -43,6 +72,24 @@ impl Default for ProjectPriority {
 impl Default for ProjectVisibility {
     fn default() -> Self {
         Self::Private
+    }
+}
+
+impl Default for TaskStatus {
+    fn default() -> Self {
+        Self::Backlog
+    }
+}
+
+impl Default for TaskPriority {
+    fn default() -> Self {
+        Self::Medium
+    }
+}
+
+impl Default for MemberRole {
+    fn default() -> Self {
+        Self::Viewer
     }
 }
 
@@ -65,6 +112,33 @@ impl ToString for ProjectPriority {
 }
 
 impl ToString for ProjectVisibility {
+    fn to_string(&self) -> String {
+        serde_json::to_string(self)
+            .unwrap()
+            .trim_matches('"')
+            .to_string()
+    }
+}
+
+impl ToString for TaskStatus {
+    fn to_string(&self) -> String {
+        serde_json::to_string(self)
+            .unwrap()
+            .trim_matches('"')
+            .to_string()
+    }
+}
+
+impl ToString for TaskPriority {
+    fn to_string(&self) -> String {
+        serde_json::to_string(self)
+            .unwrap()
+            .trim_matches('"')
+            .to_string()
+    }
+}
+
+impl ToString for MemberRole {
     fn to_string(&self) -> String {
         serde_json::to_string(self)
             .unwrap()

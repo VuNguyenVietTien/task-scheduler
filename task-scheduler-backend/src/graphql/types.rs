@@ -3,7 +3,10 @@ use chrono::{DateTime, FixedOffset};
 use serde::{Deserialize, Serialize};
 use serde_json::Value as JsonValue;
 
-use crate::db::enums::{ProjectStatus, ProjectPriority, ProjectVisibility};
+use crate::db::enums::{
+    ProjectStatus, ProjectPriority, ProjectVisibility,
+    TaskStatus, TaskPriority, MemberRole
+};
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
 #[graphql(rename_items = "camelCase")]
@@ -33,6 +36,38 @@ pub enum ProjectVisibilityEnum {
     Private,
     Team,
     Public,
+}
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[graphql(rename_items = "camelCase")] 
+#[serde(rename_all = "camelCase")]
+pub enum TaskStatusEnum {
+    Backlog,
+    Planned,
+    InProgress,
+    InReview,
+    Done,
+    Cancelled,
+}
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[graphql(rename_items = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub enum TaskPriorityEnum {
+    Low,
+    Medium,
+    High,
+    Urgent,
+}
+
+#[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize)]
+#[graphql(rename_items = "camelCase")]
+#[serde(rename_all = "camelCase")]
+pub enum MemberRoleEnum {
+    Owner,
+    Manager,
+    Editor,
+    Viewer,
 }
 
 // Project Types
@@ -74,31 +109,15 @@ pub struct UpdateProjectInput {
     pub progress: Option<f32>,
 }
 
-#[derive(SimpleObject)]
-pub struct ProjectMember {
-    pub project_id: ID,
-    pub user_id: ID,
-    pub role: String,
-    pub joined_at: DateTime<FixedOffset>,
-}
-
-#[derive(InputObject)]
-pub struct AddProjectMemberInput {
-    pub project_id: ID,
-    pub user_id: ID,
-    pub role: String,
-}
-
 // Task Types
 #[derive(SimpleObject)]
 pub struct Task {
     pub id: ID,
     pub project_id: ID,
-    pub parent_task_id: Option<ID>,
     pub title: String,
     pub description: String,
-    pub status: String,
-    pub priority: i32,
+    pub status: TaskStatusEnum,
+    pub priority: TaskPriorityEnum,
     pub effort_hours: Option<f64>,
     pub start_date: Option<DateTime<FixedOffset>>,
     pub deadline: Option<DateTime<FixedOffset>>,
@@ -110,79 +129,47 @@ pub struct Task {
 #[derive(InputObject)]
 pub struct CreateTaskInput {
     pub project_id: ID,
-    pub parent_task_id: Option<ID>,
     pub title: String,
     pub description: String,
-    pub status: String,
-    pub priority: i32,
+    pub status: Option<TaskStatusEnum>,
+    pub priority: Option<TaskPriorityEnum>,
     pub effort_hours: Option<f64>,
     pub start_date: Option<DateTime<FixedOffset>>,
     pub deadline: Option<DateTime<FixedOffset>>,
 }
 
 #[derive(InputObject)]
-pub struct TaskOrderInput {
-    pub task_id: ID,
-    pub position: i32,
+pub struct UpdateTaskInput {
+    pub title: String,
+    pub description: String,
+    pub status: Option<TaskStatusEnum>,
+    pub priority: Option<TaskPriorityEnum>,
+    pub effort_hours: Option<f64>,
+    pub start_date: Option<DateTime<FixedOffset>>,
+    pub deadline: Option<DateTime<FixedOffset>>,
+}
+
+// Member Types
+#[derive(SimpleObject)]
+pub struct ProjectMember {
+    pub project_id: ID,
+    pub user_id: ID,
+    pub role: MemberRoleEnum,
+    pub joined_at: DateTime<FixedOffset>,
 }
 
 #[derive(InputObject)]
-pub struct ReorderTasksInput {
-    pub task_orders: Vec<TaskOrderInput>,
-}
-
-// Comment Types
-#[derive(SimpleObject)]
-pub struct Comment {
-    pub id: ID,
-    pub task_id: ID,
+pub struct AddProjectMemberInput {
+    pub project_id: ID,
     pub user_id: ID,
-    pub parent_comment_id: Option<ID>,
-    pub content: String,
-    pub created_at: DateTime<FixedOffset>,
-    pub updated_at: DateTime<FixedOffset>,
+    pub role: MemberRoleEnum,
 }
 
 #[derive(InputObject)]
-pub struct CreateCommentInput {
-    pub task_id: ID,
-    pub parent_comment_id: Option<ID>,
-    pub content: String,
-}
-
-// Attachment Types
-#[derive(SimpleObject)]
-pub struct Attachment {
-    pub id: ID,
-    pub task_id: ID,
+pub struct UpdateMemberRoleInput {
+    pub project_id: ID,
     pub user_id: ID,
-    pub file_name: String,
-    pub file_size: i64,
-    pub mime_type: String,
-    pub storage_path: String,
-    pub created_at: DateTime<FixedOffset>,
-}
-
-// Notification Types
-#[derive(SimpleObject)]
-pub struct Notification {
-    pub id: ID,
-    pub user_id: ID,
-    pub type_: String,
-    pub content: Json<JsonValue>,
-    pub created_at: DateTime<FixedOffset>,
-    pub read_at: Option<DateTime<FixedOffset>>,
-}
-
-// User Types
-#[derive(SimpleObject, Serialize, Deserialize)]
-pub struct User {
-    pub id: ID,
-    pub email: String,
-    pub name: String,
-    pub role: String,
-    pub created_at: DateTime<FixedOffset>,
-    pub updated_at: DateTime<FixedOffset>,
+    pub role: MemberRoleEnum,
 }
 
 // Extensions
@@ -219,6 +206,41 @@ impl From<ProjectVisibility> for ProjectVisibilityEnum {
     }
 }
 
+impl From<TaskStatus> for TaskStatusEnum {
+    fn from(status: TaskStatus) -> Self {
+        match status {
+            TaskStatus::Backlog => Self::Backlog,
+            TaskStatus::Planned => Self::Planned,
+            TaskStatus::InProgress => Self::InProgress,
+            TaskStatus::InReview => Self::InReview,
+            TaskStatus::Done => Self::Done,
+            TaskStatus::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+impl From<TaskPriority> for TaskPriorityEnum {
+    fn from(priority: TaskPriority) -> Self {
+        match priority {
+            TaskPriority::Low => Self::Low,
+            TaskPriority::Medium => Self::Medium,
+            TaskPriority::High => Self::High,
+            TaskPriority::Urgent => Self::Urgent,
+        }
+    }
+}
+
+impl From<MemberRole> for MemberRoleEnum {
+    fn from(role: MemberRole) -> Self {
+        match role {
+            MemberRole::Owner => Self::Owner,
+            MemberRole::Manager => Self::Manager,
+            MemberRole::Editor => Self::Editor,
+            MemberRole::Viewer => Self::Viewer,
+        }
+    }
+}
+
 impl From<ProjectStatusEnum> for ProjectStatus {
     fn from(status: ProjectStatusEnum) -> Self {
         match status {
@@ -248,6 +270,41 @@ impl From<ProjectVisibilityEnum> for ProjectVisibility {
             ProjectVisibilityEnum::Private => Self::Private,
             ProjectVisibilityEnum::Team => Self::Team,
             ProjectVisibilityEnum::Public => Self::Public,
+        }
+    }
+}
+
+impl From<TaskStatusEnum> for TaskStatus {
+    fn from(status: TaskStatusEnum) -> Self {
+        match status {
+            TaskStatusEnum::Backlog => Self::Backlog,
+            TaskStatusEnum::Planned => Self::Planned,
+            TaskStatusEnum::InProgress => Self::InProgress,
+            TaskStatusEnum::InReview => Self::InReview,
+            TaskStatusEnum::Done => Self::Done,
+            TaskStatusEnum::Cancelled => Self::Cancelled,
+        }
+    }
+}
+
+impl From<TaskPriorityEnum> for TaskPriority {
+    fn from(priority: TaskPriorityEnum) -> Self {
+        match priority {
+            TaskPriorityEnum::Low => Self::Low,
+            TaskPriorityEnum::Medium => Self::Medium,
+            TaskPriorityEnum::High => Self::High,
+            TaskPriorityEnum::Urgent => Self::Urgent,
+        }
+    }
+}
+
+impl From<MemberRoleEnum> for MemberRole {
+    fn from(role: MemberRoleEnum) -> Self {
+        match role {
+            MemberRoleEnum::Owner => Self::Owner,
+            MemberRoleEnum::Manager => Self::Manager,
+            MemberRoleEnum::Editor => Self::Editor,
+            MemberRoleEnum::Viewer => Self::Viewer,
         }
     }
 }

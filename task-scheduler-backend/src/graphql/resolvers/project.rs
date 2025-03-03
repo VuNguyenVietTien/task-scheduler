@@ -12,13 +12,13 @@ use crate::{
             ProjectEntity, ProjectModel, ProjectActiveModel,
             ProjectMemberModel, ProjectMemberActiveModel,
         },
-        enums::{ProjectStatus, ProjectPriority, ProjectVisibility},
+        enums::{ProjectStatus, ProjectPriority, ProjectVisibility, MemberRole},
     },
     graphql::{
         context::ContextExt,
         map_db_err,
         resolvers::mutation_utils::current_time_db,
-        types::{Project, ProjectMember, CreateProjectInput, UpdateProjectInput, AddProjectMemberInput,
+        types::{Project, CreateProjectInput, UpdateProjectInput,
             ProjectStatusEnum, ProjectPriorityEnum, ProjectVisibilityEnum},
     },
 };
@@ -68,10 +68,6 @@ impl ProjectMutation {
         debug!("Creating project with priority: {:?}", input.priority);
         debug!("Creating project with visibility: {:?}", input.visibility);
 
-        let status = input.status.unwrap_or(ProjectStatusEnum::NotStarted);
-        let priority = input.priority.unwrap_or(ProjectPriorityEnum::Medium);
-        let visibility = input.visibility.unwrap_or(ProjectVisibilityEnum::Private);
-
         let project = ProjectActiveModel {
             id: Set(Uuid::new_v4()),
             name: Set(input.name),
@@ -79,11 +75,20 @@ impl ProjectMutation {
             created_by: Set(user_id),
             created_at: Set(current_time_db()),
             updated_at: Set(current_time_db()),
-            status: Set(ProjectStatus::from(status).to_string()),
-            priority: Set(ProjectPriority::from(priority).to_string()),
+            status: Set(input.status
+                .map(ProjectStatus::from)
+                .unwrap_or_default()
+                .to_string()),
+            priority: Set(input.priority
+                .map(ProjectPriority::from)
+                .unwrap_or_default()
+                .to_string()),
             category: Set(input.category),
             metadata: Set(Some(JsonValue::Object(serde_json::Map::new()))),
-            visibility: Set(ProjectVisibility::from(visibility).to_string()),
+            visibility: Set(input.visibility
+                .map(ProjectVisibility::from)
+                .unwrap_or_default()
+                .to_string()),
             tags: Set(Some(JsonValue::Array(vec![]))),
             progress: Set(0.0),
         };
@@ -94,36 +99,13 @@ impl ProjectMutation {
         let member = ProjectMemberActiveModel {
             project_id: Set(project.id),
             user_id: Set(user_id),
-            role: Set("admin".to_string()),
+            role: Set(MemberRole::Owner.to_string()),
             joined_at: Set(current_time_db()),
         };
 
         member.insert(db).await.map_err(map_db_err)?;
 
         Ok(project.into())
-    }
-
-    async fn add_project_member(
-        &self,
-        ctx: &Context<'_>,
-        input: AddProjectMemberInput,
-    ) -> Result<ProjectMember, Error> {
-        let db = ctx.get_db();
-        
-        // Parse project and user IDs
-        let project_id = Uuid::parse_str(&input.project_id.to_string())?;
-        let member_id = Uuid::parse_str(&input.user_id.to_string())?;
-
-        let new_member = ProjectMemberActiveModel {
-            project_id: Set(project_id),
-            user_id: Set(member_id),
-            role: Set(input.role),
-            joined_at: Set(current_time_db()),
-        };
-
-        let member = new_member.insert(db).await.map_err(map_db_err)?;
-
-        Ok(member.into())
     }
 
     async fn update_project(
@@ -203,17 +185,6 @@ impl From<ProjectModel> for Project {
             visibility: visibility_enum,
             tags: model.tags.map(Json),
             progress: model.progress,
-        }
-    }
-}
-
-impl From<ProjectMemberModel> for ProjectMember {
-    fn from(model: ProjectMemberModel) -> Self {
-        ProjectMember {
-            project_id: model.project_id.into(),
-            user_id: model.user_id.into(),
-            role: model.role,
-            joined_at: model.joined_at,
         }
     }
 }

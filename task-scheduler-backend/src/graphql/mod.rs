@@ -4,8 +4,12 @@ pub mod resolvers;
 pub mod schema;
 pub mod types;
 
-pub use context::GraphQLContext;
-pub use schema::{create_schema, Schema};
+pub use context::Context;
+pub use schema::create_schema;
 
-// Re-export common error mapping function
-pub use schema::map_db_err;
+use sea_orm::DbErr;
+use async_graphql::Error;
+
+pub fn map_db_err(err: DbErr) -> Error {
+    Error::new(format!("Database error: {}", err))
+}

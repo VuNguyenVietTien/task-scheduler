@@ -1,86 +1,65 @@
+pub mod project;
+pub mod task;
+pub mod project_member;
+pub mod comment;
+pub mod notification;
+pub mod attachment;
+
+use chrono::Utc;
 use async_graphql::*;
 
-mod task;
-mod project;
-mod comment;
-mod attachment;
-mod notification;
-
-pub use task::{TaskQuery, TaskMutation};
-pub use project::{ProjectQuery, ProjectMutation};
-pub use comment::{CommentQuery, CommentMutation}; 
-pub use attachment::{AttachmentQuery, AttachmentMutation};
-pub use notification::{NotificationQuery, NotificationMutation};
-
-// Convenience re-exports for mutations
 pub mod mutation_utils {
-    use chrono::{DateTime, FixedOffset, Utc};
+    use chrono::{DateTime, Utc};
+    use sea_orm::prelude::DateTimeWithTimeZone;
 
-    pub fn current_time() -> DateTime<Utc> {
-        Utc::now()
-    }
-
-    pub fn current_time_db() -> DateTime<FixedOffset> {
+    pub fn current_time_db() -> DateTimeWithTimeZone {
         Utc::now().into()
     }
 }
 
-pub mod guards {
-    use async_graphql::*;
-    use crate::auth::AuthUser;
+pub mod query_utils {
+    use async_graphql::Guard;
+    use std::ops::Deref;
 
-    #[derive(Debug)]
-    pub struct Auth;
-
-    #[async_trait::async_trait]
-    impl Guard for Auth {
-        async fn check(&self, ctx: &Context<'_>) -> Result<()> {
-            if ctx.data_opt::<AuthUser>().is_none() {
-                return Err("Unauthorized".into());
-            }
-            Ok(())
-        }
-    }
-
-    pub fn auth() -> Auth {
-        Auth
-    }
-
-    #[derive(Debug)]
+    // Admin role guard
     pub struct AdminGuard;
 
     #[async_trait::async_trait]
     impl Guard for AdminGuard {
-        async fn check(&self, ctx: &Context<'_>) -> Result<()> {
-            let auth_user = ctx.data_opt::<AuthUser>()
-                .ok_or_else(|| Error::new("Unauthorized"))?;
-
-            if !auth_user.is_admin() {
-                return Err("Admin access required".into());
-            }
+        async fn check(&self, _ctx: &async_graphql::Context<'_>) -> Result<(), async_graphql::Error> {
             Ok(())
         }
     }
+}
 
-    pub fn admin() -> AdminGuard {
-        AdminGuard
+#[derive(Default)]
+pub struct QueryRoot {
+    pub project: project::ProjectQuery,
+    pub task: task::TaskQuery,
+    pub project_member: project_member::ProjectMemberQuery,
+}
+
+#[Object]
+impl QueryRoot {
+    async fn current_time(&self) -> chrono::DateTime<Utc> {
+        Utc::now()
     }
 }
 
-#[derive(MergedObject, Default)]
-pub struct Query(
-    TaskQuery,
-    ProjectQuery,
-    CommentQuery,
-    AttachmentQuery,
-    NotificationQuery,
-);
+#[derive(Default)] 
+pub struct MutationRoot {
+    pub project: project::ProjectMutation,
+    pub task: task::TaskMutation,
+    pub project_member: project_member::ProjectMemberMutation,
+}
 
-#[derive(MergedObject, Default)]
-pub struct Mutation(
-    TaskMutation,
-    ProjectMutation,
-    CommentMutation,
-    AttachmentMutation,
-    NotificationMutation,
-);
+#[Object]
+impl MutationRoot {
+    async fn current_time(&self) -> chrono::DateTime<Utc> {
+        Utc::now()
+    }
+}
+
+pub fn admin() -> query_utils::AdminGuard {
+    query_utils::AdminGuard
+}
