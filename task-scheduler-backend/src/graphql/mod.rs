@@ -1,11 +1,12 @@
-pub mod context;
+mod context;
 pub mod dataloaders;
+pub mod handlers;
 pub mod resolvers;
 pub mod schema;
-pub mod types;
 
-pub use context::GraphQLContext;
-pub use schema::{create_schema, Schema};
+pub use context::Context;
+pub use handlers::{graphql_handler, graphql_playground};
+pub use schema::AppSchema;
 
-// Re-export common error mapping function
-pub use schema::map_db_err;
+// Re-export commonly used types from dataloaders
+pub use dataloaders::{ProjectLoader, UserLoader};

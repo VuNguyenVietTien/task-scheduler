@@ -1,5 +1,4 @@
 use async_graphql::*;
-use sea_orm::{EntityTrait, QueryFilter, ColumnTrait};
 use uuid::Uuid;
 
 use crate::{

@@ -1,7 +1,6 @@
 use actix_web::{web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use sea_orm::{DatabaseConnection, EntityTrait, Set, ActiveModelTrait, QueryFilter, ColumnTrait};
 use entity::{comments, comments::Entity as Comments, tasks::Entity as Tasks};
 use chrono::Utc;
 
@@ -201,7 +200,6 @@ async fn delete_comment(
 mod tests {
     use super::*;
     use actix_web::{test, App};
-    use sea_orm::MockDatabase;
 
     #[actix_web::test]
     async fn test_create_comment() {

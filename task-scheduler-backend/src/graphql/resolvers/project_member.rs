@@ -1,6 +1,5 @@
 use async_graphql::{Context, Object, ID, Result, Error};
 use chrono::Utc;
-use sea_orm::{DatabaseConnection, EntityTrait, Set, ActiveModelTrait, QueryFilter, ColumnTrait};
 use crate::db::{
     ProjectMemberEntity as ProjectMembers,
     ProjectMemberColumn,
@@ -145,7 +144,6 @@ pub struct AddProjectMemberInput {
 mod tests {
     use super::*;
     use crate::db::ProjectMemberModel;
-    use sea_orm::MockDatabase;
 
     #[tokio::test]
     async fn test_add_project_member() {

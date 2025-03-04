@@ -1,74 +1,131 @@
+use actix_web::{http::StatusCode, HttpResponse, ResponseError};
 use async_graphql::{Error as GraphQLError, ErrorExtensions};
-use sea_orm::DbErr;
+use serde::Serialize;
+use sqlx::error::Error as SqlxError;
 use thiserror::Error;
 
-#[derive(Error, Debug)]
+use crate::auth::error::AuthError;
+
+#[derive(Debug, Error)]
 pub enum AppError {
     #[error("Authentication error: {0}")]
-    Auth(String),
+    Auth(#[from] AuthError),
 
-    #[error("Authorization error: {0}")]
-    Authorization(String),
+    #[error("Database error: {0}")]
+    Database(#[from] SqlxError),
 
     #[error("Validation error: {0}")]
     Validation(String),
 
-    #[error("Database error: {0}")]
-    Database(#[from] DbErr),
-
     #[error("Not found: {0}")]
     NotFound(String),
 
-    #[error("Internal server error: {0}")]
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
+    #[error("Conflict: {0}")]
+    Conflict(String),
+
+    #[error("Bad request: {0}")]
+    BadRequest(String),
+
+    #[error("Internal error: {0}")]
     Internal(String),
 }
 
-impl From<jsonwebtoken::errors::Error> for AppError {
-    fn from(err: jsonwebtoken::errors::Error) -> Self {
-        AppError::Auth(err.to_string())
+#[derive(Serialize)]
+struct ErrorResponse {
+    code: &'static str,
+    message: String,
+}
+
+impl ResponseError for AppError {
+    fn status_code(&self) -> StatusCode {
+        match self {
+            AppError::Auth(auth_err) => auth_err.status_code(),
+            AppError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            AppError::Validation(_) => StatusCode::BAD_REQUEST,
+            AppError::NotFound(_) => StatusCode::NOT_FOUND,
+            AppError::Forbidden(_) => StatusCode::FORBIDDEN,
+            AppError::Conflict(_) => StatusCode::CONFLICT,
+            AppError::BadRequest(_) => StatusCode::BAD_REQUEST,
+            AppError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+        }
+    }
+
+    fn error_response(&self) -> HttpResponse {
+        let code = self.error_code();
+        HttpResponse::build(self.status_code()).json(ErrorResponse {
+            code,
+            message: self.to_string(),
+        })
     }
 }
 
 impl AppError {
-    pub fn to_graphql_error(self) -> GraphQLError {
+    fn error_code(&self) -> &'static str {
         match self {
-            AppError::Auth(msg) => GraphQLError::new(msg)
-                .extend_with(|_, e| e.set("code", "AUTHENTICATION_ERROR")),
-            
-            AppError::Authorization(msg) => GraphQLError::new(msg)
-                .extend_with(|_, e| e.set("code", "AUTHORIZATION_ERROR")),
-            
-            AppError::Validation(msg) => GraphQLError::new(msg)
-                .extend_with(|_, e| e.set("code", "VALIDATION_ERROR")),
-            
-            AppError::Database(err) => GraphQLError::new(format!("Database error: {}", err))
-                .extend_with(|_, e| e.set("code", "DATABASE_ERROR")),
-            
-            AppError::NotFound(msg) => GraphQLError::new(msg)
-                .extend_with(|_, e| e.set("code", "NOT_FOUND")),
-            
-            AppError::Internal(msg) => GraphQLError::new(msg)
-                .extend_with(|_, e| e.set("code", "INTERNAL_SERVER_ERROR")),
+            AppError::Auth(_) => "AUTH_ERROR",
+            AppError::Database(_) => "DATABASE_ERROR",
+            AppError::Validation(_) => "VALIDATION_ERROR",
+            AppError::NotFound(_) => "NOT_FOUND",
+            AppError::Forbidden(_) => "FORBIDDEN",
+            AppError::Conflict(_) => "CONFLICT",
+            AppError::BadRequest(_) => "BAD_REQUEST",
+            AppError::Internal(_) => "INTERNAL_ERROR",
         }
     }
+
+    // Helper constructors
+    pub fn validation<T: std::fmt::Display>(message: T) -> Self {
+        AppError::Validation(message.to_string())
+    }
+
+    pub fn not_found<T: std::fmt::Display>(message: T) -> Self {
+        AppError::NotFound(message.to_string())
+    }
+
+    pub fn forbidden<T: std::fmt::Display>(message: T) -> Self {
+        AppError::Forbidden(message.to_string())
+    }
+
+    pub fn conflict<T: std::fmt::Display>(message: T) -> Self {
+        AppError::Conflict(message.to_string())
+    }
+
+    pub fn bad_request<T: std::fmt::Display>(message: T) -> Self {
+        AppError::BadRequest(message.to_string())
+    }
+
+    pub fn internal<T: std::fmt::Display>(message: T) -> Self {
+        AppError::Internal(message.to_string())
+    }
+
+    // Convert to GraphQL error with extensions
+    pub fn to_graphql_error(&self) -> GraphQLError {
+        let mut err = GraphQLError::new(self.to_string());
+        let code = self.error_code();
+
+        err = err.extend_with(|_, e| {
+            e.set("code", code);
+            if let AppError::Database(db_err) = self {
+                e.set("database_error", db_err.to_string());
+            }
+        });
+
+        err
+    }
 }
+
 pub type AppResult<T> = Result<T, AppError>;
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+// Helper trait for converting Result to GraphQL Result
+pub trait IntoGraphQLResult<T> {
+    fn into_graphql_result(self) -> Result<T, GraphQLError>;
+}
 
-    #[test]
-    fn test_error_conversion() {
-        let auth_error = AppError::Auth("Invalid token".to_string());
-        let graphql_error: GraphQLError = auth_error.into();
-        assert!(graphql_error.message.contains("Invalid token"));
-
-        let db_error = DbErr::Custom("Connection failed".to_string());
-        let app_error: AppError = db_error.into();
-        match app_error {
-            AppError::Database(_) => assert!(true),
-            _ => assert!(false, "Expected Database error"),
-        }
+impl<T> IntoGraphQLResult<T> for Result<T, AppError> {
+    fn into_graphql_result(self) -> Result<T, GraphQLError> {
+        self.map_err(|e| e.to_graphql_error())
     }
 }

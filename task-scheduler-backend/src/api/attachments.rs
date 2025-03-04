@@ -3,7 +3,6 @@ use actix_multipart::Multipart;
 use futures::{StreamExt, TryStreamExt};
 use serde::Serialize;
 use uuid::Uuid;
-use sea_orm::{DatabaseConnection, EntityTrait, Set, ActiveModelTrait, QueryFilter, ColumnTrait};
 use entity::{attachments, attachments::Entity as Attachments, tasks::Entity as Tasks};
 use chrono::Utc;
 use std::path::Path;
@@ -184,7 +183,6 @@ async fn delete_attachment(
 mod tests {
     use super::*;
     use actix_web::{test, App};
-    use sea_orm::MockDatabase;
 
     #[actix_web::test]
     async fn test_upload_attachment() {

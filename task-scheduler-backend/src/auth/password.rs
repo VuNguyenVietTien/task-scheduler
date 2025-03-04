@@ -1,18 +1,30 @@
-use bcrypt::{hash, verify, DEFAULT_COST};
+use bcrypt::{hash as bcrypt_hash, verify, DEFAULT_COST, BcryptError}; 
+use thiserror::Error;
 
-#[allow(dead_code)]
-pub struct PasswordHasher;
+#[derive(Error, Debug)]
+pub enum PasswordError {
+    #[error("Invalid password")]
+    InvalidPassword,
+    
+    #[error("Bcrypt error: {0}")]
+    BcryptError(#[from] BcryptError),
+}
 
-#[allow(dead_code)]
-impl PasswordHasher {
-    /// Hash a plain text password using bcrypt
-    pub fn hash_password(password: &str) -> Result<String, bcrypt::BcryptError> {
-        hash(password, DEFAULT_COST)
-    }
+pub fn hash(password: String) -> Result<String, PasswordError> {
+    bcrypt_hash(password.as_bytes(), DEFAULT_COST)
+        .map_err(|e| PasswordError::BcryptError(e))
+}
 
-    /// Verify a password against its hash
-    pub fn verify_password(password: &str, hash: &str) -> Result<bool, bcrypt::BcryptError> {
-        verify(password, hash)
+pub fn verify_password(password: &str, hash: &str) -> Result<bool, PasswordError> {
+    match verify(password, hash) {
+        Ok(valid) => {
+            if !valid {
+                Err(PasswordError::InvalidPassword)
+            } else {
+                Ok(true)
+            }
+        }
+        Err(e) => Err(PasswordError::BcryptError(e))
     }
 }
 
@@ -21,19 +33,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_password_hashing() {
-        let password = "test_password";
-        let hashed = PasswordHasher::hash_password(password).unwrap();
+    fn test_password_hash_and_verify() {
+        let password = "test123".to_string();
+        let hash = hash(password.clone()).unwrap();
         
-        // Ensure hash is different from original password
-        assert_ne!(password, hashed);
-        
-        // Verify correct password
-        let valid = PasswordHasher::verify_password(password, &hashed).unwrap();
-        assert!(valid);
-        
-        // Verify incorrect password
-        let invalid = PasswordHasher::verify_password("wrong_password", &hashed).unwrap();
-        assert!(!invalid);
+        assert!(verify_password(&password, &hash).unwrap());
+        assert!(!verify_password("wrong", &hash).unwrap_or(true));
     }
 }

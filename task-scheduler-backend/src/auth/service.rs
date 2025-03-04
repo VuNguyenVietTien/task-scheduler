@@ -1,229 +1,203 @@
-use sea_orm::{DatabaseConnection, Set, EntityTrait, IntoActiveModel, ActiveModelTrait, QueryFilter, ColumnTrait};
-use crate::auth::{AuthError, token::Claims};
-use crate::email::EmailServiceTrait;
-use entity::users::Model as UserModel;
-use entity::users::{Entity as Users, ActiveModel as UserActiveModel};
-use chrono::{Duration, Utc, FixedOffset};
-use uuid::Uuid;
 use bcrypt::{hash, verify, DEFAULT_COST};
+use chrono::{Duration, Utc};
+use sqlx::{PgPool, Row};
+use uuid::Uuid;
 
-pub struct AuthService<E: EmailServiceTrait> {
-    db: DatabaseConnection,
-    jwt_secret: Vec<u8>,
-    email_service: E,
-    frontend_url: String,
+use crate::auth::error::AuthError;
+use crate::auth::token;
+use crate::auth::types::{Claims, RowExt};
+use crate::config::{JWT_EXPIRY, RESET_TOKEN_EXPIRY, VERIFICATION_TOKEN_EXPIRY};
+
+#[derive(Clone)]
+pub struct AuthService {
+    db: PgPool,
 }
 
-impl<E: Clone + Send + Sync + EmailServiceTrait + 'static> AuthService<E> {
-    pub fn new(
-        db: DatabaseConnection,
-        jwt_secret: Vec<u8>,
-        email_service: E,
-        frontend_url: String,
-    ) -> Self {
-        Self {
-            db,
-            jwt_secret,
-            email_service,
-            frontend_url,
-        }
+impl AuthService {
+    pub fn new(db: PgPool) -> Self {
+        Self { db }
     }
 
-    pub async fn register_user(
+    pub async fn register(
         &self,
         email: String,
         password: String,
-        name: String,
-    ) -> Result<(), AuthError> {
-        // Check if user already exists
-        if let Some(_) = super::find_by_email(&self.db, &email).await? {
+        display_name: String,
+    ) -> Result<Uuid, AuthError> {
+        // Check if email exists
+        let exists = sqlx::query(
+            "SELECT user_id FROM users WHERE email = $1"
+        )
+        .bind(&email)
+        .fetch_optional(&self.db)
+        .await?;
+
+        if exists.is_some() {
             return Err(AuthError::EmailAlreadyExists);
         }
 
         // Hash password
-        let hashed_password = hash(password.as_bytes(), DEFAULT_COST)?;
+        let password_hash = hash(password.as_bytes(), DEFAULT_COST)
+            .map_err(|e| AuthError::PasswordError(e.to_string()))?;
 
-        // Generate verification token
-        let verification_token = Uuid::new_v4().to_string();
-        let verification_expires = Utc::now() + Duration::hours(24);
+        // Create user
+        let user_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO users (user_id, email, password_hash, display_name, role) VALUES ($1, $2, $3, $4, 'user')"
+        )
+        .bind(user_id)
+        .bind(&email)
+        .bind(&password_hash)
+        .bind(&display_name)
+        .execute(&self.db)
+        .await?;
 
-        // Create new user
-        let user = UserActiveModel {
-            id: Set(Uuid::new_v4()),
-            email: Set(email.clone()),
-            password_hash: Set(hashed_password),
-            name: Set(name),
-            email_verified: Set(false),
-            verification_token: Set(Some(verification_token.clone())),
-            verification_token_expires: Set(Some(verification_expires.with_timezone(&FixedOffset::east_opt(0).unwrap()))),
-            role: Set("user".to_string()),
-            work_capacity: Set(None),
-            firebase_uid: Set(None),
-            created_at: Set(Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap())),
-            updated_at: Set(Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap())),
-            provider: Set("email".to_string())
-        };
-
-        // Save user to database
-        Users::insert(user)
-            .exec(&self.db)
-            .await?;
-
-        // Send verification email
-        self.email_service
-            .send_verification_email(email, verification_token, self.frontend_url.clone())
-            .await
-            .map_err(|e| AuthError::EmailSendingFailed(e.to_string()))?;
-
-        Ok(())
+        Ok(user_id)
     }
 
-    pub async fn login(&self, email: String, password: String) -> Result<(String, UserModel), AuthError> {
-        let user = super::find_by_email(&self.db, &email)
-            .await?
-            .ok_or(AuthError::InvalidCredentials)?;
+    pub async fn login(&self, email: String, password: String) -> Result<Claims, AuthError> {
+        let user = sqlx::query(
+            "SELECT user_id, password_hash, display_name, verified FROM users WHERE email = $1"
+        )
+        .bind(&email)
+        .fetch_optional(&self.db)
+        .await?
+        .ok_or(AuthError::InvalidCredentials)?;
 
-        if !user.email_verified {
+        // Use helper methods from RowExt
+        let password_hash: String = user.get_string("password_hash")?;
+        let valid = verify(password.as_bytes(), &password_hash)
+            .map_err(|e| AuthError::PasswordError(e.to_string()))?;
+
+        if !valid {
+            return Err(AuthError::InvalidCredentials);
+        }
+
+        let verified = user.get_bool("verified")?;
+        if !verified {
             return Err(AuthError::EmailNotVerified);
         }
 
-        if !verify(password.as_bytes(), &user.password_hash)? {
-            return Err(AuthError::InvalidPassword);
-        }
+        let user_id = user.get_uuid("user_id")?;
+        let display_name = user.get_string("display_name")?;
 
-        let token = Claims::new(user.id, user.email.clone(), user.role.clone())
-            .create_token(&self.jwt_secret)?;
+        let expiry = *JWT_EXPIRY;
+        let claims = Claims::new(
+            user_id.to_string(),
+            email,
+            display_name,
+            Duration::seconds(expiry),
+        );
 
-        Ok((token, user))
+        Ok(claims)
     }
 
-    pub async fn register_firebase_user(
-        &self,
-        email: String,
-        name: String,
-        firebase_uid: String,
-    ) -> Result<(String, UserModel), AuthError> {
-        // Check if user already exists
-        if let Some(mut user) = super::find_by_email(&self.db, &email).await? {
-            // If user exists but doesn't have firebase_uid, update it
-            if user.firebase_uid.is_none() {
-                let mut user_am: UserActiveModel = user.clone().into();
-                user_am.firebase_uid = Set(Some(firebase_uid));
-                user_am.email_verified = Set(true);
-                user = user_am.update(&self.db).await?;
-            }
-            // Generate token for existing user
-            let token = Claims::new(user.id, user.email.clone(), user.role.clone())
-                .create_token(&self.jwt_secret)?;
-            return Ok((token, user));
-        }
+    pub async fn verify_email(&self, token: String) -> Result<(), AuthError> {
+        let user_id = self.verify_token(&token, VERIFICATION_TOKEN_EXPIRY).await?;
 
-        // Create new user
-        let user_id = Uuid::new_v4();
-        let user = UserActiveModel {
-            id: Set(user_id),
-            email: Set(email.clone()),
-            password_hash: Set("".to_string()), // No password for Firebase users
-            name: Set(name),
-            email_verified: Set(true), // Firebase handles email verification
-            verification_token: Set(None),
-            verification_token_expires: Set(None),
-            role: Set("user".to_string()),
-            work_capacity: Set(None),
-            firebase_uid: Set(Some(firebase_uid)),
-            created_at: Set(Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap())),
-            updated_at: Set(Utc::now().with_timezone(&FixedOffset::east_opt(0).unwrap())),
-            provider: Set("firebase".to_string())
-        };
+        sqlx::query(
+            "UPDATE users SET verified = true WHERE user_id = $1"
+        )
+        .bind(user_id)
+        .execute(&self.db)
+        .await?;
 
-        // Save user to database
-        let _saved_user = Users::insert(user)
-            .exec(&self.db)
-            .await?;
-
-        // Get complete user model
-        let user = Users::find_by_id(user_id)
-            .one(&self.db)
-            .await?
-            .ok_or(AuthError::DatabaseError("Failed to retrieve saved user".into()))?;
-
-        // Generate token for new user
-        let token = Claims::new(user.id, user.email.clone(), user.role.clone())
-            .create_token(&self.jwt_secret)?;
-
-        Ok((token, user))
-    }
-
-    pub async fn get_user_by_firebase_uid(&self, firebase_uid: String) -> Result<Option<UserModel>, AuthError> {
-        let user = Users::find()
-            .filter(entity::users::Column::FirebaseUid.eq(Some(firebase_uid)))
-            .one(&self.db)
-            .await?;
-        Ok(user)
+        Ok(())
     }
 
     pub async fn request_password_reset(&self, email: String) -> Result<(), AuthError> {
-        let mut user = super::find_by_email(&self.db, &email)
-            .await?
-            .ok_or(AuthError::UserNotFound)?;
+        let user = sqlx::query(
+            "SELECT user_id, display_name FROM users WHERE email = $1"
+        )
+        .bind(&email)
+        .fetch_optional(&self.db)
+        .await?
+        .ok_or(AuthError::UserNotFound)?;
 
-        if !user.email_verified {
-            return Err(AuthError::EmailNotVerified);
-        }
+        let user_id = user.get_uuid("user_id")?;
+        let display_name = user.get_string("display_name")?;
 
-        let reset_token = Uuid::new_v4().to_string();
-        let reset_token_expires = Utc::now() + Duration::hours(1);
+        let reset_token = token::create_token(
+            user_id,
+            email,
+            display_name,
+        )?.0;
 
-        // Update user with reset token
-        user.verification_token = Some(reset_token.clone());
-        user.verification_token_expires = Some(reset_token_expires.with_timezone(&FixedOffset::east_opt(0).unwrap()));
-
-        // Save changes
-        Users::update(user.into_active_model())
-            .exec(&self.db)
-            .await?;
-
-        // Send reset email
-        self.email_service
-            .send_password_reset(email, reset_token, self.frontend_url.clone())
-            .await
-            .map_err(|e| AuthError::EmailSendingFailed(e.to_string()))?;
+        // TODO: Send reset email
+        println!("Reset token: {}", reset_token);
 
         Ok(())
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use sea_orm::Database;
-    use crate::email::EmailService;
+    pub async fn reset_password(
+        &self,
+        token: String,
+        new_password: String,
+    ) -> Result<(), AuthError> {
+        let user_id = self.verify_token(&token, RESET_TOKEN_EXPIRY).await?;
 
-    #[tokio::test]
-    async fn test_register_user() {
-        let db = Database::connect("sqlite::memory:").await.unwrap();
-        let email_service = EmailService::new(
-            "localhost".to_string(),
-            "test".to_string(), 
-            "test".to_string(),
-            "noreply@example.com".to_string(),
-        ).unwrap();
+        let password_hash = hash(new_password.as_bytes(), DEFAULT_COST)
+            .map_err(|e| AuthError::PasswordError(e.to_string()))?;
 
-        let service = AuthService::new(
-            db,
-            b"test_secret".to_vec(),
-            email_service,
-            "http://localhost:3000".to_string(),
-        );
+        sqlx::query(
+            "UPDATE users SET password_hash = $1 WHERE user_id = $2"
+        )
+        .bind(&password_hash)
+        .bind(user_id)
+        .execute(&self.db)
+        .await?;
 
-        let result = service
-            .register_user(
-                "test@example.com".to_string(),
-                "password123".to_string(),
-                "Test User".to_string(),
-            )
-            .await;
+        Ok(())
+    }
 
-        assert!(result.is_ok());
+    pub async fn change_password(
+        &self,
+        user_id: Uuid,
+        current_password: String,
+        new_password: String,
+    ) -> Result<(), AuthError> {
+        let user = sqlx::query(
+            "SELECT password_hash FROM users WHERE user_id = $1"
+        )
+        .bind(user_id)
+        .fetch_optional(&self.db)
+        .await?
+        .ok_or(AuthError::UserNotFound)?;
+
+        let password_hash = user.get_string("password_hash")?;
+        let valid = verify(current_password.as_bytes(), &password_hash)
+            .map_err(|e| AuthError::PasswordError(e.to_string()))?;
+
+        if !valid {
+            return Err(AuthError::InvalidCredentials);
+        }
+
+        let password_hash = hash(new_password.as_bytes(), DEFAULT_COST)
+            .map_err(|e| AuthError::PasswordError(e.to_string()))?;
+
+        sqlx::query(
+            "UPDATE users SET password_hash = $1 WHERE user_id = $2"
+        )
+        .bind(&password_hash)
+        .bind(user_id)
+        .execute(&self.db)
+        .await?;
+
+        Ok(())
+    }
+
+    async fn verify_token(&self, token: &str, max_age: i64) -> Result<Uuid, AuthError> {
+        let claims = token::verify_token(token)?;
+
+        // Check token age
+        let exp = claims.exp;
+        let now = Utc::now().timestamp();
+
+        if now - exp > max_age {
+            return Err(AuthError::TokenExpired);
+        }
+
+        claims.sub.parse::<Uuid>()
+            .map_err(|_| AuthError::InvalidUserId)
     }
 }

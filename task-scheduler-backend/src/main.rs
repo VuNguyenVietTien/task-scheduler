@@ -11,18 +11,18 @@ use actix_web::{guard, web, App, HttpServer};
 use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use dotenv::dotenv;
-use sea_orm::{ConnectOptions, Database};
+use sqlx::postgres::PgPool;
 use std::sync::Arc;
 use std::time::Duration;
 
 use crate::{
     config::Config,
-    graphql::schema::{create_schema, Schema},
+    graphql::schema::{create_schema, AppSchema},
     websocket::{ws_connect, NotificationBroadcaster},
 };
 
 async fn graphql_handler(
-    schema: web::Data<Schema>,
+    schema: web::Data<AppSchema>,
     req: GraphQLRequest,
 ) -> GraphQLResponse {
     schema.execute(req.into_inner()).await.into()
@@ -41,27 +41,18 @@ async fn main() -> std::io::Result<()> {
     dotenv().ok();
     env_logger::init();
 
-    let config = Config::from_env();
-    let addr = format!("{}:{}", config.host, config.port);
+    let config = Config::from_env().expect("Failed to load config");
+    let addr = format!("{}:{}", config.server_host, config.server_port);
 
     // Database connection
-    let mut opt = ConnectOptions::new(&config.database_url);
-    opt.max_connections(100)
-        .min_connections(5)
-        .connect_timeout(Duration::from_secs(8))
-        .acquire_timeout(Duration::from_secs(8))
-        .idle_timeout(Duration::from_secs(8))
-        .max_lifetime(Duration::from_secs(8))
-        .sqlx_logging(true);
-
-    let db = Arc::new(Database::connect(opt)
+    let db = Arc::new(PgPool::connect(&config.database_url)
         .await
         .expect("Failed to connect to database"));
 
     // Setup schema
-    let schema = create_schema(Arc::clone(&db));
+    let schema = create_schema();
 
-    // Setup notification broadcaster
+    // Setup notification broadcaster 
     let broadcaster = Arc::new(NotificationBroadcaster::new(100));
 
     // Start HTTP server

@@ -4,7 +4,6 @@ pub mod project_tests;
 pub mod auth_tests;
 pub mod email_tests;
 
-use sea_orm::{Database, DatabaseConnection};
 use uuid::Uuid;
 use crate::config::Config;
 
@@ -12,7 +11,6 @@ use crate::config::Config;
 pub mod helpers {
     use super::*;
     use crate::db::entities::{user, task, project};
-    use sea_orm::{ActiveModelTrait, Set};
     use async_graphql::Context;
 
     pub async fn setup_test_db() -> DatabaseConnection {

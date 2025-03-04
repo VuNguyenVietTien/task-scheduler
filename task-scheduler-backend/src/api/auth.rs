@@ -1,205 +1,159 @@
-use actix_web::{web, HttpResponse, Scope};
+use actix_web::{web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
-use crate::auth::{AuthService, AuthError};
-use crate::email::EmailService;
-use crate::firebase::FirebaseService;
-use log::{info, error};
+use uuid::Uuid;
+use validator::Validate;
 
-#[derive(Deserialize)]
-pub struct RegisterRequest {
+use crate::auth::{token, AuthError, AuthService};
+
+#[derive(Debug, Deserialize, Validate)]
+pub struct RegisterData {
+    #[validate(email)]
+    pub email: String,
+    #[validate(length(min = 6))]
+    pub password: String,
+    #[validate(length(min = 2))]
+    pub display_name: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LoginData {
     pub email: String,
     pub password: String,
-    pub name: String,
 }
 
-#[derive(Deserialize)]
-pub struct LoginRequest {
-    pub email: String,
-    pub password: String,
-}
-
-#[derive(Serialize)]
-pub struct UserResponse {
-    pub id: String,
-    pub email: String,
-    pub name: String,
-    pub role: String,
-}
-
-#[derive(Serialize)]
-pub struct LoginResponse {
+#[derive(Debug, Serialize)]
+pub struct TokenResponse {
     pub token: String,
+    pub expires_in: i64,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AuthResponse {
+    pub token: TokenResponse,
     pub user: UserResponse,
 }
 
-#[derive(Deserialize)]
-pub struct VerifyEmailRequest {
-    pub token: String,
-}
-
-#[derive(Deserialize)]
-pub struct ResetPasswordRequest {
+#[derive(Debug, Serialize)]
+pub struct UserResponse {
+    pub id: String,
     pub email: String,
+    pub display_name: String,
+    pub verified: bool,
 }
 
-#[derive(Deserialize)]
-pub struct SetNewPasswordRequest {
-    pub token: String,
-    pub password: String,
-}
+pub async fn register(
+    data: web::Json<RegisterData>,
+    auth_service: web::Data<AuthService>,
+) -> Result<impl Responder, AuthError> {
+    data.validate()
+        .map_err(|e| AuthError::ValidationError(e.to_string()))?;
 
-#[derive(Deserialize, Debug)]
-pub struct FirebaseLoginRequest {
-    pub firebase_token: String,
-    pub email: String,
-    pub name: String,
-    pub firebase_uid: String,
-}
-
-pub fn auth_routes() -> Scope {
-    web::scope("/auth")
-        .route("/register", web::post().to(register))
-        .route("/login", web::post().to(login))
-        .route("/verify-email", web::post().to(verify_email))
-        .route("/request-password-reset", web::post().to(request_password_reset))
-        .route("/reset-password", web::post().to(reset_password))
-        .route("/firebase/login", web::post().to(firebase_login))
-}
-
-async fn register(
-    data: web::Json<RegisterRequest>,
-    service: web::Data<AuthService<EmailService>>,
-) -> Result<HttpResponse, AuthError> {
-    service
-        .register_user(data.email.clone(), data.password.clone(), data.name.clone())
+    let user_id = auth_service
+        .register(
+            data.0.email,
+            data.0.password,
+            data.0.display_name,
+        )
         .await?;
 
-    Ok(HttpResponse::Ok().finish())
+    Ok(HttpResponse::Created().json(user_id))
 }
 
-async fn login(
-    data: web::Json<LoginRequest>,
-    service: web::Data<AuthService<EmailService>>,
-) -> Result<HttpResponse, AuthError> {
-    let (token, user) = service.login(data.email.clone(), data.password.clone()).await?;
+pub async fn login(
+    data: web::Json<LoginData>,
+    auth_service: web::Data<AuthService>,
+) -> Result<impl Responder, AuthError> {
+    let claims = auth_service
+        .login(data.0.email.clone(), data.0.password.clone())
+        .await?;
 
-    Ok(HttpResponse::Ok().json(LoginResponse {
-        token,
-        user: UserResponse {
-            id: user.id.to_string(),
-            email: user.email,
-            name: user.name,
-            role: user.role,
+    // Create token with claims
+    let user_id = Uuid::parse_str(&claims.sub)
+        .map_err(|_| AuthError::InvalidUserId)?;
+
+    let (token_str, expires_in) = token::create_token(
+        user_id,
+        claims.email.clone(),
+        claims.display_name.clone(),
+    )?;
+
+    let response = AuthResponse {
+        token: TokenResponse { 
+            token: token_str, 
+            expires_in 
         },
-    }))
-}
-
-async fn verify_email(
-    _data: web::Json<VerifyEmailRequest>,
-    _service: web::Data<AuthService<EmailService>>,
-) -> Result<HttpResponse, AuthError> {
-    // TODO: Implement email verification
-    Ok(HttpResponse::Ok().finish())
-}
-
-async fn request_password_reset(
-    data: web::Json<ResetPasswordRequest>,
-    service: web::Data<AuthService<EmailService>>,
-) -> Result<HttpResponse, AuthError> {
-    service.request_password_reset(data.email.clone()).await?;
-
-    Ok(HttpResponse::Ok().finish())
-}
-
-async fn reset_password(
-    _data: web::Json<SetNewPasswordRequest>,
-    _service: web::Data<AuthService<EmailService>>,
-) -> Result<HttpResponse, AuthError> {
-    // TODO: Implement password reset
-    Ok(HttpResponse::Ok().finish())
-}
-
-async fn firebase_login(
-    data: web::Json<FirebaseLoginRequest>,
-    service: web::Data<AuthService<EmailService>>,
-    firebase_service: web::Data<FirebaseService>,
-) -> Result<HttpResponse, AuthError> {
-    info!("[Firebase Login] Received request: {:?}", data);
-
-    // Verify Firebase token
-    info!("[Firebase Login] Verifying Firebase token...");
-    firebase_service
-        .verify_id_token(&data.firebase_token)
-        .await
-        .map_err(|e| {
-            error!("[Firebase Login] Token verification failed: {}", e);
-            AuthError::InvalidToken(e.to_string())
-        })?;
-    info!("[Firebase Login] Firebase token verified successfully");
-    
-    // Register user in our system
-    info!("[Firebase Login] Registering user in our system...");
-    let (token, user) = service.register_firebase_user(
-        data.email.clone(),
-        data.name.clone(),
-        data.firebase_uid.clone()
-    ).await.map_err(|e| {
-        error!("[Firebase Login] User registration failed: {}", e);
-        e
-    })?;
-
-    info!("[Firebase Login] User registered successfully: {}", user.email);
-
-    Ok(HttpResponse::Ok().json(LoginResponse {
-        token,
         user: UserResponse {
-            id: user.id.to_string(),
-            email: user.email,
-            name: user.name,
-            role: user.role,
+            id: claims.sub,
+            email: claims.email,
+            display_name: claims.display_name,
+            verified: true,
         },
-    }))
+    };
+
+    Ok(HttpResponse::Ok().json(response))
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use actix_web::{test, App};
-    use sea_orm::{DatabaseConnection, Database};
+pub async fn verify_email(
+    token: web::Path<String>,
+    auth_service: web::Data<AuthService>,
+) -> Result<impl Responder, AuthError> {
+    auth_service.verify_email(token.into_inner()).await?;
+    Ok(HttpResponse::Ok().finish())
+}
 
-    #[actix_web::test]
-    async fn test_register_endpoint() {
-        let conn = Database::connect("sqlite::memory:").await.unwrap();
-        let email_service = EmailService::new(
-            "localhost".to_string(),
-            "test".to_string(),
-            "test".to_string(),
-            "noreply@example.com".to_string(),
-        ).unwrap();
+pub async fn request_password_reset(
+    email: web::Json<String>,
+    auth_service: web::Data<AuthService>,
+) -> Result<impl Responder, AuthError> {
+    auth_service.request_password_reset(email.into_inner()).await?;
+    Ok(HttpResponse::Ok().finish())
+}
 
-        let auth_service = AuthService::new(
-            conn,
-            b"test_secret".to_vec(),
-            email_service,
-            "http://localhost:3000".to_string(),
-        );
+#[derive(Debug, Deserialize)]
+pub struct ResetPasswordData {
+    pub token: String,
+    pub new_password: String,
+}
 
-        let app = test::init_service(
-            App::new()
-                .app_data(web::Data::new(auth_service))
-                .service(auth_routes())
-        ).await;
+pub async fn reset_password(
+    data: web::Json<ResetPasswordData>,
+    auth_service: web::Data<AuthService>,
+) -> Result<impl Responder, AuthError> {
+    auth_service
+        .reset_password(data.0.token.clone(), data.0.new_password.clone())
+        .await?;
+    Ok(HttpResponse::Ok().finish())
+}
 
-        let req = test::TestRequest::post()
-            .uri("/auth/register")
-            .set_json(&RegisterRequest {
-                email: "test@example.com".to_string(),
-                password: "password123".to_string(),
-                name: "Test User".to_string(),
-            })
-            .to_request();
+pub fn config(cfg: &mut web::ServiceConfig) {
+    cfg.service(
+        web::scope("/auth")
+            .route("/register", web::post().to(register))
+            .route("/login", web::post().to(login))
+            .route("/verify/{token}", web::get().to(verify_email))
+            .route("/password-reset", web::post().to(request_password_reset))
+            .route("/password-reset/confirm", web::post().to(reset_password))
+            .route("/users/{user_id}/password", web::put().to(change_password))
+    );
+}
 
-        let resp = test::call_service(&app, req).await;
-        assert!(resp.status().is_success());
-    }
+#[derive(Debug, Deserialize)]
+pub struct ChangePasswordData {
+    pub current_password: String,
+    pub new_password: String,
+}
+
+pub async fn change_password(
+    user_id: web::Path<Uuid>,
+    data: web::Json<ChangePasswordData>,
+    auth_service: web::Data<AuthService>,
+) -> Result<impl Responder, AuthError> {
+    auth_service
+        .change_password(
+            user_id.into_inner(),
+            data.0.current_password.clone(),
+            data.0.new_password.clone(),
+        )
+        .await?;
+    Ok(HttpResponse::Ok().finish())
 }

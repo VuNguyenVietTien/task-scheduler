@@ -1,71 +1,35 @@
-use sea_orm::{DatabaseConnection, DbErr};
-use crate::{config::Config, error::AppResult};
+// Re-export all modules
+pub mod models;
+pub mod types;
+pub mod queries;
+pub mod helpers;
 
-pub mod entities;
-pub mod migrations;
-pub mod enums;
+// Re-export commonly used items
+pub use models::*;
+pub use types::*;
+pub use queries::*;
+pub use helpers::*;
 
-pub async fn init_db(config: &Config) -> AppResult<DatabaseConnection> {
-    let db = sea_orm::Database::connect(&config.database_url)
+use chrono::{DateTime, Utc};
+use sqlx::postgres::PgPoolOptions;
+use std::time::Duration;
+
+/// Postgres connection pool type alias
+pub type Pool = sqlx::PgPool;
+
+/// Postgres transaction type alias
+pub type Transaction<'t> = sqlx::Transaction<'t, sqlx::Postgres>;
+
+/// Creates a new database connection pool with the specified configuration
+pub async fn create_pool(database_url: &str) -> Result<Pool, sqlx::Error> {
+    PgPoolOptions::new()
+        .max_connections(5)
+        .acquire_timeout(Duration::from_secs(3))
+        .connect(database_url)
         .await
-        .map_err(|e| DbErr::Custom(format!("Could not connect to database: {}", e)))?;
-
-    Ok(db)
 }
 
-// Re-exports for convenience
-pub use entities::{
-    task::{
-        ActiveModel as TaskActiveModel,
-        Entity as TaskEntity,
-        Model as TaskModel,
-        Column as TaskColumn,
-    },
-    project::{
-        ActiveModel as ProjectActiveModel,
-        Entity as ProjectEntity,
-        Model as ProjectModel,
-        Column as ProjectColumn,
-    },
-    comment::{
-        ActiveModel as CommentActiveModel,
-        Entity as CommentEntity,
-        Model as CommentModel,
-        Column as CommentColumn,
-    },
-    attachment::{
-        ActiveModel as AttachmentActiveModel,
-        Entity as AttachmentEntity,
-        Model as AttachmentModel,
-        Column as AttachmentColumn,
-    },
-    notification::{
-        ActiveModel as NotificationActiveModel,
-        Entity as NotificationEntity,
-        Model as NotificationModel,
-        Column as NotificationColumn,
-    },
-    task_assignment::{
-        ActiveModel as TaskAssignmentActiveModel,
-        Entity as TaskAssignmentEntity,
-        Model as TaskAssignmentModel,
-        Column as TaskAssignmentColumn,
-    },
-    task_dependency::{
-        ActiveModel as TaskDependencyActiveModel,
-        Entity as TaskDependencyEntity,
-        Model as TaskDependencyModel,
-        Column as TaskDependencyColumn,
-    },
-    project_member::{
-        Entity as ProjectMemberEntity,
-        Model as ProjectMemberModel,
-        Column as ProjectMemberColumn,
-    },
-    user::{
-        ActiveModel as UserActiveModel,
-        Entity as UserEntity,
-        Model as UserModel,
-        Column as UserColumn,
-    }
-};
+/// Helper function to get current UTC timestamp
+pub fn now() -> DateTime<Utc> {
+    Utc::now()
+}

@@ -1,6 +1,5 @@
 #[cfg(test)]
 mod tests {
-    use sea_orm::{DatabaseBackend, MockDatabase};
     use crate::auth::{AuthService, AuthError};
     use crate::email::EmailServiceTrait;
     use async_trait::async_trait;

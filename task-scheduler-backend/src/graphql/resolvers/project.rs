@@ -1,53 +1,164 @@
-use async_graphql::*;
-use sea_orm::{
-    ActiveModelTrait, EntityTrait, IntoActiveModel, Set,
-};
-use uuid::Uuid;
+use async_graphql::{Context, Object, ID, Result, InputObject};
+use chrono::Utc;
+use serde::Deserialize;
 use serde_json::Value as JsonValue;
-use log::debug;
+use sqlx::{PgPool, Row, pool::PoolConnection, Postgres, Transaction, Acquire};
+use uuid::Uuid;
 
-use crate::{
-    db::{
-        entities::{
-            ProjectEntity, ProjectModel, ProjectActiveModel,
-            ProjectMemberModel, ProjectMemberActiveModel,
-        },
-        enums::{ProjectStatus, ProjectPriority, ProjectVisibility},
-    },
-    graphql::{
-        context::ContextExt,
-        map_db_err,
-        resolvers::mutation_utils::current_time_db,
-        types::{Project, ProjectMember, ProjectRole, CreateProjectInput, UpdateProjectInput,
-            ProjectStatusEnum, ProjectPriorityEnum, ProjectVisibilityEnum},
-        resolvers::project_member::AddProjectMemberInput,
-    },
-};
+use crate::graphql::dataloaders::{ProjectLoader, UserLoader};
+
+pub struct ProjectResponse {
+    pub id: String,
+    pub name: String,
+    pub description: Option<String>,
+    pub owner_id: String,
+    pub workspace_id: Option<String>,
+    pub icon_url: Option<String>,
+    pub metadata: Option<JsonValue>,
+    pub is_public: bool,
+    pub created_at: chrono::DateTime<Utc>,
+    pub updated_at: chrono::DateTime<Utc>,
+}
+
+#[Object]
+impl ProjectResponse {
+    async fn id(&self) -> &str {
+        &self.id
+    }
+
+    async fn name(&self) -> &str {
+        &self.name
+    }
+
+    async fn description(&self) -> Option<&str> {
+        self.description.as_deref()
+    }
+
+    async fn owner_id(&self) -> &str {
+        &self.owner_id
+    }
+
+    async fn workspace_id(&self) -> Option<&str> {
+        self.workspace_id.as_deref()
+    }
+
+    async fn icon_url(&self) -> Option<&str> {
+        self.icon_url.as_deref()
+    }
+
+    async fn metadata(&self) -> Option<&JsonValue> {
+        self.metadata.as_ref()
+    }
+
+    async fn is_public(&self) -> bool {
+        self.is_public
+    }
+
+    async fn created_at(&self) -> chrono::DateTime<Utc> {
+        self.created_at
+    }
+
+    async fn updated_at(&self) -> chrono::DateTime<Utc> {
+        self.updated_at
+    }
+
+    async fn owner(&self, ctx: &Context<'_>) -> Result<Option<crate::graphql::dataloaders::UserInfo>> {
+        let loader = ctx.data::<UserLoader>().unwrap();
+        let owner_id = Uuid::parse_str(&self.owner_id)
+            .map_err(|_| async_graphql::Error::new("Invalid owner ID"))?;
+        Ok(loader.load(owner_id).await)
+    }
+}
+
+impl TryFrom<sqlx::postgres::PgRow> for ProjectResponse {
+    type Error = sqlx::Error;
+
+    fn try_from(row: sqlx::postgres::PgRow) -> Result<Self, Self::Error> {
+        Ok(Self {
+            id: row.get::<Uuid, _>("project_id").to_string(),
+            name: row.get("name"),
+            description: row.get("description"),
+            owner_id: row.get::<Uuid, _>("owner_id").to_string(),
+            workspace_id: row.get::<Option<Uuid>, _>("workspace_id").map(|id| id.to_string()),
+            icon_url: row.get("icon_url"),
+            metadata: row.get("metadata"),
+            is_public: row.get("is_public"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+        })
+    }
+}
 
 #[derive(Default)]
 pub struct ProjectQuery;
 
 #[Object]
 impl ProjectQuery {
-    async fn project(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Project>, Error> {
-        let db = ctx.get_db();
-        let project = ProjectEntity::find_by_id(Uuid::parse_str(&id.to_string())?)
-            .one(db)
-            .await
-            .map_err(map_db_err)?;
+    pub async fn project(&self, ctx: &Context<'_>, id: ID) -> Result<Option<ProjectResponse>> {
+        let db = ctx.data::<PgPool>().unwrap();
+        let project_id = Uuid::parse_str(&id)
+            .map_err(|_| async_graphql::Error::new("Invalid project ID"))?;
 
-        Ok(project.map(|p| p.into()))
+        let record = sqlx::query(
+            "SELECT project_id, name, description, owner_id, workspace_id,
+                    icon_url, metadata, is_public, created_at, updated_at 
+             FROM projects 
+             WHERE project_id = $1"
+        )
+        .bind(project_id)
+        .map(|row: sqlx::postgres::PgRow| ProjectResponse::try_from(row))
+        .fetch_optional(db)
+        .await
+        .map_err(|e| async_graphql::Error::new(format!("Database error: {}", e)))?
+        .transpose()
+        .map_err(|e| async_graphql::Error::new(format!("Row mapping error: {}", e)))?;
+
+        Ok(record)
     }
 
-    async fn projects(&self, ctx: &Context<'_>) -> Result<Vec<Project>, Error> {
-        let db = ctx.get_db();
-        let projects = ProjectEntity::find()
-            .all(db)
-            .await
-            .map_err(map_db_err)?;
+    pub async fn projects(&self, ctx: &Context<'_>) -> Result<Vec<ProjectResponse>> {
+        let db = ctx.data::<PgPool>().unwrap();
+        let user_id = ctx.data::<String>().unwrap();
 
-        Ok(projects.into_iter().map(|p| p.into()).collect())
+        let records = sqlx::query(
+            "SELECT p.project_id, p.name, p.description, p.owner_id, p.workspace_id,
+                    p.icon_url, p.metadata, p.is_public, p.created_at, p.updated_at
+             FROM projects p
+             INNER JOIN project_members pm ON p.project_id = pm.project_id
+             WHERE pm.user_id = $1
+             ORDER BY p.created_at DESC"
+        )
+        .bind(user_id)
+        .map(|row: sqlx::postgres::PgRow| ProjectResponse::try_from(row))
+        .fetch_all(db)
+        .await
+        .map_err(|e| async_graphql::Error::new(format!("Database error: {}", e)))?
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| async_graphql::Error::new(format!("Row mapping error: {}", e)))?;
+
+        Ok(records)
     }
+}
+
+#[derive(InputObject, Deserialize, Clone)]
+pub struct CreateProjectInput {
+    pub name: String,
+    pub description: Option<String>,
+    pub workspace_id: Option<String>,
+    pub icon_url: Option<String>,
+    pub metadata: Option<JsonValue>,
+    pub is_public: Option<bool>,
+}
+
+#[derive(InputObject, Deserialize, Clone)]
+pub struct UpdateProjectInput {
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub workspace_id: Option<String>,
+    pub icon_url: Option<String>,
+    pub metadata: Option<JsonValue>,
+    pub is_public: Option<bool>,
 }
 
 #[derive(Default)]
@@ -55,170 +166,114 @@ pub struct ProjectMutation;
 
 #[Object]
 impl ProjectMutation {
-    async fn create_project(
+    pub async fn create_project(
         &self,
         ctx: &Context<'_>,
         input: CreateProjectInput,
-    ) -> Result<Project, Error> {
-        let db = ctx.get_db();
-        
-        // Use a default user ID for testing
-        let user_id = Uuid::parse_str("7541b39e-4f4f-449e-82a2-ea22e8d6a580")?;
+    ) -> Result<ProjectResponse> {
+        let pool = ctx.data::<PgPool>().unwrap();
+        let user_id = ctx.data::<String>().unwrap();
+        let user_id = Uuid::parse_str(user_id)
+            .map_err(|_| async_graphql::Error::new("Invalid user ID"))?;
 
-        debug!("Creating project with status: {:?}", input.status);
-        debug!("Creating project with priority: {:?}", input.priority);
-        debug!("Creating project with visibility: {:?}", input.visibility);
+        let input_clone = input.clone();
+        let workspace_id = input.workspace_id.map(|id| {
+            Uuid::parse_str(&id).map_err(|_| async_graphql::Error::new("Invalid workspace ID"))
+        }).transpose()?;
 
-        let status = input.status.unwrap_or(ProjectStatusEnum::NotStarted);
-        let priority = input.priority.unwrap_or(ProjectPriorityEnum::Medium);
-        let visibility = input.visibility.unwrap_or(ProjectVisibilityEnum::Private);
+        let mut tx = pool.begin().await
+            .map_err(|e| async_graphql::Error::new(format!("Failed to start transaction: {}", e)))?;
 
-        let project = ProjectActiveModel {
-            id: Set(Uuid::new_v4()),
-            name: Set(input.name),
-            description: Set(input.description),
-            created_by: Set(user_id),
-            created_at: Set(current_time_db()),
-            updated_at: Set(current_time_db()),
-            status: Set(ProjectStatus::from(status).to_string()),
-            priority: Set(ProjectPriority::from(priority).to_string()),
-            category: Set(input.category),
-            metadata: Set(Some(JsonValue::Object(serde_json::Map::new()))),
-            visibility: Set(ProjectVisibility::from(visibility).to_string()),
-            tags: Set(Some(JsonValue::Array(vec![]))),
-            progress: Set(0.0),
-        };
+        let project_id = Uuid::new_v4();
+        let now = Utc::now();
 
-        let project = project.insert(db).await.map_err(map_db_err)?;
+        // Create project
+        let record = sqlx::query(
+            "INSERT INTO projects (
+                project_id, name, description, owner_id, workspace_id,
+                icon_url, metadata, is_public, created_at, updated_at
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $9)
+            RETURNING project_id, name, description, owner_id, workspace_id,
+                      icon_url, metadata, is_public, created_at, updated_at"
+        )
+        .bind(project_id)
+        .bind(&input_clone.name)
+        .bind(&input_clone.description)
+        .bind(user_id)
+        .bind(workspace_id)
+        .bind(&input_clone.icon_url)
+        .bind(&input_clone.metadata)
+        .bind(input_clone.is_public.unwrap_or(false))
+        .bind(now)
+        .map(|row: sqlx::postgres::PgRow| ProjectResponse::try_from(row))
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| async_graphql::Error::new(format!("Failed to create project: {}", e)))?
+        .map_err(|e| async_graphql::Error::new(format!("Failed to map project: {}", e)))?;
 
         // Add creator as admin member
-        let member = ProjectMemberActiveModel {
-            project_id: Set(project.id),
-            user_id: Set(user_id),
-            role: Set(ProjectRole::Owner.to_string()),
-            joined_at: Set(current_time_db()),
-        };
+        sqlx::query(
+            "INSERT INTO project_members (project_id, user_id, role, created_at, updated_at)
+             VALUES ($1, $2, 'admin', $3, $3)"
+        )
+        .bind(project_id)
+        .bind(user_id)
+        .bind(now)
+        .execute(&mut *tx)
+        .await
+        .map_err(|e| async_graphql::Error::new(format!("Failed to add project member: {}", e)))?;
 
-        member.insert(db).await.map_err(map_db_err)?;
+        tx.commit().await
+            .map_err(|e| async_graphql::Error::new(format!("Failed to commit transaction: {}", e)))?;
 
-        Ok(project.into())
+        Ok(record)
     }
 
-    async fn add_project_member(
-        &self,
-        ctx: &Context<'_>,
-        input: AddProjectMemberInput,
-    ) -> Result<ProjectMember, Error> {
-        let db = ctx.get_db();
-        
-        // Parse project and user IDs
-        let project_id = Uuid::parse_str(&input.project_id.to_string())?;
-        let member_id = Uuid::parse_str(&input.user_id.to_string())?;
-
-        let new_member = ProjectMemberActiveModel {
-            project_id: Set(project_id),
-            user_id: Set(member_id),
-            role: Set(input.role.to_string()),
-            joined_at: Set(current_time_db()),
-        };
-
-        let member = new_member.insert(db).await.map_err(map_db_err)?;
-
-        Ok(member.into())
-    }
-
-    async fn update_project(
+    pub async fn update_project(
         &self,
         ctx: &Context<'_>,
         id: ID,
         input: UpdateProjectInput,
-    ) -> Result<Project, Error> {
-        let db = ctx.get_db();
-        let project_id = Uuid::parse_str(&id.to_string())?;
+    ) -> Result<ProjectResponse> {
+        let db = ctx.data::<PgPool>().unwrap();
+        let project_id = Uuid::parse_str(&id)
+            .map_err(|_| async_graphql::Error::new("Invalid project ID"))?;
 
-        let mut project = ProjectEntity::find_by_id(project_id)
-            .one(db)
-            .await
-            .map_err(map_db_err)?
-            .ok_or_else(|| Error::new("Project not found"))?
-            .into_active_model();
+        let workspace_id = input.workspace_id.map(|id| {
+            Uuid::parse_str(&id).map_err(|_| async_graphql::Error::new("Invalid workspace ID"))
+        }).transpose()?;
 
-        project.name = Set(input.name);
-        project.description = Set(input.description);
+        let now = Utc::now();
 
-        if let Some(status) = input.status {
-            project.status = Set(ProjectStatus::from(status).to_string());
-        }
+        let record = sqlx::query(
+            "UPDATE projects 
+             SET 
+                name = COALESCE($1, name),
+                description = COALESCE($2, description),
+                workspace_id = COALESCE($3, workspace_id),
+                icon_url = COALESCE($4, icon_url),
+                metadata = COALESCE($5, metadata),
+                is_public = COALESCE($6, is_public),
+                updated_at = $7
+             WHERE project_id = $8
+             RETURNING project_id, name, description, owner_id, workspace_id,
+                       icon_url, metadata, is_public, created_at, updated_at"
+        )
+        .bind(input.name)
+        .bind(input.description)
+        .bind(workspace_id)
+        .bind(input.icon_url)
+        .bind(input.metadata)
+        .bind(input.is_public)
+        .bind(now)
+        .bind(project_id)
+        .map(|row: sqlx::postgres::PgRow| ProjectResponse::try_from(row))
+        .fetch_one(db)
+        .await
+        .map_err(|e| async_graphql::Error::new(format!("Database error: {}", e)))?
+        .map_err(|e| async_graphql::Error::new(format!("Row mapping error: {}", e)))?;
 
-        if let Some(priority) = input.priority {
-            project.priority = Set(ProjectPriority::from(priority).to_string());
-        }
-
-        if let Some(category) = input.category {
-            project.category = Set(Some(category));
-        }
-
-        if let Some(visibility) = input.visibility {
-            project.visibility = Set(ProjectVisibility::from(visibility).to_string());
-        }
-
-        if let Some(progress) = input.progress {
-            if progress < 0.0 || progress > 100.0 {
-                return Err(Error::new("Progress must be between 0 and 100"));
-            }
-            project.progress = Set(progress);
-        }
-        project.updated_at = Set(current_time_db());
-
-        let project = project.update(db).await.map_err(map_db_err)?;
-
-        Ok(project.into())
-    }
-}
-
-impl From<ProjectModel> for Project {
-    fn from(model: ProjectModel) -> Self {
-        let status: ProjectStatus = serde_json::from_str(&format!("\"{}\"", model.status))
-            .unwrap_or_default();
-        let status_enum = ProjectStatusEnum::from(status);
-
-        let priority: ProjectPriority = serde_json::from_str(&format!("\"{}\"", model.priority))
-            .unwrap_or_default();
-        let priority_enum = ProjectPriorityEnum::from(priority);
-
-        let visibility: ProjectVisibility = serde_json::from_str(&format!("\"{}\"", model.visibility))
-            .unwrap_or_default();
-        let visibility_enum = ProjectVisibilityEnum::from(visibility);
-
-        Project {
-            id: model.id.into(),
-            name: model.name,
-            description: model.description,
-            created_by: model.created_by.into(),
-            created_at: model.created_at,
-            updated_at: model.updated_at,
-            status: status_enum,
-            priority: priority_enum,
-            category: model.category,
-            metadata: model.metadata.map(Json),
-            visibility: visibility_enum,
-            tags: model.tags.map(Json),
-            progress: model.progress,
-        }
-    }
-}
-
-impl From<ProjectMemberModel> for ProjectMember {
-    fn from(model: ProjectMemberModel) -> Self {
-        let role: ProjectRole = match model.role.as_str() {
-            "OWNER" => ProjectRole::Owner,
-            "MANAGER" => ProjectRole::Manager,
-            "EDITOR" => ProjectRole::Editor,
-            _ => ProjectRole::Viewer,
-        };
-
-        ProjectMember {
-            project_id: model.project_id.into(), user_id: model.user_id.into(), role, joined_at: model.joined_at,
-        }
+        Ok(record)
     }
 }

@@ -1,7 +1,6 @@
 use actix_web::{web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use sea_orm::{DatabaseConnection, EntityTrait, Set, ActiveModelTrait, QueryFilter, ColumnTrait};
 use entity::{task_assignments, task_assignments::Entity as TaskAssignments, tasks::Entity as Tasks, users::Entity as Users};
 use chrono::Utc;
 
@@ -134,7 +133,6 @@ async fn remove_assignment(
 mod tests {
     use super::*;
     use actix_web::{test, App};
-    use sea_orm::MockDatabase;
 
     #[actix_web::test]
     async fn test_assign_user() {
