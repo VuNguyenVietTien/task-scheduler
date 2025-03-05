@@ -1,6 +1,7 @@
 use async_graphql::{EmptySubscription, MergedObject, Schema};
 
 use crate::graphql::resolvers::{
+    AuthMutation,
     CommentMutation, CommentQuery,
     ProjectMutation, ProjectQuery,
     UserMutation, UserQuery,
@@ -10,7 +11,7 @@ use crate::graphql::resolvers::{
 pub struct Query(ProjectQuery, CommentQuery, UserQuery);
 
 #[derive(MergedObject, Default)]
-pub struct Mutation(ProjectMutation, CommentMutation, UserMutation);
+pub struct Mutation(AuthMutation, ProjectMutation, CommentMutation, UserMutation);
 
 pub type AppSchema = Schema<Query, Mutation, EmptySubscription>;
 

@@ -30,11 +30,11 @@ pub struct Config {
     pub auth_secret: String,
     pub jwt_secret: String,
     pub jwt_expiry: i64,
-    pub email_from: String,
-    pub email_smtp_host: String,
-    pub email_smtp_port: u16,
-    pub email_smtp_user: String,
-    pub email_smtp_pass: String,
+    pub email_from: Option<String>,
+    pub email_smtp_host: Option<String>,
+    pub email_smtp_port: Option<u16>,
+    pub email_smtp_user: Option<String>,
+    pub email_smtp_pass: Option<String>,
 }
 
 impl Config {
@@ -60,18 +60,13 @@ impl Config {
                 .unwrap_or_else(|_| "86400".to_string()) // 24 hours in seconds
                 .parse()
                 .map_err(|_| ConfigError::ParseError("JWT_EXPIRY".to_string()))?,
-            email_from: env::var("EMAIL_FROM")
-                .map_err(|_| ConfigError::EnvVarNotFound("EMAIL_FROM".to_string()))?,
-            email_smtp_host: env::var("EMAIL_SMTP_HOST")
-                .map_err(|_| ConfigError::EnvVarNotFound("EMAIL_SMTP_HOST".to_string()))?,
+            email_from: env::var("EMAIL_FROM").ok(),
+            email_smtp_host: env::var("EMAIL_SMTP_HOST").ok(),
             email_smtp_port: env::var("EMAIL_SMTP_PORT")
-                .map_err(|_| ConfigError::EnvVarNotFound("EMAIL_SMTP_PORT".to_string()))?
-                .parse()
-                .map_err(|_| ConfigError::ParseError("EMAIL_SMTP_PORT".to_string()))?,
-            email_smtp_user: env::var("EMAIL_SMTP_USER")
-                .map_err(|_| ConfigError::EnvVarNotFound("EMAIL_SMTP_USER".to_string()))?,
-            email_smtp_pass: env::var("EMAIL_SMTP_PASS")
-                .map_err(|_| ConfigError::EnvVarNotFound("EMAIL_SMTP_PASS".to_string()))?,
+                .ok()
+                .and_then(|p| p.parse().ok()),
+            email_smtp_user: env::var("EMAIL_SMTP_USER").ok(),
+            email_smtp_pass: env::var("EMAIL_SMTP_PASS").ok(),
         })
     }
 }

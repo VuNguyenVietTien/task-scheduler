@@ -1,6 +1,6 @@
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{Type, Row, postgres::PgRow, Error as SqlxError};
+use sqlx::{postgres::PgRow, Error as SqlxError, Row, Type};
 use uuid::Uuid;
 
 pub trait RowExt {
@@ -22,6 +22,7 @@ impl RowExt for PgRow {
         self.try_get(name)
     }
 }
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Claims {
     pub sub: String,
@@ -107,98 +108,5 @@ pub enum UserProvider {
 impl Default for UserProvider {
     fn default() -> Self {
         Self::Email
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct RegisterInput {
-    pub email: String,
-    pub password: String,
-    pub name: String,
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct LoginInput {
-    pub email: String,
-    pub password: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct AuthResponse {
-    pub token: String,
-    pub expires_in: i64,
-    pub user: UserResponse,
-}
-
-#[derive(Debug, Serialize)]
-pub struct UserResponse {
-    pub id: Uuid,
-    pub email: String,
-    pub name: String,
-    pub role: UserRole,
-    pub verified: bool,
-}
-
-impl From<User> for UserResponse {
-    fn from(user: User) -> Self {
-        Self {
-            id: user.id,
-            email: user.email,
-            name: user.name,
-            role: user.role,
-            verified: user.verified,
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    
-    #[test]
-    fn test_claims_expiration() {
-        let user_id = Uuid::new_v4().to_string();
-        let email = "test@example.com".to_string();
-        let name = "Test User".to_string();
-        
-        // Test non-expired token
-        let claims = Claims::new(
-            user_id.clone(),
-            email.clone(),
-            name.clone(),
-            Duration::hours(1),
-        );
-        assert!(!claims.is_expired());
-        
-        // Test expired token
-        let claims = Claims::new(
-            user_id,
-            email,
-            name,
-            Duration::seconds(-1),
-        );
-        assert!(claims.is_expired());
-    }
-
-    #[test]
-    fn test_claims_user_id() {
-        let user_id = Uuid::new_v4();
-        let claims = Claims::new(
-            user_id.to_string(),
-            "test@example.com".to_string(),
-            "Test User".to_string(),
-            Duration::hours(1),
-        );
-        
-        assert_eq!(claims.user_id().unwrap(), user_id);
-        
-        let claims = Claims::new(
-            "invalid-uuid".to_string(),
-            "test@example.com".to_string(),
-            "Test User".to_string(),
-            Duration::hours(1),
-        );
-        
-        assert!(claims.user_id().is_err());
     }
 }

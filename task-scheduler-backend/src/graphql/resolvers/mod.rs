@@ -1,8 +1,9 @@
-pub mod comment;
-pub mod project;
-pub mod user;
+mod auth;
+mod comment;
+mod project;
+mod user;
 
-// Re-export commonly used types
-pub use comment::{CommentQuery, CommentMutation, CommentResponse};
-pub use project::{ProjectQuery, ProjectMutation, ProjectResponse};
-pub use user::{UserQuery, UserMutation, UserResponse};
+pub use auth::AuthMutation;
+pub use comment::{CommentMutation, CommentQuery};
+pub use project::{ProjectMutation, ProjectQuery};
+pub use user::{UserMutation, UserQuery};

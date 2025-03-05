@@ -13,7 +13,7 @@ pub mod utils;
 pub use auth::{
     error::AuthError,
     service::AuthService,
-    types::{Claims, LoginInput, RegisterInput, User, UserResponse, UserRole, UserProvider},
+    types::{Claims, User, UserRole, UserProvider},
 };
 
 // Re-exports from config
