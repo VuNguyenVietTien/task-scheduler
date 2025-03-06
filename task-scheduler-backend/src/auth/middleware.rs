@@ -1,7 +1,7 @@
 use actix_web::{
     dev::ServiceRequest,
     error::ErrorUnauthorized,
-    http::header::{HeaderMap, AUTHORIZATION},
+    http::header::{HeaderMap, HeaderValue, AUTHORIZATION},
     Error,
 };
 use actix_web_httpauth::extractors::bearer::BearerAuth;
@@ -36,11 +36,10 @@ pub fn extract_token(headers: &HeaderMap) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_web::http::header::HeaderValue;
     use actix_web::test;
 
-    #[test]
-    fn test_extract_token() {
+    #[actix_rt::test]
+    async fn test_extract_token() {
         let mut headers = HeaderMap::new();
         headers.insert(
             AUTHORIZATION,
@@ -51,15 +50,15 @@ mod tests {
         assert_eq!(token, Some("test-token".to_string()));
     }
 
-    #[test]
-    fn test_extract_token_no_auth_header() {
+    #[actix_rt::test]
+    async fn test_extract_token_no_auth_header() {
         let headers = HeaderMap::new();
         let token = extract_token(&headers);
         assert_eq!(token, None);
     }
 
-    #[test]
-    fn test_extract_token_invalid_format() {
+    #[actix_rt::test]
+    async fn test_extract_token_invalid_format() {
         let mut headers = HeaderMap::new();
         headers.insert(AUTHORIZATION, HeaderValue::from_static("Invalid-token"));
 
@@ -85,7 +84,8 @@ mod tests {
         };
 
         let req = test::TestRequest::default().to_srv_request();
-        let credentials = BearerAuth::new("invalid-token".to_string());
+        // Create a mock BearerAuth
+        let credentials = BearerAuth{token: "invalid-token".to_string()};
 
         let result = validator(req, credentials, &config).await;
         assert!(result.is_err());

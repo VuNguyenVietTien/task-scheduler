@@ -2,7 +2,8 @@ use actix_web::{web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::auth::{AuthError, AuthService};
+use crate::auth::{error::AuthError, AuthService};
+use crate::firebase::FirebaseService;
 
 #[derive(Debug, Deserialize, Validate)]
 pub struct RegisterData {
@@ -11,13 +12,21 @@ pub struct RegisterData {
     #[validate(length(min = 6))]
     pub password: String,
     #[validate(length(min = 2))]
-    pub name: String, // Changed from display_name to name
+    pub name: String,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct LoginData {
     pub email: String,
     pub password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct FirebaseLoginData {
+    pub firebase_token: String,
+    pub email: String,
+    pub name: Option<String>,
+    pub firebase_uid: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -55,6 +64,48 @@ pub async fn login(
         email: user.email,
         name: user.name,
     }))
+}
+
+pub async fn firebase_login(
+    auth_service: web::Data<AuthService>,
+    firebase_service: web::Data<FirebaseService>,
+    data: web::Json<FirebaseLoginData>,
+) -> Result<impl Responder, AuthError> {
+    // Verify Firebase token
+    let verify_result = firebase_service
+        .verify_token_and_get_claims(&data.firebase_token)
+        .await;
+
+    let (firebase_user, _) = match verify_result {
+        Ok(result) => result,
+        Err(e) => return Err(AuthError::TokenVerification(e.to_string()))
+    };
+
+    // Verify that the token belongs to the same user
+    if firebase_user.uid != data.firebase_uid {
+        return Err(AuthError::TokenVerification("Token UID mismatch".to_string()));
+    }
+
+    // Get reference to inner AuthService
+    let auth_service = auth_service.get_ref();
+
+    // Register or login the user
+    let (token, _, user) = auth_service
+        .register_firebase_user(
+            data.email.clone(),
+            data.name.clone().unwrap_or_default(),
+            data.firebase_uid.clone(),
+        )
+        .await?;
+
+    Ok(HttpResponse::Ok().json(serde_json::json!({
+        "token": token,
+        "user": {
+            "id": user.id.to_string(),
+            "email": user.email,
+            "name": user.name
+        }
+    })))
 }
 
 pub async fn verify_email(
@@ -95,6 +146,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         web::scope("/auth")
             .route("/register", web::post().to(register))
             .route("/login", web::post().to(login))
+            .route("/firebase/login", web::post().to(firebase_login))
             .route("/verify-email/{token}", web::get().to(verify_email))
             .route("/request-password-reset", web::post().to(request_password_reset))
             .route("/reset-password", web::post().to(reset_password))

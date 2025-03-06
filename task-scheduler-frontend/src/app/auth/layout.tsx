@@ -9,16 +9,12 @@ export default function AuthLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body>
-        <QueryProvider>
-          <AuthProvider>
-            <div className="min-h-screen flex items-center justify-center bg-slate-50">
-              {children}
-            </div>
-          </AuthProvider>
-        </QueryProvider>
-      </body>
-    </html>
+    <QueryProvider>
+      <AuthProvider>
+        <div className="min-h-screen flex items-center justify-center bg-slate-50">
+          {children}
+        </div>
+      </AuthProvider>
+    </QueryProvider>
   );
 }

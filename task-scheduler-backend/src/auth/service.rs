@@ -71,6 +71,65 @@ impl AuthService {
         Ok((token.clone(), token, user))
     }
 
+    pub async fn register_firebase_user(
+        &self,
+        email: String,
+        name: String,
+        firebase_uid: String,
+    ) -> Result<(String, String, User), AuthError> {
+        // Check if user exists by firebase_uid
+        let existing_user = sqlx::query(
+            "SELECT user_id, email, username
+             FROM users 
+             WHERE firebase_uid = $1"
+        )
+        .bind(&firebase_uid)
+        .fetch_optional(&self.db)
+        .await?;
+
+        let user = if let Some(row) = existing_user {
+            // User exists, return existing user
+            User {
+                id: row.get("user_id"),
+                email: row.get("email"),
+                name: row.get("username"),
+            }
+        } else {
+            // Create new user
+            let user_id = Uuid::new_v4();
+
+            sqlx::query(
+                "INSERT INTO users (user_id, email, username, firebase_uid)
+                 VALUES ($1, $2, $3, $4)"
+            )
+            .bind(user_id)
+            .bind(&email)
+            .bind(&name)
+            .bind(&firebase_uid)
+            .execute(&self.db)
+            .await?;
+
+            User {
+                id: user_id,
+                email: email.clone(),
+                name: name.clone(),
+            }
+        };
+
+        // Create JWT token
+        let config = Config::from_env()
+            .map_err(|e| AuthError::Other(e.to_string()))?;
+
+        let token = auth_common::create_token(
+            user.id,
+            email,
+            name,
+            &config,
+        )?;
+
+        Ok((token.clone(), token, user))
+    }
+
     pub async fn login(&self, email: String, password: String) -> Result<User, AuthError> {
         // Update query to include the name column
         let row = sqlx::query(

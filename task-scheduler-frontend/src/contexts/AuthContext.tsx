@@ -3,6 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithGoogle, signOutUser } from '@/lib/firebase';
+import { loginUser, registerUser } from '@/lib/authApi';
 
 interface ProviderData {
   providerId: string;
@@ -71,6 +72,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           console.log('[Auth] Storing token in localStorage');
           localStorage.setItem('token', token);
         }
+        // Redirect to dashboard if on auth page
+        if (window.location.pathname === '/auth') {
+          window.location.href = '/dashboard';
+        }
       } else {
         console.log('[Auth] No authenticated user found');
       }
@@ -129,7 +134,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       // Update local state
       setUser(data.user);
       console.log('[Auth] Local state updated, redirecting to dashboard');
-      router.push('/dashboard');
+      window.location.href = '/dashboard';
 
     } catch (error) {
       console.error('[Auth] Google login error:', error);
@@ -142,32 +147,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       setLoading(true);
-      const response = await fetch('/api/auth/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Login failed');
-      }
-
-      const data = await response.json();
-      setUser(data.user);
-      
-      // Get auth token from cookies and store in localStorage
-      const cookies = document.cookie.split(';');
-      const authTokenCookie = cookies.find(cookie => cookie.trim().startsWith('auth-token='));
-      if (authTokenCookie) {
-        const token = authTokenCookie.split('=')[1];
-        console.log('[Auth] Storing token in localStorage after login');
-        localStorage.setItem('token', token);
-      }
-      
-      router.push('/dashboard');
+      const response = await loginUser({ email, password });
+      setUser(response.user as User);
+      window.location.href = '/dashboard';
     } catch (error) {
+      console.error('[Auth] Login error:', error);
       setError('Invalid email or password');
     } finally {
       setLoading(false);
@@ -177,20 +161,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (email: string, password: string, name: string) => {
     try {
       setLoading(true);
-      const response = await fetch('/api/auth/register', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ email, password, name }),
-      });
-
-      if (!response.ok) {
-        throw new Error('Registration failed');
-      }
-
-      await login(email, password);
+      const response = await registerUser({ email, password, name });
+      setUser(response.user as User);
+      window.location.href = '/dashboard';
     } catch (error) {
+      console.error('[Auth] Registration error:', error);
       setError('Registration failed. Please try again.');
     } finally {
       setLoading(false);
@@ -211,9 +186,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUser(null);
-      localStorage.removeItem('token'); // Clear token on logout
-      document.cookie = 'auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'; // Clear auth cookie
-      router.push('/auth');
+      localStorage.removeItem('token');
+      document.cookie = 'auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
+      window.location.href = '/auth';
     } catch (error) {
       setError('Logout failed');
     } finally {
