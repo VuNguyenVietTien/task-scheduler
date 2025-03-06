@@ -1,4 +1,4 @@
-mod jwt;
+pub mod jwt;
 pub mod error;  // Make error module public
 pub mod middleware;
 pub mod password;

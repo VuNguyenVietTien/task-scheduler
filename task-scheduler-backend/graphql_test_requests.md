@@ -53,38 +53,39 @@ curl -X POST http://localhost:8080/graphql \
 }'
 ```
 
-curl -X POST http://localhost:8080/graphql \
--H "Content-Type: application/json" \
--H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEyNjg5MDksImlhdCI6MTc0MTE4MjUwOSwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.WAEVEjABMBshsJCVk0GfICU5QCVBmF7ilHm9WhBkuyc" \
--d '{
-  "query": "mutation CreateProject($input: CreateProjectInput!) { createProject(input: $input) { id name description startDate endDate status members { id role user { id name } } } }",
-  "variables": {
-    "input": {
-      "name": "Test Project",
-      "description": "This is a test project",
-      "ownerId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
-      "members": [
-        {
-          "userId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
-          "role": "admin"
-        }
-      ]
-    }
-  }
-}'
-
-## 4. Get Projects List
+## 4. Add Member to Project
 
 ```bash
 curl -X POST http://localhost:8080/graphql \
 -H "Content-Type: application/json" \
 -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
 -d '{
-  "query": "query { projects { id name description createdBy { name } } }"
+  "query": "mutation AddProjectMember($input: AddProjectMemberInput!) { addProjectMember(input: $input) { id userId role } }",
+  "variables": {
+    "input": {
+      "projectId": "YOUR_PROJECT_ID",
+      "userId": "MEMBER_USER_ID",
+      "role": "member"
+    }
+  }
 }'
 ```
 
-## 5. Get Project by ID
+## 5. Get Project Members
+
+```bash
+curl -X POST http://localhost:8080/graphql \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+-d '{
+  "query": "query ProjectMembers($projectId: ID!) { projectMembers(projectId: $projectId) { id userId role } }",
+  "variables": {
+    "projectId": "YOUR_PROJECT_ID"
+  }
+}'
+```
+
+## 6. Get Project by ID
 
 ```bash
 curl -X POST http://localhost:8080/graphql \
@@ -94,24 +95,6 @@ curl -X POST http://localhost:8080/graphql \
   "query": "query GetProject($id: ID!) { project(id: $id) { id name description members { user { name } role } tasks { id title } } }",
   "variables": {
     "id": "YOUR_PROJECT_ID"
-  }
-}'
-```
-
-## 6. Add Member to Project
-
-```bash
-curl -X POST http://localhost:8080/graphql \
--H "Content-Type: application/json" \
--H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
--d '{
-  "query": "mutation AddProjectMember($input: AddProjectMemberInput!) { addProjectMember(input: $input) { projectId userId role user { name } } }",
-  "variables": {
-    "input": {
-      "projectId": "YOUR_PROJECT_ID",
-      "userId": "MEMBER_USER_ID",
-      "role": "EDITOR"
-    }
   }
 }'
 ```
@@ -172,7 +155,7 @@ curl -X POST http://localhost:8080/graphql \
 ## Test Flow Guide
 
 1. Đăng ký tài khoản mới (Register)
-2. Đăng nhập để lấy access token (Login) 
+2. Đăng nhập để lấy access token (Login)
 3. Tạo project mới (Create Project)
 4. Đăng ký thêm một tài khoản khác để test add member
 5. Add member vào project
@@ -181,7 +164,7 @@ curl -X POST http://localhost:8080/graphql \
 
 Lưu ý:
 - Thay `YOUR_ACCESS_TOKEN` bằng token nhận được sau khi login
-- Thay `YOUR_PROJECT_ID` bằng ID của project đã tạo 
+- Thay `YOUR_PROJECT_ID` bằng ID của project đã tạo
 - Thay `YOUR_TASK_ID` bằng ID của task đã tạo
 - Thay `MEMBER_USER_ID` bằng ID của user member
 

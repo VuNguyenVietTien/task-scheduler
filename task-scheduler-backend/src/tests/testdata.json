@@ -1,28 +1,94 @@
-"users": [
+{
+  "users": [
     {
-        "data": {
-            "register": {
-                "accessToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEyNTI5NDMsImlhdCI6MTc0MTE2NjU0MywiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.zE1oVNYcPTTLhNUDOt1wr-3-WcT6329byYE8dekAEOs",
-                "refreshToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEyNTI5NDMsImlhdCI6MTc0MTE2NjU0MywiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.zE1oVNYcPTTLhNUDOt1wr-3-WcT6329byYE8dekAEOs",
-                "user": {
-                    "id": "5f762e2c-7510-4651-b0ee-36f342e9343c",
-                    "email": "test@example.com",
-                    "name": "Test User"
-                }
-            }
+      "data": {
+        "register": {
+          "accessToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEyNTI5NDMsImlhdCI6MTc0MTE2NjU0MywiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.zE1oVNYcPTTLhNUDOt1wr-3-WcT6329byYE8dekAEOs",
+          "refreshToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEyNTI5NDMsImlhdCI6MTc0MTE2NjU0MywiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.zE1oVNYcPTTLhNUDOt1wr-3-WcT6329byYE8dekAEOs",
+          "user": {
+            "id": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+            "email": "test@example.com",
+            "name": "Test User"
+          }
         }
+      }
     },
     {
-        "data": {
-            "register": {
-                "accessToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1ZDRmYjA2NC0xMjc0LTRlMWMtOTJjZi1jMDdlZDg2YTAzN2EiLCJleHAiOjE3NDEyNTMxNzAsImlhdCI6MTc0MTE2Njc3MCwiZW1haWwiOiJ0ZXN0MkBleGFtcGxlLmNvbSIsImRpc3BsYXlfbmFtZSI6IlRlc3QgVXNlcjIifQ.Mkx0cxlIPgEOBvyWIMojjrwJHdX5BAA5L_tQBeE5X2E",
-                "refreshToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1ZDRmYjA2NC0xMjc0LTRlMWMtOTJjZi1jMDdlZDg2YTAzN2EiLCJleHAiOjE3NDEyNTMxNzAsImlhdCI6MTc0MTE2Njc3MCwiZW1haWwiOiJ0ZXN0MkBleGFtcGxlLmNvbSIsImRpc3BsYXlfbmFtZSI6IlRlc3QgVXNlcjIifQ.Mkx0cxlIPgEOBvyWIMojjrwJHdX5BAA5L_tQBeE5X2E",
-                "user": {
-                    "id": "5d4fb064-1274-4e1c-92cf-c07ed86a037a",
-                    "email": "test2@example.com",
-                    "name": "Test User2"
-                }
-            }
+      "data": {
+        "register": {
+          "accessToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1ZDRmYjA2NC0xMjc0LTRlMWMtOTJjZi1jMDdlZDg2YTAzN2EiLCJleHAiOjE3NDEyNTMxNzAsImlhdCI6MTc0MTE2Njc3MCwiZW1haWwiOiJ0ZXN0MkBleGFtcGxlLmNvbSIsImRpc3BsYXlfbmFtZSI6IlRlc3QgVXNlcjIifQ.Mkx0cxlIPgEOBvyWIMojjrwJHdX5BAA5L_tQBeE5X2E",
+          "refreshToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1ZDRmYjA2NC0xMjc0LTRlMWMtOTJjZi1jMDdlZDg2YTAzN2EiLCJleHAiOjE3NDEyNTMxNzAsImlhdCI6MTc0MTE2Njc3MCwiZW1haWwiOiJ0ZXN0MkBleGFtcGxlLmNvbSIsImRpc3BsYXlfbmFtZSI6IlRlc3QgVXNlcjIifQ.Mkx0cxlIPgEOBvyWIMojjrwJHdX5BAA5L_tQBeE5X2E",
+          "user": {
+            "id": "5d4fb064-1274-4e1c-92cf-c07ed86a037a",
+            "email": "test2@example.com",
+            "name": "Test User2"
+          }
         }
+      }
     }
-]
+  ],
+  "auth": {
+    "login": {
+      "data": {
+        "login": {
+          "accessToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEzMTc4ODcsImlhdCI6MTc0MTIzMTQ4NywiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.qPWpC5qo9-jbG7qA-sSrdQViYkdvhdvdUH07GCcTt6s",
+          "refreshToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEzMTc4ODcsImlhdCI6MTc0MTIzMTQ4NywiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.qPWpC5qo9-jbG7qA-sSrdQViYkdvhdvdUH07GCcTt6s",
+          "user": {
+            "id": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+            "email": "test@example.com",
+            "name": "Test User"
+          }
+        }
+      }
+    }
+  },
+  "projects": {
+    "create": {
+      "data": {
+        "createProject": {
+          "id": "a55169d0-2828-4d2e-867c-3a05ff019016",
+          "name": "Test Project",
+          "description": "This is a test project",
+          "startDate": null,
+          "endDate": null,
+          "status": "active",
+          "members": [
+            {
+              "id": "933e20b6-4735-422f-97a3-395bebf4890b",
+              "role": "admin",
+              "user": null
+            }
+          ]
+        }
+      }
+    },
+    "members": {
+      "add": {
+        "data": {
+          "addProjectMember": {
+            "projectId": "a55169d0-2828-4d2e-867c-3a05ff019016",
+            "userId": "51694e1b-39ca-437b-a337-b63108727377",
+            "role": "member",
+            "user": null
+          }
+        }
+      },
+      "list": {
+        "data": {
+          "projectMembers": [
+            {
+              "id": "933e20b6-4735-422f-97a3-395bebf4890b",
+              "userId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+              "role": "admin"
+            },
+            {
+              "id": "e2c036ff-7437-4418-8b1e-18136025f1b7",
+              "userId": "51694e1b-39ca-437b-a337-b63108727377",
+              "role": "member"
+            }
+          ]
+        }
+      }
+    }
+  }
+}
