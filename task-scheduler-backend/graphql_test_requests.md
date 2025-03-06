@@ -25,10 +25,12 @@ curl -X POST http://localhost:8080/graphql \
 curl -X POST http://localhost:8080/graphql \
 -H "Content-Type: application/json" \
 -d '{
-  "query": "mutation Login($email: String!, $password: String!) { login(email: $email, password: $password) { accessToken refreshToken user { id email name } } }",
+  "query": "mutation Login($input: LoginInput!) { login(input: $input) { accessToken refreshToken user { id email name } } }",
   "variables": {
-    "email": "test@example.com",
-    "password": "password123"
+    "input": {
+      "email": "test@example.com",
+      "password": "password123"
+    }
   }
 }'
 ```
@@ -170,7 +172,7 @@ curl -X POST http://localhost:8080/graphql \
 ## Test Flow Guide
 
 1. Đăng ký tài khoản mới (Register)
-2. Đăng nhập để lấy access token (Login)
+2. Đăng nhập để lấy access token (Login) 
 3. Tạo project mới (Create Project)
 4. Đăng ký thêm một tài khoản khác để test add member
 5. Add member vào project
@@ -179,7 +181,7 @@ curl -X POST http://localhost:8080/graphql \
 
 Lưu ý:
 - Thay `YOUR_ACCESS_TOKEN` bằng token nhận được sau khi login
-- Thay `YOUR_PROJECT_ID` bằng ID của project đã tạo
+- Thay `YOUR_PROJECT_ID` bằng ID của project đã tạo 
 - Thay `YOUR_TASK_ID` bằng ID của task đã tạo
 - Thay `MEMBER_USER_ID` bằng ID của user member
 
