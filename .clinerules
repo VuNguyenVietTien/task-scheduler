@@ -6,9 +6,10 @@
 - When coding, add thorough comments explaining your implementation based on requirements. Avoid deleting or modifying well-functioning code in ways that could degrade existing functionality.
 - The Git repository is located in the project root folder. When asked to push files to Git, execute Git commands from the project root directory. Always use 'git add .' when committing changes.
 - Before running npm install for any package, check if the package is already listed in package.json to avoid duplicate installations. Only create an installation command for packages not already present.
-- Take initiative to perform any tasks deemed necessary for efficient project management. Proactively propose and implement improvements without requiring explicit approval for each action.
 - Regularly check all task_list*.md files to review completed and pending tasks to avoid missing work or duplicating efforts. Keep track of task status across all task lists.
 - When executing terminal commands, first clear the previous terminal logs using the clear command (or cls on Windows) before running new commands.
+- những chỗ sql thì tham khảo @/task-scheduler-backend/src/db/queries.sample.rs Dùng sqlx::query().bind()
+- không dùng apply_diff mà dùng write_to_file để sửa source code
 # Project Structure
 project_root/rule/   
 ├── business_requirement/       # Business logic, user stories, feature specs  

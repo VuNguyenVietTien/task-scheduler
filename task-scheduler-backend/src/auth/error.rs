@@ -45,6 +45,9 @@ pub enum AuthError {
 
     #[error("Internal error: {0}")]
     Internal(String),
+
+    #[error("Other error: {0}")]
+    Other(String),
 }
 
 #[derive(Serialize)]
@@ -70,6 +73,7 @@ impl ResponseError for AuthError {
             AuthError::PasswordError(_) => StatusCode::BAD_REQUEST,
             AuthError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AuthError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            AuthError::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
 
@@ -89,6 +93,7 @@ impl ResponseError for AuthError {
             AuthError::PasswordError(_) => "PASSWORD_ERROR",
             AuthError::Database(_) => "DATABASE_ERROR",
             AuthError::Internal(_) => "INTERNAL_ERROR",
+            AuthError::Other(_) => "OTHER_ERROR",
         };
 
         HttpResponse::build(self.status_code()).json(ErrorResponse {

@@ -26,6 +26,7 @@ async-graphql-actix-web = "5.0.10"
 jsonwebtoken = "8.3.0"
 bcrypt = "0.10"
 argon2 = "0.5.2"
+actix-web-httpauth = "0.8.0"
 
 # Async runtime
 tokio = { version = "1.33.0", features = ["full"] }

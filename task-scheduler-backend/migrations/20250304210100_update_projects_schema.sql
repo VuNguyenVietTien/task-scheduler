@@ -2,11 +2,9 @@
 ALTER TABLE projects
 ADD COLUMN IF NOT EXISTS icon_url VARCHAR(255),
 ADD COLUMN IF NOT EXISTS metadata JSONB,
-ADD COLUMN IF NOT EXISTS workspace_id UUID REFERENCES workspaces(workspace_id),
 ADD COLUMN IF NOT EXISTS is_public BOOLEAN NOT NULL DEFAULT FALSE;
 
 -- Add indexes
-CREATE INDEX IF NOT EXISTS idx_projects_workspace_id ON projects(workspace_id) WHERE workspace_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_projects_owner_id ON projects(owner_id);
 CREATE INDEX IF NOT EXISTS idx_projects_created_at ON projects(created_at);
 

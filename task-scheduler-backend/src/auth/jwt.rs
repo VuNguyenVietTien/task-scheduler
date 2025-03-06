@@ -1,119 +1,102 @@
-use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::auth::error::AuthError;
-use crate::auth::types::Claims;
-use crate::config::{JWT_EXPIRY, JWT_SECRET};
+use crate::Config;
 
-pub fn create_token(claims: Claims) -> Result<(String, i64), AuthError> {
-    let jwt_expiry = *JWT_EXPIRY;
-    let expiration = Utc::now()
-        .checked_add_signed(Duration::seconds(jwt_expiry))
-        .ok_or_else(|| AuthError::TokenCreation("Failed to create token expiration".into()))?
-        .timestamp();
-
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(JWT_SECRET.as_bytes()),
-    )
-    .map_err(|e| AuthError::TokenCreation(e.to_string()))?;
-
-    Ok((token, expiration))
+#[derive(Debug, Serialize, Deserialize)]
+pub struct Claims {
+    pub sub: String,      // Subject (user ID)
+    pub exp: usize,      // Expiration time (UTC timestamp)
+    pub iat: usize,      // Issued at (UTC timestamp)
+    pub email: String,   // User email
 }
 
-pub fn verify_token(token: &str) -> Result<Claims, AuthError> {
-    let token_data = decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(JWT_SECRET.as_bytes()),
-        &Validation::default(),
-    )
-    .map_err(|e| AuthError::TokenVerification(e.to_string()))?;
-
-    let claims = token_data.claims;
-    
-    // Check if token is expired
-    if claims.is_expired() {
-        return Err(AuthError::TokenExpired);
+impl Claims {
+    pub fn new(user_id: Uuid, email: String, exp: usize) -> Self {
+        let now = chrono::Utc::now().timestamp() as usize;
+        Self {
+            sub: user_id.to_string(),
+            exp,
+            iat: now,
+            email,
+        }
     }
-
-    Ok(claims)
 }
 
-pub fn refresh_token(claims: Claims) -> Result<(String, i64), AuthError> {
-    // Create new token with extended expiration
-    let jwt_expiry = *JWT_EXPIRY;
-    let new_expiration = Utc::now()
-        .checked_add_signed(Duration::seconds(jwt_expiry))
-        .ok_or_else(|| AuthError::TokenCreation("Failed to create token expiration".into()))?
-        .timestamp();
-
-    let new_claims = Claims {
-        exp: new_expiration,
-        iat: Utc::now().timestamp(),
-        ..claims
-    };
-
-    let token = encode(
+pub fn create_token(claims: &Claims, config: &Config) -> Result<String, AuthError> {
+    encode(
         &Header::default(),
-        &new_claims,
-        &EncodingKey::from_secret(JWT_SECRET.as_bytes()),
+        claims,
+        &EncodingKey::from_secret(config.jwt_secret.as_bytes()),
     )
-    .map_err(|e| AuthError::TokenCreation(e.to_string()))?;
+    .map_err(|e| AuthError::TokenCreation(e.to_string()))
+}
 
-    Ok((token, new_expiration))
+pub fn verify_token(token: &str, config: &Config) -> Result<Claims, AuthError> {
+    let validation = Validation::default();
+    decode::<Claims>(
+        token,
+        &DecodingKey::from_secret(config.jwt_secret.as_bytes()),
+        &validation,
+    )
+    .map(|data| data.claims)
+    .map_err(|e| match e.kind() {
+        jsonwebtoken::errors::ErrorKind::ExpiredSignature => AuthError::TokenExpired,
+        _ => AuthError::TokenVerification(e.to_string()),
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use uuid::Uuid;
+    use chrono::{Duration, Utc};
+
+    fn create_test_config() -> Config {
+        Config {
+            database_url: "".to_string(),
+            redis_url: "".to_string(),
+            server_host: "".to_string(),
+            server_port: 8080,
+            auth_secret: "test-auth-secret".to_string(),
+            jwt_secret: "test-jwt-secret".to_string(),
+            jwt_expiry: 3600,
+            email_from: "".to_string(),
+            email_smtp_host: "".to_string(),
+            email_smtp_port: 587,
+            email_smtp_user: "".to_string(),
+            email_smtp_pass: "".to_string(),
+        }
+    }
 
     #[test]
     fn test_jwt_flow() {
-        let user_id = Uuid::new_v4().to_string();
-        let claims = Claims::new(
-            user_id.clone(),
-            "test@example.com".to_string(),
-            "Test User".to_string(),
-            Duration::hours(1),
-        );
+        let config = create_test_config();
+        let user_id = Uuid::new_v4();
+        let email = "test@example.com".to_string();
+        let exp = (Utc::now() + Duration::hours(1)).timestamp() as usize;
 
-        // Test token creation
-        let (token, exp) = create_token(claims.clone()).unwrap();
-        assert!(!token.is_empty());
-        assert!(exp > Utc::now().timestamp());
+        let claims = Claims::new(user_id, email.clone(), exp);
+        let token = create_token(&claims, &config).unwrap();
+        let decoded = verify_token(&token, &config).unwrap();
 
-        // Test token verification
-        let verified_claims = verify_token(&token).unwrap();
-        assert_eq!(verified_claims.sub, user_id);
-        assert_eq!(verified_claims.exp, exp);
-
-        // Test token refresh
-        let (new_token, new_exp) = refresh_token(verified_claims).unwrap();
-        assert_ne!(token, new_token);
-        assert!(new_exp > exp);
-
-        // Verify refreshed token
-        let new_claims = verify_token(&new_token).unwrap();
-        assert_eq!(new_claims.sub, user_id);
-        assert_eq!(new_claims.exp, new_exp);
+        assert_eq!(decoded.sub, user_id.to_string());
+        assert_eq!(decoded.email, email);
+        assert_eq!(decoded.exp, exp);
     }
 
     #[test]
     fn test_expired_token() {
-        let mut claims = Claims::new(
-            Uuid::new_v4().to_string(),
-            "test@example.com".to_string(),
-            "Test User".to_string(),
-            Duration::hours(1),
-        );
+        let config = create_test_config();
+        let user_id = Uuid::new_v4();
+        let email = "test@example.com".to_string();
+        let exp = (Utc::now() - Duration::hours(1)).timestamp() as usize;
 
-        // Set expiration in the past
-        claims.exp = Utc::now().timestamp() - 3600; // 1 hour ago
+        let claims = Claims::new(user_id, email, exp);
+        let token = create_token(&claims, &config).unwrap();
+        let result = verify_token(&token, &config);
 
-        let (token, _) = create_token(claims).unwrap();
-        let result = verify_token(&token);
         assert!(matches!(result, Err(AuthError::TokenExpired)));
     }
 }

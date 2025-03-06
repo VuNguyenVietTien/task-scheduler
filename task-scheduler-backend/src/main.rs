@@ -8,33 +8,18 @@ mod websocket;
 
 use actix_cors::Cors;
 use actix_web::{guard, web, App, HttpServer};
-use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
-use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use dotenv::dotenv;
 use sqlx::postgres::PgPool;
 use std::sync::Arc;
-use std::time::Duration;
 
 use crate::{
     config::Config,
-    graphql::schema::{create_schema, AppSchema},
+    graphql::{
+        schema::create_schema,
+        handlers::{graphql_handler, graphql_playground},
+    },
     websocket::{ws_connect, NotificationBroadcaster},
 };
-
-async fn graphql_handler(
-    schema: web::Data<AppSchema>,
-    req: GraphQLRequest,
-) -> GraphQLResponse {
-    schema.execute(req.into_inner()).await.into()
-}
-
-async fn graphql_playground() -> actix_web::Result<actix_web::HttpResponse> {
-    Ok(actix_web::HttpResponse::Ok()
-        .content_type("text/html; charset=utf-8")
-        .body(playground_source(
-            GraphQLPlaygroundConfig::new("/graphql").subscription_endpoint("/ws"),
-        )))
-}
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
@@ -45,15 +30,19 @@ async fn main() -> std::io::Result<()> {
     let addr = format!("{}:{}", config.server_host, config.server_port);
 
     // Database connection
-    let db = Arc::new(PgPool::connect(&config.database_url)
-        .await
-        .expect("Failed to connect to database"));
+    let pool = Arc::new(
+        PgPool::connect(&config.database_url)
+            .await
+            .expect("Failed to connect to database"),
+    );
 
-    // Setup schema
-    let schema = create_schema();
-
-    // Setup notification broadcaster 
+    // Setup notification broadcaster
     let broadcaster = Arc::new(NotificationBroadcaster::new(100));
+
+    println!("Starting server at http://{}", addr);
+
+    // Create GraphQL schema with database pool and config
+    let schema = web::Data::new(create_schema(pool.as_ref().clone(), config.clone()));
 
     // Start HTTP server
     HttpServer::new(move || {
@@ -65,16 +54,15 @@ async fn main() -> std::io::Result<()> {
 
         App::new()
             .wrap(cors)
-            .app_data(web::Data::new(schema.clone()))
+            .app_data(schema.clone())
             .app_data(web::Data::new(Arc::clone(&broadcaster)))
-            .app_data(web::Data::new(config.clone()))
             .service(
                 web::resource("/graphql")
                     .guard(guard::Post())
                     .to(graphql_handler),
             )
             .service(
-                web::resource("/playground")
+                web::resource("/graphql")
                     .guard(guard::Get())
                     .to(graphql_playground),
             )

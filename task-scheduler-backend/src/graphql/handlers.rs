@@ -4,66 +4,51 @@ use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use sqlx::PgPool;
 
 use crate::auth::error::AuthError;
+use crate::config::Config;
 use crate::graphql::{
-    dataloaders::{ProjectLoader, UserLoader},
     schema::AppSchema,
     Context,
 };
 
 pub async fn graphql_handler(
-    pool: web::Data<PgPool>,
     schema: web::Data<AppSchema>,
     req: GraphQLRequest,
 ) -> Result<GraphQLResponse> {
-    let db = pool.get_ref().clone();
-    
-    let context = Context::new(
-        db.clone(),
-        None, // user_id will be set by auth middleware if present
-        ProjectLoader::new(db.clone()),
-        UserLoader::new(db),
-    );
+    // Convert request to string for logging
+    let request = req.into_inner();
+    eprintln!("\n=== Incoming GraphQL Request ===");
+    eprintln!("Query: {}", request.query);
+    eprintln!("Variables: {:?}", request.variables);
+    eprintln!("Operation Name: {:?}", request.operation_name);
+    eprintln!("==============================\n");
 
     let schema = schema.get_ref();
-    let request = req.into_inner().data(context);
-    
-    // Execute query with context
-    Ok(schema
-        .execute(request)
-        .await 
-        .into())
+    let response = schema.execute(request).await;
+
+    eprintln!("\n=== GraphQL Response ===");
+    eprintln!("{:#?}", response);
+    eprintln!("======================\n");
+
+    Ok(response.into())
 }
 
 pub async fn graphql_playground() -> Result<HttpResponse> {
     Ok(HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
         .body(playground_source(
-            GraphQLPlaygroundConfig::new("/graphql").subscription_endpoint("/graphql"),
+            GraphQLPlaygroundConfig::new("/graphql")
+                .subscription_endpoint("/graphql"),
         )))
 }
 
 pub async fn graphql_ws_handler(
-    pool: web::Data<PgPool>,
     schema: web::Data<AppSchema>,
     req: GraphQLRequest,
 ) -> Result<GraphQLResponse, actix_web::Error> {
-    let db = pool.get_ref().clone();
-    
-    let context = Context::new(
-        db.clone(),
-        None,
-        ProjectLoader::new(db.clone()),
-        UserLoader::new(db),
-    );
-
     let schema = schema.get_ref();
-    let request = req.into_inner().data(context);
-    
-    // Execute query with context
-    Ok(schema
-        .execute(request)
-        .await 
-        .into())
+    let request = req.into_inner();
+    let response = schema.execute(request).await;
+    Ok(response.into())
 }
 
 pub trait IntoGraphQLError {
@@ -89,6 +74,7 @@ impl IntoGraphQLError for AuthError {
             AuthError::PasswordError(_) => "PASSWORD_ERROR",
             AuthError::Database(_) => "DATABASE_ERROR",
             AuthError::Internal(_) => "INTERNAL_ERROR",
+            AuthError::Other(_) => "OTHER_ERROR",
         };
 
         async_graphql::Error::new(self.to_string()).extend_with(|_, e| {

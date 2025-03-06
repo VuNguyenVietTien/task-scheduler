@@ -51,6 +51,26 @@ curl -X POST http://localhost:8080/graphql \
 }'
 ```
 
+curl -X POST http://localhost:8080/graphql \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEyNjg5MDksImlhdCI6MTc0MTE4MjUwOSwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.WAEVEjABMBshsJCVk0GfICU5QCVBmF7ilHm9WhBkuyc" \
+-d '{
+  "query": "mutation CreateProject($input: CreateProjectInput!) { createProject(input: $input) { id name description startDate endDate status members { id role user { id name } } } }",
+  "variables": {
+    "input": {
+      "name": "Test Project",
+      "description": "This is a test project",
+      "ownerId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+      "members": [
+        {
+          "userId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+          "role": "admin"
+        }
+      ]
+    }
+  }
+}'
+
 ## 4. Get Projects List
 
 ```bash

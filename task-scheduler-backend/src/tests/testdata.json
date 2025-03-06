@@ -1,0 +1,28 @@
+"users": [
+    {
+        "data": {
+            "register": {
+                "accessToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEyNTI5NDMsImlhdCI6MTc0MTE2NjU0MywiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.zE1oVNYcPTTLhNUDOt1wr-3-WcT6329byYE8dekAEOs",
+                "refreshToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEyNTI5NDMsImlhdCI6MTc0MTE2NjU0MywiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.zE1oVNYcPTTLhNUDOt1wr-3-WcT6329byYE8dekAEOs",
+                "user": {
+                    "id": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+                    "email": "test@example.com",
+                    "name": "Test User"
+                }
+            }
+        }
+    },
+    {
+        "data": {
+            "register": {
+                "accessToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1ZDRmYjA2NC0xMjc0LTRlMWMtOTJjZi1jMDdlZDg2YTAzN2EiLCJleHAiOjE3NDEyNTMxNzAsImlhdCI6MTc0MTE2Njc3MCwiZW1haWwiOiJ0ZXN0MkBleGFtcGxlLmNvbSIsImRpc3BsYXlfbmFtZSI6IlRlc3QgVXNlcjIifQ.Mkx0cxlIPgEOBvyWIMojjrwJHdX5BAA5L_tQBeE5X2E",
+                "refreshToken": "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1ZDRmYjA2NC0xMjc0LTRlMWMtOTJjZi1jMDdlZDg2YTAzN2EiLCJleHAiOjE3NDEyNTMxNzAsImlhdCI6MTc0MTE2Njc3MCwiZW1haWwiOiJ0ZXN0MkBleGFtcGxlLmNvbSIsImRpc3BsYXlfbmFtZSI6IlRlc3QgVXNlcjIifQ.Mkx0cxlIPgEOBvyWIMojjrwJHdX5BAA5L_tQBeE5X2E",
+                "user": {
+                    "id": "5d4fb064-1274-4e1c-92cf-c07ed86a037a",
+                    "email": "test2@example.com",
+                    "name": "Test User2"
+                }
+            }
+        }
+    }
+]

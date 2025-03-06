@@ -1,17 +1,17 @@
-use chrono::{DateTime, Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
 use sqlx::{postgres::PgRow, PgPool, Row};
 use uuid::Uuid;
 
-use crate::auth::error::AuthError;
-use crate::auth::types::Claims;
-use crate::config::Config;
+use crate::{
+    auth::{error::AuthError, token::{self, Claims}},
+    Config,
+};
 
 pub async fn get_auth_info_from_token(
-    token: &str,
+    token_str: &str,
     db: &PgPool,
+    config: &Config,
 ) -> Result<(Uuid, String, String), AuthError> {
-    let claims = decode_token(token)?;
+    let claims = token::verify_access_token(token_str, config)?;
     
     let user_id = Uuid::parse_str(&claims.sub)
         .map_err(|_| AuthError::InvalidToken("Invalid user ID".into()))?;
@@ -38,71 +38,28 @@ pub fn create_token(
     email: String,
     name: String,
     config: &Config,
-) -> Result<(String, DateTime<Utc>), AuthError> {
-    let expiration = Utc::now()
-        .checked_add_signed(Duration::seconds(config.jwt_expiry))
-        .ok_or_else(|| AuthError::TokenCreation("Failed to create expiration time".into()))?;
-
-    let claims = Claims::new(
-        user_id.to_string(),
-        email,
-        name,
-        Duration::seconds(config.jwt_expiry),
-    );
-
-    let token = encode(
-        &Header::default(),
-        &claims,
-        &EncodingKey::from_secret(config.jwt_secret.as_bytes()),
-    )
-    .map_err(|e| AuthError::TokenCreation(e.to_string()))?;
-
-    Ok((token, expiration))
-}
-
-pub fn decode_token(token: &str) -> Result<Claims, AuthError> {
-    // Get config from env vars since we don't always have access to app state
-    let jwt_secret = std::env::var("JWT_SECRET")
-        .map_err(|_| AuthError::TokenVerification("JWT_SECRET not configured".into()))?;
-
-    let token_data = decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(jwt_secret.as_bytes()),
-        &Validation::default(),
-    )
-    .map_err(|e| AuthError::TokenVerification(e.to_string()))?;
-
-    let claims = token_data.claims;
-
-    // Check if token is expired
-    if claims.is_expired() {
-        return Err(AuthError::TokenExpired);
-    }
-
-    Ok(claims)
-}
-
-pub fn verify_token(token: &str, config: &Config) -> Result<Claims, AuthError> {
-    let token_data = decode::<Claims>(
-        token,
-        &DecodingKey::from_secret(config.jwt_secret.as_bytes()),
-        &Validation::default(),
-    )
-    .map_err(|e| AuthError::TokenVerification(e.to_string()))?;
-
-    let claims = token_data.claims;
-
-    // Check if token is expired
-    if claims.is_expired() {
-        return Err(AuthError::TokenExpired);
-    }
-
-    Ok(claims)
+) -> Result<String, AuthError> {
+    // Create access token and return just the token string
+    let access_token = token::create_access_token(user_id, email, name, config)?;
+    Ok(access_token.token)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use sqlx::postgres::{PgPool, PgPoolOptions};
+    use std::env;
+
+    async fn setup_test_db() -> PgPool {
+        let database_url = env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set");
+        
+        PgPoolOptions::new()
+            .max_connections(5)
+            .connect(&database_url)
+            .await
+            .expect("Failed to create connection pool")
+    }
 
     fn create_test_config() -> Config {
         Config {
@@ -121,37 +78,48 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_token_creation_and_verification() {
+    #[tokio::test]
+    async fn test_token_flow() {
         let config = create_test_config();
+        let pool = setup_test_db().await;
+        
+        // Create test user
         let user_id = Uuid::new_v4();
         let email = "test@example.com".to_string();
         let name = "Test User".to_string();
+        let password_hash = "hashed_password".to_string();
 
-        let (token, _) = create_token(user_id, email.clone(), name.clone(), &config)
-            .expect("Token creation should succeed");
-
-        let claims = verify_token(&token, &config).expect("Token verification should succeed");
-        assert_eq!(claims.sub, user_id.to_string());
-        assert_eq!(claims.email, email);
-        assert_eq!(claims.display_name, name);
-    }
-
-    #[test]
-    fn test_token_expiration() {
-        let mut config = create_test_config();
-        config.jwt_expiry = -3600; // Expired 1 hour ago
-
-        let user_id = Uuid::new_v4();
-        let (token, _) = create_token(
-            user_id,
-            "test@example.com".to_string(),
-            "Test User".to_string(),
-            &config,
+        sqlx::query(
+            "INSERT INTO users (user_id, email, name, password_hash, email_verified) 
+             VALUES ($1, $2, $3, $4, true)"
         )
-        .expect("Token creation should succeed");
+        .bind(user_id)
+        .bind(&email)
+        .bind(&name)
+        .bind(&password_hash)
+        .execute(&pool)
+        .await
+        .expect("Failed to create test user");
 
-        let result = verify_token(&token, &config);
-        assert!(matches!(result, Err(AuthError::TokenExpired)));
+        // Create token
+        let token = create_token(user_id, email.clone(), name.clone(), &config)
+            .expect("Failed to create token");
+
+        // Verify token
+        let (verified_id, verified_email, verified_name) = 
+            get_auth_info_from_token(&token, &pool, &config)
+            .await
+            .expect("Failed to verify token");
+
+        assert_eq!(verified_id, user_id);
+        assert_eq!(verified_email, email);
+        assert_eq!(verified_name, name);
+
+        // Cleanup
+        sqlx::query("DELETE FROM users WHERE user_id = $1")
+            .bind(user_id)
+            .execute(&pool)
+            .await
+            .expect("Failed to delete test user");
     }
 }

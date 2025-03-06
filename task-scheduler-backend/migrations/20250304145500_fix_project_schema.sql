@@ -16,12 +16,14 @@ ALTER TABLE public.projects
     ALTER COLUMN status SET NOT NULL,
     ALTER COLUMN priority SET NOT NULL,
     ALTER COLUMN visibility SET NOT NULL,
-    ALTER COLUMN progress SET NOT NULL DEFAULT 0;
+    ALTER COLUMN progress SET NOT NULL;
 
 -- Set default values
 UPDATE public.projects SET
-    status = 'active' WHERE status IS NULL,
-    priority = 'medium' WHERE priority IS NULL,
+    status = 'active' WHERE status IS NULL;
+UPDATE public.projects SET
+    priority = 'medium' WHERE priority IS NULL;
+UPDATE public.projects SET
     visibility = 'private' WHERE visibility IS NULL;
 
 -- Add check constraints

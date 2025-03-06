@@ -1,26 +1,33 @@
 use sqlx::PgPool;
-use std::sync::Arc;
-use crate::graphql::dataloaders::{ProjectLoader, UserLoader};
+
+use crate::{
+    auth::types::Claims,
+    config::Config,
+    graphql::dataloaders::{ProjectLoader, UserLoader},
+};
 
 pub struct Context {
     pub db: PgPool,
-    pub user_id: Option<String>,
-    pub project_loader: Arc<ProjectLoader>,
-    pub user_loader: Arc<UserLoader>,
+    pub auth: Option<Claims>,
+    pub project_loader: ProjectLoader,
+    pub user_loader: UserLoader,
+    pub config: Config,
 }
 
 impl Context {
     pub fn new(
         db: PgPool,
-        user_id: Option<String>,
+        auth: Option<Claims>,
         project_loader: ProjectLoader,
         user_loader: UserLoader,
+        config: Config,
     ) -> Self {
         Self {
             db,
-            user_id,
-            project_loader: Arc::new(project_loader),
-            user_loader: Arc::new(user_loader),
+            auth,
+            project_loader,
+            user_loader,
+            config,
         }
     }
 }
