@@ -90,5 +90,81 @@
         }
       }
     }
+  },
+  "tasks": {
+    "create": {
+      "data": {
+        "createTask": {
+          "taskId": "f3457c6e-f03a-4aa3-abff-c56408af18a2",
+          "title": "Test Task",
+          "description": "This is a test task",
+          "status": "todo",
+          "assigneeId": null,
+          "effort": 8.0,
+          "priorityOrder": 0,
+          "progress": 0,
+          "startDate": null,
+          "dueDate": null,
+          "actualStartDate": null,
+          "actualEndDate": null,
+          "createdAt": "2025-03-06T07:48:44.484989+00:00",
+          "updatedAt": "2025-03-06T07:48:44.484989+00:00"
+        }
+      }
+    },
+    "list": {
+      "data": {
+        "tasks": [
+          {
+            "taskId": "d64f7938-cbf9-4f57-a5fc-4d6c7802b25b",
+            "title": "Test Task",
+            "description": "This is a test task",
+            "status": "todo",
+            "effort": 8.0,
+            "priorityOrder": 0,
+            "assigneeId": null,
+            "progress": 0,
+            "startDate": null,
+            "dueDate": null,
+            "actualStartDate": null,
+            "actualEndDate": null,
+            "createdAt": "2025-03-06T07:17:12.304154+00:00",
+            "updatedAt": "2025-03-06T07:17:12.304154+00:00"
+          },
+          {
+            "taskId": "b006811b-0336-4218-bffe-7c621aee65e3",
+            "title": "Test Task",
+            "description": "This is a test task",
+            "status": "todo",
+            "effort": 8.0,
+            "priorityOrder": 0,
+            "assigneeId": null,
+            "progress": 0,
+            "startDate": null,
+            "dueDate": null,
+            "actualStartDate": null,
+            "actualEndDate": null,
+            "createdAt": "2025-03-06T07:45:35.583832+00:00",
+            "updatedAt": "2025-03-06T07:45:35.583832+00:00"
+          },
+          {
+            "taskId": "f3457c6e-f03a-4aa3-abff-c56408af18a2",
+            "title": "Test Task",
+            "description": "This is a test task",
+            "status": "todo",
+            "effort": 8.0,
+            "priorityOrder": 0,
+            "assigneeId": null,
+            "progress": 0,
+            "startDate": null,
+            "dueDate": null,
+            "actualStartDate": null,
+            "actualEndDate": null,
+            "createdAt": "2025-03-06T07:48:44.484989+00:00",
+            "updatedAt": "2025-03-06T07:48:44.484989+00:00"
+          }
+        ]
+      }
+    }
   }
 }

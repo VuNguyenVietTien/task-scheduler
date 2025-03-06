@@ -1,9 +1,29 @@
 # GraphQL Test Requests
 
-Tất cả các requests dưới đây sử dụng endpoint: `http://localhost:8080/graphql`
+## Register User
+```graphql
+mutation Register($input: RegisterInput!) {
+  register(input: $input) {
+    accessToken
+    refreshToken
+    user {
+      id
+      email
+      name
+    }
+  }
+}
 
-## 1. Register User
+Variables:
+{
+  "input": {
+    "email": "test@example.com",
+    "password": "password123",
+    "name": "Test User"
+  }
+}
 
+Curl command:
 ```bash
 curl -X POST http://localhost:8080/graphql \
 -H "Content-Type: application/json" \
@@ -18,9 +38,31 @@ curl -X POST http://localhost:8080/graphql \
   }
 }'
 ```
+```
 
-## 2. Login
+## Login User
+```graphql
+mutation Login($input: LoginInput!) {
+  login(input: $input) {
+    accessToken
+    refreshToken
+    user {
+      id
+      email
+      name
+    }
+  }
+}
 
+Variables:
+{
+  "input": {
+    "email": "test@example.com", 
+    "password": "password123"
+  }
+}
+
+Curl command:
 ```bash
 curl -X POST http://localhost:8080/graphql \
 -H "Content-Type: application/json" \
@@ -34,155 +76,148 @@ curl -X POST http://localhost:8080/graphql \
   }
 }'
 ```
+```
 
-## 3. Create Project
-Sử dụng access token từ bước login:
+## Create Project
+```graphql
+mutation CreateProject($input: CreateProjectInput!) {
+  createProject(input: $input) {
+    id
+    name
+    description
+    startDate
+    endDate
+    status
+    members {
+      id
+      role
+      user {
+        id
+        name
+      }
+    }
+  }
+}
 
+Variables:
+{
+  "input": {
+    "name": "Test Project",
+    "description": "This is a test project",
+    "ownerId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+    "members": [
+      {
+        "userId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+        "role": "admin"
+      }
+    ]
+  }
+}
+
+Curl command:
 ```bash
 curl -X POST http://localhost:8080/graphql \
 -H "Content-Type: application/json" \
--H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEzMjU4NzksImlhdCI6MTc0MTIzOTQ3OSwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.4ydIgwLPxoZnX36iQgCnJZP-5wsae3GjH6UA5MoTM6c" \
 -d '{
-  "query": "mutation CreateProject($input: CreateProjectInput!) { createProject(input: $input) { id name description } }",
+  "query": "mutation CreateProject($input: CreateProjectInput!) { createProject(input: $input) { id name description startDate endDate status members { id role user { id name } } } }",
   "variables": {
     "input": {
       "name": "Test Project",
-      "description": "This is a test project"
+      "description": "This is a test project", 
+      "ownerId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+      "members": [
+        {
+          "userId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+          "role": "admin"
+        }
+      ]
     }
   }
 }'
 ```
+```
 
-## 4. Add Member to Project
+## Create Task
+```graphql
+mutation CreateTask($input: CreateTaskInput!) {
+  createTask(input: $input) {
+    taskId
+    title
+    description
+    status
+    assigneeId
+  }
+}
 
+Variables:
+{
+  "input": {
+    "projectId": "a55169d0-2828-4d2e-867c-3a05ff019016",
+    "title": "Test Task",
+    "description": "This is a test task",
+    "status": "todo",
+    "effort": 8,
+    "assigneeIds": ["51694e1b-39ca-437b-a337-b63108727377"]
+  }
+}
+
+Curl command:
 ```bash
 curl -X POST http://localhost:8080/graphql \
 -H "Content-Type: application/json" \
--H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEzMjU4NzksImlhdCI6MTc0MTIzOTQ3OSwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.4ydIgwLPxoZnX36iQgCnJZP-5wsae3GjH6UA5MoTM6c" \
 -d '{
-  "query": "mutation AddProjectMember($input: AddProjectMemberInput!) { addProjectMember(input: $input) { id userId role } }",
+  "query": "mutation CreateTask($input: CreateTaskInput!) { createTask(input: $input) { taskId title description status assigneeId } }",
   "variables": {
     "input": {
-      "projectId": "YOUR_PROJECT_ID",
-      "userId": "MEMBER_USER_ID",
-      "role": "member"
-    }
-  }
-}'
-```
-
-## 5. Get Project Members
-
-```bash
-curl -X POST http://localhost:8080/graphql \
--H "Content-Type: application/json" \
--H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
--d '{
-  "query": "query ProjectMembers($projectId: ID!) { projectMembers(projectId: $projectId) { id userId role } }",
-  "variables": {
-    "projectId": "YOUR_PROJECT_ID"
-  }
-}'
-```
-
-## 6. Get Project by ID
-
-```bash
-curl -X POST http://localhost:8080/graphql \
--H "Content-Type: application/json" \
--H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
--d '{
-  "query": "query GetProject($id: ID!) { project(id: $id) { id name description members { user { name } role } tasks { id title } } }",
-  "variables": {
-    "id": "YOUR_PROJECT_ID"
-  }
-}'
-```
-
-## 7. Create Task
-
-```bash
-curl -X POST http://localhost:8080/graphql \
--H "Content-Type: application/json" \
--H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
--d '{
-  "query": "mutation CreateTask($input: CreateTaskInput!) { createTask(input: $input) { id title description status priority assignees { name } } }",
-  "variables": {
-    "input": {
-      "projectId": "YOUR_PROJECT_ID",
+      "projectId": "a55169d0-2828-4d2e-867c-3a05ff019016",
       "title": "Test Task",
       "description": "This is a test task",
-      "status": "BACKLOG",
-      "priority": "HIGH",
-      "assigneeIds": ["MEMBER_USER_ID"],
-      "effortHours": 8,
-      "startDate": "2025-03-05T00:00:00Z",
-      "deadline": "2025-03-10T00:00:00Z"
+      "status": "todo", 
+      "effort": 8,
+      "assigneeId": "51694e1b-39ca-437b-a337-b63108727377"
     }
   }
 }'
 ```
-
-## 8. Get Tasks List
-
-```bash
-curl -X POST http://localhost:8080/graphql \
--H "Content-Type: application/json" \
--H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
--d '{
-  "query": "query GetTasks($projectId: ID) { tasks(projectId: $projectId) { id title status priority assignees { name } } }",
-  "variables": {
-    "projectId": "YOUR_PROJECT_ID"
-  }
-}'
 ```
 
-## 9. Assign Member to Task
-
-```bash
-curl -X POST http://localhost:8080/graphql \
--H "Content-Type: application/json" \
--H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
--d '{
-  "query": "mutation AssignTask($taskId: ID!, $userId: ID!) { assignTask(taskId: $taskId, userId: $userId) { id title assignees { id name } } }",
-  "variables": {
-    "taskId": "YOUR_TASK_ID",
-    "userId": "MEMBER_USER_ID"
+## Get Tasks in Project
+```graphql
+query GetTasks($projectId: ID!) {
+  tasks(projectId: $projectId) {
+    taskId
+    title
+    description
+    status
+    effort
+    priority_order
+    assigneeId
+    progress
+    start_date
+    due_date
+    actual_start_date
+    actual_end_date
+    created_at
+    updated_at
   }
-}'
-```
-
-## Test Flow Guide
-
-1. Đăng ký tài khoản mới (Register)
-2. Đăng nhập để lấy access token (Login)
-3. Tạo project mới (Create Project)
-4. Đăng ký thêm một tài khoản khác để test add member
-5. Add member vào project
-6. Tạo task và assign cho member
-7. Kiểm tra danh sách tasks và thông tin chi tiết project
-
-Lưu ý:
-- Thay `YOUR_ACCESS_TOKEN` bằng token nhận được sau khi login
-- Thay `YOUR_PROJECT_ID` bằng ID của project đã tạo
-- Thay `YOUR_TASK_ID` bằng ID của task đã tạo
-- Thay `MEMBER_USER_ID` bằng ID của user member
-
-## Error Response Example
-
-Nếu có lỗi, response sẽ có dạng:
-```json
-{
-  "errors": [
-    {
-      "message": "Error message here",
-      "locations": [
-        {
-          "line": 1,
-          "column": 20
-        }
-      ],
-      "path": ["fieldName"]
-    }
-  ]
 }
+
+Variables:
+{
+  "projectId": "a55169d0-2828-4d2e-867c-3a05ff019016"
+}
+
+Curl command:
+```bash
+curl -X POST http://localhost:8080/graphql \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEzMjU4NzksImlhdCI6MTc0MTIzOTQ3OSwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.4ydIgwLPxoZnX36iQgCnJZP-5wsae3GjH6UA5MoTM6c" \
+-d '{
+  "query": "query GetTasks($projectId: ID!) { tasks(projectId: $projectId) { taskId title description status effort priorityOrder assigneeId progress startDate dueDate actualStartDate actualEndDate createdAt updatedAt } }",
+  "variables": {
+    "projectId": "a55169d0-2828-4d2e-867c-3a05ff019016"
+  }
+}'
+```

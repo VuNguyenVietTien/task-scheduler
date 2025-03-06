@@ -276,7 +276,7 @@ pub struct CreateTaskInput {
     pub start_date: Option<DateTime<Utc>>,
     pub due_date: Option<DateTime<Utc>>,
     pub effort: Option<f64>,
-    pub assignee_ids: Option<Vec<ID>>,
+    pub assignee_id: Option<ID>,
 }
 
 #[derive(InputObject, Debug)]
@@ -291,7 +291,7 @@ pub struct UpdateTaskInput {
     pub actual_end_date: Option<DateTime<Utc>>,
     pub effort: Option<f64>,
     pub progress: Option<i32>,
-    pub assignee_ids: Option<Vec<ID>>,
+    pub assignee_id: Option<ID>,
 }
 
 #[derive(InputObject)]

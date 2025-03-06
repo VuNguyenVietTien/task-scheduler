@@ -24,20 +24,9 @@ impl TaskQuery {
         
         let task = sqlx::query(
             r#"
-            SELECT 
-                t.*,
-                COALESCE(json_agg(
-                    DISTINCT jsonb_build_object(
-                        'id', ta.assignment_id,
-                        'user_id', ta.user_id,
-                        'task_id', ta.task_id,
-                        'assigned_at', ta.assigned_at
-                    )
-                ) FILTER (WHERE ta.assignment_id IS NOT NULL), '[]') as assignees
+            SELECT t.*
             FROM tasks t
-            LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
             WHERE t.task_id = $1 AND NOT t.is_deleted
-            GROUP BY t.task_id
             "#
         )
         .bind(task_id)
@@ -82,23 +71,12 @@ impl TaskQuery {
         
         let tasks = sqlx::query(
             r#"
-            SELECT 
-                t.*,
-                COALESCE(json_agg(
-                    DISTINCT jsonb_build_object(
-                        'id', ta.assignment_id,
-                        'user_id', ta.user_id,
-                        'task_id', ta.task_id,
-                        'assigned_at', ta.assigned_at
-                    )
-                ) FILTER (WHERE ta.assignment_id IS NOT NULL), '[]') as assignees
+            SELECT t.*
             FROM tasks t
-            LEFT JOIN task_assignments ta ON t.task_id = ta.task_id
             WHERE NOT t.is_deleted
             AND ($1::uuid IS NULL OR t.project_id = $1)
             AND ($2::text IS NULL OR t.status::text = $2)
             AND ($3::uuid IS NULL OR t.assignee_id = $3)
-            GROUP BY t.task_id
             ORDER BY t.priority_order ASC
             "#
         )
@@ -185,7 +163,7 @@ impl TaskMutation {
         .bind(now)
         .bind(now)
         .bind(false)
-        .bind(None::<Uuid>) // assignee_id
+        .bind(input.assignee_id.map(|id| Uuid::parse_str(&id.to_string())).transpose()?)
         .bind(None::<DateTime<Utc>>) // actual_start_date
         .bind(None::<DateTime<Utc>>) // actual_end_date
         .fetch_one(&mut *tx)
@@ -275,7 +253,7 @@ impl TaskMutation {
         .bind(input.actual_end_date)
         .bind(effort)
         .bind(input.progress)
-        .bind(input.assignee_ids.as_ref().and_then(|ids| ids.first()).map(|id| Uuid::parse_str(&id.to_string())).transpose()?)
+        .bind(input.assignee_id.map(|id| Uuid::parse_str(&id.to_string())).transpose()?)
         .bind(now)
         .bind(task_id)
         .fetch_one(&mut *tx)
@@ -351,27 +329,6 @@ impl TaskMutation {
             .bind(Utc::now())
             .bind(task_id)
             .fetch_one(&mut *tx)
-            .await
-            .map_err(|e| AuthError::Database(e))?;
-
-            // Get assignees
-            let assignees = sqlx::query(
-                r#"
-                SELECT json_agg(
-                    jsonb_build_object(
-                        'id', assignment_id,
-                        'user_id', user_id,
-                        'task_id', task_id,
-                        'assigned_at', assigned_at
-                    )
-                ) as assignees
-                FROM task_assignments
-                WHERE task_id = $1
-                GROUP BY task_id
-                "#
-            )
-            .bind(task_id)
-            .fetch_optional(&mut *tx)
             .await
             .map_err(|e| AuthError::Database(e))?;
 
