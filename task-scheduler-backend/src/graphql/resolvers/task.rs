@@ -3,6 +3,8 @@ use chrono::{DateTime, Utc};
 use sqlx::{Row, postgres::PgRow};
 use uuid::Uuid;
 use serde_json::json;
+use rust_decimal::prelude::*;
+use rust_decimal::Decimal;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
@@ -143,6 +145,9 @@ impl TaskMutation {
 
         let mut tx = pool.begin().await.map_err(|e| AuthError::Database(e))?;
 
+        // Convert effort from f64 to Decimal
+        let effort = input.effort.map(|e| Decimal::from_f64(e).unwrap_or_else(|| Decimal::new(0, 0)));
+
         // Create task
         let task_id = Uuid::new_v4();
         let now = Utc::now();
@@ -174,7 +179,7 @@ impl TaskMutation {
         .bind(input.priority_order.unwrap_or(0))
         .bind(input.start_date)
         .bind(input.due_date)
-        .bind(input.effort)
+        .bind(effort)
         .bind(0) // Initial progress
         .bind(Uuid::parse_str(&user_id)?)
         .bind(now)
@@ -186,40 +191,6 @@ impl TaskMutation {
         .fetch_one(&mut *tx)
         .await
         .map_err(|e| AuthError::Database(e))?;
-
-        // Add assignees if provided
-        // let assignees = if let Some(assignee_ids) = input.assignee_ids {
-        //     let mut assignees = Vec::new();
-        //     for assignee_id in assignee_ids {
-        //         let assignment_id = Uuid::new_v4();
-        //         sqlx::query(
-        //             r#"
-        //             INSERT INTO task_assignments (
-        //                 assignment_id, task_id, user_id, assigned_at
-        //             )
-        //             VALUES ($1, $2, $3, $4)
-        //             RETURNING *
-        //             "#
-        //         )
-        //         .bind(assignment_id)
-        //         .bind(task_id)
-        //         .bind(Uuid::parse_str(&assignee_id.to_string())?)
-        //         .bind(now)
-        //         .execute(&mut *tx)
-        //         .await
-        //         .map_err(|e| AuthError::Database(e))?;
-
-        //         assignees.push(json!({
-        //             "id": assignment_id,
-        //             "task_id": task_id,
-        //             "user_id": assignee_id.to_string(),
-        //             "assigned_at": now
-        //         }));
-        //     }
-        //     json!(assignees)
-        // } else {
-        //     json!([])
-        // };
 
         tx.commit().await.map_err(|e| AuthError::Database(e))?;
 
@@ -269,6 +240,9 @@ impl TaskMutation {
             return Err(AuthError::Other("Task not found".to_string()).into());
         }
 
+        // Convert effort from f64 to Decimal
+        let effort = input.effort.map(|e| Decimal::from_f64(e).unwrap_or_else(|| Decimal::new(0, 0)));
+
         // Update task
         let now = Utc::now();
         let updated = sqlx::query(
@@ -299,7 +273,7 @@ impl TaskMutation {
         .bind(input.due_date)
         .bind(input.actual_start_date)
         .bind(input.actual_end_date)
-        .bind(input.effort)
+        .bind(effort)
         .bind(input.progress)
         .bind(input.assignee_ids.as_ref().and_then(|ids| ids.first()).map(|id| Uuid::parse_str(&id.to_string())).transpose()?)
         .bind(now)
@@ -307,49 +281,6 @@ impl TaskMutation {
         .fetch_one(&mut *tx)
         .await
         .map_err(|e| AuthError::Database(e))?;
-
-        // Update assignees if provided  
-        let assignees = if let Some(assignee_ids) = input.assignee_ids {
-            let mut assignees = Vec::new();
-            
-            // Delete existing assignments
-            sqlx::query("DELETE FROM task_assignments WHERE task_id = $1")
-                .bind(task_id)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| AuthError::Database(e))?;
-
-            // Add new assignments
-            for assignee_id in assignee_ids {
-                let assignment_id = Uuid::new_v4();
-                let assignment = sqlx::query(
-                    r#"
-                    INSERT INTO task_assignments (
-                        assignment_id, task_id, user_id, assigned_at
-                    )
-                    VALUES ($1, $2, $3, $4)
-                    RETURNING *
-                    "#
-                )
-                .bind(assignment_id)
-                .bind(task_id)
-                .bind(Uuid::parse_str(&assignee_id.to_string())?)
-                .bind(now)
-                .execute(&mut *tx)
-                .await
-                .map_err(|e| AuthError::Database(e))?;
-
-                assignees.push(json!({
-                    "id": assignment_id,
-                    "task_id": task_id,
-                    "user_id": assignee_id.to_string(),
-                    "assigned_at": now
-                }));
-            }
-            json!(assignees)
-        } else {
-            json!([])
-        };
 
         tx.commit().await.map_err(|e| AuthError::Database(e))?;
 

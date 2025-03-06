@@ -5,6 +5,8 @@ use sqlx::Type;
 use std::fmt;
 use uuid::Uuid;
 use serde_json::Value as JsonValue;
+use rust_decimal::Decimal;
+use rust_decimal::prelude::*;
 
 #[allow(unused_imports)]
 use serde_json::json;
@@ -234,7 +236,7 @@ pub struct Task {
     pub due_date: Option<DateTime<Utc>>,
     pub actual_start_date: Option<DateTime<Utc>>,
     pub actual_end_date: Option<DateTime<Utc>>,
-    pub effort: Option<f64>,
+    pub effort: Option<Decimal>,
     pub progress: i32,
     pub created_by: Uuid,
     pub created_at: DateTime<Utc>,
@@ -256,7 +258,7 @@ impl Task {
     async fn due_date(&self) -> Option<DateTime<Utc>> { self.due_date }
     async fn actual_start_date(&self) -> Option<DateTime<Utc>> { self.actual_start_date }
     async fn actual_end_date(&self) -> Option<DateTime<Utc>> { self.actual_end_date }
-    async fn effort(&self) -> Option<f64> { self.effort }
+    async fn effort(&self) -> Option<f64> { self.effort.map(|e| e.to_f64().unwrap_or(0.0)) }
     async fn progress(&self) -> i32 { self.progress }
     async fn created_by(&self) -> ID { self.created_by.into() }
     async fn created_at(&self) -> DateTime<Utc> { self.created_at }
