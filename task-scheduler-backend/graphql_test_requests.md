@@ -156,7 +156,8 @@ Variables:
     "projectId": "a55169d0-2828-4d2e-867c-3a05ff019016",
     "title": "Test Task",
     "description": "This is a test task",
-    "status": "todo",
+    "status": "doing",
+    "priority": "medium",
     "effort": 8,
     "assigneeIds": ["51694e1b-39ca-437b-a337-b63108727377"]
   }
@@ -174,9 +175,62 @@ curl -X POST http://localhost:8080/graphql \
       "projectId": "a55169d0-2828-4d2e-867c-3a05ff019016",
       "title": "Test Task",
       "description": "This is a test task",
-      "status": "todo", 
+      "status": "doing",
+      "priority": "medium",
       "effort": 8,
       "assigneeId": "51694e1b-39ca-437b-a337-b63108727377"
+    }
+  }
+}'
+```
+```
+
+## Update Task
+```graphql
+mutation UpdateTask($input: UpdateTaskInput!) {
+  updateTask(input: $input) {
+    taskId
+    title
+    description
+    status
+    priorityOrder
+    startDate
+    dueDate
+    updatedAt
+  }
+}
+
+Variables:
+{
+  "input": {
+    "taskId": "f3457c6e-f03a-4aa3-abff-c56408af18a2",
+    "title": "Updated Task Title",
+    "description": "Updated task description",
+    "status": "doing",
+    "priority": "high",
+    "priorityOrder": 1,
+    "startDate": "2025-03-07T00:00:00Z",
+    "dueDate": "2025-03-14T00:00:00Z"
+  }
+}
+
+Curl command:
+```bash
+curl -X POST http://localhost:8080/graphql \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDEzMjU4NzksImlhdCI6MTc0MTIzOTQ3OSwiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.4ydIgwLPxoZnX36iQgCnJZP-5wsae3GjH6UA5MoTM6c" \
+-d '{
+  "query": "mutation UpdateTask($input: UpdateTaskInput!) { updateTask(input: $input) { taskId title description status priorityOrder startDate dueDate updatedAt } }",
+  "variables": {
+    "input": {
+      "taskId": "f3457c6e-f03a-4aa3-abff-c56408af18a2",
+      "title": "Updated Task Title",
+      "description": "Updated task description",
+      "status": "doing",
+      "priority": "high",
+      "priorityOrder": 1,
+      "startDate": "2025-03-07T00:00:00Z",
+      "dueDate": "2025-03-14T00:00:00Z"
     }
   }
 }'
@@ -193,6 +247,7 @@ query GetTasks($projectId: ID!) {
     status
     effort
     priority_order
+    priority
     assigneeId
     progress
     start_date

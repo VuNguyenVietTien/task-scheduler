@@ -232,6 +232,7 @@ pub struct Task {
     pub assignee_id: Option<Uuid>,
     pub status: TaskStatus,
     pub priority_order: i32,
+    pub priority: TaskPriority,
     pub start_date: Option<DateTime<Utc>>,
     pub due_date: Option<DateTime<Utc>>,
     pub actual_start_date: Option<DateTime<Utc>>,
@@ -254,6 +255,7 @@ impl Task {
     async fn assignee_id(&self) -> Option<ID> { self.assignee_id.map(|id| id.into()) }
     async fn status(&self) -> TaskStatus { self.status }
     async fn priority_order(&self) -> i32 { self.priority_order }
+    async fn priority(&self) -> TaskPriority { self.priority }
     async fn start_date(&self) -> Option<DateTime<Utc>> { self.start_date }
     async fn due_date(&self) -> Option<DateTime<Utc>> { self.due_date }
     async fn actual_start_date(&self) -> Option<DateTime<Utc>> { self.actual_start_date }
@@ -272,6 +274,7 @@ pub struct CreateTaskInput {
     pub title: String,
     pub description: Option<String>,
     pub status: TaskStatus,
+    pub priority: TaskPriority,
     pub priority_order: Option<i32>,
     pub start_date: Option<DateTime<Utc>>,
     pub due_date: Option<DateTime<Utc>>,
@@ -281,9 +284,11 @@ pub struct CreateTaskInput {
 
 #[derive(InputObject, Debug)]
 pub struct UpdateTaskInput {
+    pub task_id: ID,
     pub title: Option<String>,
     pub description: Option<String>,
     pub status: Option<TaskStatus>,
+    pub priority: Option<TaskPriority>,
     pub priority_order: Option<i32>,
     pub start_date: Option<DateTime<Utc>>,
     pub due_date: Option<DateTime<Utc>>,

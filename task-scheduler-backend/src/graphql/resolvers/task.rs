@@ -1,4 +1,4 @@
-use async_graphql::{Context, Object, Result, ID};
+use async_graphql::{Context, Object, Result, ID, Enum};
 use chrono::{DateTime, Utc};
 use sqlx::{Row, postgres::PgRow};
 use uuid::Uuid;
@@ -9,7 +9,7 @@ use rust_decimal::Decimal;
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
 use crate::graphql::types::{
-    Task, TaskStatus, CreateTaskInput, UpdateTaskInput, ReorderTasksInput
+    Task, TaskStatus, TaskPriority, CreateTaskInput, UpdateTaskInput, ReorderTasksInput
 };
 
 #[derive(Default)]
@@ -17,10 +17,10 @@ pub struct TaskQuery;
 
 #[Object]
 impl TaskQuery {
-    async fn task(&self, ctx: &Context<'_>, id: ID) -> Result<Option<Task>> {
+    async fn task(&self, ctx: &Context<'_>, task_id: ID) -> Result<Option<Task>> {
         let context = ctx.data::<GraphQLContext>()?;
         let pool = &context.db;
-        let task_id = Uuid::parse_str(&id.to_string())?;
+        let task_id = Uuid::parse_str(&task_id.to_string())?;
         
         let task = sqlx::query(
             r#"
@@ -43,6 +43,7 @@ impl TaskQuery {
             assignee_id: row.get("assignee_id"),
             status: row.get("status"),
             priority_order: row.get("priority_order"),
+            priority: row.get("priority"),
             start_date: row.get("start_date"),
             due_date: row.get("due_date"),
             actual_start_date: row.get("actual_start_date"),
@@ -60,7 +61,7 @@ impl TaskQuery {
         &self, 
         ctx: &Context<'_>,
         project_id: Option<ID>,
-        status: Option<TaskStatus>,
+        status: Option<String>,
         assignee_id: Option<ID>
     ) -> Result<Vec<Task>> {
         let context = ctx.data::<GraphQLContext>()?;
@@ -81,7 +82,7 @@ impl TaskQuery {
             "#
         )
         .bind(project_id)
-        .bind(status.map(|s| s.to_string()))
+        .bind(status)
         .bind(assignee_id)
         .fetch_all(pool)
         .await
@@ -96,6 +97,7 @@ impl TaskQuery {
             assignee_id: row.get("assignee_id"),
             status: row.get("status"),
             priority_order: row.get("priority_order"),
+            priority: row.get("priority"),
             start_date: row.get("start_date"),
             due_date: row.get("due_date"),
             actual_start_date: row.get("actual_start_date"),
@@ -138,13 +140,13 @@ impl TaskMutation {
             r#"
             INSERT INTO tasks (
                 task_id, project_id, parent_task_id,
-                title, description, status,
+                title, description, status, priority,
                 priority_order, start_date, due_date,
                 effort, progress, created_by,
                 created_at, updated_at, is_deleted,
-                assignee_id, actual_start_date, actual_end_date
+                assignee_id, actual_start_date, actual_end_date,
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
             RETURNING *
             "#
         )
@@ -154,6 +156,7 @@ impl TaskMutation {
         .bind(&input.title)
         .bind(input.description.as_ref())
         .bind(input.status)
+        .bind(input.priority)
         .bind(input.priority_order.unwrap_or(0))
         .bind(input.start_date)
         .bind(input.due_date)
@@ -181,6 +184,7 @@ impl TaskMutation {
             assignee_id: created.get("assignee_id"),
             status: created.get("status"),
             priority_order: created.get("priority_order"),
+            priority: created.get("priority"),
             start_date: created.get("start_date"),
             due_date: created.get("due_date"),
             actual_start_date: created.get("actual_start_date"),
@@ -194,10 +198,10 @@ impl TaskMutation {
         })
     }
 
-    async fn update_task(&self, ctx: &Context<'_>, id: ID, input: UpdateTaskInput) -> Result<Task> {
+    async fn update_task(&self, ctx: &Context<'_>, input: UpdateTaskInput) -> Result<Task> {
         let context = ctx.data::<GraphQLContext>()?;
         let pool = &context.db;
-        let task_id = Uuid::parse_str(&id.to_string())?;
+        let task_id = Uuid::parse_str(&input.task_id.to_string())?;
         
         let mut tx = pool.begin().await.map_err(|e| AuthError::Database(e))?;
 
@@ -231,22 +235,24 @@ impl TaskMutation {
                 description = COALESCE($2, description),
                 status = COALESCE($3, status),
                 priority_order = COALESCE($4, priority_order),
-                start_date = COALESCE($5, start_date),
-                due_date = COALESCE($6, due_date),
-                actual_start_date = COALESCE($7, actual_start_date),
-                actual_end_date = COALESCE($8, actual_end_date),
-                effort = COALESCE($9, effort),
-                progress = COALESCE($10, progress),
-                assignee_id = $11,
-                updated_at = $12
-            WHERE task_id = $13
+                priority = COALESCE($5, priority),
+                start_date = COALESCE($6, start_date),
+                due_date = COALESCE($7, due_date),
+                actual_start_date = COALESCE($8, actual_start_date),
+                actual_end_date = COALESCE($9, actual_end_date),
+                effort = COALESCE($10, effort),
+                progress = COALESCE($11, progress),
+                assignee_id = $12,
+                updated_at = $13
+            WHERE task_id = $14
             RETURNING *
             "#
         )
         .bind(input.title)
         .bind(input.description)
-        .bind(input.status.map(|s| s.to_string()))
+        .bind(input.status)
         .bind(input.priority_order)
+        .bind(input.priority)
         .bind(input.start_date)
         .bind(input.due_date)
         .bind(input.actual_start_date)
@@ -271,6 +277,7 @@ impl TaskMutation {
             assignee_id: updated.get("assignee_id"),
             status: updated.get("status"),
             priority_order: updated.get("priority_order"),
+            priority: updated.get("priority"),
             start_date: updated.get("start_date"),
             due_date: updated.get("due_date"),
             actual_start_date: updated.get("actual_start_date"),
@@ -284,10 +291,10 @@ impl TaskMutation {
         })
     }
 
-    async fn delete_task(&self, ctx: &Context<'_>, id: ID) -> Result<bool> {
+    async fn delete_task(&self, ctx: &Context<'_>, task_id: ID) -> Result<bool> {
         let context = ctx.data::<GraphQLContext>()?;
         let pool = &context.db;
-        let task_id = Uuid::parse_str(&id.to_string())?;
+        let task_id = Uuid::parse_str(&task_id.to_string())?;
 
         // Soft delete
         sqlx::query(
@@ -341,6 +348,7 @@ impl TaskMutation {
                 assignee_id: updated.get("assignee_id"),
                 status: updated.get("status"),
                 priority_order: updated.get("priority_order"),
+                priority: updated.get("priority"),
                 start_date: updated.get("start_date"),
                 due_date: updated.get("due_date"),
                 actual_start_date: updated.get("actual_start_date"),

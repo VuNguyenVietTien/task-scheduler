@@ -4,52 +4,56 @@
 User role in the system
 """
 enum UserRole {
-  ADMIN
-  MANAGER
-  MEMBER
+    admin
+    manager
+    member
 }
 
 """
 Task priority level
 """
 enum TaskPriority {
-  LOW
-  MEDIUM
-  HIGH
-  URGENT
+    low
+    medium
+    high
+    urgent
+    critical
 }
 
 """
 Task status
 """
 enum TaskStatus {
-  BACKLOG
-  PLANNED
-  IN_PROGRESS
-  IN_REVIEW
-  DONE
-  CANCELLED
+    todo
+    doing
+    done
+    close
+    pending
+    review
+    blocked
+    rejected
+    archived
 }
 
 """
 Project member role
 """
 enum ProjectRole {
-  OWNER
-  MANAGER
-  EDITOR
-  VIEWER
+    owner
+    manager
+    editor
+    viewer
 }
 
 """
 Notification type
 """
 enum NotificationType {
-  TASK_ASSIGNED
-  TASK_UPDATED
-  COMMENT_ADDED
-  PROJECT_INVITATION
-  DEADLINE_REMINDER
+    task_assigned
+    task_updated
+    comment_added
+    project_invitation
+    deadline_reminder
 }
 
 # Queries
@@ -63,7 +67,7 @@ type Query {
   """
   Get a specific user by ID
   """
-  user(id: ID!): User
+  user(userId: ID!): User
 
   """
   Get a list of users with optional filters
@@ -73,7 +77,7 @@ type Query {
   """
   Get a specific project by ID
   """
-  project(id: ID!): Project
+  project(projectId: ID!): Project
 
   """
   Get all accessible projects for current user
@@ -83,7 +87,7 @@ type Query {
   """
   Get a specific task by ID
   """
-  task(id: ID!): Task
+  task(taskId: ID!): Task
 
   """
   Get tasks with optional filters
@@ -132,7 +136,7 @@ type Mutation {
   Update project details
   """
   updateProject(
-    id: ID!
+    projectId: ID!
     name: String
     description: String
   ): Project!
@@ -141,10 +145,10 @@ type Mutation {
   Add member to project
   """
   addProjectMember(input: AddProjectMemberInput!): ProjectMember!
-  
+
   """
   Update project member role
-  """  
+  """
   updateProjectMember(projectId: ID!, userId: ID!, role: ProjectRole!): ProjectMember!
 
   """
@@ -161,19 +165,21 @@ type Mutation {
   Update task details
   """
   updateTask(
-    id: ID!
+    taskId: ID!
     title: String
     description: String
     status: TaskStatus
     priority: TaskPriority
     startDate: DateTime
     deadline: DateTime
+    assigneeId: ID
+    priorityOrder: Int
   ): Task!
 
   """
   Delete task from project
   """
-  deleteTask(id: ID!): Boolean!
+  deleteTask(taskId: ID!): Boolean!
 
   """
   Assign task to user
@@ -193,12 +199,12 @@ type Mutation {
   """
   Delete attachment
   """
-  deleteAttachment(id: ID!): ID!
+  deleteAttachment(attachmentId: ID!): ID!
 
   """
   Mark notification as read
   """
-  markNotificationAsRead(id: ID!): Notification!
+  markNotificationAsRead(notificationId: ID!): Notification!
 
   """
   Mark all notifications as read
@@ -219,7 +225,7 @@ type Mutation {
 # Types
 
 type User {
-  id: ID!
+  userId: ID!
   email: String!
   name: String!
   role: UserRole!
@@ -229,7 +235,7 @@ type User {
 }
 
 type Project {
-  id: ID!
+  projectId: ID!
   name: String!
   description: String
   createdBy: User!
@@ -248,7 +254,7 @@ type ProjectMember {
 }
 
 type Task {
-  id: ID!
+  taskId: ID!
   projectId: ID!
   project: Project!
   parentTaskId: ID
@@ -257,9 +263,10 @@ type Task {
   title: String!
   description: String
   status: TaskStatus!
+  assigneeId: ID
   priority: TaskPriority!
   priorityOrder: Int!
-  effortHours: Float
+  effort: Float
   startDate: DateTime
   deadline: DateTime
   createdBy: User!
@@ -272,7 +279,7 @@ type Task {
 }
 
 type Comment {
-  id: ID!
+  commentId: ID!
   taskId: ID!
   task: Task!
   userId: ID!
@@ -286,7 +293,7 @@ type Comment {
 }
 
 type Attachment {
-  id: ID!
+  attachmentId: ID!
   taskId: ID!
   task: Task!
   userId: ID!
@@ -299,7 +306,7 @@ type Attachment {
 }
 
 type Notification {
-  id: ID!
+  notificationId: ID!
   userId: ID!
   type: NotificationType!
   content: JSON!
@@ -339,10 +346,10 @@ input CreateTaskInput {
   description: String
   status: TaskStatus!
   priority: TaskPriority!
-  effortHours: Float
+  effort: Float
   startDate: DateTime
   deadline: DateTime
-  assigneeIds: [ID!]!
+  assigneeId: ID
   priorityOrder: Int
 }
 
