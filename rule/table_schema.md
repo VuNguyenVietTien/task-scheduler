@@ -4,47 +4,67 @@ Sau khi phân tích và kết hợp kết quả từ các mô hình AI khác nha
 
 ## 1. Bảng Users (Người dùng)
 
-| Field             | Type           | Description                                      |
-|-------------------|----------------|--------------------------------------------------|
-| user_id           | UUID/INT (PK)  | ID định danh duy nhất của người dùng             |
-| email             | VARCHAR(255)   | Email đăng nhập (unique)                         |
-| password_hash     | VARCHAR(255)   | Mật khẩu đã mã hóa                               |
-| full_name         | VARCHAR(255)   | Tên đầy đủ của người dùng                        |
-| username          | VARCHAR(100)   | Tên hiển thị trong hệ thống                      |
-| avatar_url        | VARCHAR(255)   | Đường dẫn ảnh đại diện                           |
-| bio               | TEXT           | Giới thiệu ngắn về người dùng                     |
-| google_id         | VARCHAR(255)   | ID từ Google (nếu đăng nhập bằng Google)         |
-| is_email_verified | BOOLEAN        | Trạng thái xác thực email                        |
-| created_at        | TIMESTAMP      | Thời gian tạo tài khoản                          |
-| updated_at        | TIMESTAMP      | Thời gian cập nhật thông tin                     |
-| last_login_at     | TIMESTAMP      | Thời gian đăng nhập gần nhất                     |
+| column_name                | data_type                | is_nullable | is_primary_key |
+| -------------------------- | ------------------------ | ----------- | -------------- |
+| user_id                    | uuid                     | NO          | YES            |
+| user_id                    | uuid                     | NO          | YES            |
+| email                      | character varying        | NO          | NO             |
+| password_hash              | character varying        | YES         | NO             |
+| full_name                  | character varying        | YES         | NO             |
+| username                   | character varying        | NO          | NO             |
+| avatar_url                 | character varying        | YES         | NO             |
+| bio                        | text                     | YES         | NO             |
+| google_id                  | character varying        | YES         | NO             |
+| is_email_verified          | boolean                  | YES         | NO             |
+| created_at                 | timestamp with time zone | YES         | NO             |
+| updated_at                 | timestamp with time zone | YES         | NO             |
+| last_login_at              | timestamp with time zone | YES         | NO             |
+| name                       | character varying        | YES         | NO             |
+| email_verified             | boolean                  | NO          | NO             |
+| verification_token         | character varying        | YES         | NO             |
+| verification_token_expires | timestamp with time zone | YES         | NO             |
+| reset_token                | character varying        | YES         | NO             |
+| reset_token_expires        | timestamp with time zone | YES         | NO             |
+| firebase_uid               | character varying        | YES         | NO             |
+| role                       | character varying        | NO          | NO             |
+| provider                   | character varying        | NO          | NO             |
+| work_capacity              | integer                  | YES         | NO             |
+| metadata                   | jsonb                    | YES         | NO             |
 
 ## 2. Bảng Projects (Dự án)
 
-| Field          | Type           | Description                                      |
-|----------------|----------------|--------------------------------------------------|
-| project_id     | UUID/INT (PK)  | ID định danh duy nhất của dự án                  |
-| name           | VARCHAR(255)   | Tên dự án                                        |
-| description    | TEXT           | Mô tả chi tiết về dự án                          |
-| owner_id       | UUID/INT (FK)  | ID người dùng sở hữu/tạo dự án                   |
-| start_date     | DATE           | Ngày bắt đầu dự án                               |
-| end_date       | DATE           | Ngày dự kiến kết thúc dự án                      |
-| status         | VARCHAR(50)    | Trạng thái dự án (active, archived, completed)   |
-| icon_url       | VARCHAR(255)   | Đường dẫn biểu tượng dự án                       |
-| is_public      | BOOLEAN        | Dự án công khai hay riêng tư                     |
-| created_at     | TIMESTAMP      | Thời gian tạo dự án                              |
-| updated_at     | TIMESTAMP      | Thời gian cập nhật dự án gần nhất                |
+| column_name | data_type                | is_nullable | is_primary_key |
+| ----------- | ------------------------ | ----------- | -------------- |
+| project_id  | uuid                     | NO          | YES            |
+| name        | character varying        | NO          | NO             |
+| description | text                     | YES         | NO             |
+| owner_id    | uuid                     | NO          | NO             |
+| created_at  | timestamp with time zone | NO          | NO             |
+| updated_at  | timestamp with time zone | NO          | NO             |
+| priority    | USER-DEFINED             | NO          | NO             |
+| visibility  | USER-DEFINED             | NO          | NO             |
+| tags        | jsonb                    | YES         | NO             |
+| progress    | double precision         | NO          | NO             |
+| category    | character varying        | YES         | NO             |
+| metadata    | jsonb                    | YES         | NO             |
+| start_date  | date                     | YES         | NO             |
+| end_date    | date                     | YES         | NO             |
+| icon_url    | character varying        | YES         | NO             |
+| is_public   | boolean                  | NO          | NO             |
+| status      | USER-DEFINED             | NO          | NO             |
 
 ## 3. Bảng Project_Members (Thành viên dự án)
 
-| Field          | Type           | Description                                      |
-|----------------|----------------|--------------------------------------------------|
-| member_id      | UUID/INT (PK)  | ID định danh duy nhất của bản ghi thành viên     |
-| project_id     | UUID/INT (FK)  | ID dự án                                         |
-| user_id        | UUID/INT (FK)  | ID người dùng                                    |
-| role           | VARCHAR(50)    | Vai trò (owner, admin, member, viewer)           |
-| joined_at      | TIMESTAMP      | Thời gian tham gia dự án                         |
-| invited_by     | UUID/INT (FK)  | ID người dùng đã mời                             |
+| column_name | data_type                | is_nullable | is_primary_key |
+| ----------- | ------------------------ | ----------- | -------------- |
+| member_id   | uuid                     | NO          | YES            |
+| project_id  | uuid                     | NO          | NO             |
+| project_id  | uuid                     | NO          | NO             |
+| user_id     | uuid                     | NO          | NO             |
+| user_id     | uuid                     | NO          | NO             |
+| joined_at   | timestamp with time zone | YES         | NO             |
+| invited_by  | uuid                     | YES         | NO             |
+| role        | USER-DEFINED             | YES         | NO             |
 
 ## 4. Bảng Task_Statuses (Trạng thái công việc)
 
@@ -73,26 +93,27 @@ Sau khi phân tích và kết hợp kết quả từ các mô hình AI khác nha
 
 ## 6. Bảng Tasks (Công việc)
 
-| Field               | Type           | Description                                      |
-|---------------------|----------------|--------------------------------------------------|
-| task_id             | UUID/INT (PK)  | ID định danh duy nhất của công việc              |
-| project_id          | UUID/INT (FK)  | ID dự án chứa công việc                          |
-| parent_task_id      | UUID/INT (FK)  | ID công việc cha (nếu là công việc con)          |
-| title               | VARCHAR(255)   | Tiêu đề công việc                                |
-| description         | TEXT           | Mô tả chi tiết công việc                         |
-| assignee_id         | UUID/INT (FK)  | ID người dùng được giao công việc                |
-| status_id           | UUID/INT (FK)  | ID trạng thái hiện tại của công việc             |
-| priority_order      | INTEGER        | Thứ tự ưu tiên trong danh sách công việc         |
-| start_date          | TIMESTAMP      | Thời gian bắt đầu theo kế hoạch                  |
-| due_date            | TIMESTAMP      | Thời hạn hoàn thành theo kế hoạch                |
-| actual_start_date   | TIMESTAMP      | Thời gian bắt đầu thực tế                        |
-| actual_end_date     | TIMESTAMP      | Thời gian kết thúc thực tế                       |
-| effort              | DECIMAL(8,2)   | Công sức ước tính (giờ)                          |
-| progress            | INTEGER        | Tiến độ hoàn thành (0-100%)                      |
-| created_by          | UUID/INT (FK)  | ID người dùng tạo công việc                      |
-| created_at          | TIMESTAMP      | Thời gian tạo công việc                          |
-| updated_at          | TIMESTAMP      | Thời gian cập nhật gần nhất                      |
-| is_deleted          | BOOLEAN        | Đánh dấu đã xóa (xóa mềm)                        |
+| column_name       | data_type                | is_nullable | is_primary_key |
+| ----------------- | ------------------------ | ----------- | -------------- |
+| task_id           | uuid                     | NO          | YES            |
+| project_id        | uuid                     | NO          | NO             |
+| parent_task_id    | uuid                     | YES         | NO             |
+| title             | character varying        | NO          | NO             |
+| description       | text                     | YES         | NO             |
+| assignee_id       | uuid                     | YES         | NO             |
+| priority_order    | integer                  | NO          | NO             |
+| start_date        | timestamp with time zone | YES         | NO             |
+| due_date          | timestamp with time zone | YES         | NO             |
+| actual_start_date | timestamp with time zone | YES         | NO             |
+| actual_end_date   | timestamp with time zone | YES         | NO             |
+| effort            | numeric                  | YES         | NO             |
+| progress          | integer                  | YES         | NO             |
+| created_by        | uuid                     | NO          | NO             |
+| created_at        | timestamp with time zone | YES         | NO             |
+| updated_at        | timestamp with time zone | YES         | NO             |
+| is_deleted        | boolean                  | YES         | NO             |
+| status            | USER-DEFINED             | NO          | NO             |
+| priority          | USER-DEFINED             | NO          | NO             |
 
 ## 7. Bảng Task_Tags (Liên kết Công việc-Nhãn)
 
@@ -119,16 +140,17 @@ Sau khi phân tích và kết hợp kết quả từ các mô hình AI khác nha
 
 ## 9. Bảng Comments (Bình luận)
 
-| Field              | Type           | Description                                      |
-|--------------------|----------------|--------------------------------------------------|
-| comment_id         | UUID/INT (PK)  | ID định danh duy nhất của bình luận              |
-| task_id            | UUID/INT (FK)  | ID công việc được bình luận                      |
-| user_id            | UUID/INT (FK)  | ID người dùng tạo bình luận                      |
-| content            | TEXT           | Nội dung bình luận                               |
-| parent_comment_id  | UUID/INT (FK)  | ID bình luận cha (cho phép trả lời bình luận)    |
-| created_at         | TIMESTAMP      | Thời gian tạo bình luận                          |
-| updated_at         | TIMESTAMP      | Thời gian cập nhật gần nhất                      |
-| is_deleted         | BOOLEAN        | Đánh dấu đã xóa (xóa mềm)                        |
+| column_name | data_type                | is_nullable | is_primary_key |
+| ----------- | ------------------------ | ----------- | -------------- |
+| comment_id  | uuid                     | NO          | YES            |
+| task_id     | uuid                     | NO          | NO             |
+| user_id     | uuid                     | NO          | NO             |
+| content     | text                     | NO          | NO             |
+| parent_id   | uuid                     | YES         | NO             |
+| created_at  | timestamp with time zone | YES         | NO             |
+| updated_at  | timestamp with time zone | YES         | NO             |
+| is_deleted  | boolean                  | YES         | NO             |
+| metadata    | jsonb                    | YES         | NO             |
 
 ## 10. Bảng Comment_Mentions (Đề cập người dùng)
 
@@ -209,6 +231,19 @@ Sau khi phân tích và kết hợp kết quả từ các mô hình AI khác nha
 | entity_id      | INTEGER        | ID của đối tượng bị tác động                     |
 | details        | JSONB/JSON     | Chi tiết thay đổi                                |
 | created_at     | TIMESTAMP      | Thời gian thực hiện hành động                    |
+
+## Enums type
+| ENUM TYPE             | ENUM VALUE                 |
+| --------------------- | -------------------------- |
+| member_role           | admin, member, viewer      |
+| project_priority      | low, medium, high, urgent |
+| project_status        | active, completed, on_hold, cancelled |
+| project_visibility    | public, private, team      |
+| task_priority         | low, medium, high, urgent, critical |
+| task_status           | todo, doing, done, close, pending, review, blocked, rejected, archived |
+| user_provider         | email, google, github       |
+| user_role             | admin, user                |
+
 
 ## Ghi chú về thiết kế
 

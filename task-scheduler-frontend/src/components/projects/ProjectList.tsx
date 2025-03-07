@@ -1,21 +1,21 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useQuery } from '@apollo/client';
 import Link from 'next/link';
-import { fetchApi } from '@/lib/api';
 import { PlusCircle, FolderPlus, Loader2, Users, Calendar } from 'lucide-react';
+import { GET_PROJECTS } from '@/graphql/queries/projects';
 
 interface Project {
   id: string;
   name: string;
   description?: string;
-  created_at: string;
-  updated_at: string;
+  createdAt: string;
+  updatedAt: string;
   status: string;
   priority: string;
   visibility: string;
   tags: string[];
-  member_count: number;
+  memberCount: number;
 }
 
 const getPriorityColor = (priority: string) => {
@@ -40,31 +40,8 @@ const getStatusColor = (status: string) => {
 };
 
 export default function ProjectList() {
-  const [projects, setProjects] = useState<Project[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetchProjects();
-  }, []);
-
-  const fetchProjects = async () => {
-    try {
-      const data = await fetchApi('/api/projects');
-      setProjects(data || []);
-      setError(null);
-    } catch (err) {
-      console.error('[Projects] Error fetching projects:', err);
-      if (err instanceof Error && err.name === 'AuthenticationError') {
-        window.location.href = '/auth';
-      } else {
-        setError('Failed to fetch projects');
-        setProjects([]);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
+  const { data, loading, error, refetch } = useQuery(GET_PROJECTS);
+  const projects = data?.projects || [];
 
   if (loading) {
     return (
@@ -77,9 +54,9 @@ export default function ProjectList() {
   if (error) {
     return (
       <div className="text-center py-8">
-        <div className="text-red-500 mb-4">{error}</div>
+        <div className="text-red-500 mb-4">{error.message}</div>
         <button 
-          onClick={fetchProjects}
+          onClick={() => refetch()}
           className="text-blue-500 hover:text-blue-600"
         >
           Try again
@@ -124,7 +101,7 @@ export default function ProjectList() {
         <span className="font-medium text-blue-600 group-hover:text-blue-700">Create New Project</span>
       </Link>
 
-      {projects.map((project) => (
+      {projects.map((project: Project) => (
         <Link
           key={project.id}
           href={`/projects/${project.id}`}
@@ -171,11 +148,11 @@ export default function ProjectList() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1">
                 <Users className="w-4 h-4" />
-                <span>{project.member_count}</span>
+                <span>{project.memberCount}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Calendar className="w-4 h-4" />
-                <span>{new Date(project.created_at).toLocaleDateString()}</span>
+                <span>{new Date(project.createdAt).toLocaleDateString()}</span>
               </div>
             </div>
             <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${project.visibility === 'PRIVATE' ? 'bg-gray-100 text-gray-700' : 'bg-green-100 text-green-700'}`}>
