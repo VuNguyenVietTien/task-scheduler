@@ -22,8 +22,12 @@ impl ProjectMemberQuery {
         let members = sqlx::query(
             r#"
             SELECT 
-                member_id, project_id, user_id, role 
-            FROM project_members 
+                pm.role,
+                u.user_id,
+                u.username,
+                u.avatar_url
+            FROM project_members pm
+            INNER JOIN users u ON pm.user_id = u.user_id
             WHERE project_id = $1
             "#
         )
@@ -33,11 +37,10 @@ impl ProjectMemberQuery {
         .map_err(|e| AuthError::Database(e))?;
 
         Ok(members.into_iter().map(|row: PgRow| ProjectMember {
-            id: row.get("member_id"),
-            project_id: row.get("project_id"), 
             user_id: row.get("user_id"),
             role: row.get("role"),
-            user: None,
+            username: row.get("username"),
+            avatar_url: row.get("avatar_url"),
         }).collect())
     }
 
@@ -55,8 +58,12 @@ impl ProjectMemberQuery {
         let member = sqlx::query(
             r#"
             SELECT 
-                member_id, project_id, user_id, role
-            FROM project_members 
+                pm.role,
+                u.user_id,
+                u.username,
+                u.avatar_url
+            FROM project_members pm
+            INNER JOIN users u ON pm.user_id = u.user_id
             WHERE project_id = $1 AND user_id = $2
             "#
         )
@@ -67,11 +74,10 @@ impl ProjectMemberQuery {
         .map_err(|e| AuthError::Database(e))?;
 
         Ok(member.map(|row: PgRow| ProjectMember {
-            id: row.get("member_id"),
-            project_id: row.get("project_id"),
             user_id: row.get("user_id"),
             role: row.get("role"),
-            user: None,
+            username: row.get("username"),
+            avatar_url: row.get("avatar_url"),
         }))
     }
 }
@@ -164,11 +170,10 @@ impl ProjectMemberMutation {
         .map_err(|e| AuthError::Database(e))?;
 
         let result = ProjectMember {
-            id: member.get("member_id"),
-            project_id: member.get("project_id"),
             user_id: member.get("user_id"),
             role: member.get("role"),
-            user: None,
+            username: String::new(),
+            avatar_url: String::new(),
         };
 
         eprintln!("\n=== Add Project Member Response ===");
@@ -208,11 +213,10 @@ impl ProjectMemberMutation {
 
         match member {
             Some(row) => Ok(ProjectMember {
-                id: row.get("member_id"),
-                project_id: row.get("project_id"),
                 user_id: row.get("user_id"),
                 role: row.get("role"),
-                user: None,
+                username: String::new(),
+                avatar_url: String::new(),
             }),
             None => Err("Project member not found".into())
         }

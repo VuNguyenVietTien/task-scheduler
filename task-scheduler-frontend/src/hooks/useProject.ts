@@ -1,38 +1,45 @@
-import { useEffect, useState } from 'react';
-import { type Project } from '@/data/mockProjects';
+import { useQuery } from '@apollo/client';
+import { GET_PROJECT_BY_ID } from '@/graphql/queries/project';
 
-export function useProject(id: string) {
-  const [project, setProject] = useState<Project | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    async function fetchProject() {
-      try {
-        setIsLoading(true);
-        setError(null);
-
-        const response = await fetch(`/api/projects/${id}`);
-        
-        if (!response.ok) {
-          const data = await response.json();
-          throw new Error(data.error || 'Failed to fetch project');
-        }
-
-        const projectData = await response.json();
-        setProject(projectData);
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to load project');
-        setProject(null);
-      } finally {
-        setIsLoading(false);
-      }
-    }
-
-    if (id) {
-      fetchProject();
-    }
-  }, [id]);
-
-  return { project, isLoading, error };
+export interface ProjectMember {
+  userId: string;
+  username: string;
+  avatarUrl: string | null;
+  role: string;
 }
+
+export interface ProjectOwner {
+  userId: string;
+  email: string;
+  username: string;
+  fullName: string | null;
+  avatarUrl: string | null;
+}
+
+export interface Project {
+  projectId: string;
+  name: string;
+  description: string | null;
+  createdAt: string;
+  priority: string;
+  visibility: string;
+  tags: string[];
+  progress: number;
+  category: string;
+  metadata: any;
+  startDate: string;
+  endDate: string;
+  iconUrl: string | null;
+  isPublic: boolean;
+  status: string;
+  memberCount: number;
+  owner: ProjectOwner;
+  members: ProjectMember[];
+}
+
+export const useProject = (projectId: string) => {
+  return useQuery<{ project: Project }>(GET_PROJECT_BY_ID, {
+    variables: { projectId },
+    skip: !projectId,
+  });
+};

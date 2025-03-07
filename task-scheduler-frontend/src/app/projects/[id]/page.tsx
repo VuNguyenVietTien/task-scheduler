@@ -1,10 +1,10 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense } from 'react';
 import type { ProjectData } from '@/types/project';
-import { fetchApi } from '@/lib/api';
 import { ProjectDetailView } from '@/components/projects/ProjectDetailView';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { useProject } from '@/hooks/useProject';
 
 function LoadingFallback() {
   return (
@@ -33,58 +33,27 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
 }
 
 function ProjectPage({ id }: { id: string }) {
-  const [project, setProject] = useState<ProjectData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { loading, error, data } = useProject(id);
 
-  useEffect(() => {
-    async function fetchProject() {
-      try {
-        const response = await fetchApi(`/api/projects/${id}`);
-        
-        // Transform API response to match ProjectData interface
-        const projectData: ProjectData = {
-          id: response.id,
-          name: response.name,
-          description: response.description || '',
-          // Using created_at as dueDate for now since API doesn't have dueDate
-          dueDate: response.created_at,
-          members: response.member_count || 0,
-          // Map API status to UI status
-          status: response.status.toLowerCase() === 'completed' ? 'completed' :
-                 response.status.toLowerCase() === 'on_hold' ? 'on-hold' :
-                 'active'
-        };
-
-        setProject(projectData);
-        setError(null);
-      } catch (err) {
-        setError('Failed to load project details');
-        console.error('Error loading project:', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-
-    fetchProject();
-  }, [id]);
-
+  // Xử lý trạng thái loading
   if (loading) {
     return <LoadingFallback />;
   }
 
+  // Xử lý trạng thái lỗi
   if (error) {
     return (
       <div className="p-6">
         <div className="card">
           <h1 className="text-xl text-red-600">Error</h1>
-          <p className="text-slate-600">{error}</p>
+          <p className="text-slate-600">{error.message}</p>
         </div>
       </div>
     );
   }
 
-  if (!project) {
+  // Xử lý trường hợp không tìm thấy project
+  if (!data || !data.project) {
     return (
       <div className="p-6">
         <div className="card">
@@ -96,6 +65,18 @@ function ProjectPage({ id }: { id: string }) {
       </div>
     );
   }
+
+  // Map dữ liệu từ GraphQL sang ProjectData
+  const project: ProjectData = {
+    id: data.project.projectId,
+    name: data.project.name,
+    description: data.project.description || '',
+    dueDate: data.project.endDate,
+    members: data.project.memberCount,
+    status: data.project.status.toLowerCase() === 'completed' ? 'completed' :
+           data.project.status.toLowerCase() === 'on_hold' ? 'on-hold' :
+           'active'
+  };
 
   return <ProjectDetailView project={project} />;
 }

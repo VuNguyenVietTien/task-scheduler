@@ -96,25 +96,24 @@ pub struct CreateProjectInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectMember {
-    pub id: Uuid,
     pub user_id: Uuid,
-    pub project_id: Uuid,
     pub role: MemberRole,
-    pub user: Option<User>,
+    pub username: String,
+    pub avatar_url: String,
+    
 }
 
 #[Object]
 impl ProjectMember {
-    async fn id(&self) -> ID { self.id.into() }
     async fn user_id(&self) -> ID { self.user_id.into() }
-    async fn project_id(&self) -> ID { self.project_id.into() }
     async fn role(&self) -> MemberRole { self.role }
-    async fn user(&self) -> &Option<User> { &self.user }
+    async fn username(&self) -> String { self.username.clone() }
+    async fn avatar_url(&self) -> String { self.avatar_url.clone() }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Projects {
-    pub id: Uuid,
+    pub project_id: Uuid,
     pub name: String,
     pub member_count: i64,
     pub start_date: DateTime<Utc>,
@@ -130,7 +129,7 @@ pub struct Projects {
 
 #[Object]
 impl Projects {
-    async fn id(&self) -> ID { self.id.into() }
+    async fn project_id(&self) -> ID { self.project_id.into() }
     async fn name(&self) -> &str { &self.name }
     async fn member_count(&self) -> i64 { self.member_count }
     async fn start_date(&self) -> DateTime<Utc> { self.start_date }
@@ -146,7 +145,7 @@ impl Projects {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {
-    pub id: Uuid,
+    pub project_id: Uuid,
     pub name: String,
     pub members: Vec<ProjectMember>,
     pub start_date: DateTime<Utc>,
@@ -163,12 +162,13 @@ pub struct Project {
     pub is_public: bool,
     pub created_at: DateTime<Utc>,
     pub description: Option<String>,
-    pub updated_at: Option<DateTime<Utc>>
+    pub updated_at: Option<DateTime<Utc>>,
+    pub member_count: i64,
 }
 
 #[Object]
 impl Project {
-    async fn id(&self) -> ID { self.id.into() }
+    async fn project_id(&self) -> ID { self.project_id.into() }
     async fn name(&self) -> &str { &self.name }
     async fn members(&self) -> &Vec<ProjectMember> { &self.members }
     async fn start_date(&self) -> DateTime<Utc> { self.start_date }
@@ -186,11 +186,12 @@ impl Project {
     async fn created_at(&self) -> DateTime<Utc> { self.created_at }
     async fn description(&self) -> &Option<String> { &self.description }
     async fn updated_at(&self) -> &Option<DateTime<Utc>> { &self.updated_at }
+    async fn member_count(&self) -> i64 { self.member_count }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectResponse {
-    pub id: Uuid,
+    pub project_id: Uuid,
     pub name: String,
     pub members: Vec<ProjectMember>,
     pub start_date: DateTime<Utc>,
@@ -211,7 +212,7 @@ pub struct ProjectResponse {
 
 #[Object]
 impl ProjectResponse {
-    async fn id(&self) -> ID { self.id.into() }
+    async fn project_id(&self) -> ID { self.project_id.into() }
     async fn name(&self) -> &str { &self.name }
     async fn description(&self) -> &Option<String> { &self.description }
     async fn start_date(&self) -> DateTime<Utc> { self.start_date }

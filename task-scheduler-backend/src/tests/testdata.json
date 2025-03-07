@@ -254,3 +254,46 @@
     ]
   }
 }
+{
+  "data": {
+    "project": {
+      "projectId": "a55169d0-2828-4d2e-867c-3a05ff019016",
+      "name": "Test Project",
+      "description": "This is a test project",
+      "createdAt": "2025-03-06T03:27:13.101200+00:00",
+      "priority": "MEDIUM",
+      "visibility": "TEAM",
+      "tags": [],
+      "progress": 0.0,
+      "category": "",
+      "metadata": null,
+      "startDate": "1970-01-01T00:00:00+00:00",
+      "endDate": "1970-01-01T00:00:00+00:00",
+      "iconUrl": "",
+      "isPublic": false,
+      "status": "active",
+      "memberCount": 2,
+      "owner": {
+        "userId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+        "email": "test@example.com",
+        "username": "Test User",
+        "fullName": "",
+        "avatarUrl": ""
+      },
+      "members": [
+        {
+          "userId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+          "username": "Test User",
+          "avatarUrl": "",
+          "role": "admin"
+        },
+        {
+          "userId": "51694e1b-39ca-437b-a337-b63108727377",
+          "username": "Member User",
+          "avatarUrl": "",
+          "role": "member"
+        }
+      ]
+    }
+  }
+}%

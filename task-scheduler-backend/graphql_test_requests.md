@@ -168,7 +168,7 @@ curl -X POST http://localhost:8080/graphql \
 -H "Content-Type: application/json" \
 -H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
 -d '{
-  "query": "query GetProjectById($projectId: UUID!) { project(project_id: $projectId) { project_id name description owner_id created_at priority visibility tags progress category metadata start_date end_date icon_url is_public status member_count owner { user_id email full_name avatar_url } members { user_id email full_name avatar_url role joined_at } } }",
+  "query": "query GetProjectById($projectId: UUID!) { project(projectId: $projectId) { projectId name description createdAt priority visibility tags progress category metadata startDate endDate iconUrl isPublic status memberCount owner { userId email username fullName avatarUrl } members { userId username avatarUrl role } } }",
   "variables": {
     "projectId": "a55169d0-2828-4d2e-867c-3a05ff019016"
   }
