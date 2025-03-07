@@ -2,7 +2,7 @@ use actix_web::{web, HttpResponse, Responder};
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
-use crate::auth::{error::AuthError, AuthService};
+use crate::auth::{error::AuthError, service::AuthService};
 use crate::firebase::FirebaseService;
 
 #[derive(Debug, Deserialize, Validate)]
@@ -31,7 +31,7 @@ pub struct FirebaseLoginData {
 
 #[derive(Debug, Serialize)]
 pub struct AuthResponse {
-    pub id: String,
+    pub user_id: String,
     pub email: String,
     pub name: String,
 }
@@ -45,9 +45,9 @@ pub async fn register(
         .await?;
 
     Ok(HttpResponse::Ok().json(AuthResponse {
-        id: user.id.to_string(),
+        user_id: user.user_id.to_string(),
         email: user.email, 
-        name: user.name,
+        name: user.username.unwrap_or_default(),
     }))
 }
 
@@ -60,9 +60,9 @@ pub async fn login(
         .await?;
 
     Ok(HttpResponse::Ok().json(AuthResponse {
-        id: user.id.to_string(),
+        user_id: user.user_id.to_string(),
         email: user.email,
-        name: user.name,
+        name: user.username.unwrap_or_default(),
     }))
 }
 
@@ -101,9 +101,9 @@ pub async fn firebase_login(
     Ok(HttpResponse::Ok().json(serde_json::json!({
         "token": token,
         "user": {
-            "id": user.id.to_string(),
+            "id": user.user_id.to_string(),
             "email": user.email,
-            "name": user.name
+            "name": user.username.unwrap_or_default()
         }
     })))
 }

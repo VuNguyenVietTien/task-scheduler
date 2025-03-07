@@ -8,7 +8,7 @@ mutation Register($input: RegisterInput!) {
     refreshToken
     user {
       id
-      email
+      email 
       name
     }
   }
@@ -67,12 +67,110 @@ Curl command:
 curl -X POST http://localhost:8080/graphql \
 -H "Content-Type: application/json" \
 -d '{
-  "query": "mutation Login($input: LoginInput!) { login(input: $input) { accessToken refreshToken user { id email name } } }",
+  "query": "mutation Login($input: LoginInput!) { login(input: $input) { accessToken refreshToken user { userId email username } } }",
   "variables": {
     "input": {
       "email": "test@example.com",
       "password": "password123"
     }
+  }
+}'
+```
+```
+
+## Get Projects List
+```graphql
+query GetProjects {
+  projects {
+    project_id
+    name
+    description
+    owner_id
+    created_at
+    priority
+    visibility
+    tags
+    progress
+    category
+    metadata
+    start_date
+    end_date
+    icon_url
+    is_public
+    status
+    member_count
+    owner {
+      user_id
+      email
+      full_name
+      avatar_url
+    }
+  }
+}
+
+Curl command:
+```bash
+curl -X POST http://localhost:8080/graphql \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiI1Zjc2MmUyYy03NTEwLTQ2NTEtYjBlZS0zNmYzNDJlOTM0M2MiLCJleHAiOjE3NDE0MTY4NzcsImlhdCI6MTc0MTMzMDQ3NywiZW1haWwiOiJ0ZXN0QGV4YW1wbGUuY29tIiwiZGlzcGxheV9uYW1lIjoiVGVzdCBVc2VyIn0.VZ_ETZSCb8NjPu3Wx_o2prZwOA2_O33CVw2SVYnuqO4" \
+-d '{
+  "query": "query GetUserProjects($userId: ID!) { projects(userId: $userId) { id name startDate endDate status memberCount progress category priority visibility iconUrl owner { userId email username fullName avatarUrl } } }",
+  "variables": {
+    "userId": "5f762e2c-7510-4651-b0ee-36f342e9343c"
+  }
+}'
+## Get Project By ID
+```graphql
+query GetProjectById($projectId: UUID!) {
+  project(project_id: $projectId) {
+    project_id
+    name
+    description
+    owner_id
+    created_at
+    priority
+    visibility
+    tags
+    progress
+    category
+    metadata
+    start_date
+    end_date
+    icon_url
+    is_public
+    status
+    member_count
+    owner {
+      user_id
+      email
+      full_name
+      avatar_url
+    }
+    members {
+      user_id
+      email
+      full_name
+      avatar_url
+      role
+      joined_at
+    }
+  }
+}
+
+Variables:
+{
+  "projectId": "a55169d0-2828-4d2e-867c-3a05ff019016"
+}
+
+Curl command:
+```bash
+curl -X POST http://localhost:8080/graphql \
+-H "Content-Type: application/json" \
+-H "Authorization: Bearer YOUR_ACCESS_TOKEN" \
+-d '{
+  "query": "query GetProjectById($projectId: UUID!) { project(project_id: $projectId) { project_id name description owner_id created_at priority visibility tags progress category metadata start_date end_date icon_url is_public status member_count owner { user_id email full_name avatar_url } members { user_id email full_name avatar_url role joined_at } } }",
+  "variables": {
+    "projectId": "a55169d0-2828-4d2e-867c-3a05ff019016"
   }
 }'
 ```
@@ -205,7 +303,7 @@ Variables:
   "input": {
     "taskId": "f3457c6e-f03a-4aa3-abff-c56408af18a2",
     "title": "Updated Task Title",
-    "description": "Updated task description",
+    "description": "Updated task description", 
     "status": "doing",
     "priority": "high",
     "priorityOrder": 1,
@@ -226,7 +324,7 @@ curl -X POST http://localhost:8080/graphql \
       "taskId": "f3457c6e-f03a-4aa3-abff-c56408af18a2",
       "title": "Updated Task Title",
       "description": "Updated task description",
-      "status": "doing",
+      "status": "doing", 
       "priority": "high",
       "priorityOrder": 1,
       "startDate": "2025-03-07T00:00:00Z",
@@ -275,4 +373,3 @@ curl -X POST http://localhost:8080/graphql \
     "projectId": "a55169d0-2828-4d2e-867c-3a05ff019016"
   }
 }'
-```

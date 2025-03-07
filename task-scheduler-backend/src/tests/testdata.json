@@ -167,4 +167,90 @@
       }
     }
   }
+},
+{
+  "data": {
+    "projects": [
+      {
+        "id": "a55169d0-2828-4d2e-867c-3a05ff019016",
+        "name": "Test Project",
+        "startDate": "2025-03-07T07:30:33.827651+00:00",
+        "endDate": "2025-03-07T07:30:33.827670+00:00",
+        "status": "active",
+        "memberCount": 2,
+        "progress": 0.0,
+        "category": "",
+        "priority": "MEDIUM",
+        "visibility": "TEAM",
+        "iconUrl": null,
+        "owner": {
+          "userId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+          "email": "test@example.com",
+          "username": "Test User",
+          "fullName": "",
+          "avatarUrl": ""
+        }
+      },
+      {
+        "id": "e3158779-2dc9-4610-8b5b-d8f57d92f753",
+        "name": "Test Project",
+        "startDate": "2025-03-07T07:30:33.827684+00:00",
+        "endDate": "2025-03-07T07:30:33.827685+00:00",
+        "status": "active",
+        "memberCount": 1,
+        "progress": 0.0,
+        "category": "",
+        "priority": "MEDIUM",
+        "visibility": "TEAM",
+        "iconUrl": null,
+        "owner": {
+          "userId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+          "email": "test@example.com",
+          "username": "Test User",
+          "fullName": "",
+          "avatarUrl": ""
+        }
+      },
+      {
+        "id": "4b286e63-0f38-4521-bb6f-c551b51f6472",
+        "name": "Test Project",
+        "startDate": "2025-03-07T07:30:33.827693+00:00",
+        "endDate": "2025-03-07T07:30:33.827694+00:00",
+        "status": "active",
+        "memberCount": 1,
+        "progress": 0.0,
+        "category": "",
+        "priority": "MEDIUM",
+        "visibility": "TEAM",
+        "iconUrl": null,
+        "owner": {
+          "userId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+          "email": "test@example.com",
+          "username": "Test User",
+          "fullName": "",
+          "avatarUrl": ""
+        }
+      },
+      {
+        "id": "3c907630-8e1d-43fc-95a0-21a6c4330878",
+        "name": "Test Project",
+        "startDate": "2025-03-07T07:30:33.827701+00:00",
+        "endDate": "2025-03-07T07:30:33.827701+00:00",
+        "status": "active",
+        "memberCount": 1,
+        "progress": 0.0,
+        "category": "",
+        "priority": "MEDIUM",
+        "visibility": "TEAM",
+        "iconUrl": null,
+        "owner": {
+          "userId": "5f762e2c-7510-4651-b0ee-36f342e9343c",
+          "email": "test@example.com",
+          "username": "Test User",
+          "fullName": "",
+          "avatarUrl": ""
+        }
+      }
+    ]
+  }
 }

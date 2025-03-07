@@ -36,11 +36,11 @@ pub async fn get_auth_info_from_token(
 pub fn create_token(
     user_id: Uuid,
     email: String,
-    name: String,
+    username: String,
     config: &Config,
 ) -> Result<String, AuthError> {
     // Create access token and return just the token string
-    let access_token = token::create_access_token(user_id, email, name, config)?;
+    let access_token = token::create_access_token(user_id, email, username, config)?;
     Ok(access_token.token)
 }
 

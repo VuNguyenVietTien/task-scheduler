@@ -83,6 +83,7 @@ pub enum ProjectPriority {
     Low,
     Medium,
     High,
+    Urgent,
 }
 
 impl Default for ProjectPriority {
@@ -99,6 +100,7 @@ impl FromStr for ProjectPriority {
             "low" => Ok(ProjectPriority::Low),
             "medium" => Ok(ProjectPriority::Medium),
             "high" => Ok(ProjectPriority::High),
+            "urgent" => Ok(ProjectPriority::Urgent),
             _ => Err(format!("Invalid project priority: {}", s)),
         }
     }
@@ -110,6 +112,7 @@ impl AsRef<str> for ProjectPriority {
             ProjectPriority::Low => "low",
             ProjectPriority::Medium => "medium",
             ProjectPriority::High => "high",
+            ProjectPriority::Urgent => "urgent",
         }
     }
 }

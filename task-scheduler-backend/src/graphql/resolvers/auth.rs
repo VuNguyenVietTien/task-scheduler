@@ -17,7 +17,7 @@ impl AuthMutation {
         let auth_service = AuthService::new(ctx.db.clone());
 
         let result = auth_service
-            .register(input.email.clone(), input.password.clone(), input.name.clone())
+            .register(input.email.clone(), input.password.clone(), input.username.clone().unwrap())
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
@@ -40,9 +40,9 @@ impl AuthMutation {
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         let token = crate::auth::auth_common::create_token(
-            user.id,
+            user.user_id,
             user.email.clone(),
-            user.name.clone(),
+            user.username.clone().unwrap(),
             &ctx.config,
         ).map_err(|e| async_graphql::Error::new(e.to_string()))?;
 

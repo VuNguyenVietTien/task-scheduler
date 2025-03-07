@@ -238,8 +238,21 @@ type Project {
   projectId: ID!
   name: String!
   description: String
+  owner: User!
   createdBy: User!
   members: [ProjectMember!]!
+  status: ProjectStatus!
+  priority: ProjectPriority!
+  visibility: ProjectVisibility!
+  tags: [String!]!
+  progress: Float!
+  category: String
+  metadata: JSON
+  startDate: DateTime
+  endDate: DateTime
+  iconUrl: String
+  isPublic: Boolean!
+  memberCount: Int!
   tasks: [Task!]!
   createdAt: DateTime!
   updatedAt: DateTime!

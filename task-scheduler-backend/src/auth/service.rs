@@ -19,7 +19,7 @@ impl AuthService {
         &self,
         email: String,
         password: String,
-        name: String,
+        username: String,
     ) -> Result<(String, String, User), AuthError> {
         // Check if email exists
         let exists = sqlx::query(
@@ -47,7 +47,7 @@ impl AuthService {
         .bind(user_id)
         .bind(&email)
         .bind(&password_hash)
-        .bind(&name)
+        .bind(&username)
         .execute(&self.db)
         .await?;
 
@@ -58,14 +58,16 @@ impl AuthService {
         let token = auth_common::create_token(
             user_id,
             email.clone(),
-            name.clone(),
+            username.clone(),
             &config,
         )?;
 
         let user = User {
-            id: user_id,
+            user_id: user_id,
             email,
-            name,
+            username: Some(username),
+            full_name: None,
+            avatar_url: None,
         };
 
         Ok((token.clone(), token, user))
@@ -79,7 +81,7 @@ impl AuthService {
     ) -> Result<(String, String, User), AuthError> {
         // Check if user exists by firebase_uid
         let existing_user = sqlx::query(
-            "SELECT user_id, email, username
+            "SELECT user_id, email, username, full_name, avatar_url
              FROM users 
              WHERE firebase_uid = $1"
         )
@@ -90,9 +92,11 @@ impl AuthService {
         let user = if let Some(row) = existing_user {
             // User exists, return existing user
             User {
-                id: row.get("user_id"),
+                user_id: row.get("user_id"),
                 email: row.get("email"),
-                name: row.get("username"),
+                username: row.get("username"),
+                full_name: row.get("full_name"),
+                avatar_url: row.get("avatar_url"),
             }
         } else {
             // Create new user
@@ -110,20 +114,24 @@ impl AuthService {
             .await?;
 
             User {
-                id: user_id,
+                user_id: user_id,
                 email: email.clone(),
-                name: name.clone(),
+                username: Some(name.clone()),
+                full_name: None,
+                avatar_url: None,
             }
         };
+
+        let username = user.username.clone();
 
         // Create JWT token
         let config = Config::from_env()
             .map_err(|e| AuthError::Other(e.to_string()))?;
 
         let token = auth_common::create_token(
-            user.id,
+            user.user_id,
             email,
-            name,
+            username.unwrap_or_default(),
             &config,
         )?;
 
@@ -151,9 +159,11 @@ impl AuthService {
         }
 
         Ok(User {
-            id: row.get("user_id"),
+            user_id: row.get("user_id"),
             email: row.get("email"), 
-            name: row.get("username"),
+            username: row.get("username"),
+            full_name: None,
+            avatar_url: None,
         })
     }
 

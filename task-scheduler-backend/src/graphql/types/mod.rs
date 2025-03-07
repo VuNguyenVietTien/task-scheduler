@@ -12,13 +12,15 @@ use rust_decimal::prelude::*;
 use serde_json::json;
 
 use crate::db::models;
+use crate::db::ProjectPriority; 
+use crate::db::ProjectVisibility;
 
 // Auth Types
 #[derive(InputObject)]
 pub struct RegisterInput {
     pub email: String,
     pub password: String,
-    pub name: String,
+    pub username: Option<String>
 }
 
 #[derive(InputObject)]
@@ -29,16 +31,20 @@ pub struct LoginInput {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
-    pub id: Uuid,
+    pub user_id: Uuid,
     pub email: String,
-    pub name: String,
+    pub username: Option<String>,
+    pub full_name: Option<String>,
+    pub avatar_url: Option<String>,
 }
 
 #[Object]
 impl User {
-    async fn id(&self) -> ID { self.id.into() }
-    async fn email(&self) -> &str { &self.email }
-    async fn name(&self) -> &str { &self.name }
+    async fn user_id(&self) -> ID { self.user_id.into() }
+    async fn email(&self) -> String { self.email.clone() }
+    async fn username(&self) -> String { self.username.clone().unwrap_or_default() }
+    async fn full_name(&self) -> String { self.full_name.clone().unwrap_or_default() }
+    async fn avatar_url(&self) -> String { self.avatar_url.clone().unwrap_or_default() }
 }
 
 #[derive(SimpleObject)]
@@ -107,40 +113,100 @@ impl ProjectMember {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Project {
+pub struct Projects {
     pub id: Uuid,
     pub name: String,
-    pub description: Option<String>,
+    pub member_count: i64,
     pub start_date: DateTime<Utc>,
     pub end_date: DateTime<Utc>,
     pub status: ProjectStatus,
-    pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
+    pub owner: User,
+    pub progress: f64,
+    pub category: String,
+    pub priority: ProjectPriority,
+    pub visibility: ProjectVisibility,
+    pub icon_url: Option<String>
+}
+
+#[Object]
+impl Projects {
+    async fn id(&self) -> ID { self.id.into() }
+    async fn name(&self) -> &str { &self.name }
+    async fn member_count(&self) -> i64 { self.member_count }
+    async fn start_date(&self) -> DateTime<Utc> { self.start_date }
+    async fn end_date(&self) -> DateTime<Utc> { self.end_date }
+    async fn status(&self) -> ProjectStatus { self.status }
+    async fn owner(&self) -> &User { &self.owner }
+    async fn progress(&self) -> f64 { self.progress }
+    async fn category(&self) -> &str { &self.category }
+    async fn priority(&self) -> ProjectPriority { self.priority }
+    async fn visibility(&self) -> ProjectVisibility { self.visibility }
+    async fn icon_url(&self) -> &Option<String> { &self.icon_url }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Project {
+    pub id: Uuid,
+    pub name: String,
     pub members: Vec<ProjectMember>,
+    pub start_date: DateTime<Utc>,
+    pub end_date: DateTime<Utc>,
+    pub status: ProjectStatus,
+    pub owner: User,
+    pub progress: f64,
+    pub category: String,
+    pub priority: ProjectPriority,
+    pub visibility: ProjectVisibility,
+    pub icon_url: Option<String>,
+    pub tags: Vec<String>,
+    pub metadata: JsonValue,
+    pub is_public: bool,
+    pub created_at: DateTime<Utc>,
+    pub description: Option<String>,
+    pub updated_at: Option<DateTime<Utc>>
 }
 
 #[Object]
 impl Project {
     async fn id(&self) -> ID { self.id.into() }
     async fn name(&self) -> &str { &self.name }
-    async fn description(&self) -> &Option<String> { &self.description }
+    async fn members(&self) -> &Vec<ProjectMember> { &self.members }
     async fn start_date(&self) -> DateTime<Utc> { self.start_date }
     async fn end_date(&self) -> DateTime<Utc> { self.end_date }
     async fn status(&self) -> ProjectStatus { self.status }
+    async fn owner(&self) -> &User { &self.owner }
+    async fn progress(&self) -> f64 { self.progress }
+    async fn category(&self) -> &str { &self.category }
+    async fn priority(&self) -> ProjectPriority { self.priority }
+    async fn visibility(&self) -> ProjectVisibility { self.visibility }
+    async fn icon_url(&self) -> &Option<String> { &self.icon_url }
+    async fn tags(&self) -> &Vec<String> { &self.tags }
+    async fn metadata(&self) -> &JsonValue { &self.metadata }
+    async fn is_public(&self) -> bool { self.is_public }
     async fn created_at(&self) -> DateTime<Utc> { self.created_at }
-    async fn updated_at(&self) -> DateTime<Utc> { self.updated_at }
-    async fn members(&self) -> Vec<&ProjectMember> { self.members.iter().collect() }
+    async fn description(&self) -> &Option<String> { &self.description }
+    async fn updated_at(&self) -> &Option<DateTime<Utc>> { &self.updated_at }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ProjectResponse {
     pub id: Uuid,
     pub name: String,
-    pub description: Option<String>,
-    pub start_date: DateTime<Utc>,
-    pub end_date: DateTime<Utc>, 
-    pub status: ProjectStatus,
     pub members: Vec<ProjectMember>,
+    pub start_date: DateTime<Utc>,
+    pub end_date: DateTime<Utc>,
+    pub status: ProjectStatus,
+    pub owner: User,
+    pub progress: f64,
+    pub category: String,
+    pub priority: ProjectPriority,
+    pub visibility: ProjectVisibility,
+    pub icon_url: Option<String>,
+    pub tags: Vec<String>,
+    pub metadata: JsonValue,
+    pub is_public: bool,
+    pub created_at: DateTime<Utc>,
+    pub description: Option<String>,
 }
 
 #[Object]
@@ -151,6 +217,16 @@ impl ProjectResponse {
     async fn start_date(&self) -> DateTime<Utc> { self.start_date }
     async fn end_date(&self) -> DateTime<Utc> { self.end_date }
     async fn status(&self) -> ProjectStatus { self.status }
+    async fn owner(&self) -> &User { &self.owner }
+    async fn progress(&self) -> f64 { self.progress }
+    async fn category(&self) -> &str { &self.category }
+    async fn priority(&self) -> ProjectPriority { self.priority }
+    async fn visibility(&self) -> ProjectVisibility { self.visibility }
+    async fn icon_url(&self) -> &Option<String> { &self.icon_url }
+    async fn tags(&self) -> &Vec<String> { &self.tags }
+    async fn metadata(&self) -> &JsonValue { &self.metadata }
+    async fn is_public(&self) -> bool { self.is_public }
+    async fn created_at(&self) -> DateTime<Utc> { self.created_at }
     async fn members(&self) -> Vec<&ProjectMember> { self.members.iter().collect() }
 }
 

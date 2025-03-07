@@ -3,45 +3,94 @@
 import { useQuery } from '@apollo/client';
 import Link from 'next/link';
 import { PlusCircle, FolderPlus, Loader2, Users, Calendar } from 'lucide-react';
-import { GET_PROJECTS } from '@/graphql/queries/projects';
+import { GET_USER_PROJECTS } from '@/graphql/queries/project';
+import { getAuthHeaders } from '@/lib/api';
+import { useEffect } from 'react';
 
 interface Project {
   id: string;
   name: string;
   description?: string;
-  createdAt: string;
-  updatedAt: string;
+  startDate?: string;
+  endDate?: string;
   status: string;
+  memberCount: number;
+  progress: number;
+  category?: string;
   priority: string;
   visibility: string;
-  tags: string[];
-  memberCount: number;
+  iconUrl?: string;
+  owner: {
+    userId: string;
+    email: string;
+    username: string;
+    fullName: string;
+    avatarUrl?: string;
+  };
 }
 
 const getPriorityColor = (priority: string) => {
   const colors = {
-    URGENT: 'bg-red-100 text-red-800',
-    HIGH: 'bg-orange-100 text-orange-800',
-    MEDIUM: 'bg-yellow-100 text-yellow-800',
-    LOW: 'bg-green-100 text-green-800'
+    urgent: 'bg-red-100 text-red-800',
+    high: 'bg-orange-100 text-orange-800',
+    medium: 'bg-yellow-100 text-yellow-800',
+    low: 'bg-green-100 text-green-800'
   };
-  return colors[priority as keyof typeof colors] || colors.MEDIUM;
+  return colors[priority.toLowerCase() as keyof typeof colors] || colors.medium;
 };
 
 const getStatusColor = (status: string) => {
   const colors = {
-    NEW: 'bg-blue-100 text-blue-800',
-    IN_PROGRESS: 'bg-indigo-100 text-indigo-800',
-    ON_HOLD: 'bg-yellow-100 text-yellow-800',
-    COMPLETED: 'bg-green-100 text-green-800',
-    CANCELLED: 'bg-gray-100 text-gray-800'
+    active: 'bg-blue-100 text-blue-800',
+    completed: 'bg-green-100 text-green-800',
+    on_hold: 'bg-yellow-100 text-yellow-800',
+    cancelled: 'bg-gray-100 text-gray-800'
   };
-  return colors[status as keyof typeof colors] || colors.NEW;
+  return colors[status.toLowerCase() as keyof typeof colors] || colors.active;
 };
 
 export default function ProjectList() {
-  const { data, loading, error, refetch } = useQuery(GET_PROJECTS);
+  const userId = '5f762e2c-7510-4651-b0ee-36f342e9343c'; // Tạm thời hardcode, sau này có thể lấy từ context
+
+  const { data, loading, error, refetch } = useQuery(GET_USER_PROJECTS, {
+    variables: {
+      userId
+    },
+    context: {
+      headers: getAuthHeaders()
+    },
+    onCompleted: (data) => {
+      const requestInfo = {
+        url: `${process.env.NEXT_PUBLIC_BACKEND_URL}/graphql`,
+        method: 'POST',
+        headers: {
+          ...getAuthHeaders(),
+          'Content-Type': 'application/json'
+        },
+        query: GET_USER_PROJECTS.loc?.source.body,
+        variables: { userId },
+      };
+
+      console.group('🚀 GraphQL Projects Query');
+      console.log('Request:', requestInfo);
+      console.log('Response:', data);
+      console.groupEnd();
+    },
+    onError: (error) => {
+      console.group('❌ GraphQL Query Error');
+      console.error('URL:', `${process.env.NEXT_PUBLIC_BACKEND_URL}/graphql`);
+      console.error('Headers:', getAuthHeaders());
+      console.error('Query:', GET_USER_PROJECTS.loc?.source.body);
+      console.error('Error:', error);
+      console.groupEnd();
+    }
+  });
   const projects = data?.projects || [];
+
+  useEffect(() => {
+    console.log('Auth Headers:', getAuthHeaders());
+    console.log('GraphQL Query:', GET_USER_PROJECTS.loc?.source.body);
+  }, []);
 
   if (loading) {
     return (
@@ -114,10 +163,10 @@ export default function ProjectList() {
             </h3>
             <div className="flex gap-2">
               <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getPriorityColor(project.priority)} transition-transform group-hover:scale-105`}>
-                {project.priority}
+                {project.priority.toLowerCase()}
               </span>
               <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(project.status)} transition-transform group-hover:scale-105`}>
-                {project.status.replace('_', ' ')}
+                {project.status.toLowerCase()}
               </span>
             </div>
           </div>
@@ -129,19 +178,13 @@ export default function ProjectList() {
             </p>
           )}
 
-          {/* Project Tags */}
-          {project.tags && project.tags.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 mb-4">
-              {project.tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-600 hover:bg-gray-200 transition-colors"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
-          )}
+          {/* Project Progress */}
+          <div className="w-full bg-gray-200 rounded-full h-2 mb-4">
+            <div 
+              className="bg-blue-500 h-2 rounded-full transition-all duration-500 ease-out"
+              style={{ width: `${project.progress}%` }}
+            />
+          </div>
 
           {/* Project Footer */}
           <div className="flex items-center justify-between text-xs text-gray-500 mt-4">
@@ -152,11 +195,11 @@ export default function ProjectList() {
               </div>
               <div className="flex items-center gap-1">
                 <Calendar className="w-4 h-4" />
-                <span>{new Date(project.createdAt).toLocaleDateString()}</span>
+                <span>{project.startDate ? new Date(project.startDate).toLocaleDateString() : 'Not set'}</span>
               </div>
             </div>
-            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${project.visibility === 'PRIVATE' ? 'bg-gray-100 text-gray-700' : 'bg-green-100 text-green-700'}`}>
-              {project.visibility}
+            <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${project.visibility.toLowerCase() === 'private' ? 'bg-gray-100 text-gray-700' : 'bg-green-100 text-green-700'}`}>
+              {project.visibility.toLowerCase()}
             </span>
           </div>
         </Link>
