@@ -1,5 +1,8 @@
 use actix_web::{web, HttpRequest, HttpResponse, Result};
-use async_graphql::http::{playground_source, GraphQLPlaygroundConfig};
+use async_graphql::{
+    http::{GraphiQLSource, ALL_WEBSOCKET_PROTOCOLS},
+    Schema,
+};
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use sqlx::PgPool;
 use std::sync::Arc;
@@ -97,10 +100,10 @@ pub async fn graphql_handler(
 pub async fn graphql_playground() -> Result<HttpResponse> {
     Ok(HttpResponse::Ok()
         .content_type("text/html; charset=utf-8")
-        .body(playground_source(
-            GraphQLPlaygroundConfig::new("/graphql")
-                .subscription_endpoint("/graphql"),
-        )))
+        .body(GraphiQLSource::build()
+            .endpoint("/graphql")
+            .subscription_endpoint("/graphql")
+            .finish()))
 }
 
 pub async fn graphql_ws_handler(
@@ -131,7 +134,7 @@ impl IntoGraphQLError for AuthError {
             AuthError::InvalidUserId => "INVALID_USER_ID",
             AuthError::Unauthorized(_) => "UNAUTHORIZED",
             AuthError::Forbidden(_) => "FORBIDDEN",
-            AuthError::Database(_) => "DATABASE_ERROR", 
+            AuthError::Database(_) => "DATABASE_ERROR",
             AuthError::ValidationError(_) => "VALIDATION_ERROR",
             AuthError::InternalError(_) => "INTERNAL_ERROR",
             AuthError::Other(_) => "OTHER_ERROR",
