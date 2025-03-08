@@ -132,14 +132,9 @@ export const createProjectMutation = `
       startDate
       endDate 
       status
-      members {
-        id
-        role
-        user {
-          id
-          name
-        }
-      }
+      priority
+      visibility
+      tags
     }
   }
 `;
@@ -210,11 +205,10 @@ export interface LoginInput {
 export interface CreateProjectInput {
   name: string;
   description: string;
-  ownerId: string;
-  members: Array<{
-    userId: string;
-    role: string;
-  }>;
+  status: 'ACTIVE' | 'CANCELLED' | 'COMPLETED' | 'ON_HOLD';
+  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  visibility: 'PUBLIC' | 'PRIVATE' | 'TEAM';
+  tags: string[];
 }
 
 export interface CreateTaskInput {

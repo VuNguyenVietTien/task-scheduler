@@ -2,10 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { fetchApi, getAuthHeaders } from '@/lib/api';
 import { validateProjectForm, type ProjectFormData, ProjectPriority, ProjectVisibility, ProjectStatus } from '@/schemas/projectForm';
 import { XCircle } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { createProject } from '@/lib/projectApi';
 
 type ValidationError = {
   path: string;
@@ -15,7 +15,6 @@ type ValidationError = {
 export default function NewProjectPage() {
   const router = useRouter();
   const { user, loading } = useAuth();
-  const API_URL = `${process.env.NEXT_PUBLIC_BACKEND_URL}/api/projects`;
 
   useEffect(() => {
     if (!loading && !user) {
@@ -35,8 +34,8 @@ export default function NewProjectPage() {
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [formData, setFormData] = useState<ProjectFormData>({
     name: '',
-    description: '',
-    status: ProjectStatus.NEW,
+    description: null,
+    status: ProjectStatus.ACTIVE,
     priority: ProjectPriority.MEDIUM,
     visibility: ProjectVisibility.PRIVATE,
     tags: []
@@ -60,47 +59,18 @@ export default function NewProjectPage() {
       return;
     }
 
-    const requestData = {
-      status: formData.status,
-      name: formData.name,
-      description: formData.description,
-      priority: formData.priority,
-      visibility: formData.visibility,
-      tags: formData.tags
-    };
-
     try {
-      // Log request as curl command for debugging
-      console.log([
-        '🚀 Create Project Request:',
-        `curl -X POST ${API_URL} \\`,
-        '  -H "Content-Type: application/json" \\',
-        `  -H "Authorization: ${getAuthHeaders().Authorization}" \\`,
-        `  -d '${JSON.stringify(requestData, null, 2)}' \\`,
-        '  -v'
-      ].join('\n'));
-
-      const project = await fetchApi(API_URL, {
-        method: 'POST',
-        body: requestData,
-        headers: getAuthHeaders()
+      const project = await createProject({
+        name: formData.name,
+        description: formData.description || '',
+        status: formData.status,
+        priority: formData.priority,
+        visibility: formData.visibility,
+        tags: formData.tags,
       });
 
-      router.push(`/projects/${project.id}`);
+      router.push(`/projects/${project.project_id}`);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-      console.error([
-        '❌ Create Project Error:',
-        `Error: ${errorMsg}`,
-        '',
-        'Request Details:',
-        `curl -X POST ${API_URL} \\`,
-        '  -H "Content-Type: application/json" \\',
-        `  -H "Authorization: ${getAuthHeaders().Authorization}" \\`,
-        `  -d '${JSON.stringify(requestData, null, 2)}' \\`,
-        '  -v'
-      ].join('\n'));
-
       if (err instanceof Error && err.name === 'AuthenticationError') {
         router.push('/auth');
         return;
@@ -122,7 +92,7 @@ export default function NewProjectPage() {
     const { name, value } = e.target;
     setFormData(prev => ({
       ...prev,
-      [name]: value
+      [name]: value || null
     }));
   };
 
