@@ -1,8 +1,9 @@
 use actix_web::{
-    dev::{forward_ready, Service, ServiceRequest, ServiceResponse},
-    Error,
+    dev::{forward_ready, Service, ServiceRequest, ServiceResponse, Transform},
+    Error, HttpMessage,
 };
 use futures::future::LocalBoxFuture;
+use std::future::{ready, Ready};
 
 use actix_web::{
     error::ErrorUnauthorized,
@@ -22,7 +23,7 @@ pub async fn validator(
     
     // Verify token
     match verify_access_token(token, config) {
-        Ok(_) => Ok(req),
+        Ok(_claims) => Ok(req),
         Err(e) => Err((ErrorUnauthorized(e.to_string()), req)),
     }
 }
@@ -59,7 +60,7 @@ where
 
     forward_ready!(service);
 
-    fn call(&self, req: ServiceRequest) -> Self::Future {
+    fn call(&self, mut req: ServiceRequest) -> Self::Future {
         let auth_header = req.headers().get("Authorization");
         
         if let Some(auth_header) = auth_header {
@@ -68,7 +69,7 @@ where
                     let token = auth_str.trim_start_matches("Bearer ").trim();
                     
                     match verify_access_token(token, &Config::from_env().unwrap()) {
-                        Ok(_) => {
+                        Ok(claims) => {
                             let fut = self.service.call(req);
                             return Box::pin(async move {
                                 let res = fut.await?;
@@ -95,7 +96,6 @@ where
 mod tests {
     use super::*;
     use actix_web::test;
-    use actix_web::http::header::HeaderValue;
 
     #[actix_rt::test]
     async fn test_extract_token() {

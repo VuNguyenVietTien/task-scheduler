@@ -30,7 +30,7 @@ impl AuthService {
         .await?;
 
         if exists.is_some() {
-            return Err(AuthError::EmailAlreadyExists);
+            return Err(AuthError::Database(sqlx::Error::RowNotFound));
         }
 
         let user_id = Uuid::new_v4();

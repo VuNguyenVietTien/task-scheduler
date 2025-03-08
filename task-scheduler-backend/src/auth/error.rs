@@ -7,44 +7,38 @@ pub enum AuthError {
     #[error("Invalid credentials")]
     InvalidCredentials,
 
+    #[error("Invalid user ID")]
+    InvalidUserId,
+
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("Forbidden: {0}")]
+    Forbidden(String),
+
+    #[error("Database error: {0}")]
+    Database(#[from] sqlx::Error),
+
+    #[error("Token creation error: {0}")]
+    TokenCreation(String),
+
+    #[error("Token verification error: {0}")]
+    TokenVerification(String),
+
     #[error("Invalid token: {0}")]
     InvalidToken(String),
 
     #[error("Token expired")]
     TokenExpired,
 
-    #[error("Token creation failed: {0}")]
-    TokenCreation(String),
-
-    #[error("Token verification failed: {0}")]
-    TokenVerification(String),
-
-    #[error("Email not verified")]
-    EmailNotVerified,
-
-    #[error("Email already exists")]
-    EmailAlreadyExists,
-
     #[error("User not found")]
     UserNotFound,
-
-    #[error("Invalid user ID")]
-    InvalidUserId,
-
-    #[error("Invalid verification token")]
-    InvalidVerificationToken,
 
     #[error("Validation error: {0}")]
     ValidationError(String),
 
-    #[error("Password error: {0}")]
-    PasswordError(String),
-
-    #[error("Database error: {0}")]
-    Database(#[from] sqlx::Error),
-
     #[error("Internal error: {0}")]
-    Internal(String),
+    InternalError(String),
 
     #[error("Other error: {0}")]
     Other(String),
@@ -60,19 +54,17 @@ impl ResponseError for AuthError {
     fn status_code(&self) -> StatusCode {
         match self {
             AuthError::InvalidCredentials => StatusCode::UNAUTHORIZED,
-            AuthError::InvalidToken(_) => StatusCode::UNAUTHORIZED,
-            AuthError::TokenExpired => StatusCode::UNAUTHORIZED,
+            AuthError::InvalidUserId => StatusCode::BAD_REQUEST,
+            AuthError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
+            AuthError::Forbidden(_) => StatusCode::FORBIDDEN,
+            AuthError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AuthError::TokenCreation(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AuthError::TokenVerification(_) => StatusCode::UNAUTHORIZED,
-            AuthError::EmailNotVerified => StatusCode::FORBIDDEN,
-            AuthError::EmailAlreadyExists => StatusCode::CONFLICT,
+            AuthError::InvalidToken(_) => StatusCode::UNAUTHORIZED,
+            AuthError::TokenExpired => StatusCode::UNAUTHORIZED,
             AuthError::UserNotFound => StatusCode::NOT_FOUND,
-            AuthError::InvalidUserId => StatusCode::BAD_REQUEST,
-            AuthError::InvalidVerificationToken => StatusCode::BAD_REQUEST,
             AuthError::ValidationError(_) => StatusCode::BAD_REQUEST,
-            AuthError::PasswordError(_) => StatusCode::BAD_REQUEST,
-            AuthError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
-            AuthError::Internal(_) => StatusCode::INTERNAL_SERVER_ERROR,
+            AuthError::InternalError(_) => StatusCode::INTERNAL_SERVER_ERROR,
             AuthError::Other(_) => StatusCode::INTERNAL_SERVER_ERROR,
         }
     }
@@ -80,19 +72,17 @@ impl ResponseError for AuthError {
     fn error_response(&self) -> HttpResponse {
         let code = match self {
             AuthError::InvalidCredentials => "INVALID_CREDENTIALS",
+            AuthError::InvalidUserId => "INVALID_USER_ID",
+            AuthError::Unauthorized(_) => "UNAUTHORIZED",
+            AuthError::Forbidden(_) => "FORBIDDEN",
+            AuthError::Database(_) => "DATABASE_ERROR",
+            AuthError::TokenCreation(_) => "TOKEN_CREATION_ERROR", 
+            AuthError::TokenVerification(_) => "TOKEN_VERIFICATION_ERROR",
             AuthError::InvalidToken(_) => "INVALID_TOKEN",
             AuthError::TokenExpired => "TOKEN_EXPIRED",
-            AuthError::TokenCreation(_) => "TOKEN_CREATION_ERROR",
-            AuthError::TokenVerification(_) => "TOKEN_VERIFICATION_ERROR",
-            AuthError::EmailNotVerified => "EMAIL_NOT_VERIFIED",
-            AuthError::EmailAlreadyExists => "EMAIL_EXISTS",
             AuthError::UserNotFound => "USER_NOT_FOUND",
-            AuthError::InvalidUserId => "INVALID_USER_ID",
-            AuthError::InvalidVerificationToken => "INVALID_VERIFICATION_TOKEN",
             AuthError::ValidationError(_) => "VALIDATION_ERROR",
-            AuthError::PasswordError(_) => "PASSWORD_ERROR",
-            AuthError::Database(_) => "DATABASE_ERROR",
-            AuthError::Internal(_) => "INTERNAL_ERROR",
+            AuthError::InternalError(_) => "INTERNAL_ERROR",
             AuthError::Other(_) => "OTHER_ERROR",
         };
 
@@ -114,16 +104,16 @@ mod tests {
             StatusCode::UNAUTHORIZED
         );
         assert_eq!(
-            AuthError::TokenExpired.status_code(),
+            AuthError::InvalidUserId.status_code(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
+            AuthError::Unauthorized("test".into()).status_code(),
             StatusCode::UNAUTHORIZED
         );
         assert_eq!(
-            AuthError::EmailNotVerified.status_code(),
+            AuthError::Forbidden("test".into()).status_code(),
             StatusCode::FORBIDDEN
-        );
-        assert_eq!(
-            AuthError::EmailAlreadyExists.status_code(),
-            StatusCode::CONFLICT
         );
         assert_eq!(
             AuthError::UserNotFound.status_code(),
@@ -141,12 +131,24 @@ mod tests {
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-        let error = AuthError::TokenExpired;
+        let error = AuthError::InvalidUserId;
+        let response = error.error_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+
+        let error = AuthError::Unauthorized("test".into());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
 
-        let error = AuthError::EmailNotVerified;
+        let error = AuthError::Forbidden("test".into());
         let response = error.error_response();
         assert_eq!(response.status(), StatusCode::FORBIDDEN);
+
+        let error = AuthError::UserNotFound;
+        let response = error.error_response();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
+
+        let error = AuthError::ValidationError("test".into());
+        let response = error.error_response();
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST);
     }
 }

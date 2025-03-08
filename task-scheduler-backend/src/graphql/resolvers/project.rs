@@ -1,5 +1,5 @@
 use async_graphql::{Context, Object, Result, ID, InputObject};
-use chrono::Utc;
+use chrono::{DateTime, NaiveDate, Utc};
 use sqlx::{Row, postgres::PgRow};
 use uuid::Uuid;
 use serde_json::json;
@@ -21,7 +21,7 @@ impl ProjectQuery {
         let pool = &context.db;
         
         // Kiểm tra user đã đăng nhập
-        let current_user = context.current_user.as_ref()
+        let current_user = context.auth.as_ref()
             .ok_or_else(|| AuthError::Unauthorized("You must be logged in".into()))?;
             
         let project_id = Uuid::parse_str(&project_id.to_string())?;
@@ -44,7 +44,7 @@ impl ProjectQuery {
             "#
         )
         .bind(project_id)
-        .bind(current_user.user_id)
+        .bind(current_user.user_id()?)
         .fetch_one(pool)
         .await
         .map_err(|e| AuthError::Database(e))?;
@@ -159,13 +159,13 @@ impl ProjectQuery {
         let pool = &context.db;
         
         // Kiểm tra user đã đăng nhập
-        let current_user = context.current_user.as_ref()
+        let current_user = context.auth.as_ref()
             .ok_or_else(|| AuthError::Unauthorized("You must be logged in".into()))?;
         
         let user_id = Uuid::parse_str(&user_id.to_string())?;
 
         // Chỉ cho phép user lấy projects của chính họ
-        if current_user.user_id != user_id {
+        if current_user.user_id()? != user_id {
             return Err(AuthError::Forbidden("You can only view your own projects".into()).into());
         }
 
@@ -274,11 +274,11 @@ impl ProjectMutation {
         let pool = &context.db;
 
         // Kiểm tra user đã đăng nhập
-        let current_user = context.current_user.as_ref()
+        let current_user = context.auth.as_ref()
             .ok_or_else(|| AuthError::Unauthorized("You must be logged in".into()))?;
 
-        // Chỉ cho phép user tạo project với owner là chính họ
-        if current_user.user_id != input.ownerId {
+        // Only allow users to create projects where they are the owner
+        if current_user.user_id()? != input.ownerId {
             return Err(AuthError::Forbidden("You can only create projects for yourself".into()).into());
         }
 
