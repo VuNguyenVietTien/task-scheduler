@@ -4,8 +4,6 @@ import { useQuery } from '@apollo/client';
 import Link from 'next/link';
 import { PlusCircle, FolderPlus, Loader2, Users, Calendar } from 'lucide-react';
 import { GET_USER_PROJECTS } from '@/graphql/queries/project';
-import { getAuthHeaders } from '@/lib/api';
-import { useEffect } from 'react';
 
 interface Project {
   id: string;
@@ -50,47 +48,15 @@ const getStatusColor = (status: string) => {
 };
 
 export default function ProjectList() {
-  const userId = '5f762e2c-7510-4651-b0ee-36f342e9343c'; // Tạm thời hardcode, sau này có thể lấy từ context
-
   const { data, loading, error, refetch } = useQuery(GET_USER_PROJECTS, {
-    variables: {
-      userId
-    },
-    context: {
-      headers: getAuthHeaders()
-    },
-    onCompleted: (data) => {
-      const requestInfo = {
-        url: `${process.env.NEXT_PUBLIC_BACKEND_URL}/graphql`,
-        method: 'POST',
-        headers: {
-          ...getAuthHeaders(),
-          'Content-Type': 'application/json'
-        },
-        query: GET_USER_PROJECTS.loc?.source.body,
-        variables: { userId },
-      };
-
-      console.group('🚀 GraphQL Projects Query');
-      console.log('Request:', requestInfo);
-      console.log('Response:', data);
-      console.groupEnd();
-    },
     onError: (error) => {
       console.group('❌ GraphQL Query Error');
-      console.error('URL:', `${process.env.NEXT_PUBLIC_BACKEND_URL}/graphql`);
-      console.error('Headers:', getAuthHeaders());
-      console.error('Query:', GET_USER_PROJECTS.loc?.source.body);
       console.error('Error:', error);
       console.groupEnd();
     }
   });
+  
   const projects = data?.projects || [];
-
-  useEffect(() => {
-    console.log('Auth Headers:', getAuthHeaders());
-    console.log('GraphQL Query:', GET_USER_PROJECTS.loc?.source.body);
-  }, []);
 
   if (loading) {
     return (

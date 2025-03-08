@@ -1,8 +1,8 @@
 import { gql } from '@apollo/client';
 
 export const GET_USER_PROJECTS = gql`
-  query GetUserProjects($userId: ID!) {
-    projects(userId: $userId) {
+  query GetUserProjects {
+    projects {
       id: projectId
       name
       startDate

@@ -1,13 +1,14 @@
 import { graphqlRequest, RegisterInput, LoginInput } from './graphqlClient';
 
+interface User {
+  id: string;
+  email: string;
+  name: string;
+}
+
 interface AuthResponse {
-  accessToken: string;
-  refreshToken: string;
-  user: {
-    id: string;
-    email: string;
-    name: string;
-  };
+  token: string;
+  user: User;
 }
 
 interface RegisterResponse {
@@ -22,8 +23,7 @@ export const registerUser = async (input: RegisterInput): Promise<AuthResponse> 
   const response = await graphqlRequest<RegisterResponse>(`
     mutation Register($input: RegisterInput!) {
       register(input: $input) {
-        accessToken
-        refreshToken
+        token
         user {
           id
           email
@@ -37,10 +37,15 @@ export const registerUser = async (input: RegisterInput): Promise<AuthResponse> 
     throw new Error('Registration failed');
   }
 
-  // Store the token
-  localStorage.setItem('token', response.register.accessToken);
-  document.cookie = `auth-token=${response.register.accessToken}; path=/; SameSite=Strict`;
-
+  // Call API route to set cookies
+  await fetch('/api/auth/set-token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ token: response.register.token })
+  });
+   
   return response.register;
 };
 
@@ -48,8 +53,7 @@ export const loginUser = async (input: LoginInput): Promise<AuthResponse> => {
   const response = await graphqlRequest<LoginResponse>(`
     mutation Login($input: LoginInput!) {
       login(input: $input) {
-        accessToken
-        refreshToken
+        token
         user {
           id
           email
@@ -63,9 +67,14 @@ export const loginUser = async (input: LoginInput): Promise<AuthResponse> => {
     throw new Error('Login failed');
   }
 
-  // Store the token
-  localStorage.setItem('token', response.login.accessToken);
-  document.cookie = `auth-token=${response.login.accessToken}; path=/; SameSite=Strict`;
+  // Call API route to set cookies
+  await fetch('/api/auth/set-token', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ token: response.login.token })
+  });
 
   return response.login;
 };

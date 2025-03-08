@@ -20,7 +20,7 @@ export async function POST(request: Request) {
     // Call backend API to verify token and create/update user
     console.log(`[Firebase API] Calling backend service at ${BACKEND_URL}/api/v1/auth/firebase/login`);
     try {
-      const response = await fetch(`${BACKEND_URL}/api/v1/auth/firebase/login`, {
+      const backendResponse = await fetch(`${BACKEND_URL}/api/v1/auth/firebase/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -33,7 +33,7 @@ export async function POST(request: Request) {
         }),
       });
 
-      const responseText = await response.text();
+      const responseText = await backendResponse.text();
       console.log('[Firebase API] Backend raw response:', responseText);
 
       let data;
@@ -44,11 +44,11 @@ export async function POST(request: Request) {
         throw new Error('Invalid response from backend');
       }
 
-      if (!response.ok) {
+      if (!backendResponse.ok) {
         console.error('[Firebase API] Backend error:', data);
         return NextResponse.json(
           { error: data.message || 'Authentication failed' },
-          { status: response.status }
+          { status: backendResponse.status }
         );
       }
 
@@ -57,34 +57,46 @@ export async function POST(request: Request) {
         email: data.user?.email
       });
 
-      // Set auth token cookie
-      cookies().set('auth-token', data.token, {
+      // Set cookies using Next.js cookies() API
+      const cookieOptions = {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
+        sameSite: 'lax' as const,
         path: '/',
         maxAge: 60 * 60 * 24 * 7 // 1 week
-      });
+      };
 
-      // Set session cookie
+      // Set auth token cookie
+      cookies().set('auth-token', data.token, cookieOptions);
+
+      // Set session cookie with user data
       cookies().set('user-session', JSON.stringify({
         userId: data.user.id,
         email: data.user.email,
         provider: 'firebase'
-      }), {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        path: '/',
-        maxAge: 60 * 60 * 24 * 7 // 1 week
-      });
+      }), cookieOptions);
 
       console.log('[Firebase API] Cookies set successfully');
 
-      return NextResponse.json({
+      // Create final response with user data and token
+      const clientResponse = NextResponse.json({
         success: true,
-        user: data.user
+        user: data.user,
+        token: data.token // Include token in response for client validation
       });
+
+      // Add cookie headers manually as backup
+      const authCookie = `auth-token=${data.token}; Path=/; HttpOnly; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
+      const sessionCookie = `user-session=${JSON.stringify({
+        userId: data.user.id,
+        email: data.user.email,
+        provider: 'firebase'
+      })}; Path=/; HttpOnly; SameSite=Lax${process.env.NODE_ENV === 'production' ? '; Secure' : ''}`;
+
+      clientResponse.headers.set('Set-Cookie', authCookie);
+      clientResponse.headers.append('Set-Cookie', sessionCookie);
+
+      return clientResponse;
 
     } catch (error) {
       console.error('[Firebase API] Backend request failed:', error);

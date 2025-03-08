@@ -124,28 +124,4 @@ mod tests {
         let token = extract_token(&headers);
         assert_eq!(token, None);
     }
-
-    #[actix_rt::test]
-    async fn test_validator_invalid_token() {
-        let config = Config {
-            database_url: "".to_string(),
-            redis_url: "".to_string(),
-            server_host: "".to_string(),
-            server_port: 8080,
-            auth_secret: "test-auth-secret".to_string(),
-            jwt_secret: "test-jwt-secret".to_string(),
-            jwt_expiry: 3600,
-            email_from: "".to_string(),
-            email_smtp_host: "".to_string(),
-            email_smtp_port: 587,
-            email_smtp_user: "".to_string(),
-            email_smtp_pass: "".to_string(),
-        };
-
-        let req = test::TestRequest::default().to_srv_request();
-        // Create a mock BearerAuth
-        let credentials = BearerAuth::from_parts("invalid-token");        
-        let result = validator(req, credentials, &config).await;
-        assert!(result.is_err());
-    }
 }

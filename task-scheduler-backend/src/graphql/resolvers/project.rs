@@ -154,20 +154,13 @@ impl ProjectQuery {
         Ok(project)
     }
 
-    async fn projects(&self, ctx: &Context<'_>, user_id: ID) -> Result<Vec<Projects>> {
+    async fn projects(&self, ctx: &Context<'_>) -> Result<Vec<Projects>> {
         let context = ctx.data::<GraphQLContext>()?;
         let pool = &context.db;
         
         // Kiểm tra user đã đăng nhập
         let current_user = context.auth.as_ref()
             .ok_or_else(|| AuthError::Unauthorized("You must be logged in".into()))?;
-        
-        let user_id = Uuid::parse_str(&user_id.to_string())?;
-
-        // Chỉ cho phép user lấy projects của chính họ
-        if current_user.user_id()? != user_id {
-            return Err(AuthError::Forbidden("You can only view your own projects".into()).into());
-        }
 
         // Get all projects that user is a member of, including member counts
         let projects = sqlx::query(
@@ -205,7 +198,7 @@ impl ProjectQuery {
             ORDER BY p.created_at DESC
             "#
         )
-        .bind(user_id)
+        .bind(current_user.user_id()?)
         .fetch_all(pool)
         .await
         .map_err(|e| AuthError::Database(e))?;
@@ -234,7 +227,7 @@ impl ProjectQuery {
         }).collect();
 
         eprintln!("\n=== Get Projects Response ===");
-        eprintln!("Found {} projects for user {}", result.len(), user_id);
+        eprintln!("Found {} projects", result.len());
         eprintln!("Projects: {}", json!(result.iter().map(|p| {
             json!({
                 "project_id": p.project_id,
@@ -322,6 +315,22 @@ impl ProjectMutation {
         .bind(now)
         .bind(ProjectStatus::active)
         .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| AuthError::Database(e))?;
+
+        // Add owner as a member with ADMIN role
+        let member_id = Uuid::new_v4();
+        sqlx::query(
+            r#"
+            INSERT INTO project_members (member_id, project_id, user_id, role)
+            VALUES ($1, $2, $3, $4)
+            "#
+        )
+        .bind(member_id)
+        .bind(project_id)
+        .bind(input.ownerId)
+        .bind(MemberRole::admin)
+        .execute(&mut *tx)
         .await
         .map_err(|e| AuthError::Database(e))?;
 

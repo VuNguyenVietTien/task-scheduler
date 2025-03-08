@@ -15,28 +15,82 @@ interface GraphQLResponse<T> {
   }>;
 }
 
+// Function to refresh token
+async function refreshToken(): Promise<string> {
+  try {
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/api/auth/refresh`, {
+      method: 'POST',
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      throw new Error('Token refresh failed');
+    }
+
+    const data = await response.json();
+    return data.accessToken;
+  } catch (error) {
+    console.error('Token refresh failed:', error);
+    window.location.href = '/auth';
+    throw error;
+  }
+}
+
+// Main GraphQL request function
 export async function graphqlRequest<T = any>(
   query: string,
-  variables?: Record<string, any>
+  variables?: Record<string, any>,
+  retryCount = 0
 ): Promise<T> {
-  const response = await fetch(GRAPHQL_ENDPOINT, {
-    method: 'POST',
-    headers: {
-      ...getAuthHeaders(),
-    },
-    body: JSON.stringify({
-      query,
-      variables,
-    }),
-  });
+  try {
+    const response = await fetch(GRAPHQL_ENDPOINT, {
+      method: 'POST',
+      credentials: 'include', // Include cookies in the request
+      headers: {
+        ...getAuthHeaders(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        query,
+        variables,
+      }),
+    });
 
-  const result: GraphQLResponse<T> = await response.json();
+    // Handle 401 Unauthorized
+    if (response.status === 401 && retryCount < 1) {
+      // Try to refresh token
+      await refreshToken();
+      // Retry request with new token
+      return graphqlRequest(query, variables, retryCount + 1);
+    }
 
-  if (result.errors) {
-    throw new Error(result.errors[0].message);
+    const result: GraphQLResponse<T> = await response.json();
+
+    if (result.errors) {
+      const error = new Error(result.errors[0].message);
+      // Check if error is due to authentication
+      if (result.errors[0].message.toLowerCase().includes('unauthorized') ||
+          result.errors[0].message.toLowerCase().includes('authentication')) {
+        error.name = 'AuthenticationError';
+        // Redirect to login if authentication fails
+        window.location.href = '/auth';
+      }
+      throw error;
+    }
+
+    return result.data as T;
+  } catch (error) {
+    // If error is not authentication related, rethrow
+    if (error instanceof Error && error.name !== 'AuthenticationError') {
+      throw error;
+    }
+    // Otherwise redirect to login
+    window.location.href = '/auth';
+    throw error;
   }
-
-  return result.data as T;
 }
 
 // Authentication Mutations

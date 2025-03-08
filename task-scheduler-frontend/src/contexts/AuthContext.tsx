@@ -64,14 +64,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         console.log('[Auth] Current user:', data.user);
         setUser(data.user);
         
-        // Get auth token from cookies and store in localStorage
-        const cookies = document.cookie.split(';');
-        const authTokenCookie = cookies.find(cookie => cookie.trim().startsWith('auth-token='));
-        if (authTokenCookie) {
-          const token = authTokenCookie.split('=')[1];
-          console.log('[Auth] Storing token in localStorage');
-          localStorage.setItem('token', token);
-        }
         // Redirect to dashboard if on auth page
         if (window.location.pathname === '/auth') {
           window.location.href = '/dashboard';
@@ -97,14 +89,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const { token, user: firebaseUser } = await signInWithGoogle();
       console.log('[Auth] Firebase auth successful:', {
         email: firebaseUser.email,
-        uid: firebaseUser.uid,
-        token: `${token.substring(0, 10)}...`
+        uid: firebaseUser.uid
       });
       
       // Call our API endpoint
       console.log('[Auth] Calling backend sync API...');
       const apiUrl = '/api/auth/firebase/login';
-      console.log(`[Auth] API URL: ${apiUrl}`);
       
       const response = await fetch(apiUrl, {
         method: 'POST',
@@ -119,7 +109,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         })
       });
 
-      console.log(`[Auth] API Response Status: ${response.status}`);
       const data = await response.json();
       
       if (!response.ok) {
@@ -186,8 +175,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setUser(null);
-      localStorage.removeItem('token');
-      document.cookie = 'auth-token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;';
       window.location.href = '/auth';
     } catch (error) {
       setError('Logout failed');
