@@ -6,7 +6,7 @@ import { PlusCircle, FolderPlus, Loader2, Users, Calendar } from 'lucide-react';
 import { GET_USER_PROJECTS } from '@/graphql/queries/project';
 
 interface Project {
-  id: string;
+  projectId: string;
   name: string;
   description?: string;
   startDate?: string;
@@ -118,8 +118,8 @@ export default function ProjectList() {
 
       {projects.map((project: Project) => (
         <Link
-          key={project.id}
-          href={`/projects/${project.id}`}
+          key={project.projectId}
+          href={`/projects/${project.projectId}`}
           className="group block p-6 bg-white rounded-xl border border-gray-200 hover:shadow-xl hover:border-blue-100 transition-all duration-300 transform hover:-translate-y-1"
         >
           {/* Project Header */}
