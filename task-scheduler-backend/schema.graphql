@@ -46,6 +46,35 @@ enum ProjectRole {
 }
 
 """
+Project status
+"""
+enum ProjectStatus {
+    active
+    completed
+    cancelled
+    on_hold
+}
+
+"""
+Project priority
+"""
+enum ProjectPriority {
+    low
+    medium
+    high
+    urgent
+}
+
+"""
+Project visibility
+"""
+enum ProjectVisibility {
+    public
+    private
+    team
+}
+
+"""
 Notification type
 """
 enum NotificationType {
@@ -137,8 +166,7 @@ type Mutation {
   """
   updateProject(
     projectId: ID!
-    name: String
-    description: String
+    input: UpdateProjectInput!
   ): Project!
 
   """
@@ -341,9 +369,36 @@ input RegisterInput {
   name: String!
 }
 
+"""
+Input for creating a new project
+"""
 input CreateProjectInput {
   name: String!
   description: String
+  status: ProjectStatus = active
+  priority: ProjectPriority = medium
+  visibility: ProjectVisibility = private
+  tags: [String!]
+  startDate: DateTime
+  endDate: DateTime
+  category: String
+  metadata: JSON
+}
+
+"""
+Input for updating project details
+"""
+input UpdateProjectInput {
+  name: String
+  description: String
+  status: ProjectStatus
+  priority: ProjectPriority
+  visibility: ProjectVisibility
+  tags: [String!]
+  startDate: DateTime
+  endDate: DateTime
+  category: String
+  metadata: JSON
 }
 
 input AddProjectMemberInput {

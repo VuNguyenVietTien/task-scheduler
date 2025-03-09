@@ -87,7 +87,7 @@ async function sendLogToBackend(type: string, details: any) {
   }
 }
 
-export async function fetchApi(url: string, options: FetchOptions = {}) {
+export async function fetchApi<T>(url: string, options: FetchOptions = {}): Promise<T> {
   const defaultHeaders: Record<string, string> = {
     ...getAuthHeaders(),
   };

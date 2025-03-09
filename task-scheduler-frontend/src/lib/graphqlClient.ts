@@ -1,4 +1,3 @@
-// GraphQL client implementation
 import { getAuthHeaders } from './api';
 
 const GRAPHQL_ENDPOINT = `${process.env.NEXT_PUBLIC_BACKEND_URL}/graphql`;
@@ -126,7 +125,7 @@ export const loginMutation = `
 export const createProjectMutation = `
   mutation CreateProject($input: CreateProjectInput!) {
     createProject(input: $input) {
-      id
+      projectId
       name
       description
       startDate
@@ -135,6 +134,17 @@ export const createProjectMutation = `
       priority
       visibility
       tags
+      category
+      metadata
+      iconUrl
+      isPublic
+      createdAt
+      owner {
+        userId
+        email
+        fullName
+        avatarUrl
+      }
     }
   }
 `;
@@ -204,21 +214,27 @@ export interface LoginInput {
 
 export interface CreateProjectInput {
   name: string;
-  description: string;
-  status: 'ACTIVE' | 'CANCELLED' | 'COMPLETED' | 'ON_HOLD';
-  priority: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
-  visibility: 'PUBLIC' | 'PRIVATE' | 'TEAM';
-  tags: string[];
+  description?: string;
+  priority?: 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT';
+  visibility?: 'PUBLIC' | 'PRIVATE' | 'TEAM';
+  tags?: string[];
+  status?: 'ACTIVE' | 'COMPLETED' | 'ON_HOLD' | 'CANCELLED';
+  category?: string;
+  startDate?: string;
+  endDate?: string;
+  iconUrl?: string;
+  metadata?: Record<string, any>;
 }
 
 export interface CreateTaskInput {
   projectId: string;
   title: string;
-  description: string;
-  status: string;
-  priority: string;
-  effort: number;
-  assigneeIds: string[];
+  description?: string;
+  status?: string;
+  priority?: string;
+  effort?: number;
+  dueDate?: string;
+  assigneeId?: string;
 }
 
 export interface UpdateTaskInput {

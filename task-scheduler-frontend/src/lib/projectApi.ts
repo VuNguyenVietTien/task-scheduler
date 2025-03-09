@@ -11,11 +11,10 @@ export interface ProjectMember {
 }
 
 export interface Project {
-  project_id: string;
+  projectId: string;
   name: string;
   description: string;
-  owner_id: string;
-  created_at: string;
+  createdAt: string;
   priority: string;
   visibility: string;
   tags: string;
@@ -23,7 +22,7 @@ export interface Project {
   category: string;
   metadata: string;
   status: string;
-  member_count: number;
+  memberCount: number;
   owner: ProjectMember;
   members: ProjectMember[];
 }
@@ -36,20 +35,26 @@ export const createProject = async (input: CreateProjectInput): Promise<Project>
   const response = await graphqlRequest<CreateProjectResponse>(`
     mutation CreateProject($input: CreateProjectInput!) {
       createProject(input: $input) {
-        project_id
+        projectId
         name
         description
-        owner_id
         priority
         visibility
         tags
         category
         metadata
-        start_date
-        end_date
-        icon_url
-        is_public
+        startDate
+        endDate
+        iconUrl
+        isPublic
         status
+        createdAt
+        owner {
+          userId
+          email
+          fullName
+          avatarUrl
+        }
       }
     }
   `, { input });
@@ -69,28 +74,27 @@ export const getProjects = async (): Promise<Project[]> => {
   const response = await graphqlRequest<GetProjectsResponse>(`
     query GetProjects {
       projects {
-        project_id
+        projectId
         name
         description
-        owner_id
-        created_at
+        createdAt
         priority
         visibility
         tags
         progress
         category
         metadata
-        start_date
-        end_date
-        icon_url
-        is_public
+        startDate
+        endDate
+        iconUrl
+        isPublic
         status
-        member_count
+        memberCount
         owner {
-          user_id
+          userId
           email
-          full_name
-          avatar_url
+          fullName
+          avatarUrl
         }
       }
     }
@@ -106,37 +110,36 @@ interface GetProjectResponse {
 export const getProject = async (id: string): Promise<Project> => {
   const response = await graphqlRequest<GetProjectResponse>(`
     query GetProjectById($projectId: UUID!) {
-      project(project_id: $projectId) {
-        project_id
+      project(projectId: $projectId) {
+        projectId
         name
         description
-        owner_id
-        created_at
+        createdAt
         priority
         visibility
         tags
         progress
         category
         metadata
-        start_date
-        end_date
-        icon_url
-        is_public
+        startDate
+        endDate
+        iconUrl
+        isPublic
         status
-        member_count
+        memberCount
         owner {
-          user_id
+          userId
           email
-          full_name
-          avatar_url
+          fullName
+          avatarUrl
         }
         members {
-          user_id
+          userId
           email
-          full_name
-          avatar_url
+          fullName
+          avatarUrl
           role
-          joined_at
+          joinedAt
         }
       }
     }

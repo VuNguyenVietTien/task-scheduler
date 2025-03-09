@@ -1,11 +1,12 @@
 use async_graphql::*;
 use serde::{Deserialize, Serialize};
+use crate::graphql::types::project::User;
 
 #[derive(Debug, Serialize, Deserialize, InputObject)]
 pub struct RegisterInput {
     pub email: String,
     pub password: String,
-    pub name: String,
+    pub username: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize, InputObject)] 
@@ -28,6 +29,13 @@ pub struct AuthUserResponse {
     pub name: String,
     pub role: String,
     pub verified: bool,
+}
+
+#[derive(SimpleObject)]
+pub struct AuthPayload {
+    pub access_token: String,
+    pub refresh_token: String,
+    pub user: User,
 }
 
 impl From<crate::auth::types::User> for AuthUserResponse {

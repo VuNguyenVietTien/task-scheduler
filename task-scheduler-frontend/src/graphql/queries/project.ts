@@ -60,3 +60,31 @@ export const GET_PROJECT_BY_ID = gql`
     }
   }
 `;
+
+export const CREATE_PROJECT = gql`
+  mutation CreateProject($input: CreateProjectInput!) {
+    createProject(input: $input) {
+      projectId
+      name
+      description
+      startDate
+      endDate 
+      status
+      priority
+      visibility
+      tags
+      category
+      metadata
+      iconUrl
+      isPublic
+      createdAt
+      owner {
+        userId
+        email 
+        username
+        fullName
+        avatarUrl
+      }
+    }
+  }
+`;

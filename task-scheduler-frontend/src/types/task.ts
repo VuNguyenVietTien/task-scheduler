@@ -54,6 +54,27 @@ export interface TaskFilter {
   projectId?: string;
 }
 
+export interface TaskResponse {
+  id: string;
+  title: string;
+  description?: string;
+  status: TaskStatus;
+  priority: Priority;
+  assignee: User;
+  deadline?: string;
+  effortHours?: number;
+  priorityOrder: number;
+  projectId: string;
+  startDate?: string;
+  tags?: string[];
+  category?: string;
+  type?: string;
+  createdAt: string;
+  updatedAt: string;
+  parentTaskId?: string;
+  childTasks?: Task[];
+}
+
 export type TaskType = 'Feature' | 'Bug' | 'Enhancement' | 'Documentation';
 export type TaskCategory = 'Frontend' | 'Backend' | 'Design' | 'Testing' | 'DevOps';
 export type TaskTag = 'Urgent' | 'High Priority' | 'Low Priority' | 'In Progress' | 'Blocked';

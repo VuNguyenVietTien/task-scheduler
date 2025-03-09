@@ -4,7 +4,7 @@ import type { ProjectData } from '@/types/project';
 import { TaskResponse } from '@/types/task';
 
 interface ProjectResponse {
-  id: string;
+  projectId: string;
   name: string;
   description: string | null;
   status: string;
@@ -23,8 +23,8 @@ interface ProjectResponse {
 }
 
 export function useProjectDetail(projectId: string) {
-  return useQuery<ProjectData>({
-    queryKey: ['project', projectId],
+  return useQuery({
+    queryKey: ['project', projectId] as const,
     queryFn: async () => {
       console.log('📤 [API] Fetching project details for ID:', projectId);
       
@@ -39,7 +39,7 @@ export function useProjectDetail(projectId: string) {
 
         // Transform API response to match ProjectData interface
         return {
-          id: response.id,
+          id: response.projectId,
           name: response.name || 'Untitled Project',
           description: response.description || '',
           status: response.status?.toLowerCase() === 'completed' ? 'completed' :
@@ -62,12 +62,12 @@ export function useProjectDetail(projectId: string) {
             description: task.description || '',
             status: task.status,
             priority: task.priority,
-            assignees: task.assignee_ids || [],
+            assignee: task.assignee || undefined,
             deadline: task.deadline || undefined,
-            startDate: task.start_date || undefined,
-            effortHours: task.effort_hours || 0,
-            created_at: task.created_at,
-            updated_at: task.updated_at
+            startDate: task.startDate || undefined,
+            effortHours: task.effortHours || 0,
+            created_at: task.createdAt,
+            updated_at: task.updatedAt
           }))
         };
       } catch (error) {

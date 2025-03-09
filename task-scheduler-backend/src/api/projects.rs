@@ -5,17 +5,65 @@ use sqlx::{PgPool, Row, postgres::PgRow};
 use log::{info, error};
 use chrono::{DateTime, Utc, NaiveDate};
 use validator::Validate;
-use crate::auth::{Auth};  // Import Auth từ module auth
+use crate::auth::{Auth};
+
+#[derive(Debug, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "project_status", rename_all = "lowercase")]
+pub enum ProjectStatus {
+    Active,
+    Completed,
+    Cancelled,
+    OnHold,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "project_priority", rename_all = "lowercase")]
+pub enum ProjectPriority {
+    Low,
+    Medium, 
+    High,
+    Urgent,
+}
+
+#[derive(Debug, Serialize, Deserialize, sqlx::Type)]
+#[sqlx(type_name = "project_visibility", rename_all = "lowercase")]
+pub enum ProjectVisibility {
+    Public,
+    Private,
+    Team,
+}
+
+impl Default for ProjectStatus {
+    fn default() -> Self {
+        ProjectStatus::Active
+    }
+}
+
+impl Default for ProjectPriority {
+    fn default() -> Self {
+        ProjectPriority::Medium
+    }
+}
+
+impl Default for ProjectVisibility {
+    fn default() -> Self {
+        ProjectVisibility::Private
+    }
+}
 
 #[derive(Debug, sqlx::FromRow)]
 struct ProjectRow {
     project_id: Uuid,
     name: String,
-    description: Option<String>, 
+    description: Option<String>,
     owner_id: Uuid,
+    status: ProjectStatus,
+    priority: ProjectPriority,
+    visibility: ProjectVisibility,
+    tags: Option<Vec<String>>,
     start_date: Option<NaiveDate>,
     end_date: Option<NaiveDate>,
-    status: String,
+    category: Option<String>,
     icon_url: Option<String>,
     is_public: bool,
     created_at: DateTime<Utc>,
@@ -27,11 +75,14 @@ pub struct CreateProjectRequest {
     #[validate(length(min = 1, max = 255))]
     pub name: String,
     pub description: Option<String>,
+    pub status: Option<ProjectStatus>,
+    pub priority: Option<ProjectPriority>,
+    pub visibility: Option<ProjectVisibility>,
+    pub tags: Option<Vec<String>>,
     pub start_date: Option<NaiveDate>,
     pub end_date: Option<NaiveDate>,
-    pub status: Option<String>,
+    pub category: Option<String>,
     pub icon_url: Option<String>,
-    pub is_public: Option<bool>,
 }
 
 #[derive(Debug, Deserialize, Validate)]
@@ -39,11 +90,14 @@ pub struct UpdateProjectRequest {
     #[validate(length(min = 1, max = 255))]
     pub name: Option<String>,
     pub description: Option<String>,
+    pub status: Option<ProjectStatus>,
+    pub priority: Option<ProjectPriority>,
+    pub visibility: Option<ProjectVisibility>, 
+    pub tags: Option<Vec<String>>,
     pub start_date: Option<NaiveDate>,
     pub end_date: Option<NaiveDate>,
-    pub status: Option<String>,
+    pub category: Option<String>,
     pub icon_url: Option<String>,
-    pub is_public: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -52,9 +106,13 @@ pub struct ProjectResponse {
     pub name: String,
     pub description: Option<String>,
     pub owner_id: String,
+    pub status: ProjectStatus,
+    pub priority: ProjectPriority,
+    pub visibility: ProjectVisibility,
+    pub tags: Vec<String>,
     pub start_date: Option<NaiveDate>,
     pub end_date: Option<NaiveDate>,
-    pub status: String,
+    pub category: Option<String>,
     pub icon_url: Option<String>,
     pub is_public: bool,
     pub created_at: DateTime<Utc>,
@@ -73,9 +131,13 @@ impl From<PgRow> for ProjectResponse {
             name: row.get("name"),
             description: row.get("description"),
             owner_id: row.get::<Uuid, _>("owner_id").to_string(),
+            status: row.get("status"),
+            priority: row.get("priority"),
+            visibility: row.get("visibility"),
+            tags: row.get::<Option<Vec<String>>, _>("tags").unwrap_or_default(),
             start_date: row.get("start_date"),
             end_date: row.get("end_date"),
-            status: row.get("status"),
+            category: row.get("category"),
             icon_url: row.get("icon_url"),
             is_public: row.get("is_public"),
             created_at: row.get("created_at"),
@@ -89,7 +151,7 @@ pub fn config(cfg: &mut web::ServiceConfig) {
         web::scope("/projects")
             .wrap(Auth)
             .route("", web::get().to(get_projects))
-            .route("/{id}", web::get().to(get_project)) 
+            .route("/{id}", web::get().to(get_project))
             .route("", web::post().to(create_project))
             .route("/{id}", web::put().to(update_project))
             .route("/{id}", web::delete().to(delete_project))
@@ -115,20 +177,25 @@ async fn create_project(
     let result = sqlx::query(
         "INSERT INTO projects (
             project_id, name, description, owner_id,
-            start_date, end_date, status, icon_url,
+            status, priority, visibility, tags,
+            start_date, end_date, category, icon_url,
             is_public, created_at, updated_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10)
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $14)
         RETURNING *"
     )
     .bind(project_id)
     .bind(&request.name)
     .bind(&request.description)
     .bind(owner_id)
+    .bind(request.status.unwrap_or_default())
+    .bind(request.priority.unwrap_or_default())
+    .bind(request.visibility.unwrap_or_default())
+    .bind(&request.tags)
     .bind(request.start_date)
     .bind(request.end_date)
-    .bind(request.status.as_deref().unwrap_or("active"))
+    .bind(&request.category)
     .bind(&request.icon_url)
-    .bind(request.is_public.unwrap_or(false))
+    .bind(false) // is_public default false
     .bind(now)
     .map(ProjectResponse::from)
     .fetch_one(pool.get_ref())
@@ -191,7 +258,7 @@ async fn get_project(
 
 async fn update_project(
     pool: web::Data<PgPool>,
-    path: web::Path<String>, 
+    path: web::Path<String>,
     request: web::Json<UpdateProjectRequest>,
 ) -> impl Responder {
     let project_id = match Uuid::parse_str(&path.into_inner()) {
@@ -209,22 +276,28 @@ async fn update_project(
         "UPDATE projects SET
             name = COALESCE($1, name),
             description = COALESCE($2, description),
-            start_date = COALESCE($3, start_date),
-            end_date = COALESCE($4, end_date),
-            status = COALESCE($5, status),
-            icon_url = COALESCE($6, icon_url),
-            is_public = COALESCE($7, is_public),
-            updated_at = $8
-        WHERE project_id = $9
+            status = COALESCE($3, status),
+            priority = COALESCE($4, priority),
+            visibility = COALESCE($5, visibility),
+            tags = COALESCE($6, tags),
+            start_date = COALESCE($7, start_date),
+            end_date = COALESCE($8, end_date),
+            category = COALESCE($9, category),
+            icon_url = COALESCE($10, icon_url),
+            updated_at = $11
+        WHERE project_id = $12
         RETURNING *"
     )
     .bind(&request.name)
     .bind(&request.description)
+    .bind(request.status)
+    .bind(request.priority)
+    .bind(request.visibility)
+    .bind(&request.tags)
     .bind(request.start_date)
     .bind(request.end_date)
-    .bind(&request.status)
+    .bind(&request.category)
     .bind(&request.icon_url)
-    .bind(request.is_public)
     .bind(now)
     .bind(project_id)
     .map(ProjectResponse::from)
@@ -288,11 +361,14 @@ mod tests {
             .set_json(&CreateProjectRequest {
                 name: "Test Project".to_string(),
                 description: Some("Test Description".to_string()),
+                status: Some(ProjectStatus::Active),
+                priority: Some(ProjectPriority::Medium),
+                visibility: Some(ProjectVisibility::Private),
+                tags: Some(vec!["test".to_string()]),
                 start_date: None,
-                end_date: None, 
-                status: Some("active".to_string()),
+                end_date: None,
+                category: Some("Testing".to_string()),
                 icon_url: None,
-                is_public: Some(false),
             })
             .app_data(web::Data::new(user))
             .to_request();
