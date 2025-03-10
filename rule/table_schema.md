@@ -106,14 +106,18 @@ Sau khi phân tích và kết hợp kết quả từ các mô hình AI khác nha
 | due_date          | timestamp with time zone | YES         | NO             |
 | actual_start_date | timestamp with time zone | YES         | NO             |
 | actual_end_date   | timestamp with time zone | YES         | NO             |
-| effort            | numeric                  | YES         | NO             |
-| progress          | integer                  | YES         | NO             |
+| effort            | double precision         | YES         | NO             |
+| progress          | double precision         | YES         | NO             |
 | created_by        | uuid                     | NO          | NO             |
 | created_at        | timestamp with time zone | YES         | NO             |
 | updated_at        | timestamp with time zone | YES         | NO             |
 | is_deleted        | boolean                  | YES         | NO             |
 | status            | USER-DEFINED             | NO          | NO             |
 | priority          | USER-DEFINED             | NO          | NO             |
+| type              | character varying        | YES         | NO             |
+| category          | character varying        | YES         | NO             |
+| tags              | jsonb                    | YES         | NO             |
+| progress_type     | USER-DEFINED             | YES         | NO             |
 
 ## 7. Bảng Task_Tags (Liên kết Công việc-Nhãn)
 

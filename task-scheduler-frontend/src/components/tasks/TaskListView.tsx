@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback } from 'react';
-import { Task, TaskStatus, Priority, TaskFilter, User, TaskStatuses, Priorities } from '@/types/task';
+import { Task, TaskStatus, Priority, TaskFilter, TaskAssignee, TaskStatuses, Priorities } from '@/types/task';
 import { ProjectData } from '@/types/project';
 import { TaskFilterBar } from './TaskFilterBar';
 import { TaskBulkActions } from './TaskBulkActions';
@@ -19,27 +19,27 @@ interface SortConfig {
 
 export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
   const [filter, setFilter] = useState<TaskFilter>({});
-  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'createdAt', direction: 'desc' });
+  const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'created_at', direction: 'desc' });
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
 
   // Get unique assignees and projects from all tasks
   const { assignees, projects } = useMemo(() => {
-    const uniqueAssignees = new Map<string, User>();
+    const uniqueAssignees = new Map<string, TaskAssignee>();
     const uniqueProjects = new Map<string, ProjectData>();
     
     tasks.forEach(task => {
-      task.assignees.forEach(assignee => {
-        if (!uniqueAssignees.has(assignee.id)) {
-          uniqueAssignees.set(assignee.id, assignee);
+      if (task.assignee) {
+        if (!uniqueAssignees.has(task.assignee.userId)) {
+          uniqueAssignees.set(task.assignee.userId, task.assignee);
         }
-      });
+      }
       
-      if (task.projectId && !uniqueProjects.has(task.projectId)) {
-        uniqueProjects.set(task.projectId, {
-          id: task.projectId,
-          name: `Project ${task.projectId}`,
+      if (task.project_id && !uniqueProjects.has(task.project_id)) {
+        uniqueProjects.set(task.project_id, {
+          id: task.project_id,
+          name: `Project ${task.project_id}`,
           description: '',
           dueDate: '',
           members: 0,
@@ -54,11 +54,10 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
     };
   }, [tasks]);
 
-  // Separate tasks by completion status and apply filters
+  // Filter tasks
   const { completedTasks, incompleteTasks } = useMemo(() => {
     const filteredTasks = tasks.filter(task => {
-      // Only include top-level tasks (no parent)
-      if (task.parentTaskId) return false;
+      if (task.parent_task_id) return false;
 
       if (filter.searchQuery) {
         const query = filter.searchQuery.toLowerCase();
@@ -76,19 +75,19 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
         return false;
       }
 
-      if (filter.assigneeId && !task.assignees.some(a => a.id === filter.assigneeId)) {
+      if (filter.assigneeId && task.assignee?.userId !== filter.assigneeId) {
         return false;
       }
 
-      if (filter.startDate && new Date(task.startDate!) < new Date(filter.startDate)) {
+      if (filter.startDate && new Date(task.start_date!) < new Date(filter.startDate)) {
         return false;
       }
 
-      if (filter.endDate && new Date(task.deadline!) > new Date(filter.endDate)) {
+      if (filter.endDate && new Date(task.due_date!) > new Date(filter.endDate)) {
         return false;
       }
 
-      if (filter.projectId && task.projectId !== filter.projectId) {
+      if (filter.projectId && task.project_id !== filter.projectId) {
         return false;
       }
 
@@ -101,12 +100,10 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
     };
   }, [tasks, filter]);
 
-  // Sort tasks by priority order for incomplete tasks
   const sortedIncompleteTasks = useMemo(() => {
-    return [...incompleteTasks].sort((a, b) => a.priorityOrder - b.priorityOrder);
+    return [...incompleteTasks].sort((a, b) => a.priority_order - b.priority_order);
   }, [incompleteTasks]);
 
-  // Sort completed tasks by the current sort config
   const sortedCompletedTasks = useMemo(() => {
     return [...completedTasks].sort((a, b) => {
       const aValue = a[sortConfig.key];
@@ -119,7 +116,6 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
     });
   }, [completedTasks, sortConfig]);
 
-  // Combine tasks based on showCompletedTasks setting
   const displayedTasks = useMemo(() => {
     return showCompletedTasks 
       ? [...sortedIncompleteTasks, ...sortedCompletedTasks]
@@ -139,23 +135,24 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
   };
 
   const renderTaskRow = (task: Task, level: number = 0): JSX.Element => {
-    const hasChildren = task.childTasks && task.childTasks.length > 0;
-    const isExpanded = expandedTasks.has(task.id);
+    const hasChildren = task.child_tasks && task.child_tasks.length > 0;
+    const isExpanded = expandedTasks.has(task.task_id);
 
     return (
-      <React.Fragment key={task.id}>
+      <React.Fragment key={task.task_id}>
         <tr className={`hover:bg-slate-50 ${level > 0 ? 'bg-slate-50' : ''}`}>
           <td className="w-8 py-4 pl-4 pr-3">
             <div className="flex items-center">
               <input
                 type="checkbox"
                 className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                checked={selectedTasks.has(task.id)}
-                onChange={(e) => toggleTaskSelection(task.id, e)}
+                checked={selectedTasks.has(task.task_id)}
+                onChange={(e) => toggleTaskSelection(task.task_id, e)}
+                title="Select task"
               />
             </div>
           </td>
-          <td className="py-4 pl-4 pr-3 text-sm sm:pl-6" onClick={() => onTaskClick?.(task.id)}>
+          <td className="py-4 pl-4 pr-3 text-sm sm:pl-6" onClick={() => onTaskClick?.(task.task_id)}>
             <div className="flex items-center">
               {level > 0 && (
                 <span className="inline-block w-[20px] ml-[20px]" />
@@ -164,9 +161,10 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
-                    toggleTaskExpansion(task.id);
+                    toggleTaskExpansion(task.task_id);
                   }}
                   className="mr-2 p-1 hover:bg-slate-200 rounded"
+                  title={isExpanded ? "Collapse" : "Expand"}
                 >
                   <svg
                     className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-90' : ''}`}
@@ -195,40 +193,42 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
             </span>
           </td>
           <td className="px-3 py-4 text-sm">
-            <div className="flex -space-x-2">
-              {task.assignees.map((assignee) => (
+            {task.assignee && (
+              <div className="flex items-center gap-2">
                 <img
-                  key={assignee.id}
                   className="inline-block h-6 w-6 rounded-full ring-2 ring-white"
-                  src={assignee.avatarUrl}
-                  alt={assignee.name}
-                  title={assignee.name}
+                  src={task.assignee.avatarUrl || '/images/default-avatar.png'}
+                  alt={task.assignee.username}
+                  title={task.assignee.username}
                 />
-              ))}
-            </div>
+                <span>{task.assignee.username}</span>
+              </div>
+            )}
           </td>
           <td className="px-3 py-4 text-sm text-slate-500">
-            {task.deadline ? new Date(task.deadline).toLocaleDateString() : '-'}
+            {task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}
           </td>
           <td className="px-3 py-4 text-sm text-slate-500">
-            {task.effortHours ? `${task.effortHours}h` : '-'}
+            {task.effort ? `${task.effort}h` : '-'}
           </td>
           <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-            <button className="text-blue-600 hover:text-blue-900">
+            <button 
+              className="text-blue-600 hover:text-blue-900"
+              title="More actions"
+            >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
               </svg>
             </button>
           </td>
         </tr>
-        {hasChildren && isExpanded && task.childTasks?.map((childTask) => (
+        {hasChildren && isExpanded && task.child_tasks?.map((childTask) => (
           renderTaskRow(childTask, level + 1)
         ))}
       </React.Fragment>
     );
   };
 
-  // Continue with existing functions...
   const handleBulkStatusChange = useCallback((status: TaskStatus) => {
     console.log('Change status to', status, 'for tasks:', Array.from(selectedTasks));
   }, [selectedTasks]);
@@ -239,15 +239,15 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
 
   const handleExport = useCallback(() => {
     const selectedTaskData = tasks
-      .filter(task => selectedTasks.has(task.id))
+      .filter(task => selectedTasks.has(task.task_id))
       .map(task => ({
         Title: task.title,
         Description: task.description,
         Status: task.status,
         Priority: task.priority,
-        'Due Date': task.deadline,
-        'Effort (hours)': task.effortHours,
-        Assignees: task.assignees.map(a => a.name).join(', ')
+        'Due Date': task.due_date,
+        'Effort (hours)': task.effort,
+        Assignee: task.assignee?.username || ''
       }));
 
     const csvContent = 'data:text/csv;charset=utf-8,' + 
@@ -286,7 +286,7 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
 
   const toggleAllTasks = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.checked) {
-      setSelectedTasks(new Set(displayedTasks.map(t => t.id)));
+      setSelectedTasks(new Set(displayedTasks.map(t => t.task_id)));
     } else {
       setSelectedTasks(new Set());
     }
@@ -311,13 +311,13 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
     switch (status) {
       case TaskStatuses.DONE:
         return 'text-green-600 bg-green-50';
-      case TaskStatuses.IN_PROGRESS:
+      case TaskStatuses.DOING:
         return 'text-blue-600 bg-blue-50';
-      case TaskStatuses.IN_REVIEW:
+      case TaskStatuses.REVIEW:
         return 'text-purple-600 bg-purple-50';
-      case TaskStatuses.PLANNED:
+      case TaskStatuses.TODO:
         return 'text-amber-600 bg-amber-50';
-      case TaskStatuses.BACKLOG:
+      case TaskStatuses.PENDING:
         return 'text-slate-600 bg-slate-50';
       default:
         return 'text-red-600 bg-red-50';
@@ -374,6 +374,7 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                     className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                     checked={selectedTasks.size === displayedTasks.length && displayedTasks.length > 0}
                     onChange={toggleAllTasks}
+                    title="Select all tasks"
                   />
                 </th>
                 <th 
@@ -398,21 +399,21 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                   Priority <SortIcon columnKey="priority" />
                 </th>
                 <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">
-                  Assignees
+                  Assignee
                 </th>
                 <th 
                   scope="col" 
                   className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
-                  onClick={() => handleSort('deadline')}
+                  onClick={() => handleSort('due_date')}
                 >
-                  Due Date <SortIcon columnKey="deadline" />
+                  Due Date <SortIcon columnKey="due_date" />
                 </th>
                 <th 
                   scope="col" 
                   className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
-                  onClick={() => handleSort('effortHours')}
+                  onClick={() => handleSort('effort')}
                 >
-                  Effort <SortIcon columnKey="effortHours" />
+                  Effort <SortIcon columnKey="effort" />
                 </th>
                 <th scope="col" className="relative py-3.5 pl-3 pr-4">
                   <span className="sr-only">Actions</span>
