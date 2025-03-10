@@ -11,6 +11,8 @@ import { mockTasks } from '@/data/mockTasks';
 import { useAuth } from '@/contexts/AuthContext';
 import { useProject } from '@/hooks/useProject';
 import { Combobox } from '@headlessui/react';
+import { useMutation } from '@apollo/client';
+import { CREATE_TASK } from '@/graphql/mutations';
 
 // Dynamic import for React Quill
 const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
@@ -31,6 +33,16 @@ export interface TaskFormInputs {
   progressType: string;
   tags: string[];
   parentTaskId?: string;
+  status: 'todo' | 'doing' | 'done' | 'close' | 'pending' | 'review' | 'blocked' | 'rejected' | 'archived';
+  priority: 'low' | 'medium' | 'high' | 'urgent' | 'critical';
+  priorityOrder: number;
+}
+
+interface ComboboxFieldProps {
+  options: { value: string; label: string }[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
 }
 
 const quillModules = {
@@ -44,12 +56,7 @@ const quillModules = {
   ],
 };
 
-function ComboboxField({ options, value, onChange, placeholder }: {
-  options: { value: string; label: string }[];
-  value: string;
-  onChange: (value: string) => void;
-  placeholder: string;
-}) {
+function ComboboxField({ options, value, onChange, placeholder }: ComboboxFieldProps) {
   const [query, setQuery] = useState('');
 
   const filteredOptions = useMemo(() => {
@@ -130,6 +137,9 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
   const [assigneeSearchQuery, setAssigneeSearchQuery] = useState('');
   const [isAssigneeDropdownOpen, setIsAssigneeDropdownOpen] = useState(false);
 
+  // GraphQL mutation
+  const [createTask, { loading: createTaskLoading }] = useMutation(CREATE_TASK);
+
   const {
     register,
     control,
@@ -143,13 +153,15 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
       tags: [],
       type: '',
       category: '',
-      progressType: '',
+      progressType: 'todo',
       effort: 0,
+      status: 'todo',
+      priority: 'medium',
+      priorityOrder: 0
     },
   });
 
   const selectedAssignee = watch('assignee');
-
   // Filter project members based on search query
   const filteredMembers = useMemo(() => {
     const members = projectData?.project?.members || [];
@@ -158,51 +170,92 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
       member.username.toLowerCase().includes(assigneeSearchQuery.toLowerCase())
     );
   }, [projectData?.project?.members, assigneeSearchQuery]);
+  // Get selected assignee member
+  const selectedAssigneeMember = useMemo(() => {
+    if (!selectedAssignee || !projectData?.project?.members) return null;
+    return projectData.project.members.find(m => m.userId === selectedAssignee);
+  }, [selectedAssignee, projectData?.project?.members]);
 
-  // Filter available parent tasks
-  const availableParentTasks = useMemo(() => {
-    return mockTasks.filter(task => {
-      if (task.projectId !== projectId) return false;
-      if (!taskSearchQuery) return true;
-      
-      const query = taskSearchQuery.toLowerCase();
-      return task.title.toLowerCase().includes(query) || 
-             task.description?.toLowerCase().includes(query);
-    });
-  }, [taskSearchQuery, projectId]);
+// Filter available parent tasks
+const availableParentTasks = useMemo(() => {
+  return mockTasks.filter(task => {
+    if (task.projectId !== projectId) return false;
+    if (!taskSearchQuery) return true;
+    
+    const query = taskSearchQuery.toLowerCase();
+    return task.title.toLowerCase().includes(query) || 
+           task.description?.toLowerCase().includes(query);
+  });
+}, [taskSearchQuery, projectId]);
 
-  const progressTypeOpts = useMemo(() => 
-    progressTypeOptions.map(type => ({
-      value: type,
-      label: type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
-    })), 
-    []
-  );
+const progressTypeOpts = useMemo(() => 
+  progressTypeOptions.map(type => ({
+    value: type,
+    label: type.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+  })), 
+  []
+);
 
-  const categoryOpts = useMemo(() => 
-    TASK_CATEGORIES.map(category => ({
-      value: category,
-      label: category
-    })),
-    []
-  );
+const categoryOpts = useMemo(() => 
+  TASK_CATEGORIES.map(category => ({
+    value: category,
+    label: category
+  })),
+  []
+);
 
-  const typeOpts = useMemo(() => 
-    TASK_TYPES.map(type => ({
-      value: type,
-      label: type
-    })),
-    []
-  );
+const typeOpts = useMemo(() => 
+  TASK_TYPES.map(type => ({
+    value: type,
+    label: type
+  })),
+  []
+);
+
+const priorityOpts = useMemo(() => [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+  { value: 'urgent', label: 'Urgent' },
+  { value: 'critical', label: 'Critical' }
+], []);
+
+const statusOpts = useMemo(() => [
+  { value: 'todo', label: 'Todo' },
+  { value: 'doing', label: 'Doing' },
+  { value: 'done', label: 'Done' },
+  { value: 'close', label: 'Close' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'review', label: 'Review' },
+  { value: 'blocked', label: 'Blocked' },
+  { value: 'rejected', label: 'Rejected' },
+  { value: 'archived', label: 'Archived' }
+], []);
 
   const onSubmit = async (data: TaskFormInputs) => {
     try {
-      const taskData = {
-        ...data,
-        projectId,
-        parentTaskId: selectedParentTask?.id,
-      };
-      console.log('Creating task:', taskData);
+      const result = await createTask({
+        variables: {
+          input: {
+            projectId,
+            title: data.title,
+            description: data.description,
+            assigneeId: data.assignee || null,
+            dueDate: data.deadline ? new Date(data.deadline).toISOString() : null,
+            effort: data.effort,
+            type: data.type || null,
+            category: data.category || null,
+            progressType: data.progressType || null,
+            tags: data.tags?.length > 0 ? data.tags : null,
+            parentTaskId: selectedParentTask?.id || null,
+            status: data.status || 'todo', // Status should be lowercase from schema
+            priority: data.priority || 'medium',
+            priorityOrder: data.priorityOrder || 0
+          }
+        }
+      });
+
+      console.log('Task created:', result.data.createTask);
       router.push(`/projects/${projectId}`);
       router.refresh();
     } catch (error) {
@@ -210,14 +263,15 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
     }
   };
 
-  const handleParentTaskSelect = (task: Task) => {
-    setSelectedParentTask(task);
-    setTaskSearchQuery('');
-    setValue('parentTaskId', task.id);
-  };
+const handleParentTaskSelect = (task: Task) => {
+  setSelectedParentTask(task);
+  setTaskSearchQuery('');
+  setValue('parentTaskId', task.id);
+};
 
   const handleAssigneeSelect = (userId: string, username: string) => {
     setValue('assignee', userId);
+    setAssigneeSearchQuery('');
     setIsAssigneeDropdownOpen(false);
   };
 
@@ -225,6 +279,11 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
     if (user) {
       setValue('assignee', user.id);
     }
+  };
+
+  const handleClearAssignee = () => {
+    setValue('assignee', '');
+    setAssigneeSearchQuery('');
   };
 
   return (
@@ -270,67 +329,80 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
           )}
         </div>
 
-        <div>
-          <label htmlFor="assignee" className="block text-sm font-medium text-gray-700">
-            Assignee
-          </label>
-          <div className="mt-1 relative">
-            <div className="flex gap-2">
-              <div className="relative flex-1">
-                <div 
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 cursor-pointer"
-                  onClick={() => setIsAssigneeDropdownOpen(true)}
-                >
-                  {selectedAssignee ? (
-                    <div className="inline-flex items-center px-2 py-0.5 rounded bg-blue-100 text-blue-800">
-                      {projectData?.project?.members.find(m => m.userId === selectedAssignee)?.username || selectedAssignee}
-                    </div>
-                  ) : (
-                    <input
-                      type="text"
-                      placeholder="Search members..."
-                      value={assigneeSearchQuery}
-                      onChange={(e) => {
-                        setAssigneeSearchQuery(e.target.value);
-                        setIsAssigneeDropdownOpen(true);
-                      }}
-                      className="w-full border-none p-0 focus:ring-0"
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  )}
+  <div>
+    <label htmlFor="assignee" className="block text-sm font-medium text-gray-700">
+      Assignee
+    </label>
+    <div className="mt-1 relative">
+      <div className="flex gap-2">
+        <div className="relative flex-1">
+          <div 
+            className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 cursor-pointer"
+            onClick={() => setIsAssigneeDropdownOpen(true)}
+          >
+            {selectedAssigneeMember ? (
+              <div className="flex items-center justify-between">
+                <div className="inline-flex items-center px-2 py-0.5 rounded bg-blue-100 text-blue-800">
+                  <span>{selectedAssigneeMember.username}</span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleClearAssignee();
+                    }}
+                    className="ml-2 text-blue-600 hover:text-blue-800"
+                    title="Clear assignee"
+                    aria-label="Clear assignee"
+                  >
+                    <svg className="h-4 w-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
                 </div>
-                {isAssigneeDropdownOpen && (
-                  <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
-                    {filteredMembers.map((member) => (
-                      <li
-                        key={member.userId}
-                        onClick={() => handleAssigneeSelect(member.userId, member.username)}
-                        className="relative cursor-pointer select-none py-2 px-3 hover:bg-blue-50"
-                      >
-                        <div className="flex items-center">
-                          {member.avatarUrl && (
-                            <img src={member.avatarUrl} alt="" className="h-6 w-6 rounded-full mr-2" />
-                          )}
-                          <span>{member.username}</span>
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                )}
               </div>
-              <button
-                type="button"
-                onClick={handleAssignToMe}
-                className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                Assign to me
-              </button>
-            </div>
-            {errors.assignee && (
-              <p className="mt-1 text-sm text-red-600">{errors.assignee.message as string}</p>
+            ) : (
+              <input
+                type="text"
+                placeholder="Search members..."
+                value={assigneeSearchQuery}
+                onChange={(e) => {
+                  setAssigneeSearchQuery(e.target.value);
+                  setIsAssigneeDropdownOpen(true);
+                }}
+                className="w-full border-none p-0 focus:ring-0"
+                onClick={(e) => e.stopPropagation()}
+              />
             )}
           </div>
+          {isAssigneeDropdownOpen && (
+            <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
+              {filteredMembers.map((member) => (
+                <li
+                  key={member.userId}
+                  onClick={() => handleAssigneeSelect(member.userId, member.username)}
+                  className="relative cursor-pointer select-none py-2 px-3 hover:bg-blue-50"
+                >
+                  <div className="flex items-center">
+                    {member.avatarUrl && (
+                      <img src={member.avatarUrl} alt="" className="h-6 w-6 rounded-full mr-2" />
+                    )}
+                    <span>{member.username}</span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
+        <button
+          type="button"
+          onClick={handleAssignToMe}
+          className="inline-flex items-center px-3 py-2 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+        >
+          Assign to me
+        </button>
+      </div>
+    </div>
+  </div>
 
         <div>
           <label htmlFor="deadline" className="block text-sm font-medium text-gray-700">
@@ -344,6 +416,68 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
           />
           {errors.deadline && (
             <p className="mt-1 text-sm text-red-600">{errors.deadline.message as string}</p>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="status" className="block text-sm font-medium text-gray-700">
+            Status
+          </label>
+          <div className="mt-1">
+            <Controller
+              name="status"
+              control={control}
+              render={({ field }) => (
+                <ComboboxField
+                  options={statusOpts}
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder="Select status"
+                />
+              )}
+            />
+          </div>
+          {errors.status && (
+            <p className="mt-1 text-sm text-red-600">{errors.status.message as string}</p>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="priority" className="block text-sm font-medium text-gray-700">
+            Priority
+          </label>
+          <div className="mt-1">
+            <Controller
+              name="priority"
+              control={control}
+              render={({ field }) => (
+                <ComboboxField
+                  options={priorityOpts}
+                  value={field.value}
+                  onChange={field.onChange}
+                  placeholder="Select priority"
+                />
+              )}
+            />
+          </div>
+          {errors.priority && (
+            <p className="mt-1 text-sm text-red-600">{errors.priority.message as string}</p>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="priorityOrder" className="block text-sm font-medium text-gray-700">
+            Priority Order
+          </label>
+          <input
+            {...register('priorityOrder')}
+            type="number"
+            id="priorityOrder"
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            placeholder="Enter priority order"
+          />
+          {errors.priorityOrder && (
+            <p className="mt-1 text-sm text-red-600">{errors.priorityOrder.message as string}</p>
           )}
         </div>
 
@@ -367,6 +501,30 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
           </div>
           {errors.progressType && (
             <p className="mt-1 text-sm text-red-600">{errors.progressType.message as string}</p>
+          )}
+        </div>
+
+        <div>
+          <label htmlFor="effort" className="block text-sm font-medium text-gray-700">
+            Effort (hours)
+          </label>
+          <input
+            {...register('effort', {
+              setValueAs: (value) => {
+                const parsed = parseFloat(value);
+                return isNaN(parsed) ? undefined : parsed;
+              }
+            })}
+            type="number"
+            id="effort"
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+            placeholder="Enter estimated effort in hours"
+            defaultValue={0}
+            min={0}
+            step="0.5"
+          />
+          {errors.effort && (
+            <p className="mt-1 text-sm text-red-600">{errors.effort.message as string}</p>
           )}
         </div>
 
@@ -447,9 +605,12 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
         </button>
         <button
           type="submit"
-          className="px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+          disabled={createTaskLoading}
+          className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 ${
+            createTaskLoading ? 'opacity-50 cursor-not-allowed' : 'hover:bg-blue-700'
+          } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
         >
-          Create Task
+          {createTaskLoading ? 'Creating...' : 'Create Task'}
         </button>
       </div>
     </form>

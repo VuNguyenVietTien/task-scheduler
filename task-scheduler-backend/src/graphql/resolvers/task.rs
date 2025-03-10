@@ -2,9 +2,10 @@ use async_graphql::{Context, Object, Result, ID, Enum};
 use chrono::{DateTime, Utc};
 use sqlx::{Row, postgres::PgRow};
 use uuid::Uuid;
-use serde_json::json;
+use serde_json::{json, Value}; // Add Value import
 use rust_decimal::prelude::*;
 use rust_decimal::Decimal;
+use crate::db::enums::TaskProgressType;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
@@ -51,6 +52,10 @@ impl TaskQuery {
             effort: row.get("effort"),
             progress: row.get("progress"),
             created_by: row.get("created_by"),
+            type_: row.get("type"),
+            category: row.get("category"),
+            progress_type: row.get("progress_type"),
+            tags: row.get("tags"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
             is_deleted: row.get("is_deleted")
@@ -105,6 +110,10 @@ impl TaskQuery {
             effort: row.get("effort"),
             progress: row.get("progress"),
             created_by: row.get("created_by"),
+            type_: row.get("type"),
+            category: row.get("category"),
+            progress_type: row.get("progress_type"),
+            tags: row.get("tags"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
             is_deleted: row.get("is_deleted")
@@ -128,6 +137,12 @@ impl TaskMutation {
         // Convert effort from f64 to Decimal
         let effort = input.effort.map(|e| Decimal::from_f64(e).unwrap_or_else(|| Decimal::new(0, 0)));
 
+        // Convert tags to JSON
+        let tags_json = match input.tags {
+            Some(tags) => serde_json::to_value(tags)?,
+            None => json!([])
+        };
+
         // Create task
         let task_id = Uuid::new_v4();
         let now = Utc::now();
@@ -145,8 +160,9 @@ impl TaskMutation {
                 effort, progress, created_by,
                 created_at, updated_at, is_deleted,
                 assignee_id, actual_start_date, actual_end_date,
+                type, category, progress_type, tags
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
             RETURNING *
             "#
         )
@@ -169,6 +185,10 @@ impl TaskMutation {
         .bind(input.assignee_id.map(|id| Uuid::parse_str(&id.to_string())).transpose()?)
         .bind(None::<DateTime<Utc>>) // actual_start_date
         .bind(None::<DateTime<Utc>>) // actual_end_date
+        .bind(input.type_)
+        .bind(input.category)
+        .bind(input.progress_type)
+        .bind(tags_json) // Use converted tags_json
         .fetch_one(&mut *tx)
         .await
         .map_err(|e| AuthError::Database(e))?;
@@ -188,10 +208,14 @@ impl TaskMutation {
             start_date: created.get("start_date"),
             due_date: created.get("due_date"),
             actual_start_date: created.get("actual_start_date"),
-            actual_end_date: created.get("actual_end_date"), 
-            effort: created.get("effort"),
+            actual_end_date: created.get("actual_end_date"),
+            effort: created.get::<Option<f64>, _>("effort"),
             progress: created.get("progress"),
             created_by: created.get("created_by"),
+            type_: created.get("type"),
+            category: created.get("category"),
+            progress_type: created.get("progress_type"),
+            tags: created.get::<Option<Value>, _>("tags").and_then(|v| v.as_array().map(|arr| arr.iter().filter_map(|val| val.as_str().map(String::from)).collect())),
             created_at: created.get("created_at"),
             updated_at: created.get("updated_at"),
             is_deleted: created.get("is_deleted")
@@ -285,6 +309,10 @@ impl TaskMutation {
             effort: updated.get("effort"),
             progress: updated.get("progress"),
             created_by: updated.get("created_by"),
+            type_: updated.get("type"),
+            category: updated.get("category"),
+            progress_type: updated.get("progress_type"),
+            tags: updated.get("tags"),
             created_at: updated.get("created_at"),
             updated_at: updated.get("updated_at"),
             is_deleted: updated.get("is_deleted")
@@ -356,6 +384,10 @@ impl TaskMutation {
                 effort: updated.get("effort"),
                 progress: updated.get("progress"),
                 created_by: updated.get("created_by"),
+                type_: updated.get("type"),
+                category: updated.get("category"),
+                progress_type: updated.get("progress_type"),
+                tags: updated.get("tags"),
                 created_at: updated.get("created_at"),
                 updated_at: updated.get("updated_at"),
                 is_deleted: updated.get("is_deleted")

@@ -48,7 +48,7 @@ pub fn row_to_task(row: PgRow) -> Result<Task, sqlx::Error> {
         title: row.try_get("title")?,
         description: row.try_get("description")?,
         assignee_id: row.try_get("assignee_id")?,
-        status_id: row.try_get("status_id")?,
+        status: row.try_get("status_id")?,
         priority_order: row.try_get("priority_order")?,
         start_date: row.try_get("start_date")?,
         due_date: row.try_get("due_date")?,
@@ -60,6 +60,11 @@ pub fn row_to_task(row: PgRow) -> Result<Task, sqlx::Error> {
         created_at: row.try_get("created_at")?,
         updated_at: row.try_get("updated_at")?,
         is_deleted: row.try_get("is_deleted")?,
+        type_: row.try_get("type_")?,
+        category: row.try_get("category")?,
+        progress_type: row.try_get("progress_type")?,
+        tags: row.try_get("tags")?,
+        priority: row.try_get("priority")?,
     })
 }
 

@@ -3,12 +3,14 @@ pub mod models;
 pub mod types;
 pub mod queries;
 pub mod helpers;
+pub mod enums;
 
 // Re-export commonly used items
 pub use models::*;
 pub use types::*;
 pub use queries::*;
 pub use helpers::*;
+pub use enums::*;
 
 use chrono::{DateTime, Utc};
 use sqlx::postgres::PgPoolOptions;

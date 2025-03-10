@@ -54,7 +54,7 @@ pub async fn create_task(pool: &PgPool, task: Task) -> Result<Task, sqlx::Error>
         r#"
         INSERT INTO tasks (
             task_id, project_id, parent_task_id, title,
-            description, assignee_id, status_id, priority_order,
+            description, assignee_id, status, priority_order,
             start_date, due_date, actual_start_date, actual_end_date,
             effort, progress, created_by, created_at,
             updated_at, is_deleted
@@ -69,7 +69,7 @@ pub async fn create_task(pool: &PgPool, task: Task) -> Result<Task, sqlx::Error>
     .bind(&task.title)
     .bind(&task.description)
     .bind(task.assignee_id)
-    .bind(task.status_id)
+    .bind(task.status)
     .bind(task.priority_order)
     .bind(task.start_date)
     .bind(task.due_date)
@@ -95,7 +95,7 @@ pub async fn update_task(pool: &PgPool, task: Task) -> Result<Task, sqlx::Error>
             title = $2,
             description = $3,
             assignee_id = $4,
-            status_id = $5,
+            status = $5,
             priority_order = $6,
             start_date = $7,
             due_date = $8,
@@ -112,7 +112,7 @@ pub async fn update_task(pool: &PgPool, task: Task) -> Result<Task, sqlx::Error>
     .bind(&task.title)
     .bind(&task.description)
     .bind(task.assignee_id)
-    .bind(task.status_id)
+    .bind(task.status)
     .bind(task.priority_order)
     .bind(task.start_date)
     .bind(task.due_date)

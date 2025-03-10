@@ -75,6 +75,17 @@ enum ProjectVisibility {
 }
 
 """
+Task progress type
+"""
+enum TaskProgressType {
+    not_started
+    in_progress
+    completed
+    blocked
+    on_hold
+}
+
+"""
 Notification type
 """
 enum NotificationType {
@@ -202,6 +213,10 @@ type Mutation {
     deadline: DateTime
     assigneeId: ID
     priorityOrder: Int
+    type: String
+    category: String
+    progressType: TaskProgressType
+    tags: [String!]
   ): Task!
 
   """
@@ -314,6 +329,10 @@ type Task {
   assignees: [User!]!
   comments: [Comment!]!
   attachments: [Attachment!]!
+  type: String
+  category: String
+  progressType: TaskProgressType
+  tags: [String!]
   metadata: JSON
   createdAt: DateTime!
   updatedAt: DateTime!
@@ -419,6 +438,10 @@ input CreateTaskInput {
   deadline: DateTime
   assigneeId: ID
   priorityOrder: Int
+  type: String
+  category: String
+  progressType: TaskProgressType
+  tags: [String!]
 }
 
 input CreateCommentInput {

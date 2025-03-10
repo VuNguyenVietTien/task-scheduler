@@ -241,6 +241,7 @@ Sau khi phân tích và kết hợp kết quả từ các mô hình AI khác nha
 | project_visibility    | public, private, team      |
 | task_priority         | low, medium, high, urgent, critical |
 | task_status           | todo, doing, done, close, pending, review, blocked, rejected, archived |
+| task_progress_type    | study, investigate, code, test, review_code, review_test_report, release |
 | user_provider         | email, google, github       |
 | user_role             | admin, user                |
 
