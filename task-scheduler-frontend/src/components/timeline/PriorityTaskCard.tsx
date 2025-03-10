@@ -50,11 +50,6 @@ export function PriorityTaskCard({ task, onClick }: PriorityTaskCardProps) {
           <h3 className="text-sm font-medium text-slate-900 truncate">
             {task.title}
           </h3>
-          {task.description && (
-            <p className="mt-1 text-xs text-slate-500 truncate">
-              {task.description}
-            </p>
-          )}
         </div>
 
         {/* Priority Indicator */}
