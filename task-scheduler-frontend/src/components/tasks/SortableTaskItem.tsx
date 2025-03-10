@@ -1,6 +1,6 @@
 'use client';
 
-import { Task, Priority, Priorities } from '@/types/task';
+import { Task } from '@/types/task';
 import { format } from 'date-fns';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -17,23 +17,29 @@ export function SortableTaskItem({ task }: SortableTaskItemProps) {
     setNodeRef,
     transform,
     transition,
-    isDragging
-  } = useSortable({ id: task.task_id });
+    isDragging,
+  } = useSortable({
+    id: task.task_id,
+    data: {
+      type: 'Task',
+      task
+    }
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
-    transition,
+    transition: transition ? `transform 200ms ease, opacity 200ms ease` : undefined,
   };
 
-  const getPriorityColor = (priority: Priority) => {
-    switch (priority) {
-      case Priorities.URGENT:
+  const getPriorityColor = (priority: string) => {
+    switch (priority.toLowerCase()) {
+      case 'urgent':
         return 'border-l-4 border-l-red-600';
-      case Priorities.HIGH:
+      case 'high':
         return 'border-l-4 border-l-orange-600';
-      case Priorities.MEDIUM:
+      case 'medium':
         return 'border-l-4 border-l-amber-600';
-      case Priorities.LOW:
+      case 'low':
         return 'border-l-4 border-l-green-600';
       default:
         return 'border-l-4 border-l-slate-600';
@@ -52,34 +58,30 @@ export function SortableTaskItem({ task }: SortableTaskItemProps) {
       {...attributes}
       {...listeners}
       className={`
-        bg-white rounded-lg select-none relative
+        bg-white rounded-lg select-none cursor-grab active:cursor-grabbing 
         ${getPriorityColor(task.priority)}
         ${isDragging 
-          ? 'shadow-lg ring-2 ring-blue-500 scale-[1.02] z-50' 
-          : 'shadow-sm hover:shadow-md'
+          ? 'opacity-50 shadow-xl ring-2 ring-blue-500 scale-105 z-50 rotate-1' 
+          : 'opacity-100 shadow hover:shadow-md hover:-translate-y-0.5 hover:scale-[1.01]'
         }
-        transition-all duration-100 ease-in-out
+        transition-all duration-200 ease-out
+        transform-gpu will-change-transform
         touch-manipulation
       `}
     >
-      {/* Task Content */}
-      <div className="p-3 space-y-2">
+      <div className="p-3">
         <div className="flex items-start justify-between gap-3">
           <h3 className="text-sm font-medium text-slate-900 truncate flex-1">
             {task.title}
           </h3>
-          <div className="flex items-center gap-2 shrink-0">
-            {/* Due Date */}
-            {task.due_date && (
-              <span className="text-xs text-slate-500 whitespace-nowrap">
-                {formatDate(task.due_date)}
-              </span>
-            )}
-          </div>
+          {task.due_date && (
+            <span className="text-xs text-slate-500 whitespace-nowrap shrink-0">
+              {formatDate(task.due_date)}
+            </span>
+          )}
         </div>
 
-        <div className="flex items-center justify-between gap-2">
-          {/* Assignee */}
+        <div className="flex items-center justify-between gap-2 mt-2">
           {task.assignee && (
             <div className="flex items-center gap-1">
               <UserAvatar 
@@ -93,26 +95,28 @@ export function SortableTaskItem({ task }: SortableTaskItemProps) {
             </div>
           )}
 
-          {/* Progress */}
-          {task.effort && (
-            <div className="flex items-center gap-1 text-xs text-slate-500">
-              <span>{task.progress || 0}%</span>
-              <span>•</span>
-              <span>{task.effort}h</span>
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <div className="flex items-center gap-1">
+              {task.progress !== undefined && (
+                <div className="flex items-center gap-1">
+                  <div className="w-16 h-1 bg-slate-200 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-blue-500 rounded-full transition-all duration-300"
+                      style={{ width: `${task.progress}%` }}
+                    />
+                  </div>
+                  <span>{task.progress}%</span>
+                </div>
+              )}
             </div>
-          )}
+            {task.effort && (
+              <span className="px-1.5 py-0.5 bg-slate-100 rounded">
+                {task.effort}h
+              </span>
+            )}
+          </div>
         </div>
       </div>
-
-      {/* Drag Handle */}
-      <div 
-        className={`
-          absolute top-0 left-0 w-1 h-full bg-blue-500 opacity-0
-          group-hover:opacity-50 rounded-l
-          transition-opacity duration-150
-          ${isDragging ? 'opacity-100' : ''}
-        `}
-      />
     </div>
   );
 }
