@@ -179,7 +179,6 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
               )}
               <div>
                 <div className="font-medium text-slate-900 cursor-pointer">{task.title}</div>
-                <div className="text-slate-500">{task.description}</div>
               </div>
             </div>
           </td>
