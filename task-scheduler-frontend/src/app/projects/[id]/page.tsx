@@ -68,7 +68,7 @@ function ProjectPage({ id }: { id: string }) {
 
   // Map dữ liệu từ GraphQL sang ProjectData
   const project: ProjectData = {
-    id: data.project.projectId,
+    id: id, // Sử dụng params.id thay vì data.project.projectId
     name: data.project.name,
     description: data.project.description || '',
     dueDate: data.project.endDate,

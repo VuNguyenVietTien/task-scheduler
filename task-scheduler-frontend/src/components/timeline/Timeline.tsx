@@ -1,9 +1,7 @@
-/**
- * Timeline Component with integrated Gantt chart and priority task list.
- * IMPORTANT: This component handles drag & drop reordering of tasks.
- */
+'use client';
 
-import { Task, User } from '@/types/task';
+import { Task } from '@/types/task';
+import { AssignedUser } from '@/types/user';
 import { TaskBar } from './TaskBar';
 import { TimelineSkeleton } from './TimelineSkeleton';
 import { PriorityTaskList } from './PriorityTaskList';
@@ -30,7 +28,7 @@ interface TimelineProps {
   tasks: Task[];
   isLoading?: boolean;
   onTaskClick?: (taskId: string) => void;
-  users: User[];
+  users: AssignedUser[];
 }
 
 type ViewMode = 'project' | 'user';
@@ -42,13 +40,13 @@ interface DateRange {
 
 const getTaskDurationDays = (task: Task): number => {
   // Nếu task có effort, tính số ngày dựa trên effort/8
-  if (task.effortHours) {
-    return Math.ceil(task.effortHours / 8);
+  if (task.effort) {
+    return Math.ceil(task.effort / 8);
   }
-  // Nếu không có effort nhưng có startDate và deadline, tính số ngày giữa 2 ngày
-  if (task.startDate && task.deadline) {
-    const start = new Date(task.startDate);
-    const end = new Date(task.deadline);
+  // Nếu không có effort nhưng có start_date và due_date, tính số ngày giữa 2 ngày
+  if (task.start_date && task.due_date) {
+    const start = new Date(task.start_date);
+    const end = new Date(task.due_date);
     return Math.ceil((end.getTime() - start.getTime()) / (24 * 60 * 60 * 1000)) + 1;
   }
   // Mặc định là 1 ngày
@@ -69,9 +67,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
       return orderedTasks;
     } 
     if (viewMode === 'user' && selectedUserId) {
-      return orderedTasks.filter(task => 
-        task.assignees.some(assignee => assignee.id === selectedUserId)
-      );
+      return orderedTasks.filter(task => task.assignee?.userId === selectedUserId);
     }
     return [];
   }, [orderedTasks, viewMode, selectedUserId]);
@@ -85,43 +81,43 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
 
     const processTasks = (inputTasks: Task[]): Task[] => {
       const sortedTasks = [...inputTasks].sort((a, b) => {
-        const orderDiff = a.priorityOrder - b.priorityOrder;
+        const orderDiff = a.priority_order - b.priority_order;
         if (orderDiff !== 0) return orderDiff;
         return b.priority.localeCompare(a.priority);
       });
 
       let lastEndDate = new Date();
       const processedTasks = sortedTasks.map(task => {
-        if (task.startDate && task.deadline) {
-          lastEndDate = new Date(task.deadline);
+        if (task.start_date && task.due_date) {
+          lastEndDate = new Date(task.due_date);
           return task;
         }
 
         const taskDurationDays = getTaskDurationDays(task);
         
-        if (!task.startDate) {
+        if (!task.start_date) {
           let nextStartDate: Date;
-          if (task.deadline) {
-            const deadlineDate = new Date(task.deadline);
+          if (task.due_date) {
+            const deadlineDate = new Date(task.due_date);
             nextStartDate = new Date(deadlineDate);
             nextStartDate.setDate(nextStartDate.getDate() - taskDurationDays + 1);
           } else {
             nextStartDate = new Date(lastEndDate.getTime() + 24 * 60 * 60 * 1000);
           }
 
-          const endDate = task.deadline
-            ? new Date(task.deadline)
+          const endDate = task.due_date 
+            ? new Date(task.due_date)
             : new Date(nextStartDate.getTime() + (taskDurationDays - 1) * 24 * 60 * 60 * 1000);
             
           lastEndDate = endDate;
 
           return {
             ...task,
-            startDate: nextStartDate.toISOString().split('T')[0],
+            start_date: nextStartDate.toISOString().split('T')[0],
           };
         }
 
-        const endDate = new Date(task.startDate);
+        const endDate = new Date(task.start_date);
         endDate.setDate(endDate.getDate() + taskDurationDays - 1);
         lastEndDate = endDate;
         return task;
@@ -138,8 +134,8 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
 
     const dates = tasks
       .flatMap(task => [
-        task.startDate ? new Date(task.startDate) : null,
-        task.deadline ? new Date(task.deadline) : null
+        task.start_date ? new Date(task.start_date) : null,
+        task.due_date ? new Date(task.due_date) : null
       ])
       .filter((date): date is Date => date !== null);
 
@@ -187,22 +183,22 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      const oldIndex = orderedTasks.findIndex((task) => task.id === String(active.id));
-      const newIndex = orderedTasks.findIndex((task) => task.id === String(over.id));
+      const oldIndex = orderedTasks.findIndex((task) => task.task_id === String(active.id));
+      const newIndex = orderedTasks.findIndex((task) => task.task_id === String(over.id));
 
       if (oldIndex !== -1 && newIndex !== -1) {
         const reorderedTasks = arrayMove(orderedTasks, oldIndex, newIndex);
   
         const taskOrders = reorderedTasks.map((task, index) => ({
-          taskId: task.id,
+          taskId: task.task_id,
           priorityOrder: index + 1
         }));
   
         setOrderedTasks(reorderedTasks);
   
-        if (reorderTasks && tasks[0]?.projectId) {
+        if (reorderTasks && tasks[0]?.project_id) {
           reorderTasks.mutate({
-            projectId: tasks[0].projectId,
+            projectId: tasks[0].project_id,
             taskOrders
           });
         }
@@ -221,7 +217,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     );
   }
 
-    return (
+  return (
     <DndContext
       sensors={sensors}
       collisionDetection={closestCenter}
@@ -241,7 +237,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
             className="relative bg-white"
           >
             {/* Date Headers */}
-            <div className="sticky top-0 z-40 bg-white border-b border-slate-200"  style={{ zIndex:1}}>
+            <div className="sticky top-0 z-40 bg-white border-b border-slate-200" style={{ zIndex:1}}>
               <div className="flex items-center justify-between p-2 border-b">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-4 mr-6">
@@ -272,6 +268,8 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                         value={selectedUserId}
                         onChange={(e) => setSelectedUserId(e.target.value)}
                         className="px-2 py-1 border rounded text-sm"
+                        aria-label="Select user to filter tasks"
+                        title="Select user"
                       >
                         <option value="">Select User</option>
                         {users.map(user => (
@@ -283,8 +281,11 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                     )}
                   </div>
                   <div className="flex items-center gap-2">
-                    <label className="text-sm text-slate-600">Start:</label>
+                    <label htmlFor="start-date" className="text-sm text-slate-600">
+                      Start:
+                    </label>
                     <input
+                      id="start-date"
                       type="date"
                       value={dateRange.startDate.toISOString().split('T')[0]}
                       onChange={(e) => {
@@ -295,11 +296,16 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                         }));
                       }}
                       className="px-2 py-1 text-sm border rounded"
+                      aria-label="Start date"
+                      title="Start date"
                     />
                   </div>
                   <div className="flex items-center gap-2">
-                    <label className="text-sm text-slate-600">End:</label>
+                    <label htmlFor="end-date" className="text-sm text-slate-600">
+                      End:
+                    </label>
                     <input
+                      id="end-date"
                       type="date"
                       value={dateRange.endDate.toISOString().split('T')[0]}
                       onChange={(e) => {
@@ -310,12 +316,14 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                         }));
                       }}
                       className="px-2 py-1 text-sm border rounded"
+                      aria-label="End date"
+                      title="End date"
                     />
                   </div>
                 </div>
               </div>
               <div className="flex" style={{ height: '40px' }}>
-                {days.map((day) => (
+                {days.map((day: Date) => (
                   <div
                     key={day.toISOString()}
                     style={{ width: `${dayWidth}px` }}
@@ -349,7 +357,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                   minHeight: rowHeight
                 }}
               >
-                {days.map((day) => (
+                {days.map((day: Date) => (
                   orderedTasks.map((_, rowIndex) => (
                     <div
                       key={`${day.toISOString()}-${rowIndex}`}
@@ -366,29 +374,28 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
               {/* Task Bars */}
               {filteredTasks.map((task: Task, rowIndex: number) => {
                 const dayIndex = days.findIndex(day => 
-                  day.toISOString().split('T')[0] === task.startDate?.split('T')[0]
+                  day.toISOString().split('T')[0] === task.start_date?.split('T')[0]
                 );
                 
                 if (dayIndex === -1) return null;
 
-                const taskStart = new Date(task.startDate!);
-                const taskEnd = task.deadline ? new Date(task.deadline) : new Date(taskStart);
-                taskEnd.setDate(taskEnd.getDate() + getTaskDurationDays(task) - 1);
-
+                const taskStart = new Date(task.start_date!);
+                const taskEnd = task.due_date ? new Date(task.due_date) : taskStart;
+                
                 let startIndex = dayIndex;
                 if (taskStart < dateRange.startDate) {
                   startIndex = 0;
                 }
 
-                const taskDuration = task.effortHours 
-                  ? Math.ceil(task.effortHours / 8)  // Sử dụng số ngày dựa trên effort 
+                const taskDuration = task.effort 
+                  ? Math.ceil(task.effort / 8)  // Sử dụng số ngày dựa trên effort 
                   : Math.ceil(
                       (taskEnd.getTime() - Math.max(taskStart.getTime(), dateRange.startDate.getTime())) / (24 * 60 * 60 * 1000)
                     ) + 1;
 
                 return (
                   <div
-                    key={task.id}
+                    key={task.task_id}
                     style={{
                       position: 'absolute',
                       left: `${startIndex * dayWidth}px`,

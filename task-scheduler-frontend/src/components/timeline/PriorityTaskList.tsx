@@ -1,118 +1,145 @@
-import { useTasks } from '@/hooks/useTasks';
+'use client';
+
 import { Task, Priorities } from '@/types/task';
 import { PriorityTaskCard } from './PriorityTaskCard';
+import { useState, useEffect } from 'react';
 import {
-  SortableContext,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import { 
-  DndContext, 
-  DragEndEvent,
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
   useSensor,
   useSensors,
-  PointerSensor,
-  KeyboardSensor,
-  TouchSensor,
+  DragEndEvent
 } from '@dnd-kit/core';
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy
+} from '@dnd-kit/sortable';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
-import { useReorderTasks } from '@/hooks/useTasks';
 
-export function PriorityTaskList() {
-  const { data: tasks, isLoading } = useTasks();
-  const reorderTasks = useReorderTasks();
+interface PriorityTaskListProps {
+  tasks: Task[];
+  onTaskClick?: (taskId: string) => void;
+  onTaskReorder?: (taskId: string, newIndex: number) => void;
+}
 
+export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: PriorityTaskListProps) {
+  const [priorityGroups, setPriorityGroups] = useState<{[key: string]: Task[]}>({});
+  
+  // Setup DnD sensors
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
         distance: 8,
       },
     }),
-    useSensor(KeyboardSensor),
-    useSensor(TouchSensor)
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
   );
+
+  // Group tasks by priority
+  useEffect(() => {
+    const groups = tasks.reduce((acc, task) => {
+      const priority = task.priority.toLowerCase();
+      if (!acc[priority]) {
+        acc[priority] = [];
+      }
+      acc[priority].push(task);
+      return acc;
+    }, {} as {[key: string]: Task[]});
+
+    // Sort tasks within each priority group by priority_order
+    Object.keys(groups).forEach(priority => {
+      groups[priority].sort((a, b) => a.priority_order - b.priority_order);
+    });
+
+    setPriorityGroups(groups);
+  }, [tasks]);
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
-    if (!over || active.id === over.id) return;
+    if (!over) return;
 
-    // Find tasks involved in the drag operation
-    const draggedTask = tasks?.find(task => task.id === active.id);
-    const targetTask = tasks?.find(task => task.id === over.id);
-    
-    if (!draggedTask || !targetTask || !tasks) return;
+    if (active.id !== over.id) {
+      const taskId = active.id as string;
+      const activeTask = tasks.find(t => t.task_id === taskId);
+      if (!activeTask) return;
 
-    // Calculate new priority order
-    const updatedTasks = tasks.map(task => ({
-      taskId: task.id,
-      priorityOrder: task.id === active.id 
-        ? targetTask.priorityOrder 
-        : task.id === over.id 
-          ? draggedTask.priorityOrder 
-          : task.priorityOrder
-    }));
+      const overTask = tasks.find(t => t.task_id === over.id);
+      if (!overTask) return;
 
-    // Update priority orders
-    reorderTasks.mutate({
-      projectId: draggedTask.projectId,
-      taskOrders: updatedTasks
-    });
+      // Only allow reordering within the same priority group
+      if (activeTask.priority !== overTask.priority) return;
+
+      const oldIndex = tasks.findIndex(t => t.task_id === taskId);
+      const newIndex = tasks.findIndex(t => t.task_id === over.id);
+
+      onTaskReorder?.(taskId, newIndex);
+
+      // Update local state optimistically
+      const currentGroup = [...priorityGroups[activeTask.priority]];
+      const oldGroupIndex = currentGroup.findIndex(t => t.task_id === taskId);
+      const newGroupIndex = currentGroup.findIndex(t => t.task_id === over.id);
+      
+      const [movedTask] = currentGroup.splice(oldGroupIndex, 1);
+      currentGroup.splice(newGroupIndex, 0, movedTask);
+
+      setPriorityGroups(prev => ({
+        ...prev,
+        [activeTask.priority]: currentGroup
+      }));
+    }
   };
 
-  if (isLoading) {
+  const renderPriorityGroup = (priority: string, tasks: Task[]) => {
     return (
-      <div className="h-full bg-slate-50 rounded-lg flex flex-col overflow-hidden">
-        <div className="p-4 border-b border-slate-200 bg-white">
-          <h2 className="text-lg font-medium text-slate-900">Priority Tasks</h2>
+      <div key={priority} className="mb-6 last:mb-0">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-lg font-semibold capitalize">{priority}</h3>
+          <span className="text-sm text-slate-500">{tasks.length} tasks</span>
         </div>
-        <div className="flex-1 overflow-y-auto p-4">
-          <div className="animate-pulse space-y-4">
-            {[1, 2, 3].map((i) => (
-              <div key={i} className="h-20 bg-slate-200 rounded-lg" />
+        <div className="space-y-3">
+          <SortableContext 
+            items={tasks.map(t => t.task_id)}
+            strategy={verticalListSortingStrategy}
+          >
+            {tasks.map(task => (
+              <PriorityTaskCard 
+                key={task.task_id}
+                task={task}
+                onClick={onTaskClick}
+              />
             ))}
-          </div>
+          </SortableContext>
         </div>
       </div>
     );
-  }
+  };
 
-  // Filter tasks that have HIGH or URGENT priority, sorted by priorityOrder
-  const priorityTasks = tasks?.filter(
-    task => task.priority === Priorities.HIGH || task.priority === Priorities.URGENT
-  ).sort((a, b) => a.priorityOrder - b.priorityOrder) ?? [];
+  // Render priority groups in order
+  const priorityOrder = [
+    Priorities.URGENT,
+    Priorities.HIGH,
+    Priorities.MEDIUM,
+    Priorities.LOW,
+  ].reverse(); // Reverse to show highest priority first
 
   return (
-    <div 
-      className="h-full bg-slate-50 rounded-lg flex flex-col overflow-hidden"
-      role="region" 
-      aria-label="Priority Tasks"
-    >
-      <div className="p-4 border-b border-slate-200 bg-white">
-        <h2 className="text-lg font-medium text-slate-900">
-          Priority Tasks ({priorityTasks.length})
-        </h2>
-      </div>
-
-      <div className="flex-1 overflow-y-auto p-4">
-        <DndContext 
-          onDragEnd={handleDragEnd}
-          sensors={sensors}
-          modifiers={[restrictToVerticalAxis]}
-        >
-          <SortableContext
-            items={priorityTasks.map(task => task.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="min-h-[calc(100%-1rem)] rounded-lg flex flex-col gap-3">
-              {priorityTasks.map((task) => (
-                <PriorityTaskCard 
-                  key={task.id} 
-                  task={task}
-                />
-              ))}
-            </div>
-          </SortableContext>
-        </DndContext>
-      </div>
+    <div className="space-y-6 p-4">
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+        modifiers={[restrictToVerticalAxis]}
+      >
+        {priorityOrder.map(priority => (
+          priorityGroups[priority] && 
+          renderPriorityGroup(priority, priorityGroups[priority])
+        ))}
+      </DndContext>
     </div>
   );
 }

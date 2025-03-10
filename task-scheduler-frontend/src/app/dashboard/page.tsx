@@ -29,7 +29,7 @@ export default function DashboardPage() {
           <div className="p-6">
             <h2 className="text-lg font-semibold mb-4">Priority Tasks</h2>
             <div className="h-[400px]">
-              <PriorityTaskList />
+              <PriorityTaskList tasks={tasks || []} />
             </div>
           </div>
         </div>
@@ -55,12 +55,12 @@ export default function DashboardPage() {
                       <h3 className="font-medium text-gray-900">{task.title}</h3>
                       <span className={`
                         text-xs px-2 py-1 rounded-full
-                        ${task.status === 'DONE' 
+                        ${task.status === 'done' 
                           ? 'bg-green-100 text-green-800' 
                           : 'bg-blue-100 text-blue-800'
                         }
                       `}>
-                        {task.status.replace('_', ' ')}
+                        {task.status?.replace('_', ' ') || 'pending'}
                       </span>
                     </div>
                     <p className="text-sm text-gray-500">{task.description}</p>

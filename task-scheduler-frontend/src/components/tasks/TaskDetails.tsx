@@ -1,228 +1,180 @@
-import React, { useEffect, useRef } from 'react';
-import type { Task } from '@/types/task';
-import styles from './TaskDetails.module.css';
+import { Task } from '@/types/task';
+import { format } from 'date-fns';
 
-export interface TaskDetailsProps {
+interface TaskDetailsProps {
   task: Task;
-  onEdit: (task: Task) => void;
-  onDelete: (taskId: string) => void;
-  onClose: () => void;
 }
 
-export const TaskDetails: React.FC<TaskDetailsProps> = ({ 
-  task,
-  onEdit,
-  onDelete,
-  onClose,
-}) => {
-  const [isDeleting, setIsDeleting] = React.useState(false);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const deleteButtonRef = useRef<HTMLButtonElement>(null);
-  const confirmButtonRef = useRef<HTMLButtonElement>(null);
-  const dialogRef = useRef<HTMLDivElement>(null);
+// Helper function to format dates consistently
+const formatDateTime = (dateString: string | undefined) => {
+  if (!dateString) return 'Not set';
+  return format(new Date(dateString), 'dd/MM/yyyy HH:mm');
+};
 
-  // Focus management
-  useEffect(() => {
-    const previousActiveElement = document.activeElement as HTMLElement;
-    closeButtonRef.current?.focus();
-
-    // Cleanup function to restore focus
-    return () => {
-      previousActiveElement?.focus();
-    };
-  }, []);
-
-  // Format dates using Intl
-  const formatDate = (date: string | undefined) => {
-    if (!date) return 'Not set';
+export function TaskDetails({ task }: TaskDetailsProps) {
+  // Helper to calculate days remaining
+  const calculateDaysRemaining = () => {
+    if (!task.due_date) return null;
     
-    return new Intl.DateTimeFormat('en-US', {
-      dateStyle: 'long',
-      timeStyle: 'short',
-    }).format(new Date(date));
-  };
-
-  // Check if deadline is approaching (within 24 hours)
-  const isDeadlineApproaching = () => {
-    if (!task.deadline) return false;
-
-    const deadline = new Date(task.deadline);
     const now = new Date();
-    const timeDiff = deadline.getTime() - now.getTime();
-    return timeDiff > 0 && timeDiff <= 24 * 60 * 60 * 1000;
+    const dueDate = new Date(task.due_date);
+    const diffTime = dueDate.getTime() - now.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    
+    if (diffDays < 0) {
+      return `${Math.abs(diffDays)} days overdue`;
+    }
+    if (diffDays === 0) {
+      return 'Due today';
+    }
+    return `${diffDays} days remaining`;
   };
 
-  // Handle keydown events
-  const handleKeyDown = (event: React.KeyboardEvent) => {
-    switch (event.key) {
-      case 'Escape':
-        if (isDeleting) {
-          setIsDeleting(false);
-        } else {
-          onClose();
-        }
-        break;
-      case 'Delete':
-        if (event.ctrlKey || event.metaKey) {
-          event.preventDefault();
-          setIsDeleting(true);
-        }
-        break;
-      case 'Enter':
-        if (isDeleting && event.target === confirmButtonRef.current) {
-          onDelete(task.id);
-        }
-        break;
+  // Calculate status color
+  const getStatusColor = (status: Task['status']) => {
+    switch (status) {
+      case 'done':
+        return 'bg-green-100 text-green-800';
+      case 'doing':
+        return 'bg-blue-100 text-blue-800';
+      case 'blocked':
+        return 'bg-red-100 text-red-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
     }
   };
 
-  // Close dialog when clicking outside
-  const handleBackdropClick = (event: React.MouseEvent) => {
-    if (event.target === dialogRef.current) {
-      onClose();
-    }
+  // Format effort
+  const formatEffort = (hours?: number) => {
+    if (!hours) return 'Not estimated';
+    const days = Math.floor(hours / 8);
+    const remainingHours = hours % 8;
+    
+    if (days === 0) return `${hours}h`;
+    if (remainingHours === 0) return `${days}d`;
+    return `${days}d ${remainingHours}h`;
+  };
+
+  // Calculate progress
+  const calculateProgress = () => {
+    if (task.progress === undefined) return 'Not started';
+    return `${task.progress}%`;
   };
 
   return (
-    <div
-      ref={dialogRef}
-      role="dialog"
-      aria-labelledby="task-details-title"
-      aria-modal="true"
-      className={styles.taskDetails}
-      onKeyDown={handleKeyDown}
-      onClick={handleBackdropClick}
-    >
-      <header className={styles.header}>
-        <h2 id="task-details-title" className={styles.title}>
-          {task.title}
-        </h2>
-        <button
-          ref={closeButtonRef}
-          type="button"
-          onClick={onClose}
-          aria-label="Close details"
-          className={styles.closeButton}
-        >
-          ×
-        </button>
-      </header>
-
-      <div role="region" aria-label="Task details" className={styles.section}>
-        <div className={styles.description}>
-          <p>{task.description}</p>
-        </div>
-
-        <div className={styles.statusBadges}>
-          <span 
-            className={`${styles.status} ${styles[`status${task.status}`]}`}
-            aria-label={`Status: ${task.status}`}
-          >
-            {task.status}
-          </span>
-          <span 
-            className={`${styles.priority} ${styles[`priority${task.priority}`]}`}
-            aria-label={`Priority: ${task.priority}`}
-          >
-            {task.priority}
-          </span>
-        </div>
-
-        <div className={styles.effort}>
-          <span>Effort: {task.effortHours || 0} hours</span>
-        </div>
+    <div className="bg-white shadow-sm rounded-lg">
+      {/* Header */}
+      <div className="px-4 py-5 border-b border-gray-200 sm:px-6">
+        <h3 className="text-lg font-medium leading-6 text-gray-900">
+          Task Details
+        </h3>
       </div>
 
-      <div role="region" aria-label="Dates" className={styles.section}>
-        <div className={styles.dates}>
-          <p>
-            Start: {task.startDate ? formatDate(task.startDate) : 'Not scheduled'}
-          </p>
-          <p>
-            Deadline: {task.deadline ? formatDate(task.deadline) : 'No deadline'}
-            {isDeadlineApproaching() && (
-              <span className={styles.warning} role="alert">
-                Deadline approaching
-              </span>
-            )}
-          </p>
-        </div>
-      </div>
-
-      <div role="region" aria-label="Assignees" className={styles.section}>
-        <h3>Assignees</h3>
-        {task.assignees.length > 0 ? (
-          <ul className={styles.assigneesList}>
-            {task.assignees.map(user => (
-              <li key={user.id} className={styles.assigneeItem}>
-                {user.name}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p>No assignees</p>
-        )}
-      </div>
-
-      <div role="region" aria-label="Created by" className={styles.meta}>
-        <p>Created by {task.createdBy.name}</p>
-        <p>
-          on {formatDate(task.createdAt)}
-          {task.updatedAt && task.updatedAt !== task.createdAt && (
-            <span className={styles.updated}>
-              (Updated: {formatDate(task.updatedAt)})
-            </span>
-          )}
-        </p>
-      </div>
-
-      <div className={styles.actions}>
-        <button
-          type="button"
-          onClick={() => onEdit(task)}
-          className={styles.editButton}
-          aria-label="Edit task"
-        >
-          Edit
-        </button>
-
-        {isDeleting ? (
-          <div 
-            className={styles.deleteConfirmation}
-            role="alertdialog"
-            aria-labelledby="delete-confirmation"
-          >
-            <p id="delete-confirmation">Are you sure you want to delete this task?</p>
-            <button
-              ref={confirmButtonRef}
-              type="button"
-              onClick={() => onDelete(task.id)}
-              className={styles.confirmButton}
-              aria-label="Confirm delete"
-            >
-              Confirm
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsDeleting(false)}
-              className={styles.cancelButton}
-              aria-label="Cancel delete"
-            >
-              Cancel
-            </button>
+      {/* Content */}
+      <div className="px-4 py-5 sm:p-6">
+        <dl className="grid grid-cols-1 gap-x-4 gap-y-6 sm:grid-cols-2">
+          {/* Title */}
+          <div className="sm:col-span-2">
+            <dt className="text-sm font-medium text-gray-500">Title</dt>
+            <dd className="mt-1 text-sm text-gray-900">{task.title}</dd>
           </div>
-        ) : (
-          <button
-            ref={deleteButtonRef}
-            type="button"
-            onClick={() => setIsDeleting(true)}
-            className={styles.deleteButton}
-            aria-label="Delete task"
-          >
-            Delete
-          </button>
-        )}
+
+          {/* Description */}
+          {task.description && (
+            <div className="sm:col-span-2">
+              <dt className="text-sm font-medium text-gray-500">Description</dt>
+              <dd className="mt-1 text-sm text-gray-900 whitespace-pre-wrap">
+                {task.description}
+              </dd>
+            </div>
+          )}
+
+          {/* Status */}
+          <div>
+            <dt className="text-sm font-medium text-gray-500">Status</dt>
+            <dd className="mt-1">
+              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
+                {task.status}
+              </span>
+            </dd>
+          </div>
+
+          {/* Priority */}
+          <div>
+            <dt className="text-sm font-medium text-gray-500">Priority</dt>
+            <dd className="mt-1 text-sm text-gray-900 capitalize">
+              {task.priority}
+            </dd>
+          </div>
+
+          {/* Start Date */}
+          <div>
+            <dt className="text-sm font-medium text-gray-500">Start Date</dt>
+            <dd className="mt-1 text-sm text-gray-900">
+              {formatDateTime(task.start_date)}
+            </dd>
+          </div>
+
+          {/* Due Date */}
+          <div>
+            <dt className="text-sm font-medium text-gray-500">Due Date</dt>
+            <dd className="mt-1 text-sm text-gray-900">
+              {formatDateTime(task.due_date)}
+              {task.due_date && (
+                <span className="ml-2 text-xs text-gray-500">
+                  ({calculateDaysRemaining()})
+                </span>
+              )}
+            </dd>
+          </div>
+
+          {/* Effort */}
+          <div>
+            <dt className="text-sm font-medium text-gray-500">Effort</dt>
+            <dd className="mt-1 text-sm text-gray-900">
+              {formatEffort(task.effort)}
+            </dd>
+          </div>
+
+          {/* Progress */}
+          <div>
+            <dt className="text-sm font-medium text-gray-500">Progress</dt>
+            <dd className="mt-1 text-sm text-gray-900">
+              {calculateProgress()}
+            </dd>
+          </div>
+
+          {/* Assignee */}
+          <div>
+            <dt className="text-sm font-medium text-gray-500">Assignee</dt>
+            <dd className="mt-1 text-sm text-gray-900">
+              {task.assignee ? task.assignee.username : 'Unassigned'}
+            </dd>
+          </div>
+
+          {/* Created By */}
+          <div>
+            <dt className="text-sm font-medium text-gray-500">Created By</dt>
+            <dd className="mt-1 text-sm text-gray-900">{task.created_by}</dd>
+          </div>
+
+          {/* Created At */}
+          <div>
+            <dt className="text-sm font-medium text-gray-500">Created At</dt>
+            <dd className="mt-1 text-sm text-gray-900">
+              {formatDateTime(task.created_at)}
+            </dd>
+          </div>
+
+          {/* Last Updated */}
+          <div>
+            <dt className="text-sm font-medium text-gray-500">Last Updated</dt>
+            <dd className="mt-1 text-sm text-gray-900">
+              {formatDateTime(task.updated_at)}
+            </dd>
+          </div>
+        </dl>
       </div>
     </div>
   );
-};
+}

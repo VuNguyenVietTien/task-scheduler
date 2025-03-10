@@ -6,6 +6,7 @@ import { ProjectData } from '@/types/project';
 import { TaskFilterBar } from './TaskFilterBar';
 import { TaskBulkActions } from './TaskBulkActions';
 import { useUpdateTaskPriorityOrder } from '@/hooks/useTasks';
+import { UserAvatar } from '@/components/common/UserAvatar';
 
 interface TaskListViewProps {
   tasks: Task[];
@@ -24,27 +25,26 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
 
-  // Get unique assignees and projects from all tasks
+  // Memoize assignees and projects
   const { assignees, projects } = useMemo(() => {
     const uniqueAssignees = new Map<string, TaskAssignee>();
     const uniqueProjects = new Map<string, ProjectData>();
     
     tasks.forEach(task => {
       if (task.assignee) {
-        if (!uniqueAssignees.has(task.assignee.userId)) {
-          uniqueAssignees.set(task.assignee.userId, task.assignee);
-        }
+        uniqueAssignees.set(task.assignee.userId, task.assignee);
       }
       
-      if (task.project_id && !uniqueProjects.has(task.project_id)) {
-        uniqueProjects.set(task.project_id, {
+      if (task.project_id) {
+        const project: ProjectData = {
           id: task.project_id,
           name: `Project ${task.project_id}`,
           description: '',
           dueDate: '',
           members: 0,
           status: 'active'
-        });
+        };
+        uniqueProjects.set(task.project_id, project);
       }
     });
     
@@ -100,6 +100,7 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
     };
   }, [tasks, filter]);
 
+  // Sort tasks
   const sortedIncompleteTasks = useMemo(() => {
     return [...incompleteTasks].sort((a, b) => a.priority_order - b.priority_order);
   }, [incompleteTasks]);
@@ -193,16 +194,17 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
             </span>
           </td>
           <td className="px-3 py-4 text-sm">
-            {task.assignee && (
+            {task.assignee ? (
               <div className="flex items-center gap-2">
-                <img
-                  className="inline-block h-6 w-6 rounded-full ring-2 ring-white"
-                  src={task.assignee.avatarUrl || '/images/default-avatar.png'}
-                  alt={task.assignee.username}
-                  title={task.assignee.username}
+                <UserAvatar 
+                  username={task.assignee.username} 
+                  avatarUrl={task.assignee.avatarUrl} 
+                  size="md" 
                 />
                 <span>{task.assignee.username}</span>
               </div>
+            ) : (
+              <span className="text-slate-400">Unassigned</span>
             )}
           </td>
           <td className="px-3 py-4 text-sm text-slate-500">

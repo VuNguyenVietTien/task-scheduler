@@ -4,9 +4,9 @@ import { Task, TaskStatus, TaskStatuses } from '@/types/task';
 import { useEffect, useState } from 'react';
 import { DndContext, DragEndEvent, useSensors, useSensor, PointerSensor } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
-import { useReorderTasks } from '@/hooks/useTasks';
-import { SortableTaskItem } from './SortableTaskItem';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
+import { useUpdateTaskStatus } from '@/hooks/useTaskMutations';
+import { SortableTaskItem } from './SortableTaskItem';
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -19,9 +19,23 @@ interface Column {
   tasks: Task[];
 }
 
+const COLUMN_DEFINITIONS: Array<{id: TaskStatus; title: string}> = [
+  { id: TaskStatuses.TODO, title: 'Todo' },
+  { id: TaskStatuses.DOING, title: 'In Progress' },
+  { id: TaskStatuses.PENDING, title: 'Pending' },
+  { id: TaskStatuses.REVIEW, title: 'Review' },
+  { id: TaskStatuses.BLOCKED, title: 'Blocked' },
+  { id: TaskStatuses.DONE, title: 'Done' },
+  { id: TaskStatuses.CLOSE, title: 'Closed' },
+  { id: TaskStatuses.REJECTED, title: 'Rejected' },
+  { id: TaskStatuses.ARCHIVED, title: 'Archived' },
+];
+
 export function KanbanBoard({ tasks, onTasksReorder }: KanbanBoardProps) {
   const [columns, setColumns] = useState<Column[]>([]);
-  const reorderTasks = useReorderTasks();
+  const [updateTaskStatus] = useUpdateTaskStatus();
+
+  console.log('KanbanBoard: Received tasks', tasks);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -33,55 +47,57 @@ export function KanbanBoard({ tasks, onTasksReorder }: KanbanBoardProps) {
 
   useEffect(() => {
     // Initialize columns with tasks
-    const initialColumns: Column[] = [
-      { id: TaskStatuses.BACKLOG, title: 'Backlog', tasks: [] },
-      { id: TaskStatuses.PLANNED, title: 'Planned', tasks: [] },
-      { id: TaskStatuses.IN_PROGRESS, title: 'In Progress', tasks: [] },
-      { id: TaskStatuses.IN_REVIEW, title: 'In Review', tasks: [] },
-      { id: TaskStatuses.DONE, title: 'Done', tasks: [] },
-    ];
-
-    // Distribute tasks to their respective columns
-    tasks.forEach(task => {
-      const column = initialColumns.find(col => col.id === task.status);
-      if (column) {
-        column.tasks.push(task);
-      }
-    });
+    const initialColumns: Column[] = COLUMN_DEFINITIONS.map(col => ({
+      ...col,
+      tasks: tasks.filter(task => task.status === col.id) || []
+    }));
 
     setColumns(initialColumns);
   }, [tasks]);
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over) return;
 
     const taskId = active.id as string;
     const targetColumnId = over.id as TaskStatus;
 
-    // Find the task that was dragged
-    const draggedTask = tasks.find(t => t.id === taskId);
+    // Find task being dragged
+    const draggedTask = tasks.find(t => t.task_id === taskId);
     if (!draggedTask) return;
 
-    // Update the task's status
-    const updatedTasks = tasks.map(task => 
-      task.id === taskId
-        ? { ...task, status: targetColumnId }
-        : task
-    );
+    try {
+      // Call mutation to update status
+      await updateTaskStatus({
+        variables: {
+          taskId,
+          status: targetColumnId
+        }
+      });
 
-    // Update columns
-    const newColumns = columns.map(column => ({
-      ...column,
-      tasks: updatedTasks.filter(task => task.status === column.id)
-    }));
+      // Update UI optimistically
+      const updatedTasks = tasks.map(task =>
+        task.task_id === taskId
+          ? { ...task, status: targetColumnId }
+          : task
+      );
 
-    setColumns(newColumns);
-    onTasksReorder?.(updatedTasks);
+      // Update columns
+      const newColumns = columns.map(column => ({
+        ...column,
+        tasks: updatedTasks.filter(task => task.status === column.id)
+      }));
+
+      setColumns(newColumns);
+      onTasksReorder?.(updatedTasks);
+      
+    } catch (error) {
+      console.error('Failed to update task status:', error);
+    }
   };
 
   return (
-    <div className="flex gap-4 h-full overflow-x-auto p-4">
+    <div className="flex gap-4 h-full overflow-x-auto p-4 pb-8">
       <DndContext 
         onDragEnd={handleDragEnd}
         sensors={sensors}
@@ -97,12 +113,12 @@ export function KanbanBoard({ tasks, onTasksReorder }: KanbanBoardProps) {
                 {column.title} ({column.tasks.length})
               </div>
               <SortableContext 
-                items={column.tasks.map(task => task.id)}
+                items={column.tasks.map(task => task.task_id)}
                 strategy={verticalListSortingStrategy}
               >
-                <div className="p-2 space-y-2">
+                <div className="p-2 space-y-2 min-h-[200px]">
                   {column.tasks.map(task => (
-                    <SortableTaskItem key={task.id} task={task} />
+                    <SortableTaskItem key={task.task_id} task={task} />
                   ))}
                 </div>
               </SortableContext>

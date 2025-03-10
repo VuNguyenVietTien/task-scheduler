@@ -4,14 +4,16 @@ import { useState } from 'react';
 import { Timeline } from '@/components/timeline/Timeline';
 import { TaskListView } from '@/components/tasks/TaskListView';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
-import { mockUsers } from '@/data/mockTasks';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
+import { useUsers } from '@/hooks/useUsers';
 import type { ProjectData } from '@/types/project';
+
 type ViewType = 'list' | 'kanban' | 'gantt';
 
 export function ProjectDetailView({ project }: { project: ProjectData }) {
   const [activeView, setActiveView] = useState<ViewType>('list');
-  const { data: tasks, isLoading } = useProjectTasks(project.id);
+  const { data: tasks, loading: tasksLoading, error } = useProjectTasks(project.id);
+  const { data: users, loading: usersLoading } = useUsers();
 
   const tabs = [
     {
@@ -43,6 +45,42 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
     }
   ];
 
+  if (error) {
+    return (
+      <div className="p-6">
+        <div className="bg-red-50 p-4 rounded-lg text-red-700">
+          Error loading tasks: {error.message}
+        </div>
+      </div>
+    );
+  }
+
+  // Loading state component
+  const LoadingState = () => (
+    <div className="h-full flex items-center justify-center">
+      <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+    </div>
+  );
+
+  // Empty state component
+  const EmptyState = () => (
+    <div className="h-full flex items-center justify-center text-slate-500">
+      <div className="text-center">
+        <h3 className="text-lg font-medium mb-2">No tasks found</h3>
+        <p>Start by adding tasks to your project.</p>
+        <a 
+          href={`/projects/${project.id}/add-task`}
+          className="mt-4 inline-flex items-center text-blue-600 hover:text-blue-700"
+        >
+          <span>Add Task</span>
+          <svg className="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+        </a>
+      </div>
+    </div>
+  );
+
   return (
     <div className="p-6">
       {/* Project Header */}
@@ -51,8 +89,6 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
           <h1 className="text-2xl font-bold">{project.name}</h1>
           <a 
             href={`/projects/${project.id}/add-task`}
-            target="_blank"
-            rel="noopener noreferrer"
             className="btn-primary inline-block"
           >
             Add Task
@@ -96,25 +132,21 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
 
       {/* View Content */}
       <div className="h-[calc(100vh-240px)]">
-        {isLoading ? (
-          <div className="h-full flex items-center justify-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
-          </div>
-        ) : !tasks ? (
-          <div className="h-full flex items-center justify-center text-slate-500">
-            No tasks found
-          </div>
+        {tasksLoading || usersLoading ? (
+          <LoadingState />
+        ) : !tasks?.length ? (
+          <EmptyState />
         ) : (
           <>
             {activeView === 'list' && <TaskListView tasks={tasks} />}
             {activeView === 'kanban' && (
               <div className="h-full overflow-x-auto">
-                <KanbanBoard tasks={tasks} projectId={project.id} />
+                <KanbanBoard tasks={tasks} />
               </div>
             )}
             {activeView === 'gantt' && (
               <div className="card h-full overflow-auto">
-                <Timeline tasks={tasks} users={mockUsers} />
+                <Timeline tasks={tasks} users={users || []} />
               </div>
             )}
           </>

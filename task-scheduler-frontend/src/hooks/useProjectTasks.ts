@@ -1,5 +1,16 @@
 import { useQuery } from '@apollo/client';
-import { Task, TaskAssignee } from '@/types/task';
+import { 
+  Task, 
+  TaskStatus, 
+  Priority, 
+  TaskType, 
+  TaskCategory, 
+  ProgressType, 
+  TaskTag, 
+  TaskAssignee,
+  TaskStatuses,
+  Priorities 
+} from '@/types/task';
 import { GET_PROJECT_TASKS } from '@/graphql/queries/tasks';
 
 interface GraphQLTaskAssignee {
@@ -36,6 +47,48 @@ interface GraphQLTask {
   childTasks?: GraphQLTask[];
 }
 
+const validateTaskStatus = (status: string): TaskStatus => {
+  const normalizedStatus = status.toLowerCase() as TaskStatus;
+  return Object.values(TaskStatuses).includes(normalizedStatus) 
+    ? normalizedStatus 
+    : TaskStatuses.TODO;
+};
+
+const validatePriority = (priority: string): Priority => {
+  const normalizedPriority = priority.toLowerCase() as Priority;
+  return Object.values(Priorities).includes(normalizedPriority)
+    ? normalizedPriority
+    : Priorities.LOW;
+};
+
+const validateTaskType = (type: string): TaskType | undefined => {
+  const normalizedType = type.charAt(0).toUpperCase() + type.slice(1).toLowerCase();
+  return ['Feature', 'Bug', 'Enhancement', 'Documentation'].includes(normalizedType)
+    ? normalizedType as TaskType
+    : undefined;
+};
+
+const validateTaskCategory = (category: string): TaskCategory | undefined => {
+  const normalizedCategory = category.charAt(0).toUpperCase() + category.slice(1).toLowerCase();
+  return ['Frontend', 'Backend', 'Design', 'Testing', 'DevOps'].includes(normalizedCategory)
+    ? normalizedCategory as TaskCategory
+    : undefined;
+};
+
+const validateProgressType = (progressType: string): ProgressType | undefined => {
+  const normalizedType = progressType.toLowerCase().replace(' ', '_') as ProgressType;
+  return ['study', 'investigate', 'code', 'test', 'review_code', 'review_test_report', 'release'].includes(normalizedType)
+    ? normalizedType
+    : undefined;
+};
+
+const validateTaskTags = (tags: string[]): TaskTag[] => {
+  return tags.filter(tag => {
+    const normalizedTag = tag.charAt(0).toUpperCase() + tag.slice(1).toLowerCase().replace('_', ' ');
+    return ['Urgent', 'High Priority', 'Low Priority', 'In Progress', 'Blocked'].includes(normalizedTag);
+  }) as TaskTag[];
+};
+
 const transformAssignee = (assignee: GraphQLTaskAssignee | undefined): TaskAssignee | undefined => {
   if (!assignee) return undefined;
   
@@ -67,29 +120,28 @@ const transformGraphQLTask = (graphqlTask: GraphQLTask): Task => {
     created_at: graphqlTask.createdAt,
     updated_at: graphqlTask.updatedAt,
     is_deleted: graphqlTask.isDeleted,
-    status: graphqlTask.status as Task['status'],
-    priority: graphqlTask.priority as Task['priority'],
-    type: graphqlTask.type as Task['type'],
-    category: graphqlTask.category as Task['category'],
-    progress_type: graphqlTask.progressType as Task['progress_type'],
-    tags: graphqlTask.tags as Task['tags'],
+    status: validateTaskStatus(graphqlTask.status),
+    priority: validatePriority(graphqlTask.priority),
+    type: graphqlTask.type ? validateTaskType(graphqlTask.type) : undefined,
+    category: graphqlTask.category ? validateTaskCategory(graphqlTask.category) : undefined,
+    progress_type: graphqlTask.progressType ? validateProgressType(graphqlTask.progressType) : undefined,
+    tags: graphqlTask.tags ? validateTaskTags(graphqlTask.tags) : undefined,
     child_tasks: graphqlTask.childTasks 
       ? graphqlTask.childTasks.map(transformGraphQLTask)
       : undefined
   };
 };
 
-/**
- * Hook để lấy tasks của một project và map dữ liệu sang định dạng Task
- */
 export function useProjectTasks(projectId: string) {
-  const { loading, error, data } = useQuery(GET_PROJECT_TASKS, {
+  const { data, loading, error } = useQuery(GET_PROJECT_TASKS, {
     variables: { projectId },
+    skip: !projectId,
     fetchPolicy: 'network-only'
   });
 
-  // Transform GraphQL response to match Task interface
-  const tasks = data?.tasks?.map((task: GraphQLTask) => transformGraphQLTask(task)) || [];
+  const tasks = data?.tasks
+    ? data.tasks.map((task: GraphQLTask) => transformGraphQLTask(task))
+    : [];
 
-  return { loading, error, data: tasks };
+  return { data: tasks, loading, error };
 }

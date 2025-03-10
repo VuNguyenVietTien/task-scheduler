@@ -1,23 +1,17 @@
-/**
- * PriorityTaskCard Component
- * 
- * This component is a draggable element enabling task reordering.
- * Each card represents a task with:
- * - Priority color indicator
- * - Task title and status
- * - Start and end dates
- * - Effort hours
- */
+'use client';
 
-import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
+import { Task } from '@/types/task';
+import { format } from 'date-fns';
+import { UserAvatar } from '@/components/common/UserAvatar';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 interface PriorityTaskCardProps {
   task: Task;
+  onClick?: (taskId: string) => void;
 }
 
-export function PriorityTaskCard({ task }: PriorityTaskCardProps) {
+export function PriorityTaskCard({ task, onClick }: PriorityTaskCardProps) {
   const {
     attributes,
     listeners,
@@ -25,52 +19,15 @@ export function PriorityTaskCard({ task }: PriorityTaskCardProps) {
     transform,
     transition,
     isDragging
-  } = useSortable({ id: task.id });
+  } = useSortable({ id: task.task_id });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
   };
 
-  const getPriorityColor = (priority: Priority) => {
-    switch (priority) {
-      case Priorities.URGENT:
-        return 'border-l-4 border-l-red-600';
-      case Priorities.HIGH:
-        return 'border-l-4 border-l-orange-600';
-      case Priorities.MEDIUM:
-        return 'border-l-4 border-l-amber-600';
-      case Priorities.LOW:
-        return 'border-l-4 border-l-green-600';
-      default:
-        return 'border-l-4 border-l-slate-600';
-    }
-  };
-
-  const getStatusColor = (status: TaskStatus) => {
-    switch (status) {
-      case TaskStatuses.DONE:
-        return 'text-green-600 bg-green-50';
-      case TaskStatuses.IN_PROGRESS:
-        return 'text-blue-600 bg-blue-50';
-      case TaskStatuses.IN_REVIEW:
-        return 'text-purple-600 bg-purple-50';
-      case TaskStatuses.PLANNED:
-        return 'text-amber-600 bg-amber-50';
-      case TaskStatuses.BACKLOG:
-        return 'text-slate-600 bg-slate-50';
-      default:
-        return 'text-slate-600 bg-slate-50';
-    }
-  };
-
-  const formatDate = (dateString: string | undefined) => {
-    if (!dateString) return '';
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-GB', {
-      day: '2-digit',
-      month: '2-digit'
-    });
+  const handleClick = () => {
+    onClick?.(task.task_id);
   };
 
   return (
@@ -79,63 +36,77 @@ export function PriorityTaskCard({ task }: PriorityTaskCardProps) {
       style={style}
       {...attributes}
       {...listeners}
+      onClick={handleClick}
       className={`
-        group bg-white rounded-lg select-none relative
-        ${getPriorityColor(task.priority)}
+        bg-white rounded-lg shadow-sm hover:shadow p-3 cursor-pointer
         ${isDragging 
-          ? 'shadow-lg ring-2 ring-blue-500 scale-[1.02] z-50'
-          : 'shadow-sm hover:shadow-md'
+          ? 'shadow-lg ring-2 ring-blue-500 scale-[1.02] z-50' 
+          : 'hover:scale-[1.02] transition-transform'
         }
-        transition-all duration-100 ease-in-out
-        touch-manipulation
       `}
     >
-      {/* Drag Handle */}
-      <div 
-        className={`
-          absolute top-0 left-0 w-1 h-full bg-blue-500 opacity-0
-          group-hover:opacity-50 rounded-l
-          transition-opacity duration-150
-          ${isDragging ? 'opacity-100' : ''}
-        `}
-      />
-
-      <div className="p-3 space-y-2">
-        {/* Task Header */}
-        <div className="flex items-center justify-between gap-2">
-          <h3 className="font-medium text-slate-900 truncate">{task.title}</h3>
-          <span 
-            className={`
-              shrink-0 px-2 py-0.5 rounded-full text-xs font-medium
-              ${getStatusColor(task.status)}
-            `}
-          >
-            {task.status.replace(/_/g, ' ')}
-          </span>
+      <div className="flex items-start justify-between gap-2">
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-medium text-slate-900 truncate">
+            {task.title}
+          </h3>
+          {task.description && (
+            <p className="mt-1 text-xs text-slate-500 truncate">
+              {task.description}
+            </p>
+          )}
         </div>
 
-        {/* Task Details */}
-        <div className="flex items-center justify-between gap-2 text-sm text-slate-500">
-          <div className="flex items-center gap-2 min-w-0">
-            <div className="flex items-center gap-1 shrink-0">
-              {task.startDate ? (
-                <>
-                  <span className="text-xs font-medium">{formatDate(task.startDate)}</span>
-                  <span className="text-slate-300">→</span>
-                </>
-              ) : (
-                <span className="text-xs text-slate-400 italic">Not scheduled</span>
-              )}
-            </div>
-            <span className="text-xs truncate">
-              {task.deadline ? formatDate(task.deadline) : 'No deadline'}
-            </span>
-          </div>
-          <span className="px-2 py-0.5 bg-slate-100 rounded text-xs font-medium shrink-0">
-            {task.effortHours}h
+        {/* Priority Indicator */}
+        <div className="shrink-0">
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize
+            ${task.priority === 'urgent' ? 'bg-red-100 text-red-800' :
+              task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
+              task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+              'bg-green-100 text-green-800'
+            }`}
+          >
+            {task.priority}
           </span>
         </div>
       </div>
+
+      <div className="mt-2 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          {/* Assignee */}
+          {task.assignee && (
+            <div className="flex items-center gap-1">
+              <UserAvatar 
+                username={task.assignee.username}
+                avatarUrl={task.assignee.avatarUrl}
+                size="sm"
+              />
+              <span className="text-xs text-slate-600">
+                {task.assignee.username}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Due Date */}
+        {task.due_date && (
+          <span className="text-xs text-slate-500">
+            {format(new Date(task.due_date), 'dd/MM')}
+          </span>
+        )}
+      </div>
+
+      {/* Progress Bar */}
+      {task.progress !== undefined && (
+        <div className="mt-2">
+          <div className="w-full bg-slate-200 rounded-full h-1.5">
+            <div 
+              className="bg-blue-600 h-1.5 rounded-full" 
+              style={{width: `${task.progress}%`}}
+            />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

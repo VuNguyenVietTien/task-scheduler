@@ -1,18 +1,10 @@
-import { Task, TaskStatus, Priority } from '@/types/task';
+import { Task } from '@/types/task';
 import { formatDateRange } from '@/lib/utils';
 import { useEffect, useState } from 'react';
 
 interface TaskTooltipProps {
   task: Task;
   targetRef: React.RefObject<HTMLDivElement>;
-}
-
-type StatusDisplayProps = {
-  status: TaskStatus;
-}
-
-type PriorityDisplayProps = {
-  priority: Priority;
 }
 
 export function TaskTooltip({ task, targetRef }: TaskTooltipProps) {
@@ -41,10 +33,10 @@ export function TaskTooltip({ task, targetRef }: TaskTooltipProps) {
     top: `${position.y}px`,
     transform: 'translate(-50%, -100%)',
     marginTop: '-8px',
-    zIndex: 1000, // Increased z-index to appear above header
+    zIndex: 1000
   };
 
-  const dateRange = formatDateRange(task.startDate, task.deadline);
+  const dateRange = formatDateRange(task.start_date, task.due_date);
 
   return (
     <div
@@ -70,31 +62,31 @@ export function TaskTooltip({ task, targetRef }: TaskTooltipProps) {
         </div>
 
         {/* Effort */}
-        {task.effortHours && (
+        {task.effort && (
           <div className="flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>{task.effortHours}h effort</span>
+            <span>{task.effort}h effort</span>
           </div>
         )}
 
-        {/* Assignees */}
-        {task.assignees?.length > 0 && (
+        {/* Assignee */}
+        {task.assignee && (
           <div className="flex items-center gap-2">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
             </svg>
-            <div className="flex -space-x-2">
-              {task.assignees.map(assignee => (
+            <div className="flex items-center gap-2">
+              {task.assignee.avatarUrl && (
                 <img
-                  key={assignee.id}
-                  src={assignee.avatarUrl}
-                  alt={assignee.name}
-                  title={assignee.name}
+                  src={task.assignee.avatarUrl}
+                  alt={task.assignee.username}
+                  title={task.assignee.username}
                   className="w-6 h-6 rounded-full ring-2 ring-white"
                 />
-              ))}
+              )}
+              <span>{task.assignee.username}</span>
             </div>
           </div>
         )}
@@ -104,7 +96,7 @@ export function TaskTooltip({ task, targetRef }: TaskTooltipProps) {
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
           </svg>
-          <span>{task.status.replace(/_/g, ' ')}</span>
+          <span className="capitalize">{task.status.replace(/_/g, ' ').toLowerCase()}</span>
         </div>
 
         {/* Priority */}
@@ -112,7 +104,7 @@ export function TaskTooltip({ task, targetRef }: TaskTooltipProps) {
           <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4h13M3 8h9m-9 4h6m4 0l4-4m0 0l4 4m-4-4v12" />
           </svg>
-          <span>{task.priority}</span>
+          <span className="capitalize">{task.priority.toLowerCase()}</span>
         </div>
       </div>
 
