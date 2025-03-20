@@ -11,6 +11,7 @@ use crate::graphql::{
         TaskMutation, TaskQuery,
     },
     dataloaders::{ProjectLoader, UserLoader},
+    types::{ProjectPriority, ProjectStatus, ProjectVisibility, MemberRole},
 };
 use crate::config::Config;
 
@@ -29,5 +30,6 @@ pub fn create_schema(pool: PgPool, config: Config) -> AppSchema {
         .data(ProjectLoader::new(pool_ref.clone()))
         .data(UserLoader::new(pool_ref.clone()))
         .data(config)
+        .enable_federation()
         .finish()
 }

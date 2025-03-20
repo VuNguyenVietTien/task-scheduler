@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use sqlx::Type;
 use uuid::Uuid;
 use std::str::FromStr;
+use std::fmt;
 use serde::{Serialize, Deserialize};
 use serde_json::Value as JsonValue;
 use log::debug;
@@ -57,6 +58,24 @@ pub enum TaskStatus {
     Blocked,
     Rejected,
     Archived,
+}
+
+impl fmt::Display for TaskStatus {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        // Convert enum variant to lowercase string
+        let s = match self {
+            TaskStatus::Todo => "todo",
+            TaskStatus::Doing => "doing",
+            TaskStatus::Done => "done",
+            TaskStatus::Close => "close",
+            TaskStatus::Pending => "pending",
+            TaskStatus::Review => "review",
+            TaskStatus::Blocked => "blocked",
+            TaskStatus::Rejected => "rejected",
+            TaskStatus::Archived => "archived",
+        };
+        write!(f, "{}", s)
+    }
 }
 
 impl FromStr for TaskStatus {
@@ -207,6 +226,13 @@ pub struct UpdateTaskInput {
     pub tags: Option<Vec<String>>,
     pub progress_type: Option<TaskProgressType>,
     pub is_deleted: Option<bool>,
+}
+
+#[derive(InputObject)]
+#[graphql(rename_fields = "camelCase")]
+pub struct UpdateTaskStatusInput {
+    pub task_id: ID,
+    pub status: TaskStatus,
 }
 
 #[derive(InputObject)]

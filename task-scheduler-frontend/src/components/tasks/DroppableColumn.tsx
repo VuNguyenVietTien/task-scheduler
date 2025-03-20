@@ -4,12 +4,14 @@ import { Task, TaskStatus } from '@/types/task';
 import { useDroppable } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableTaskItem } from './SortableTaskItem';
+import { useMemo } from 'react';
 
 interface DroppableColumnProps {
   id: TaskStatus;
   title: string;
   tasks: Task[];
-  isLastDroppable?: boolean;
+  activeId: string | null;
+  overId: string | null;
 }
 
 const getColumnColor = (status: TaskStatus, isOver: boolean) => {
@@ -37,83 +39,211 @@ const getColumnColor = (status: TaskStatus, isOver: boolean) => {
     archived: 'ring-slate-400 bg-gradient-to-b from-slate-200 to-slate-300'
   };
 
-  return isOver ? `${highlightColors[status]} ring-2` : baseColors[status];
+  return isOver ? `${highlightColors[status]} ring-2 ring-opacity-100` : baseColors[status];
 };
 
 export function DroppableColumn({ 
   id, 
   title, 
   tasks,
-  isLastDroppable = false 
+  activeId,
+  overId,
 }: DroppableColumnProps) {
   const { setNodeRef, isOver, active } = useDroppable({
-    id: id,
+    id,
+    data: {
+      type: 'Column',
+      accepts: ['Task'],
+      status: id,
+    }
   });
 
   const isDraggingOver = Boolean(isOver && active);
-  const sortedTasks = [...tasks].sort((a, b) => a.priority_order - b.priority_order);
+  const isColumnTarget = overId === id;
+  
+  // Visual feedback when a task is being dragged
+  const isColumnActive = useMemo(() => {
+    if (!activeId) return false;
+    return tasks.some(task => task.task_id === activeId);
+  }, [activeId, tasks]);
+  
+  const sortedTasks = useMemo(() => 
+    [...tasks].sort((a, b) => a.priority_order - b.priority_order),
+    [tasks]
+  );
+
+  const taskIds = useMemo(() => 
+    sortedTasks.map(task => task.task_id),
+    [sortedTasks]
+  );
+
+  // Helper to determine if a task is being dragged
+  const isTaskActive = (taskId: string) => activeId === taskId;
+  
+  // Helper to determine if we're dragging over a specific task
+  const isTaskTarget = (taskId: string) => overId === taskId;
+  
+  // Helper to find task index in sorted array
+  const getTaskIndex = (taskId: string) => sortedTasks.findIndex(t => t.task_id === taskId);
+  
+  // Helper to determine position relative to active item
+  const getTaskPosition = (taskId: string) => {
+    if (!activeId || activeId === taskId) return 'self';
+    
+    const activeIndex = getTaskIndex(activeId as string);
+    const currentIndex = getTaskIndex(taskId);
+    
+    if (activeIndex === -1 || currentIndex === -1) return 'none';
+    
+    return currentIndex < activeIndex ? 'before' : 'after';
+  };
 
   return (
     <div
       className={`
-        flex-1 min-w-[300px] rounded-lg overflow-hidden
-        ${getColumnColor(id, isDraggingOver || isLastDroppable)}
+        flex-1 min-w-[300px] rounded-lg overflow-hidden flex flex-col
+        ${getColumnColor(id, isDraggingOver || isColumnTarget)}
         transition-all duration-300 ease-in-out transform-gpu
-        ${isDraggingOver || isLastDroppable ? 'scale-[1.02] shadow-lg' : 'shadow hover:shadow-md hover:scale-[1.01]'}
+        ${isDraggingOver 
+          ? 'ring-2 ring-blue-400 shadow-lg scale-[1.02]' 
+          : isColumnTarget
+            ? 'ring-2 ring-blue-300 shadow-md scale-[1.01]'
+            : isColumnActive
+              ? 'ring-1 ring-blue-200 shadow-sm'
+              : 'shadow hover:shadow-sm'
+        }
+        will-change-transform
       `}
+      data-column-id={id}
+      data-status={id}
+      data-is-column-target={isColumnTarget ? 'true' : 'false'}
+      data-has-active-task={isColumnActive ? 'true' : 'false'}
     >
-      <div className="p-3 font-medium text-slate-700 border-b bg-white/50 backdrop-blur-sm sticky top-0 z-10">
+      {/* Column Header */}
+      <div className={`
+        p-3 font-medium text-slate-700 border-b sticky top-0 z-10
+        ${isDraggingOver || isColumnTarget ? 'bg-white/70' : 'bg-white/50'} 
+        backdrop-blur-sm transition-colors duration-200
+      `}>
         <div className="flex items-center justify-between">
           <span>{title}</span>
-          <span className="px-2 py-0.5 text-xs bg-white/80 rounded-full">
+          <span className={`
+            px-2 py-0.5 text-xs rounded-full transition-all duration-200
+            ${isDraggingOver 
+              ? 'bg-blue-100 text-blue-800' 
+              : isColumnTarget
+                ? 'bg-blue-50 text-blue-700'
+                : 'bg-white/80 text-slate-600'
+            }
+          `}>
             {tasks.length}
           </span>
         </div>
       </div>
 
-      <SortableContext 
-        items={sortedTasks.map(task => task.task_id)}
-        strategy={verticalListSortingStrategy}
+      {/* Column Content */}
+      <div 
+        ref={setNodeRef}
+        className={`
+          flex-1 p-2 min-h-[200px] relative
+          ${tasks.length === 0 ? 'flex items-center justify-center' : ''}
+          ${isDraggingOver 
+            ? 'bg-blue-50/70 drop-spotlight' 
+            : isColumnTarget
+              ? 'bg-blue-50/30'
+              : ''
+          }
+          transition-all duration-200 ease-in-out
+        `}
       >
-        <div 
-          ref={setNodeRef}
-          className={`
-            p-2 space-y-2 min-h-[200px] group
-            transition-all duration-300 ease-in-out
-            ${(isDraggingOver || isLastDroppable) ? 'bg-blue-100/30 ring-2 ring-inset ring-blue-400/50' : ''}
-            ${tasks.length === 0 ? 'flex items-center justify-center' : ''}
-            rounded-b-lg
-          `}
-        >
-          {tasks.length === 0 && !isDraggingOver && !isLastDroppable && (
-            <div className="text-sm text-slate-400 text-center p-4">
-              Drop tasks here
-            </div>
-          )}
+        {tasks.length === 0 ? (
+          // Empty Column State
+          <div 
+            className={`
+              w-full h-full rounded-lg border-2 border-dashed
+              flex items-center justify-center
+              transition-all duration-300 ease-in-out transform-gpu
+              ${isDraggingOver 
+                ? 'border-blue-400 bg-blue-100/40 text-blue-600 scale-105' 
+                : isColumnTarget
+                  ? 'border-blue-300 bg-blue-50/30 text-blue-500 scale-[1.02]'
+                  : 'border-slate-200 text-slate-400'
+              }
+            `}
+          >
+            {isDraggingOver 
+              ? 'Drop here'
+              : isColumnTarget
+                ? 'Release to drop'
+                : 'No tasks'
+            }
+          </div>
+        ) : (
+          // Task List
+          <SortableContext 
+            items={taskIds}
+            strategy={verticalListSortingStrategy}
+          >
+            <div className="relative">
+              {/* Drop Zone Indicator */}
+              {(isDraggingOver || isColumnTarget) && (
+                <div 
+                  className={`
+                    absolute inset-0 -m-2 rounded-lg pointer-events-none
+                    ${isDraggingOver 
+                      ? 'bg-blue-100/40 ring-2 ring-inset ring-blue-400/50' 
+                      : 'bg-blue-50/30 ring-1 ring-inset ring-blue-300/40'
+                    }
+                    transition-all duration-300 ease-in-out transform-gpu
+                    ${active ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}
+                  `}
+                />
+              )}
 
-          {(isDraggingOver || (isLastDroppable && tasks.length === 0)) && (
-            <div className="text-sm text-blue-500 text-center p-4 animate-pulse">
-              Release to drop here
+              {/* Tasks Container */}
+              <div 
+                className="relative z-10 space-y-2"
+                data-status={id}
+              >
+                {sortedTasks.map((task, index) => {
+                  const taskPosition = getTaskPosition(task.task_id);
+                  const isActive = isTaskActive(task.task_id);
+                  const isTarget = isTaskTarget(task.task_id);
+                  
+                  return (
+                    <div
+                      key={task.task_id}
+                      data-task-id={task.task_id}
+                      data-index={index}
+                      data-position={taskPosition}
+                      className={`
+                        transform-gpu transition-all duration-200 ease-out
+                        ${isActive 
+                          ? 'opacity-50 translate-y-1 z-0' 
+                          : isTarget
+                            ? 'z-20 -translate-y-1 shadow-lg scale-[1.02]'
+                            : taskPosition === 'before' && activeId && overId === id
+                              ? '-translate-y-2 z-10'
+                              : taskPosition === 'after' && activeId && overId === id
+                                ? 'translate-y-2 z-10'
+                                : 'translate-y-0 z-10'
+                        }
+                        will-change-transform
+                      `}
+                    >
+                      <SortableTaskItem 
+                        task={task}
+                        isOver={isTarget}
+                        dragPosition={taskPosition}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-          )}
-
-          {sortedTasks.map((task, index) => (
-            <div
-              key={task.task_id}
-              className={`
-                transform transition-all duration-200 ease-in-out
-                ${isDraggingOver ? '-translate-y-1 opacity-50' : ''}
-                hover:z-10
-              `}
-              style={{
-                transitionDelay: `${index * 20}ms`
-              }}
-            >
-              <SortableTaskItem task={task} />
-            </div>
-          ))}
-        </div>
-      </SortableContext>
+          </SortableContext>
+        )}
+      </div>
     </div>
   );
 }

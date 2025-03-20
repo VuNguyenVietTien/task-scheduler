@@ -1,7 +1,7 @@
 'use client';
 
 import { Task, TaskStatus, TaskStatuses } from '@/types/task';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef } from 'react';
 import { 
   DndContext, 
   DragEndEvent,
@@ -10,18 +10,21 @@ import {
   PointerSensor,
   DragOverlay,
   DragStartEvent,
-  DragOverEvent,
-  closestCenter,
   pointerWithin,
-  getFirstCollision,
+  MeasuringStrategy,
+  UniqueIdentifier,
+  closestCenter,
+  CollisionDetection,
+  DragOverEvent,
+  dropAnimation,
+  defaultDropAnimation,
 } from '@dnd-kit/core';
 import {
   SortableContext,
   verticalListSortingStrategy,
-  arrayMove
+  arrayMove,
 } from '@dnd-kit/sortable';
 import { useUpdateTaskStatus } from '@/hooks/useTaskMutations';
-import { useTaskPriorityOrder } from '@/hooks/useTaskPriorityOrder';
 import { DroppableColumn } from './DroppableColumn';
 import { SortableTaskItem } from './SortableTaskItem';
 
@@ -36,6 +39,22 @@ interface Column {
   tasks: Task[];
 }
 
+// Convert status to GraphQL enum format
+const toGraphQLStatus = (status: TaskStatus): string => {
+  const mapping = {
+    [TaskStatuses.TODO]: 'TODO',
+    [TaskStatuses.DOING]: 'DOING',
+    [TaskStatuses.DONE]: 'DONE',
+    [TaskStatuses.CLOSE]: 'CLOSE',
+    [TaskStatuses.PENDING]: 'PENDING',
+    [TaskStatuses.REVIEW]: 'REVIEW',
+    [TaskStatuses.BLOCKED]: 'BLOCKED',
+    [TaskStatuses.REJECTED]: 'REJECTED',
+    [TaskStatuses.ARCHIVED]: 'ARCHIVED',
+  };
+  return mapping[status];
+};
+
 const COLUMN_DEFINITIONS = [
   { id: TaskStatuses.TODO, title: 'Todo' },
   { id: TaskStatuses.DOING, title: 'In Progress' },
@@ -48,234 +67,197 @@ const COLUMN_DEFINITIONS = [
   { id: TaskStatuses.ARCHIVED, title: 'Archived' },
 ] as const;
 
+const VALID_STATUSES = new Set(Object.values(TaskStatuses));
+
+const measuring = {
+  droppable: {
+    strategy: MeasuringStrategy.Always
+  }
+};
+
+// Improved drop animation for smoother transitions
+const customDropAnimationConfig = {
+  ...defaultDropAnimation,
+  dragSourceOpacity: 0.5,
+  duration: 300,
+  easing: 'cubic-bezier(0.2, 1, 0.1, 1)',
+};
+
 export function KanbanBoard({ tasks, onTasksReorder }: KanbanBoardProps) {
-  const [columns, setColumns] = useState<Column[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [mousePosition, setMousePosition] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
-  const [lastDroppableId, setLastDroppableId] = useState<string | null>(null);
-  const [updateTaskStatus] = useUpdateTaskStatus();
-  const { reorderTask } = useTaskPriorityOrder();
+  const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
+  const [clonedTasks, setClonedTasks] = useState<Task[]>(tasks);
+  const [overId, setOverId] = useState<UniqueIdentifier | null>(null);
+  const [updateTaskStatus, { loading }] = useUpdateTaskStatus();
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Reset the cloned tasks when the original tasks change
+  useEffect(() => {
+    setClonedTasks(tasks);
+  }, [tasks]);
+
+  const columns = useMemo(() => {
+    return COLUMN_DEFINITIONS.map(col => ({
+      ...col,
+      tasks: clonedTasks
+        .filter(task => task.status === col.id)
+        .sort((a, b) => a.priority_order - b.priority_order)
+    }));
+  }, [clonedTasks]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
-        distance: 8,
+        delay: 0, 
+        tolerance: 5,
+        distance: 5,
       },
     })
   );
 
-  useEffect(() => {
-    const initialColumns = COLUMN_DEFINITIONS.map(col => ({
-      ...col,
-      tasks: tasks
-        .filter(task => task.status === col.id)
-        .sort((a, b) => a.priority_order - b.priority_order)
-    }));
-    setColumns(initialColumns);
-  }, [tasks]);
+  const findContainer = useCallback((id: UniqueIdentifier): Column | undefined => {
+    if (!id) return undefined;
 
-  useEffect(() => {
-    if (activeId) {
-      const handleMouseMove = (event: MouseEvent) => {
-        setMousePosition({
-          x: event.clientX,
-          y: event.clientY,
-        });
-      };
-
-      window.addEventListener('mousemove', handleMouseMove);
-      return () => window.removeEventListener('mousemove', handleMouseMove);
-    }
-  }, [activeId]);
-
-  const findColumn = (id: string) => {
-    // Check if id is a column id
-    const column = columns.find(col => col.id === id);
-    if (column) return column;
-
-    // If not, find column containing task with id
-    return columns.find(col => col.tasks.some(task => task.task_id === id));
-  };
-
-  const findTask = (id: string) => {
-    const task = tasks.find(t => t.task_id === id);
-    if (task) return task;
-
-    // Check tasks in columns
-    for (const column of columns) {
-      const found = column.tasks.find(t => t.task_id === id);
-      if (found) return found;
-    }
-    return null;
-  };
-
-  const handleDragStart = (event: DragStartEvent) => {
-    const { active } = event;
-    setActiveId(active.id as string);
+    const idString = String(id);
     
-    // Add a class to body when dragging starts
-    document.body.classList.add('dragging');
-  };
+    // First check if id is a column id
+    if (VALID_STATUSES.has(idString as TaskStatus)) {
+      return columns.find(col => col.id === idString);
+    }
+    
+    // Then check if id is a task id
+    for (const column of columns) {
+      const task = column.tasks.find(task => task.task_id === id);
+      if (task) {
+        return column;
+      }
+    }
+    
+    return undefined;
+  }, [columns]);
 
-  const handleDragOver = (event: DragOverEvent) => {
-    const { active, over } = event;
-    if (!over || !active) return;
+  const getTaskById = useCallback((id: UniqueIdentifier): Task | undefined => {
+    return columns
+      .flatMap(col => col.tasks)
+      .find(task => task.task_id === id);
+  }, [columns]);
 
-    const activeId = active.id.toString();
-    const overId = over.id.toString();
-
-    const activeColumn = findColumn(activeId);
-    const overColumn = findColumn(overId);
-
-    if (!activeColumn || !overColumn || activeColumn === overColumn) return;
-
-    // Store the last droppable id for smooth column switching
-    setLastDroppableId(overId);
-
-    setColumns(prev => {
-      const activeTask = findTask(activeId);
-      if (!activeTask) return prev;
-
-      return prev.map(col => {
-        // Remove from source
-        if (col.id === activeColumn.id) {
-          return {
-            ...col,
-            tasks: col.tasks.filter(t => t.task_id !== activeId)
-          };
-        }
-        // Add to target
-        if (col.id === overColumn.id) {
-          const updatedTasks = [...col.tasks];
-          
-          // Find the insertion index based on mouse position
-          const overTaskIndex = updatedTasks.findIndex(t => t.task_id === overId);
-          const insertIndex = overTaskIndex >= 0 ? overTaskIndex : updatedTasks.length;
-          
-          updatedTasks.splice(insertIndex, 0, {
-            ...activeTask,
-            status: overColumn.id
-          });
-
-          return {
-            ...col,
-            tasks: updatedTasks
-          };
-        }
-        return col;
-      });
+  // Improved collision detection that gives priority to columns for better UX
+  const collisionDetectionStrategy: CollisionDetection = useCallback((args) => {
+    // First, detect collisions with columns
+    const columnIntersections = pointerWithin({
+      ...args,
+      droppableContainers: args.droppableContainers.filter(
+        container => VALID_STATUSES.has(String(container.id) as TaskStatus)
+      )
     });
-  };
+    
+    if (columnIntersections.length > 0) {
+      return columnIntersections;
+    }
+    
+    // If not over a column, use closest center for more accurate task placement
+    return closestCenter(args);
+  }, []);
 
-  const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
-    document.body.classList.remove('dragging');
-    setLastDroppableId(null);
+  const handleDragStart = useCallback(({ active }: DragStartEvent) => {
+    setActiveId(active.id);
+    document.body.classList.add('dragging');
+  }, []);
 
-    if (!over || !active) {
-      setActiveId(null);
+  const handleDragOver = useCallback(({ active, over }: DragOverEvent) => {
+    if (!over) {
+      setOverId(null);
       return;
     }
+    
+    setOverId(over.id);
+    
+    // Optimize UI updates by avoiding unnecessary reordering while dragging
+    // But show visual feedback of where it will go
+  }, []);
 
-    const activeId = active.id.toString();
-    const overId = over.id.toString();
+  const handleDragEnd = useCallback(async ({ active, over }: DragEndEvent) => {
+    setActiveId(null);
+    setOverId(null);
+    document.body.classList.remove('dragging');
+
+    if (!over) return;
 
     try {
-      const activeColumn = findColumn(activeId);
-      const overColumn = findColumn(overId);
-
-      if (!activeColumn || !overColumn) return;
-
-      const activeTask = findTask(activeId);
+      const activeTask = getTaskById(active.id);
       if (!activeTask) return;
-
-      // Update task status if column changed
-      if (activeColumn.id !== overColumn.id) {
-        await updateTaskStatus({
-          variables: {
-            taskId: activeId,
-            status: overColumn.id
+      
+      const overContainer = findContainer(over.id);
+      if (!overContainer) return;
+      
+      const activeContainer = findContainer(active.id);
+      if (!activeContainer) return;
+      
+      // Create an optimistic update to the UI first
+      const newTasks = [...clonedTasks];
+      const targetTask = newTasks.find(t => t.task_id === activeTask.task_id);
+      
+      if (targetTask && activeContainer.id !== overContainer.id) {
+        // If moving to a different column, update the status
+        const oldStatus = targetTask.status;
+        targetTask.status = overContainer.id;
+        
+        // Update UI immediately for responsive feel
+        setClonedTasks(newTasks);
+        
+        try {
+          // Then attempt API update
+          const newStatus = toGraphQLStatus(overContainer.id as TaskStatus);
+          console.log('Updating task status:', { taskId: activeTask.task_id, status: newStatus });
+          
+          // Perform optimistic UI update to avoid flickering
+          await updateTaskStatus({
+            variables: {
+              input: {
+                taskId: activeTask.task_id,
+                status: newStatus
+              }
+            }
+          });
+          
+          // On success, notify parent of changes
+          if (onTasksReorder) {
+            onTasksReorder(newTasks);
           }
-        });
-
-        // Calculate new priority order based on drop position
-        const overTaskIndex = overColumn.tasks.findIndex(t => t.task_id === overId);
-        const newOrder = overTaskIndex >= 0 ? overTaskIndex + 1 : overColumn.tasks.length + 1;
-
-        await reorderTask(activeId, newOrder);
-
-        // Update local state
-        const updatedTasks = tasks.map(task =>
-          task.task_id === activeId
-            ? {
-                ...task,
-                status: overColumn.id,
-                priority_order: newOrder
-              }
-            : task
-        );
-
-        const newColumns = COLUMN_DEFINITIONS.map(col => ({
-          ...col,
-          tasks: updatedTasks
-            .filter(task => task.status === col.id)
-            .sort((a, b) => a.priority_order - b.priority_order)
-        }));
-
-        setColumns(newColumns);
-        onTasksReorder?.(updatedTasks);
-      } else {
-        // Reorder within same column
-        const oldIndex = activeColumn.tasks.findIndex(t => t.task_id === activeId);
-        const newIndex = activeColumn.tasks.findIndex(t => t.task_id === overId);
-
-        if (oldIndex !== newIndex) {
-          await reorderTask(activeId, newIndex + 1);
-
-          setColumns(prev => 
-            prev.map(col => {
-              if (col.id === activeColumn.id) {
-                const newTasks = arrayMove(col.tasks, oldIndex, newIndex);
-                return {
-                  ...col,
-                  tasks: newTasks
-                };
-              }
-              return col;
-            })
-          );
+        } catch (error) {
+          console.error('Failed to update task:', error);
+          
+          // On error, revert the optimistic update
+          if (targetTask) {
+            targetTask.status = oldStatus;
+            setClonedTasks([...newTasks]);
+          }
         }
       }
     } catch (error) {
-      console.error('Failed to update task:', error);
-
-      // Revert to original state on error
-      setColumns(prev => 
-        COLUMN_DEFINITIONS.map(col => ({
-          ...col,
-          tasks: tasks
-            .filter(task => task.status === col.id)
-            .sort((a, b) => a.priority_order - b.priority_order)
-        }))
-      );
+      console.error('Error in drag end handler:', error);
     }
+  }, [findContainer, getTaskById, clonedTasks, updateTaskStatus, onTasksReorder]);
 
+  const handleDragCancel = useCallback(() => {
     setActiveId(null);
-  };
-
-  const handleDragCancel = () => {
+    setOverId(null);
     document.body.classList.remove('dragging');
-    setLastDroppableId(null);
-    setActiveId(null);
-  };
+    
+    // If needed, revert any temporary UI changes made during drag
+  }, []);
 
-  const activeTask = activeId ? findTask(activeId) : null;
+  const activeTask = useMemo(() => {
+    if (!activeId) return null;
+    return getTaskById(activeId);
+  }, [activeId, getTaskById]);
 
   return (
     <div className="flex gap-4 h-full overflow-x-auto p-4 pb-8">
       <DndContext 
         sensors={sensors}
-        collisionDetection={closestCenter}
+        collisionDetection={collisionDetectionStrategy}
+        measuring={measuring}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
@@ -283,31 +265,28 @@ export function KanbanBoard({ tasks, onTasksReorder }: KanbanBoardProps) {
       >
         <div className="flex gap-4">
           {columns.map(column => (
-            <DroppableColumn
+            <SortableContext
               key={column.id}
-              id={column.id}
-              title={column.title}
-              tasks={column.tasks}
-              isLastDroppable={lastDroppableId === column.id}
-            />
+              items={column.tasks.map(task => task.task_id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <DroppableColumn
+                id={column.id}
+                title={column.title}
+                tasks={column.tasks}
+                activeId={activeId}
+                overId={overId}
+              />
+            </SortableContext>
           ))}
         </div>
 
-        <DragOverlay dropAnimation={{
-          duration: 200,
-          easing: 'cubic-bezier(0.18, 0.67, 0.6, 1.22)',
-          sideEffects: defaultDropAnimationSideEffects({
-            styles: {
-              active: {
-                opacity: '0.5',
-              },
-            },
-          }),
-        }}>
+        <DragOverlay dropAnimation={customDropAnimationConfig}>
           {activeTask && (
-            <div className="transform-gpu touch-none">
+            <div className="opacity-95 scale-105 rotate-1 shadow-xl">
               <SortableTaskItem 
                 task={activeTask} 
+                isDragOverlay={true}
               />
             </div>
           )}
@@ -323,55 +302,50 @@ export function KanbanBoard({ tasks, onTasksReorder }: KanbanBoardProps) {
           cursor: grabbing !important;
         }
 
-        .overflow-x-auto {
-          scrollbar-width: thin;
-          scrollbar-color: #CBD5E1 #F1F5F9;
+        [data-dragging="true"] {
+          opacity: 0.5;
         }
 
-        .overflow-x-auto::-webkit-scrollbar {
-          height: 8px;
+        .task-card-enter {
+          opacity: 0;
+          transform: scale(0.9);
         }
-
-        .overflow-x-auto::-webkit-scrollbar-track {
-          background: #F1F5F9;
-          border-radius: 4px;
+        
+        .task-card-enter-active {
+          opacity: 1;
+          transform: scale(1);
+          transition: opacity 300ms, transform 300ms;
         }
-
-        .overflow-x-auto::-webkit-scrollbar-thumb {
-          background-color: #CBD5E1;
-          border-radius: 4px;
+        
+        .task-card-exit {
+          opacity: 1;
+          transform: scale(1);
         }
-
-        .overflow-x-auto::-webkit-scrollbar-thumb:hover {
-          background-color: #94A3B8;
+        
+        .task-card-exit-active {
+          opacity: 0;
+          transform: scale(0.9);
+          transition: opacity 300ms, transform 300ms;
+        }
+        
+        .task-drag-preview {
+          transform: rotate(2deg) scale(1.05);
+          opacity: 0.9;
+          box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Spotlight effect for dropping */
+        .drop-spotlight {
+          background: radial-gradient(circle at center, rgba(59, 130, 246, 0.1) 0%, transparent 70%);
+          animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+          0% { opacity: 0.3; }
+          50% { opacity: 0.6; }
+          100% { opacity: 0.3; }
         }
       `}</style>
     </div>
   );
 }
-
-// Helper for drop animation
-const defaultDropAnimationSideEffects = ({
-  styles = {},
-}: {
-  styles?: Record<string, React.CSSProperties>;
-} = {}) => (parameters: any) => {
-  const { active } = parameters;
-  if (!active?.node) return;
-
-  if (styles.active) {
-    Object.assign(active.node.style, styles.active);
-  }
-
-  return () => {
-    if (!active?.node) return;
-    if (styles.active) {
-      Object.assign(
-        active.node.style,
-        Object.fromEntries(
-          Object.entries(styles.active).map(([key]) => [key, ''])
-        )
-      );
-    }
-  };
-};

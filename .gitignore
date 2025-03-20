@@ -39,3 +39,4 @@ task-scheduler-backend/config/projectmanager-e13cb-firebase-adminsdk-fbsvc-*.jso
 
 # Cline specific
 .clinerules
+.qodo

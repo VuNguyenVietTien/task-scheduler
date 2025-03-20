@@ -2,8 +2,8 @@ import { gql } from '@apollo/client';
 import { TaskStatus } from '@/types/task';
 
 export const UPDATE_TASK_STATUS = gql`
-  mutation UpdateTaskStatus($taskId: ID!, $status: String!) {
-    updateTaskStatus(taskId: $taskId, status: $status) {
+  mutation UpdateTaskStatus($input: UpdateTaskStatusInput!) {
+    updateTaskStatus(input: $input) {
       taskId
       projectId
       parentTaskId

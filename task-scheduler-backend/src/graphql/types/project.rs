@@ -97,12 +97,49 @@ pub enum ProjectPriority {
     Urgent
 }
 
+impl FromStr for ProjectPriority {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "low" => Ok(ProjectPriority::Low),
+            "medium" => Ok(ProjectPriority::Medium),
+            "high" => Ok(ProjectPriority::High),
+            "urgent" => Ok(ProjectPriority::Urgent),
+            _ => Err(format!("Invalid project priority: {}", s))
+        }
+    }
+}
+
+impl From<String> for ProjectPriority {
+    fn from(s: String) -> Self {
+        ProjectPriority::from_str(&s).unwrap_or(ProjectPriority::Medium)
+    }
+}
+
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]
 #[sqlx(rename_all = "lowercase", type_name = "project_visibility")]
 pub enum ProjectVisibility {
     Public,
     Private,
     Team
+}
+
+impl FromStr for ProjectVisibility {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "public" => Ok(ProjectVisibility::Public),
+            "private" => Ok(ProjectVisibility::Private),
+            "team" => Ok(ProjectVisibility::Team),
+            _ => Err(format!("Invalid project visibility: {}", s))
+        }
+    }
+}
+
+impl From<String> for ProjectVisibility {
+    fn from(s: String) -> Self {
+        ProjectVisibility::from_str(&s).unwrap_or(ProjectVisibility::Private)
+    }
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]
@@ -114,6 +151,25 @@ pub enum ProjectStatus {
     Cancelled
 }
 
+impl FromStr for ProjectStatus {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "active" => Ok(ProjectStatus::Active),
+            "completed" => Ok(ProjectStatus::Completed),
+            "on_hold" => Ok(ProjectStatus::OnHold),
+            "cancelled" => Ok(ProjectStatus::Cancelled),
+            _ => Err(format!("Invalid project status: {}", s))
+        }
+    }
+}
+
+impl From<String> for ProjectStatus {
+    fn from(s: String) -> Self {
+        ProjectStatus::from_str(&s).unwrap_or(ProjectStatus::Active)
+    }
+}
+
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]
 #[sqlx(rename_all = "lowercase", type_name = "member_role")]
 pub enum MemberRole {
@@ -121,6 +177,25 @@ pub enum MemberRole {
     Member,
     Viewer,
     Guest,
+}
+
+impl FromStr for MemberRole {
+    type Err = String;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "admin" => Ok(MemberRole::Admin),
+            "member" => Ok(MemberRole::Member),
+            "viewer" => Ok(MemberRole::Viewer),
+            "guest" => Ok(MemberRole::Guest),
+            _ => Err(format!("Invalid member role: {}", s))
+        }
+    }
+}
+
+impl From<String> for MemberRole {
+    fn from(s: String) -> Self {
+        MemberRole::from_str(&s).unwrap_or(MemberRole::Member)
+    }
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]

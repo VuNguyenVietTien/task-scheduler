@@ -13,8 +13,10 @@ interface UpdateTaskStatusResponse {
 }
 
 interface UpdateTaskStatusVars {
-  taskId: string;
-  status: string;
+  input: {
+    taskId: string;
+    status: string;
+  };
 }
 
 export function useUpdateTaskStatus() {

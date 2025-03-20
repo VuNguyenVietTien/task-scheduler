@@ -259,12 +259,11 @@ impl ProjectMutation {
             "description": &input.description,
             "startDate": &input.start_date,
             "endDate": &input.end_date,
-            "status": &input.status,
-            "priority": &input.priority,
-            "visibility": &input.visibility,
+            "status": &input.status.map(|s| format!("{:?}", s)),
+            "priority": &input.priority.map(|p| format!("{:?}", p)),
+            "visibility": &input.visibility.map(|v| format!("{:?}", v)),
             "tags": &input.tags
         }));
-        eprintln!("===========================\n");
 
         let context = ctx.data::<GraphQLContext>()?;
         let pool = &context.db;
@@ -281,13 +280,50 @@ impl ProjectMutation {
         let now = Utc::now();
         let owner_id = current_user.user_id()?;
 
-        // Convert tags to JSONB
+        // Convert tags to JSONB if provided
         let tags_json = if let Some(tags) = input.tags {
             json!(tags)
         } else {
             json!([])
         };
 
+        // Manually set default and convert enum values to lowercase strings
+        let status_str = match input.status {
+            Some(status) => match status {
+                ProjectStatus::Active => "active",
+                ProjectStatus::Completed => "completed", 
+                ProjectStatus::OnHold => "on_hold",
+                ProjectStatus::Cancelled => "cancelled",
+            },
+            None => "active", // Default
+        };
+
+        let priority_str = match input.priority {
+            Some(priority) => match priority {
+                ProjectPriority::Low => "low",
+                ProjectPriority::Medium => "medium",
+                ProjectPriority::High => "high",
+                ProjectPriority::Urgent => "urgent",
+            },
+            None => "medium", // Default
+        };
+
+        let visibility_str = match input.visibility {
+            Some(visibility) => match visibility {
+                ProjectVisibility::Public => "public",
+                ProjectVisibility::Private => "private",
+                ProjectVisibility::Team => "team",
+            },
+            None => "private", // Default
+        };
+
+        eprintln!("Enum values for DB insertion:");
+        eprintln!("- status: {}", status_str);
+        eprintln!("- priority: {}", priority_str);
+        eprintln!("- visibility: {}", visibility_str);
+        eprintln!("===========================\n");
+
+        // Use a modified query with text values for enums
         let project_row = sqlx::query(
             r#"
             WITH inserted_project AS (
@@ -297,7 +333,7 @@ impl ProjectMutation {
                 status, priority, visibility, tags,
                 category, metadata, icon_url
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9::project_status, $10::project_priority, $11::project_visibility, $12, $13, $14, $15)
             RETURNING *
             ),
             member_count AS (
@@ -326,29 +362,31 @@ impl ProjectMutation {
         .bind(input.end_date)
         .bind(now)
         .bind(now)
-        .bind(input.status.unwrap_or(ProjectStatus::Active))
-        .bind(input.priority.unwrap_or(ProjectPriority::Medium))
-        .bind(input.visibility.unwrap_or(ProjectVisibility::Private))
-        .bind(tags_json) // Use converted tags
+        .bind(status_str)     // Use string value instead of enum
+        .bind(priority_str)   // Use string value instead of enum
+        .bind(visibility_str) // Use string value instead of enum
+        .bind(tags_json)
         .bind(&input.category)
         .bind(&input.metadata)
         .bind(&input.icon_url)
         .fetch_one(&mut *tx)
         .await
-        .map_err(|e| AuthError::Database(e))?;
+        .map_err(|e| {
+            eprintln!("ERROR creating project: {:?}", e);
+            AuthError::Database(e)
+        })?;
 
         // Add owner as a member with ADMIN role
         let member_id = Uuid::new_v4();
         sqlx::query(
             r#"
             INSERT INTO project_members (member_id, project_id, user_id, role)
-            VALUES ($1, $2, $3, $4)
+            VALUES ($1, $2, $3, 'admin')
             "#
         )
         .bind(member_id)
         .bind(project_id)
         .bind(owner_id)
-        .bind(MemberRole::Admin)
         .execute(&mut *tx)
         .await
         .map_err(|e| AuthError::Database(e))?;

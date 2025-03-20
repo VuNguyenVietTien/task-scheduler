@@ -9,7 +9,12 @@ export const CREATE_TASK = gql`
       status
       priority
       priorityOrder
-      assigneeId
+      assignee {
+        userId
+        username
+        avatarUrl
+        role
+      }
       effort
       startDate
       dueDate

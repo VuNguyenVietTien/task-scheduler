@@ -278,6 +278,10 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
 
   const onSubmit = async (data: TaskFormInputs) => {
     try {
+      // Đảm bảo status và priority là lowercase
+      const statusValue = data.status?.toLowerCase() || "todo";
+      const priorityValue = data.priority?.toLowerCase() || "medium";
+      
       const result = await createTask({
         variables: {
           input: {
@@ -295,8 +299,8 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
             progressType: data.progressType,
             tags: data.tags?.length > 0 ? data.tags : null,
             parentTaskId: selectedParentTask?.id || null,
-            status: data.status || "todo",
-            priority: data.priority || "medium",
+            status: statusValue,
+            priority: priorityValue,
             priorityOrder: data.priorityOrder || 0,
           },
         },
