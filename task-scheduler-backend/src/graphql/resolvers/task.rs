@@ -28,7 +28,7 @@ impl TaskQuery {
                     u.user_id as assignee_user_id,
                     u.username as assignee_username,
                     u.avatar_url as assignee_avatar_url,
-                    u.role as assignee_role
+                    u.role::text as assignee_role
                 FROM tasks t
                 LEFT JOIN users u ON t.assignee_id = u.user_id
                 WHERE t.task_id = $1 AND NOT t.is_deleted
@@ -39,7 +39,7 @@ impl TaskQuery {
                     u.user_id as assignee_user_id,
                     u.username as assignee_username,
                     u.avatar_url as assignee_avatar_url,
-                    u.role as assignee_role
+                    u.role::text as assignee_role
                 FROM tasks t
                 LEFT JOIN users u ON t.assignee_id = u.user_id
                 INNER JOIN child_tasks ct ON t.parent_task_id = ct.task_id
@@ -146,7 +146,7 @@ impl TaskQuery {
                     u.user_id as assignee_user_id,
                     u.username as assignee_username,
                     u.avatar_url as assignee_avatar_url,
-                    u.role as assignee_role
+                    u.role::text as assignee_role
                 FROM tasks t
                 LEFT JOIN users u ON t.assignee_id = u.user_id
                 WHERE NOT t.is_deleted
@@ -161,7 +161,7 @@ impl TaskQuery {
                     u.user_id as assignee_user_id,
                     u.username as assignee_username,
                     u.avatar_url as assignee_avatar_url,
-                    u.role as assignee_role
+                    u.role::text as assignee_role
                 FROM tasks t
                 LEFT JOIN users u ON t.assignee_id = u.user_id
                 INNER JOIN task_tree tt ON t.parent_task_id = tt.task_id
@@ -288,7 +288,7 @@ impl TaskMutation {
                    u.user_id as assignee_user_id,
                    u.username as assignee_username,
                    u.avatar_url as assignee_avatar_url,
-                   u.role as assignee_role
+                   u.role::text as assignee_role
             FROM inserted_task t
             LEFT JOIN users u ON t.assignee_id = u.user_id
             "#
@@ -412,7 +412,7 @@ impl TaskMutation {
                    u.user_id as assignee_user_id,
                    u.username as assignee_username,
                    u.avatar_url as assignee_avatar_url,
-                   u.role as assignee_role
+                   u.role::text as assignee_role
             FROM updated_task t
             LEFT JOIN users u ON t.assignee_id = u.user_id
             "#
@@ -519,7 +519,7 @@ impl TaskMutation {
                        u.user_id as assignee_user_id,
                        u.username as assignee_username,
                        u.avatar_url as assignee_avatar_url,
-                       u.role as assignee_role
+                       u.role::text as assignee_role
                 FROM reordered_task t
                 LEFT JOIN users u ON t.assignee_id = u.user_id
                 "#

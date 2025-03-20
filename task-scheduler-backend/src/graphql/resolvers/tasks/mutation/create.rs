@@ -46,7 +46,7 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
                u.user_id as assignee_user_id,
                u.username as assignee_username,
                u.avatar_url as assignee_avatar_url,
-               u.role as assignee_role
+               u.role::text as assignee_role
         FROM inserted_task t
         LEFT JOIN users u ON t.assignee_id = u.user_id
         "#
@@ -62,21 +62,24 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
     .bind(input.start_date)
     .bind(input.due_date)
     .bind(input.effort)
-    .bind(0f64) // Initial progress
+    .bind(input.progress.unwrap_or(0f64))
     .bind(Uuid::parse_str(&user_id)?)
     .bind(now)
     .bind(now)
     .bind(false)
     .bind(assignee_id)
-    .bind(None::<DateTime<Utc>>) // actual_start_date
-    .bind(None::<DateTime<Utc>>) // actual_end_date
+    .bind(None::<DateTime<Utc>>)
+    .bind(None::<DateTime<Utc>>)
     .bind(input.type_)
     .bind(input.category)
     .bind(input.progress_type)
     .bind(tags_json)
     .fetch_one(&mut *tx)
     .await
-    .map_err(|e| AuthError::Database(e))?;
+    .map_err(|e| {
+        eprintln!("Error creating task: {:?}", e);
+        AuthError::Database(e)
+    })?;
 
     tx.commit().await.map_err(|e| AuthError::Database(e))?;
 
@@ -103,8 +106,8 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
         created_at: created.get("created_at"),
         updated_at: created.get("updated_at"),
         is_deleted: created.get("is_deleted"),
-        status: created.get::<String, _>("status").into(),
-        priority: created.get::<String, _>("priority").into(),
+        status: created.get("status"),
+        priority: created.get("priority"),
         type_: created.get("type"),
         category: created.get("category"),
         progress_type: created.get("progress_type"),

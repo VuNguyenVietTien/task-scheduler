@@ -49,14 +49,23 @@ pub struct Task {
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]
 #[sqlx(type_name = "task_status", rename_all = "lowercase")]
 pub enum TaskStatus {
+    #[graphql(name = "todo")]
     Todo,
+    #[graphql(name = "doing")]
     Doing, 
+    #[graphql(name = "done")]
     Done,
+    #[graphql(name = "close")]
     Close,
+    #[graphql(name = "pending")]
     Pending,
+    #[graphql(name = "review")]
     Review,
+    #[graphql(name = "blocked")]
     Blocked,
+    #[graphql(name = "rejected")]
     Rejected,
+    #[graphql(name = "archived")]
     Archived,
 }
 
@@ -111,10 +120,15 @@ impl From<String> for TaskStatus {
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]
 #[sqlx(type_name = "task_priority", rename_all = "lowercase")]
 pub enum TaskPriority {
+    #[graphql(name = "low")]
     Low,
+    #[graphql(name = "medium")]
     Medium,
+    #[graphql(name = "high")]
     High,
+    #[graphql(name = "urgent")]
     Urgent,
+    #[graphql(name = "critical")]
     Critical,
 }
 
@@ -147,12 +161,19 @@ impl From<String> for TaskPriority {
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]
 #[sqlx(type_name = "task_progress_type", rename_all = "snake_case")]
 pub enum TaskProgressType {
+    #[graphql(name = "study")]
     Study,
+    #[graphql(name = "investigate")]
     Investigate,
+    #[graphql(name = "code")]
     Code,
+    #[graphql(name = "test")]
     Test,
+    #[graphql(name = "review_code")]
     ReviewCode,
+    #[graphql(name = "review_test_report")]
     ReviewTestReport,
+    #[graphql(name = "release")]
     Release
 }
 

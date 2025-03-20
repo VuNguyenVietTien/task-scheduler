@@ -19,7 +19,7 @@ pub async fn task(ctx: &Context<'_>, task_id: ID) -> Result<Option<Task>> {
                 u.user_id as assignee_user_id,
                 u.username as assignee_username,
                 u.avatar_url as assignee_avatar_url,
-                u.role as assignee_role
+                u.role::text as assignee_role
             FROM tasks t
             LEFT JOIN users u ON t.assignee_id = u.user_id
             WHERE t.task_id = $1 AND NOT t.is_deleted
@@ -30,7 +30,7 @@ pub async fn task(ctx: &Context<'_>, task_id: ID) -> Result<Option<Task>> {
                 u.user_id as assignee_user_id,
                 u.username as assignee_username,
                 u.avatar_url as assignee_avatar_url,
-                u.role as assignee_role
+                u.role::text as assignee_role
             FROM tasks t
             LEFT JOIN users u ON t.assignee_id = u.user_id
             INNER JOIN child_tasks ct ON t.parent_task_id = ct.task_id
@@ -106,8 +106,8 @@ pub async fn task(ctx: &Context<'_>, task_id: ID) -> Result<Option<Task>> {
         created_at: parent_task.get("created_at"),
         updated_at: parent_task.get("updated_at"),
         is_deleted: parent_task.get("is_deleted"),
-        status: parent_task.get::<String, _>("status").into(),
-        priority: parent_task.get::<String, _>("priority").into(),
+        status: parent_task.get("status"),
+        priority: parent_task.get("priority"),
         type_: parent_task.get("type"),
         category: parent_task.get("category"),
         progress_type: parent_task.get("progress_type"),

@@ -31,7 +31,7 @@ pub async fn reorder_tasks(ctx: &Context<'_>, input: ReorderTasksInput) -> Resul
                    u.user_id as assignee_user_id,
                    u.username as assignee_username,
                    u.avatar_url as assignee_avatar_url,
-                   u.role as assignee_role
+                   u.role::text as assignee_role
             FROM reordered_task t
             LEFT JOIN users u ON t.assignee_id = u.user_id
             "#
