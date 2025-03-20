@@ -31,6 +31,7 @@ import { SortableTaskItem } from './SortableTaskItem';
 interface KanbanBoardProps {
   tasks: Task[];
   onTasksReorder?: (tasks: Task[]) => void;
+  projectId: string;
 }
 
 interface Column {
@@ -83,7 +84,7 @@ const customDropAnimationConfig = {
   easing: 'cubic-bezier(0.2, 1, 0.1, 1)',
 };
 
-export function KanbanBoard({ tasks, onTasksReorder }: KanbanBoardProps) {
+export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardProps) {
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
   const [clonedTasks, setClonedTasks] = useState<Task[]>(tasks);
   const [overId, setOverId] = useState<UniqueIdentifier | null>(null);
@@ -94,6 +95,29 @@ export function KanbanBoard({ tasks, onTasksReorder }: KanbanBoardProps) {
   useEffect(() => {
     setClonedTasks(tasks);
   }, [tasks]);
+
+  // Lắng nghe sự kiện khi task status được cập nhật từ nơi khác
+  useEffect(() => {
+    const handleTaskStatusUpdate = (event: CustomEvent) => {
+      const { taskId, newStatus } = event.detail;
+      
+      setClonedTasks(prevTasks => {
+        return prevTasks.map(task => 
+          task.task_id === taskId 
+            ? { ...task, status: newStatus } 
+            : task
+        );
+      });
+    };
+
+    // Add event listener
+    window.addEventListener('task-status-updated', handleTaskStatusUpdate as EventListener);
+    
+    // Clean up
+    return () => {
+      window.removeEventListener('task-status-updated', handleTaskStatusUpdate as EventListener);
+    };
+  }, []);
 
   const columns = useMemo(() => {
     return COLUMN_DEFINITIONS.map(col => ({
@@ -210,6 +234,20 @@ export function KanbanBoard({ tasks, onTasksReorder }: KanbanBoardProps) {
           const newStatus = toGraphQLStatus(overContainer.id as TaskStatus);
           console.log('Updating task status:', { taskId: activeTask.task_id, status: newStatus });
           
+          // Prepare optimistic response
+          const optimisticResponse = {
+            updateTaskStatus: {
+              __typename: 'Task',
+              task_id: activeTask.task_id,
+              project_id: projectId,
+              status: newStatus,
+              // Include other required fields that won't change
+              title: activeTask.title,
+              description: activeTask.description,
+              // ... other required fields
+            }
+          };
+          
           // Perform optimistic UI update to avoid flickering
           await updateTaskStatus({
             variables: {
@@ -217,7 +255,8 @@ export function KanbanBoard({ tasks, onTasksReorder }: KanbanBoardProps) {
                 taskId: activeTask.task_id,
                 status: newStatus
               }
-            }
+            },
+            optimisticResponse
           });
           
           // On success, notify parent of changes
@@ -237,7 +276,7 @@ export function KanbanBoard({ tasks, onTasksReorder }: KanbanBoardProps) {
     } catch (error) {
       console.error('Error in drag end handler:', error);
     }
-  }, [findContainer, getTaskById, clonedTasks, updateTaskStatus, onTasksReorder]);
+  }, [findContainer, getTaskById, clonedTasks, updateTaskStatus, onTasksReorder, projectId]);
 
   const handleDragCancel = useCallback(() => {
     setActiveId(null);

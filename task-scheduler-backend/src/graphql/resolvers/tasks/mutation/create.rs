@@ -62,7 +62,7 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
     .bind(input.start_date)
     .bind(input.due_date)
     .bind(input.effort)
-    .bind(input.progress.unwrap_or(0f64))
+    .bind(0f64) // Default progress to 0
     .bind(Uuid::parse_str(&user_id)?)
     .bind(now)
     .bind(now)

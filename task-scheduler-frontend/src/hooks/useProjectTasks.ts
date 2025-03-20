@@ -133,15 +133,16 @@ const transformGraphQLTask = (graphqlTask: GraphQLTask): Task => {
 };
 
 export function useProjectTasks(projectId: string) {
-  const { data, loading, error } = useQuery(GET_PROJECT_TASKS, {
+  const { data, loading, error, refetch } = useQuery(GET_PROJECT_TASKS, {
     variables: { projectId },
     skip: !projectId,
-    fetchPolicy: 'network-only'
+    fetchPolicy: 'cache-and-network',
+    nextFetchPolicy: 'cache-first'
   });
 
   const tasks = data?.tasks
     ? data.tasks.map((task: GraphQLTask) => transformGraphQLTask(task))
     : [];
 
-  return { data: tasks, loading, error };
+  return { data: tasks, loading, error, refetch };
 }

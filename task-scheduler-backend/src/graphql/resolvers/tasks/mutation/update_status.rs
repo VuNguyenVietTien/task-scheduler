@@ -3,15 +3,19 @@ use chrono::Utc;
 use sqlx::Row;
 use uuid::Uuid;
 use serde_json::Value as JsonValue;
+use std::str::FromStr;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
-use crate::graphql::types::{Task, Assignee, UpdateTaskStatusInput};
+use crate::graphql::types::{Task, Assignee, UpdateTaskStatusInput, TaskStatus};
 
 pub async fn update_task_status(ctx: &Context<'_>, input: UpdateTaskStatusInput) -> Result<Task, async_graphql::Error> {
     let context = ctx.data::<GraphQLContext>()?;
     let pool = &context.db;
     let task_id = Uuid::parse_str(&input.task_id.to_string())?;
+    
+    let status = TaskStatus::from_str(&input.status.to_lowercase())
+        .map_err(|e| async_graphql::Error::new(e))?;
     
     let mut tx = pool.begin().await.map_err(|e| AuthError::Database(e))?;
 
@@ -52,7 +56,7 @@ pub async fn update_task_status(ctx: &Context<'_>, input: UpdateTaskStatusInput)
         LEFT JOIN users u ON t.assignee_id = u.user_id
         "#
     )
-    .bind(&input.status) // Bind enum directly
+    .bind(&status)
     .bind(now)
     .bind(task_id)
     .fetch_one(&mut *tx)

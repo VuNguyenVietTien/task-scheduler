@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Timeline } from '@/components/timeline/Timeline';
 import { TaskListView } from '@/components/tasks/TaskListView';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
@@ -12,8 +12,24 @@ type ViewType = 'list' | 'kanban' | 'gantt';
 
 export function ProjectDetailView({ project }: { project: ProjectData }) {
   const [activeView, setActiveView] = useState<ViewType>('list');
-  const { data: tasks, loading: tasksLoading, error } = useProjectTasks(project.id);
+  const { data: tasks, loading: tasksLoading, error, refetch } = useProjectTasks(project.id);
   const { data: users, loading: usersLoading } = useUsers();
+
+  const handleTasksUpdated = useCallback(() => {
+    refetch();
+  }, [refetch]);
+
+  useEffect(() => {
+    const handleTaskStatusUpdate = () => {
+      refetch();
+    };
+
+    window.addEventListener('task-status-updated', handleTaskStatusUpdate);
+    
+    return () => {
+      window.removeEventListener('task-status-updated', handleTaskStatusUpdate);
+    };
+  }, [refetch]);
 
   const tabs = [
     {
@@ -141,7 +157,11 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
             {activeView === 'list' && <TaskListView tasks={tasks} />}
             {activeView === 'kanban' && (
               <div className="h-full overflow-x-auto">
-                <KanbanBoard tasks={tasks} />
+                <KanbanBoard 
+                  tasks={tasks} 
+                  projectId={project.id}
+                  onTasksReorder={handleTasksUpdated} 
+                />
               </div>
             )}
             {activeView === 'gantt' && (

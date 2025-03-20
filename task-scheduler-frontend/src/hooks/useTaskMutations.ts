@@ -26,36 +26,73 @@ export function useUpdateTaskStatus() {
     },
     onCompleted: (data) => {
       console.log('Task status updated:', data);
+      
+      // Broadcast an event to notify other components about the status change
+      if (typeof window !== 'undefined') {
+        const event = new CustomEvent('task-status-updated', { 
+          detail: { 
+            taskId: data.updateTaskStatus.task_id,
+            newStatus: data.updateTaskStatus.status,
+            projectId: data.updateTaskStatus.project_id 
+          } 
+        });
+        window.dispatchEvent(event);
+      }
     },
     update: (cache: ApolloCache<any>, { data }) => {
-      if (data?.updateTaskStatus) {
-        const projectId = data.updateTaskStatus.project_id;
-        if (!projectId) return;
+      if (!data?.updateTaskStatus) return;
+      
+      const updatedTask = data.updateTaskStatus;
+      const projectId = updatedTask.project_id;
+      
+      try {
+        // Read current cache
+        const existingData = cache.readQuery<{ tasks: Task[] }>({
+          query: GET_PROJECT_TASKS,
+          variables: { projectId }
+        });
 
-        try {
-          const existingData = cache.readQuery<{ tasks: Task[] }>({
-            query: GET_PROJECT_TASKS,
-            variables: { projectId }
+        if (!existingData?.tasks) return;
+
+        // Create updated task list
+        const updatedTasks = existingData.tasks.map(task =>
+          task.task_id === updatedTask.task_id
+            ? { ...task, status: updatedTask.status }
+            : task
+        );
+
+        // Write updated list back to cache
+        cache.writeQuery({
+          query: GET_PROJECT_TASKS,
+          variables: { projectId },
+          data: { tasks: updatedTasks }
+        });
+        
+        // Forcefully mark the cache as changed to trigger UI updates
+        cache.modify({
+          fields: {
+            tasks: (existingTasks = []) => {
+              return [...updatedTasks];
+            },
+          },
+        });
+        
+        // Also update any individual task queries if they exist
+        const taskCacheId = cache.identify({
+          __typename: 'Task',
+          task_id: updatedTask.task_id,
+        });
+        
+        if (taskCacheId) {
+          cache.modify({
+            id: taskCacheId,
+            fields: {
+              status: () => updatedTask.status,
+            },
           });
-
-          if (!existingData?.tasks) return;
-
-          const updatedTasks = existingData.tasks.map(task =>
-            task.task_id === data.updateTaskStatus.task_id
-              ? { ...task, ...data.updateTaskStatus }
-              : task
-          );
-
-          cache.writeQuery({
-            query: GET_PROJECT_TASKS,
-            variables: { projectId },
-            data: {
-              tasks: updatedTasks
-            }
-          });
-        } catch (error) {
-          console.error('Error updating cache:', error);
         }
+      } catch (error) {
+        console.error('Error updating cache:', error);
       }
     },
     refetchQueries: (result) => {
@@ -65,7 +102,8 @@ export function useUpdateTaskStatus() {
           return [
             {
               query: GET_PROJECT_TASKS,
-              variables: { projectId }
+              variables: { projectId },
+              fetchPolicy: 'network-only' // Force refetch from network
             }
           ];
         }

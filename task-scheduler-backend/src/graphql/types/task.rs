@@ -253,7 +253,15 @@ pub struct UpdateTaskInput {
 #[graphql(rename_fields = "camelCase")]
 pub struct UpdateTaskStatusInput {
     pub task_id: ID,
-    pub status: TaskStatus,
+    #[graphql(validator(custom = "validate_task_status"))]
+    pub status: String,
+}
+
+fn validate_task_status(status: &String) -> Result<(), String> {
+    match status.to_lowercase().as_str() {
+        "todo" | "doing" | "done" | "close" | "pending" | "review" | "blocked" | "rejected" | "archived" => Ok(()),
+        _ => Err(format!("Invalid task status: {}", status)),
+    }
 }
 
 #[derive(InputObject)]
