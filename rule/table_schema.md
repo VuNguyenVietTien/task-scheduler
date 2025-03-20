@@ -7,7 +7,6 @@ Sau khi phân tích và kết hợp kết quả từ các mô hình AI khác nha
 | column_name                | data_type                | is_nullable | is_primary_key |
 | -------------------------- | ------------------------ | ----------- | -------------- |
 | user_id                    | uuid                     | NO          | YES            |
-| user_id                    | uuid                     | NO          | YES            |
 | email                      | character varying        | NO          | NO             |
 | password_hash              | character varying        | YES         | NO             |
 | full_name                  | character varying        | YES         | NO             |
@@ -19,7 +18,6 @@ Sau khi phân tích và kết hợp kết quả từ các mô hình AI khác nha
 | created_at                 | timestamp with time zone | YES         | NO             |
 | updated_at                 | timestamp with time zone | YES         | NO             |
 | last_login_at              | timestamp with time zone | YES         | NO             |
-| name                       | character varying        | YES         | NO             |
 | email_verified             | boolean                  | NO          | NO             |
 | verification_token         | character varying        | YES         | NO             |
 | verification_token_expires | timestamp with time zone | YES         | NO             |

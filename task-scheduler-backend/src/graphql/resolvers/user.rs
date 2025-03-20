@@ -5,7 +5,8 @@ use sqlx::{PgPool, Row};
 pub struct UserResponse {
     pub id: String,
     pub email: String,
-    pub name: String,
+    pub username: String,
+    pub full_name: Option<String>,
     pub avatar_url: Option<String>,
     pub email_verified: bool,
     pub role: String,
@@ -23,8 +24,12 @@ impl UserResponse {
         &self.email
     }
 
-    async fn name(&self) -> &str {
-        &self.name
+    async fn username(&self) -> &str {
+        &self.username
+    }
+
+    async fn full_name(&self) -> Option<&str> {
+        self.full_name.as_deref()
     }
 
     async fn avatar_url(&self) -> Option<&str> {
@@ -55,7 +60,8 @@ impl TryFrom<sqlx::postgres::PgRow> for UserResponse {
         Ok(Self {
             id: row.get::<Uuid, _>("user_id").to_string(),
             email: row.get("email"),
-            name: row.get("name"),
+            username: row.get("username"),
+            full_name: row.get("full_name"),
             avatar_url: row.get("avatar_url"),
             email_verified: row.get("email_verified"),
             role: row.get("role"),
@@ -77,7 +83,7 @@ impl UserQuery {
             .map_err(|_| async_graphql::Error::new("Invalid user ID"))?;
 
         let record = sqlx::query(
-            "SELECT user_id, email, name, avatar_url, email_verified, role, created_at, updated_at 
+            "SELECT user_id, email, username, full_name, avatar_url, email_verified, role, created_at, updated_at 
              FROM users WHERE user_id = $1"
         )
         .bind(user_id)
@@ -98,7 +104,7 @@ impl UserQuery {
             .map_err(|_| async_graphql::Error::new("Invalid user ID"))?;
 
         let record = sqlx::query(
-            "SELECT user_id, email, name, avatar_url, email_verified, role, created_at, updated_at 
+            "SELECT user_id, email, username, full_name, avatar_url, email_verified, role, created_at, updated_at 
              FROM users WHERE user_id = $1"
         )
         .bind(user_id)
@@ -116,7 +122,7 @@ impl UserQuery {
         let db = ctx.data::<PgPool>().unwrap();
 
         let records = sqlx::query(
-            "SELECT user_id, email, name, avatar_url, email_verified, role, created_at, updated_at 
+            "SELECT user_id, email, username, full_name, avatar_url, email_verified, role, created_at, updated_at 
              FROM users ORDER BY created_at DESC"
         )
         .map(|row: sqlx::postgres::PgRow| UserResponse::try_from(row))
@@ -133,7 +139,7 @@ impl UserQuery {
 
 #[derive(Debug, InputObject)]
 pub struct UpdateUserProfileInput {
-    pub name: Option<String>,
+    pub full_name: Option<String>,
     pub avatar_url: Option<String>,
 }
 
@@ -155,13 +161,13 @@ impl UserMutation {
         let record = sqlx::query(
             "UPDATE users 
              SET 
-                name = COALESCE($1, name),
+                full_name = COALESCE($1, full_name),
                 avatar_url = COALESCE($2, avatar_url),
                 updated_at = NOW() 
              WHERE user_id = $3
-             RETURNING user_id, email, name, avatar_url, email_verified, role, created_at, updated_at"
+             RETURNING user_id, email, username, full_name, avatar_url, email_verified, role, created_at, updated_at"
         )
-        .bind(input.name)
+        .bind(input.full_name)
         .bind(input.avatar_url)
         .bind(user_id)
         .map(|row: sqlx::postgres::PgRow| UserResponse::try_from(row))
