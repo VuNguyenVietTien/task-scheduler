@@ -40,6 +40,7 @@ export interface Project {
   memberCount: number;
   owner: ProjectOwner;
   members: ProjectMember[];
+  userRole?: string; // Vai trò của người dùng hiện tại trong project (Admin, Member, Viewer, Guest, null)
 }
 
 export const useProject = (projectId: string) => {

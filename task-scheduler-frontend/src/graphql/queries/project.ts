@@ -44,6 +44,7 @@ export const GET_PROJECT_BY_ID = gql`
       isPublic
       status
       memberCount
+      userRole
       owner {
         userId
         email

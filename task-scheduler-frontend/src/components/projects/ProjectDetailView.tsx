@@ -9,6 +9,9 @@ import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { useUsers } from '@/hooks/useUsers';
 import { useProject } from '@/hooks/useProject';
 import type { ProjectData } from '@/types/project';
+import { useQuery } from '@apollo/client';
+import { GET_PROJECT_BY_ID } from '@/graphql/queries/project';
+import { GET_MY_PROJECT_ROLE } from '@/graphql/queries/member';
 
 type ViewType = 'list' | 'kanban' | 'gantt' | 'members';
 
@@ -37,7 +40,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
   const tabs = [
     {
       id: 'list',
-      label: 'Task List',
+      label: 'Danh sách công việc',
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
@@ -55,7 +58,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
     },
     {
       id: 'gantt',
-      label: 'Gantt Chart',
+      label: 'Biểu đồ Gantt',
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -64,7 +67,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
     },
     {
       id: 'members',
-      label: 'Member',
+      label: 'Thành viên',
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -109,18 +112,23 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
     </div>
   );
 
-  // Kiểm tra nếu user hiện tại có quyền quản lý members
-  let currentUserRole = 'viewer';
-  if (projectData?.project?.members) {
-    // Lấy từ local storage userId
-    const currentUserId = localStorage.getItem('userId');
-    const currentMember = projectData.project.members.find(
-      (m: any) => m.user.userId === currentUserId
-    );
-    if (currentMember) {
-      currentUserRole = currentMember.role;
-    }
-  }
+  // Lấy thông tin vai trò của người dùng hiện tại từ API response
+  const currentUserRole = projectData?.project?.userRole || 'guest';
+  
+  // Kiểm tra quyền admin
+  const isProjectAdmin = String(currentUserRole).toLowerCase() === 'admin';
+  const canManageProject = isProjectAdmin;
+
+  // Debug: Log thông tin vai trò để kiểm tra
+  console.log('===== THÔNG TIN QUYỀN HẠN =====');
+  console.log('Project role từ API:', currentUserRole);
+  console.log('Project role (type):', typeof currentUserRole);
+  console.log('Is project admin:', isProjectAdmin);
+  
+  // Debug: Log thêm chi tiết về member data từ project
+  console.log('===== CHI TIẾT DỮ LIỆU MEMBERS =====');
+  console.log('Project data available:', !!projectData?.project);
+  console.log('All members count:', projectData?.project?.members?.length || 0);
 
   return (
     <div className="p-6">
@@ -132,7 +140,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
             href={`/projects/${project.id}/add-task`}
             className="btn-primary inline-block"
           >
-            Add Task
+            Thêm công việc
           </a>
         </div>
         <div className="flex gap-4 mt-2 text-slate-600">
@@ -140,13 +148,13 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <span>Due {new Date(project.dueDate).toLocaleDateString()}</span>
+            <span>Hạn {new Date(project.dueDate).toLocaleDateString('vi-VN')}</span>
           </div>
           <div className="flex items-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
             </svg>
-            <span>{project.members} members</span>
+            <span>{projectData?.project?.members?.length || 0} thành viên</span>
           </div>
         </div>
       </div>
@@ -179,7 +187,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
               projectId={project.id}
               members={projectData.project.members?.map(member => ({
                 ...member,
-                role: mapRoleToMemberType(member.role),
+                role: member.role.toLowerCase(),
                 user: {
                   ...member.user,
                   fullName: member.user.fullName || member.user.username || "",
@@ -218,21 +226,4 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       </div>
     </div>
   );
-}
-
-// Helper function to map role string to Member type enum
-function mapRoleToMemberType(role: string): 'owner' | 'manager' | 'editor' | 'viewer' {
-  switch(role.toLowerCase()) {
-    case 'owner':
-      return 'owner';
-    case 'manager':
-    case 'admin':
-      return 'manager';
-    case 'editor':
-      return 'editor';
-    case 'viewer':
-    case 'guest':
-    default:
-      return 'viewer';
-  }
 }

@@ -1,15 +1,18 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useMutation } from '@apollo/client';
-import { ADD_PROJECT_MEMBER, UPDATE_PROJECT_MEMBER_ROLE, REMOVE_PROJECT_MEMBER } from '@/graphql/mutations/projectMember';
+import { ADD_PROJECT_MEMBER_BY_EMAIL, UPDATE_PROJECT_MEMBER_ROLE, REMOVE_PROJECT_MEMBER } from '@/graphql/mutations/projectMember';
 import { GET_PROJECT_BY_ID } from '@/graphql/queries/project';
 import { Dialog } from '@/components/ui/Dialog';
+import { toast } from 'sonner';
 
 // Định nghĩa các type cần thiết
+type MemberRole = 'admin' | 'member' | 'viewer' | 'guest';
+
 type Member = {
-  role: 'owner' | 'manager' | 'editor' | 'viewer';
+  role: string; // Role từ API 
   joinedAt: string;
   user: {
     userId: string;
@@ -23,18 +26,49 @@ type Member = {
 type ProjectMembersProps = {
   projectId: string;
   members: Member[];
-  currentUserRole: string;
+  currentUserRole: string;  // Role của người dùng hiện tại trong project
   refetch: () => void;
 };
 
 type AddMemberFormValues = {
   email: string;
-  role: 'manager' | 'editor' | 'viewer';
+  role: MemberRole;
 };
 
 export function MembersView({ projectId, members, currentUserRole, refetch }: ProjectMembersProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const isAdmin = currentUserRole === 'admin' || currentUserRole === 'owner';
+  const [emailInput, setEmailInput] = useState('');
+  const [editMode, setEditMode] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState<Map<string, MemberRole>>(new Map());
+  const [addError, setAddError] = useState<string | null>(null);
+
+  // Kiểm tra quyền dựa trên vai trò trong dự án
+  const canManageMembers = String(currentUserRole).toLowerCase() === 'admin';
+  
+  // Debug: Log vai trò hiện tại để kiểm tra
+  useEffect(() => {
+    console.log('MembersView - Thông tin quyền:');
+    console.log('Vai trò trong dự án (raw):', currentUserRole);
+    console.log('Vai trò trong dự án (type):', typeof currentUserRole);
+    console.log('Vai trò trong dự án (toLowerCase):', typeof currentUserRole === 'string' ? currentUserRole.toLowerCase() : currentUserRole);
+    console.log('So sánh currentUserRole === "admin":', currentUserRole === 'admin');
+    console.log('So sánh String(currentUserRole).toLowerCase() === "admin":', String(currentUserRole).toLowerCase() === 'admin');
+    console.log('Có quyền quản lý thành viên?', canManageMembers);
+    
+    // Kiểm tra members được truyền vào component
+    console.log('===== CHI TIẾT MEMBERS =====');
+    console.log('Members array:', members);
+    console.log('Members roles:', members?.map(m => ({
+      userId: m.user.userId,
+      username: m.user.username || m.user.email,
+      role: m.role,
+      roleType: typeof m.role,
+      roleValue: String(m.role),
+      roleLowerCase: typeof m.role === 'string' ? m.role.toLowerCase() : String(m.role).toLowerCase(),
+      isAdmin: m.role === 'admin' || m.role === 'Admin' || String(m.role).toLowerCase() === 'admin',
+      isCurrentUser: false // Không còn sử dụng localStorage
+    })));
+  }, [currentUserRole, canManageMembers, members]);
   
   const { register, handleSubmit, reset, formState: { errors } } = useForm<AddMemberFormValues>({
     defaultValues: {
@@ -44,68 +78,133 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
   });
 
   // Mutation để thêm thành viên
-  const [addMember, { loading: addLoading }] = useMutation(ADD_PROJECT_MEMBER, {
+  const [addMember, { loading: addLoading }] = useMutation(ADD_PROJECT_MEMBER_BY_EMAIL, {
     refetchQueries: [
       { query: GET_PROJECT_BY_ID, variables: { projectId } },
     ],
     onCompleted: () => {
-      alert('Member has been added to the project');
+      toast.success('Thành viên đã được thêm vào dự án thành công');
       setIsAddDialogOpen(false);
+      setEmailInput('');
+      setAddError(null);
       reset();
+      refetch();
     },
     onError: (error) => {
-      alert(error.message || 'Unable to add member');
+      const errorMessage = error.message;
+      setAddError(errorMessage);
+      if (errorMessage.includes("User with this email not found")) {
+        setAddError("Email không tồn tại trong hệ thống.");
+      } else if (errorMessage.includes("User is already a member")) {
+        setAddError("Người dùng này đã là thành viên của dự án.");
+      } else {
+        setAddError("Không thể thêm thành viên. Vui lòng thử lại sau.");
+      }
     }
   });
 
   // Mutation để cập nhật vai trò thành viên
-  const [updateRole] = useMutation(UPDATE_PROJECT_MEMBER_ROLE, {
+  const [updateRole, { loading: updateLoading }] = useMutation(UPDATE_PROJECT_MEMBER_ROLE, {
     refetchQueries: [
       { query: GET_PROJECT_BY_ID, variables: { projectId } },
     ],
     onCompleted: () => {
-      alert('Member role has been updated');
+      toast.success('Vai trò thành viên đã được cập nhật');
+      refetch();
     },
     onError: (error) => {
-      alert(error.message || 'Unable to update role');
+      toast.error(error.message || 'Không thể cập nhật vai trò');
     }
   });
 
   // Mutation để xóa thành viên
-  const [removeMember] = useMutation(REMOVE_PROJECT_MEMBER, {
+  const [removeMember, { loading: removeLoading }] = useMutation(REMOVE_PROJECT_MEMBER, {
     refetchQueries: [
       { query: GET_PROJECT_BY_ID, variables: { projectId } },
     ],
     onCompleted: () => {
-      alert('Member has been removed from the project');
+      toast.success('Thành viên đã được xóa khỏi dự án');
+      refetch();
     },
     onError: (error) => {
-      alert(error.message || 'Unable to remove member');
+      toast.error(error.message || 'Không thể xóa thành viên');
     }
   });
 
-  const onAddMember = (data: AddMemberFormValues) => {
+  const onAddMemberSubmit = (data: AddMemberFormValues) => {
+    if (!canManageMembers) {
+      toast.error('Bạn không có quyền thêm thành viên');
+      return;
+    }
+    
+    setAddError(null);
     addMember({
       variables: {
         projectId,
         email: data.email,
-        role: data.role.toUpperCase()
+        role: data.role
       }
     });
   };
 
-  const handleRoleChange = (userId: string, newRole: string) => {
-    updateRole({
+  const handleQuickAdd = () => {
+    if (!canManageMembers) {
+      toast.error('Bạn không có quyền thêm thành viên');
+      return;
+    }
+    
+    if (!emailInput.trim()) {
+      toast.error('Vui lòng nhập email');
+      return;
+    }
+
+    setAddError(null);
+    addMember({
       variables: {
         projectId,
-        userId,
-        role: newRole
+        email: emailInput,
+        role: 'viewer'
       }
     });
+  };
+
+  const handleRoleChange = (userId: string, newRole: MemberRole) => {
+    if (!canManageMembers) {
+      toast.error('Bạn không có quyền chỉnh sửa vai trò thành viên');
+      return;
+    }
+    
+    if (editMode) {
+      // In edit mode, save changes to pending changes map
+      const newChanges = new Map(pendingChanges);
+      newChanges.set(userId, newRole as MemberRole);
+      setPendingChanges(newChanges);
+    } else {
+      // In direct mode, apply change immediately
+      updateRole({
+        variables: {
+          projectId,
+          userId,
+          role: newRole
+        }
+      });
+    }
   };
 
   const handleRemoveMember = (userId: string) => {
-    if (confirm('Are you sure you want to remove this member?')) {
+    if (!canManageMembers) {
+      toast.error('Bạn không có quyền xóa thành viên');
+      return;
+    }
+    
+    // Không cho phép xóa chính mình khỏi dự án
+    const currentUserId = localStorage.getItem('userId');
+    if (userId === currentUserId) {
+      toast.error('Bạn không thể xóa chính mình khỏi dự án');
+      return;
+    }
+    
+    if (confirm('Bạn có chắc chắn muốn xóa thành viên này?')) {
       removeMember({
         variables: {
           projectId,
@@ -115,163 +214,288 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
     }
   };
 
+  const handleSaveChanges = async () => {
+    if (!canManageMembers) {
+      toast.error('Bạn không có quyền chỉnh sửa vai trò thành viên');
+      return;
+    }
+    
+    if (pendingChanges.size === 0) {
+      setEditMode(false);
+      return;
+    }
+    
+    // Apply all role changes
+    const promises: Array<Promise<any>> = [];
+    pendingChanges.forEach((role, userId) => {
+      promises.push(
+        updateRole({
+          variables: {
+            projectId,
+            userId,
+            role: role
+          }
+        })
+      );
+    });
+    
+    try {
+      await Promise.all(promises);
+      setPendingChanges(new Map());
+      setEditMode(false);
+      toast.success('Đã lưu tất cả thay đổi');
+    } catch (error) {
+      toast.error('Lỗi khi cập nhật vai trò thành viên');
+      console.error(error);
+    }
+  };
+
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('en-US', {
+    return new Date(dateString).toLocaleDateString('vi-VN', {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
     });
   };
 
+  // Kiểm tra vai trò thành viên
+  const isAdminRole = (role: string): boolean => {
+    if (!role) return false;
+    return String(role).toLowerCase() === 'admin';
+  };
+
+  // Hàm chuyển đổi role thành dạng hiển thị
+  const getRoleDisplay = (role: string): string => {
+    if (!role) return 'Viewer';
+    const normalizedRole = String(role).toLowerCase();
+    if (normalizedRole === 'admin') return 'Admin';
+    if (normalizedRole === 'member') return 'Member';
+    if (normalizedRole === 'guest') return 'Guest';
+    return 'Viewer';
+  };
+
+  // Kiểm tra xem người dùng hiện tại có phải là chủ sở hữu dự án không
+  const isCurrentUserProjectOwner = () => {
+    return canManageMembers;
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">Project Members</h2>
-        {isAdmin && (
-          <>
+        <h2 className="text-xl font-semibold">Thành viên dự án</h2>
+        {canManageMembers && (
+          <div className="flex gap-2">
             <button 
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
               onClick={() => setIsAddDialogOpen(true)}
             >
-              Add Member
+              Thêm thành viên
             </button>
-            
-            <Dialog 
-              open={isAddDialogOpen} 
-              onClose={() => setIsAddDialogOpen(false)}
-              title="Add Member to Project"
-            >
-              <form onSubmit={handleSubmit(onAddMember)} className="space-y-4">
-                <div className="space-y-2">
-                  <label htmlFor="email" className="text-sm font-medium">Email</label>
-                  <input
-                    id="email"
-                    type="email"
-                    {...register('email', { required: 'Email is required' })}
-                    placeholder="Enter member email"
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  />
-                  {errors.email && <p className="text-red-500 text-sm">{errors.email.message}</p>}
-                </div>
-                
-                <div className="space-y-2">
-                  <label htmlFor="role" className="text-sm font-medium">Role</label>
-                  <select
-                    id="role"
-                    {...register('role')}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  >
-                    <option value="manager">Manager</option>
-                    <option value="editor">Editor</option>
-                    <option value="viewer">Viewer</option>
-                  </select>
-                </div>
-                
-                <div className="flex justify-end space-x-2 mt-4">
-                  <button
-                    type="button"
-                    className="px-4 py-2 border border-gray-300 rounded-md"
-                    onClick={() => setIsAddDialogOpen(false)}
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    disabled={addLoading}
-                    className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-                  >
-                    {addLoading ? 'Adding...' : 'Add Member'}
-                  </button>
-                </div>
-              </form>
-            </Dialog>
-          </>
+            {editMode ? (
+              <button 
+                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition"
+                onClick={handleSaveChanges}
+                disabled={updateLoading}
+              >
+                {updateLoading ? 'Đang lưu...' : 'Lưu thay đổi'}
+              </button>
+            ) : (
+              <button 
+                className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition"
+                onClick={() => setEditMode(true)}
+              >
+                Sửa vai trò
+              </button>
+            )}
+          </div>
         )}
       </div>
+
+      {/* Dialog để thêm thành viên mới */}
+      <Dialog 
+        open={isAddDialogOpen} 
+        onClose={() => {
+          setIsAddDialogOpen(false);
+          setAddError(null);
+          reset();
+        }}
+        title="Thêm thành viên vào dự án"
+      >
+        <form onSubmit={handleSubmit(onAddMemberSubmit)} className="space-y-4">
+          <div className="space-y-2">
+            <label htmlFor="email" className="text-sm font-medium">Email</label>
+            <input
+              id="email"
+              type="email"
+              {...register('email', { required: 'Email là bắt buộc' })}
+              placeholder="Nhập email thành viên"
+              className={`w-full px-3 py-2 border ${addError ? 'border-red-500' : 'border-gray-300'} rounded-md`}
+            />
+            {errors.email && <p className="text-red-500 text-sm">{errors.email.message}</p>}
+            {addError && <p className="text-red-500 text-sm">{addError}</p>}
+          </div>
+          
+          <div className="space-y-2">
+            <label htmlFor="role" className="text-sm font-medium">Vai trò</label>
+            <select
+              id="role"
+              {...register('role')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+            >
+              <option value="admin">Admin</option>
+              <option value="member">Member</option>
+              <option value="viewer">Viewer</option>
+              <option value="guest">Guest</option>
+            </select>
+          </div>
+          
+          <div className="flex justify-end space-x-2 mt-4">
+            <button
+              type="button"
+              className="px-4 py-2 border border-gray-300 rounded-md"
+              onClick={() => {
+                setIsAddDialogOpen(false);
+                setAddError(null);
+                reset();
+              }}
+            >
+              Hủy
+            </button>
+            <button
+              type="submit"
+              disabled={addLoading}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
+            >
+              {addLoading ? 'Đang thêm...' : 'Thêm thành viên'}
+            </button>
+          </div>
+        </form>
+      </Dialog>
+      
+      {/* Form thêm nhanh thành viên */}
+      {canManageMembers && (
+        <div className="flex flex-col space-y-2 mb-4">
+          <div className="flex items-center gap-2">
+            <input
+              type="email"
+              value={emailInput}
+              onChange={(e) => setEmailInput(e.target.value)}
+              placeholder="Nhập email để thêm thành viên nhanh"
+              className={`flex-1 px-3 py-2 border ${addError ? 'border-red-500' : 'border-gray-300'} rounded-md`}
+            />
+            <button
+              onClick={handleQuickAdd}
+              disabled={addLoading || !emailInput.trim()}
+              className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:opacity-50"
+            >
+              {addLoading ? 'Đang thêm...' : 'Thêm nhanh'}
+            </button>
+          </div>
+          {addError && (
+            <p className="text-red-500 text-sm">{addError}</p>
+          )}
+        </div>
+      )}
 
       <div className="border rounded-md overflow-hidden">
         <table className="min-w-full divide-y divide-gray-200">
           <thead className="bg-gray-50">
             <tr>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Member
+                Thành viên
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Email
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Role
+                Vai trò
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Join Date
+                Ngày tham gia
               </th>
-              {isAdmin && <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Actions
+              {canManageMembers && <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Thao tác
               </th>}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {members.map((member) => (
-              <tr key={member.user.userId} className="hover:bg-gray-50">
-                <td className="px-6 py-4 whitespace-nowrap">
-                  <div className="flex items-center gap-2">
-                    {member.user.avatarUrl ? (
-                      <img
-                        src={member.user.avatarUrl}
-                        alt={member.user.fullName}
-                        className="w-8 h-8 rounded-full"
-                      />
-                    ) : (
-                      <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
-                        <span className="text-sm font-medium">
-                          {member.user.fullName.charAt(0)}
-                        </span>
-                      </div>
-                    )}
-                    <span className="font-medium">{member.user.fullName || member.user.username}</span>
-                  </div>
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {member.user.email}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {member.role === 'owner' ? (
-                    <span className="font-medium text-blue-600">Owner</span>
-                  ) : isAdmin ? (
-                    <select
-                      value={member.role}
-                      onChange={(e) => handleRoleChange(member.user.userId, e.target.value)}
-                      className="px-2 py-1 border border-gray-300 rounded-md"
-                      aria-label={`Change role of ${member.user.fullName || member.user.username}`}
-                    >
-                      <option value="manager">Manager</option>
-                      <option value="editor">Editor</option>
-                      <option value="viewer">Viewer</option>
-                    </select>
-                  ) : (
-                    <span>
-                      {member.role === 'manager' ? 'Manager' : 
-                       member.role === 'editor' ? 'Editor' : 'Viewer'}
-                    </span>
-                  )}
-                </td>
-                <td className="px-6 py-4 whitespace-nowrap">
-                  {formatDate(member.joinedAt)}
-                </td>
-                {isAdmin && (
-                  <td className="px-6 py-4 whitespace-nowrap text-right">
-                    {member.role !== 'owner' && (
-                      <button
-                        onClick={() => handleRemoveMember(member.user.userId)}
-                        className="text-red-600 hover:text-red-800"
+            {members.map((member: Member) => {
+              const normalizedRole = member.role.toLowerCase();
+              
+              // Kiểm tra có phải người dùng hiện tại không
+              const isCurrentUser = false; // Sẽ được xác định từ thông tin project
+              const canEditThisMember = canManageMembers;
+              
+              return (
+                <tr key={member.user.userId} className={`hover:bg-gray-50 ${isCurrentUser ? 'bg-blue-50' : ''}`}>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    <div className="flex items-center gap-2">
+                      {member.user.avatarUrl ? (
+                        <img
+                          src={member.user.avatarUrl}
+                          alt={member.user.fullName}
+                          className="w-8 h-8 rounded-full"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-gray-200 flex items-center justify-center">
+                          <span className="text-sm font-medium">
+                            {(member.user.fullName || member.user.username || 'U').charAt(0).toUpperCase()}
+                          </span>
+                        </div>
+                      )}
+                      <span className="font-medium">
+                        {member.user.fullName || member.user.username}
+                        {isCurrentUser && <span className="ml-2 text-xs text-blue-600">(Bạn)</span>}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {member.user.email}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {isAdminRole(member.role) ? (
+                      <span className="font-medium text-blue-600">Admin</span>
+                    ) : canManageMembers && editMode ? (
+                      <select
+                        value={pendingChanges.has(member.user.userId) ? pendingChanges.get(member.user.userId) : normalizedRole}
+                        onChange={(e) => handleRoleChange(member.user.userId, e.target.value as MemberRole)}
+                        className={`px-2 py-1 border border-gray-300 rounded-md ${
+                          pendingChanges.has(member.user.userId) ? 'bg-yellow-50 border-yellow-300' : ''
+                        }`}
+                        aria-label={`Thay đổi vai trò của ${member.user.fullName || member.user.username}`}
+                        disabled={!canEditThisMember}
                       >
-                        Remove
-                      </button>
+                        <option value="admin">Admin</option>
+                        <option value="member">Member</option>
+                        <option value="viewer">Viewer</option>
+                        <option value="guest">Guest</option>
+                      </select>
+                    ) : (
+                      <span>
+                        {getRoleDisplay(member.role)}
+                      </span>
                     )}
                   </td>
-                )}
-              </tr>
-            ))}
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {formatDate(member.joinedAt)}
+                  </td>
+                  {canManageMembers && (
+                    <td className="px-6 py-4 whitespace-nowrap text-right">
+                      {!isAdminRole(member.role) && !isCurrentUser && (
+                        <button
+                          onClick={() => handleRemoveMember(member.user.userId)}
+                          disabled={removeLoading}
+                          className="text-red-600 hover:text-red-800"
+                          aria-label={`Xóa thành viên ${member.user.fullName || member.user.username}`}
+                        >
+                          Xóa
+                        </button>
+                      )}
+                    </td>
+                  )}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

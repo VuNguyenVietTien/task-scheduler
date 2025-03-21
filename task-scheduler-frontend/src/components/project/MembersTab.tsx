@@ -236,6 +236,15 @@ export const MembersTab: React.FC = () => {
   if (error) return <div>Error: {error.message}</div>;
 
   const isAdmin = data?.myProjectRole === 'Admin';
+  
+  // Log để debug
+  console.log('===== MembersTab Debug =====');
+  console.log('myProjectRole data:', data);
+  console.log('myProjectRole type:', typeof data?.myProjectRole);
+  console.log('myProjectRole value:', data?.myProjectRole);
+  console.log('isAdmin:', isAdmin);
+  console.log('localStorage userId:', localStorage.getItem('userId'));
+  console.log('localStorage userRole:', localStorage.getItem('userRole'));
 
   return (
     <Box sx={{ p: 3 }}>

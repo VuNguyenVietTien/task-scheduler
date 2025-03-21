@@ -37,6 +37,8 @@ pub struct Project {
     pub status: ProjectStatus,
     pub member_count: i64,
     pub owner: User,
+    pub created_by: Option<User>,
+    pub user_role: Option<MemberRole>,
     pub members: Vec<ProjectMember>,
 }
 
@@ -170,6 +172,7 @@ impl From<String> for ProjectStatus {
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]
+#[graphql(rename_items = "lowercase")]
 #[sqlx(rename_all = "lowercase", type_name = "member_role")]
 pub enum MemberRole {
     Admin,

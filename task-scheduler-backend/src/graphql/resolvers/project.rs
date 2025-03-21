@@ -119,6 +119,27 @@ impl ProjectQuery {
             })
             .collect();
 
+        // Lấy thông tin vai trò của user hiện tại trong project
+        let user_role = sqlx::query(
+            r#"
+            SELECT role FROM project_members
+            WHERE project_id = $1 AND user_id = $2
+            "#
+        )
+        .bind(project_id)
+        .bind(current_user.user_id()?)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| AuthError::Database(e))?;
+
+        let user_role = user_role.map(|row| row.get::<MemberRole, _>("role"));
+        
+        // In ra log để debug
+        match &user_role {
+            Some(role) => println!("User role in project: {:?}", role),
+            None => println!("User has no specific role in project")
+        }
+
         // Map project data
         let project = Project {
             project_id: project.get("project_id"),
@@ -145,6 +166,8 @@ impl ProjectQuery {
                 full_name: project.get("owner_full_name"),
                 avatar_url: project.get::<Option<String>, _>("owner_avatar_url"),
             },
+            created_by: None,
+            user_role: user_role,
             members: project_members,
         };
 
