@@ -98,10 +98,11 @@ function ComboboxField({
               xmlns="http://www.w3.org/2000/svg"
               viewBox="0 0 20 20"
               fill="currentColor"
+              aria-hidden="true"
             >
               <path
                 fillRule="evenodd"
-                d="M10 3a1 1 0 01.707.293l3 3a1 1 0 01-1.414 1.414L10 5.414 7.707 7.707a1 1 0 01-1.414-1.414l3-3A1 1 0 0110 3zm-3.707 9.293a1 1 0 011.414 0L10 14.586l2.293-2.293a1 1 0 011.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z"
+                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
                 clipRule="evenodd"
               />
             </svg>
@@ -162,6 +163,20 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
   );
   const [assigneeSearchQuery, setAssigneeSearchQuery] = useState("");
   const [isAssigneeDropdownOpen, setIsAssigneeDropdownOpen] = useState(false);
+  const assigneeRef = React.useRef<HTMLDivElement>(null);
+
+  // Xử lý click ngoài dropdown
+  React.useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (assigneeRef.current && !assigneeRef.current.contains(event.target as Node)) {
+        setIsAssigneeDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [assigneeRef]);
 
   // GraphQL mutation
   const [createTask, { loading: createTaskLoading }] = useMutation(CREATE_TASK);
@@ -191,16 +206,30 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
   // Filter project members based on search query
   const filteredMembers = useMemo(() => {
     const members = projectData?.project?.members || [];
-    if (!assigneeSearchQuery) return members;
-    return members.filter((member) =>
-      member.username.toLowerCase().includes(assigneeSearchQuery.toLowerCase())
-    );
+    let filtered = members;
+    
+    if (assigneeSearchQuery) {
+      filtered = members.filter((member) => 
+        member && member.user && member.user.username && 
+        member.user.username.toLowerCase().includes(assigneeSearchQuery.toLowerCase())
+      );
+    }
+    
+    // Sắp xếp thành viên theo tên người dùng
+    filtered = [...filtered].sort((a, b) => {
+      if (!a.user || !b.user || !a.user.username || !b.user.username) return 0;
+      return a.user.username.localeCompare(b.user.username);
+    });
+    
+    // Limit the number of displayed members to 10
+    return filtered.slice(0, 10);
   }, [projectData?.project?.members, assigneeSearchQuery]);
+  
   // Get selected assignee member
   const selectedAssigneeMember = useMemo(() => {
     if (!selectedAssignee || !projectData?.project?.members) return null;
     return projectData.project.members.find(
-      (m) => m.userId === selectedAssignee
+      (m) => m.user.userId === selectedAssignee
     );
   }, [selectedAssignee, projectData?.project?.members]);
 
@@ -326,6 +355,19 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
     setIsAssigneeDropdownOpen(false);
   };
 
+  // Thêm xử lý phím ESC để đóng dropdown
+  React.useEffect(() => {
+    function handleEscapeKey(event: KeyboardEvent) {
+      if (event.key === 'Escape') {
+        setIsAssigneeDropdownOpen(false);
+      }
+    }
+    document.addEventListener("keydown", handleEscapeKey);
+    return () => {
+      document.removeEventListener("keydown", handleEscapeKey);
+    };
+  }, []);
+
   const handleAssignToMe = () => {
     if (user) {
       setValue("assignee", user.id);
@@ -402,15 +444,15 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
           </label>
           <div className="mt-1 relative">
             <div className="flex gap-2">
-              <div className="relative flex-1">
+              <div className="relative flex-1" ref={assigneeRef}>
                 <div
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 cursor-pointer"
+                  className="w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus-within:border-blue-500 focus-within:ring-1 focus-within:ring-blue-500 cursor-pointer flex items-center"
                   onClick={() => setIsAssigneeDropdownOpen(true)}
                 >
                   {selectedAssigneeMember ? (
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between w-full">
                       <div className="inline-flex items-center px-2 py-0.5 rounded bg-blue-100 text-blue-800">
-                        <span>{selectedAssigneeMember.username}</span>
+                        <span>{selectedAssigneeMember.user.username}</span>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -438,41 +480,64 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
                       </div>
                     </div>
                   ) : (
-                    <input
-                      type="text"
-                      placeholder="Search members..."
-                      value={assigneeSearchQuery}
-                      onChange={(e) => {
-                        setAssigneeSearchQuery(e.target.value);
-                        setIsAssigneeDropdownOpen(true);
-                      }}
-                      className="w-full border-none p-0 focus:ring-0"
-                      onClick={(e) => e.stopPropagation()}
-                    />
+                    <div className="flex items-center justify-between w-full">
+                      <input
+                        type="text"
+                        placeholder="Search members..."
+                        value={assigneeSearchQuery}
+                        onChange={(e) => {
+                          setAssigneeSearchQuery(e.target.value);
+                          setIsAssigneeDropdownOpen(true);
+                        }}
+                        className="w-full border-none p-0 focus:ring-0"
+                        onClick={(e) => e.stopPropagation()}
+                      />
+                    </div>
                   )}
+                  <div className="inset-y-0 right-0 flex items-center">
+                    <svg
+                      className="h-5 w-5 text-gray-400"
+                      xmlns="http://www.w3.org/2000/svg"
+                      viewBox="0 0 20 20"
+                      fill="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        fillRule="evenodd"
+                        d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                        clipRule="evenodd"
+                      />
+                    </svg>
+                  </div>
                 </div>
                 {isAssigneeDropdownOpen && (
                   <ul className="absolute z-10 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm">
-                    {filteredMembers.map((member) => (
-                      <li
-                        key={member.userId}
-                        onClick={() =>
-                          handleAssigneeSelect(member.userId, member.username)
-                        }
-                        className="relative cursor-pointer select-none py-2 px-3 hover:bg-blue-50"
-                      >
-                        <div className="flex items-center">
-                          {member.avatarUrl && (
-                            <img
-                              src={member.avatarUrl}
-                              alt=""
-                              className="h-6 w-6 rounded-full mr-2"
-                            />
-                          )}
-                          <span>{member.username}</span>
-                        </div>
+                    {filteredMembers.length > 0 ? (
+                      filteredMembers.map((member) => (
+                        <li
+                          key={member.user.userId}
+                          onClick={() =>
+                            handleAssigneeSelect(member.user.userId, member.user.username)
+                          }
+                          className="relative cursor-pointer select-none py-2 px-3 hover:bg-blue-50"
+                        >
+                          <div className="flex items-center">
+                            {member.user.avatarUrl && (
+                              <img
+                                src={member.user.avatarUrl}
+                                alt=""
+                                className="h-6 w-6 rounded-full mr-2"
+                              />
+                            )}
+                            <span>{member.user.username}</span>
+                          </div>
+                        </li>
+                      ))
+                    ) : (
+                      <li className="relative py-2 px-3 text-gray-500">
+                        Không tìm thấy thành viên nào
                       </li>
-                    ))}
+                    )}
                   </ul>
                 )}
               </div>
