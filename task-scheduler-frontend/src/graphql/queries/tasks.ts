@@ -133,3 +133,16 @@ export const GET_PROJECT_TASKS_PAGINATED = gql`
     }
   }
 `;
+
+export const GET_TASK_COMMENTS = gql`
+  query GetTaskComments($taskId: ID!) {
+    taskComments(taskId: $taskId) {
+      id
+      content
+      authorId
+      username
+      createdAt
+      updatedAt
+    }
+  }
+`;

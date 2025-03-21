@@ -9,6 +9,8 @@ import { useUpdateTaskPriorityOrder } from '@/hooks/useTasks';
 import { UserAvatar } from '@/components/common/UserAvatar';
 import { TaskFilterModal } from './TaskFilterModal';
 import { Pagination } from '@/components/common/Pagination';
+import { TaskDetail } from './TaskDetail';
+import { useAuth } from '@/contexts/AuthContext';
 
 interface TaskListViewProps {
   tasks: Task[];
@@ -43,6 +45,9 @@ export function TaskListView({
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
+  const { user } = useAuth();
 
   // Memoize assignees and projects
   const { assignees, projects } = useMemo(() => {
@@ -185,101 +190,32 @@ export function TaskListView({
     });
   };
 
-  const renderTaskRow = (task: Task, level: number = 0): JSX.Element => {
-    const hasChildren = task.child_tasks && task.child_tasks.length > 0;
-    const isExpanded = expandedTasks.has(task.task_id);
+  const handleTaskClick = (taskId: string) => {
+    // Chuyển hướng đến trang chi tiết task thay vì mở modal
+    const task = tasks.find(t => t.task_id === taskId || t.id === taskId);
+    if (task) {
+      // Lấy project_id từ task
+      const projectId = task.project_id;
+      
+      // Chuyển hướng đến trang chi tiết task
+      window.location.href = `/projects/${projectId}/tasks/${taskId}`;
+    }
+    
+    // Nếu có callback onTaskClick từ props, gọi nó
+    if (onTaskClick) {
+      onTaskClick(taskId);
+    }
+  };
 
-    return (
-      <React.Fragment key={task.task_id}>
-        <tr className={`hover:bg-slate-50 ${level > 0 ? 'bg-slate-50' : ''}`}>
-          <td className="w-8 py-4 pl-4 pr-3">
-            <div className="flex items-center">
-              <input
-                type="checkbox"
-                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                checked={selectedTasks.has(task.task_id)}
-                onChange={(e) => toggleTaskSelection(task.task_id, e)}
-                title="Select task"
-              />
-            </div>
-          </td>
-          <td className="py-4 pl-4 pr-3 text-sm sm:pl-6" onClick={() => onTaskClick?.(task.task_id)}>
-            <div className="flex items-center">
-              {level > 0 && (
-                <span className="inline-block w-[20px] ml-[20px]" />
-              )}
-              {hasChildren && (
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    toggleTaskExpansion(task.task_id);
-                  }}
-                  className="mr-2 p-1 hover:bg-slate-200 rounded"
-                  title={isExpanded ? "Thu gọn" : "Mở rộng"}
-                  aria-label={isExpanded ? "Thu gọn" : "Mở rộng"}
-                >
-                  <svg
-                    className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-90' : ''}`}
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                  </svg>
-                </button>
-              )}
-              <div>
-                <div className="font-medium text-slate-900 cursor-pointer">{task.title}</div>
-              </div>
-            </div>
-          </td>
-          <td className="px-3 py-4 text-sm">
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-              {task.status.replace(/_/g, ' ')}
-            </span>
-          </td>
-          <td className="px-3 py-4 text-sm">
-            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
-              {task.priority}
-            </span>
-          </td>
-          <td className="px-3 py-4 text-sm">
-            {task.assignee ? (
-              <div className="flex items-center gap-2">
-                <UserAvatar 
-                  username={task.assignee.username} 
-                  avatarUrl={task.assignee.avatarUrl} 
-                  size="md" 
-                />
-                <span>{task.assignee.username}</span>
-              </div>
-            ) : (
-              <span className="text-slate-400">Chưa gán</span>
-            )}
-          </td>
-          <td className="px-3 py-4 text-sm text-slate-500">
-            {task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}
-          </td>
-          <td className="px-3 py-4 text-sm text-slate-500">
-            {task.effort ? `${task.effort}h` : '-'}
-          </td>
-          <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
-            <button 
-              className="text-blue-600 hover:text-blue-900"
-              title="Thao tác khác"
-              aria-label="Thao tác khác"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
-              </svg>
-            </button>
-          </td>
-        </tr>
-        {hasChildren && isExpanded && task.child_tasks?.map((childTask) => (
-          renderTaskRow(childTask, level + 1)
-        ))}
-      </React.Fragment>
-    );
+  const handleTaskUpdate = (taskId: string, updates: Partial<Task>) => {
+    // Cập nhật task trong state nếu cần
+    // Đây chỉ là cập nhật tạm thời, thường sẽ cần refetch data từ server
+    if (selectedTask) {
+      setSelectedTask({
+        ...selectedTask,
+        ...updates
+      });
+    }
   };
 
   const handleBulkStatusChange = useCallback((status: TaskStatus) => {
@@ -510,7 +446,87 @@ export function TaskListView({
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
             {displayedTasks.length > 0 ? (
-              displayedTasks.map(task => renderTaskRow(task))
+              displayedTasks.map(task => (
+                <React.Fragment key={task.task_id}>
+                  <tr className={`hover:bg-slate-50`}>
+                    <td className="w-8 py-4 pl-4 pr-3">
+                      <div className="flex items-center">
+                        <input
+                          type="checkbox"
+                          className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                          checked={selectedTasks.has(task.task_id)}
+                          onChange={(e) => toggleTaskSelection(task.task_id, e)}
+                          title="Select task"
+                        />
+                      </div>
+                    </td>
+                    <td className="py-4 pl-4 pr-3 text-sm sm:pl-6">
+                      <div className="flex items-center">
+                        <div>
+                          <div 
+                            className="font-medium text-slate-900 cursor-pointer hover:text-blue-600"
+                            onClick={() => handleTaskClick(task.task_id)}
+                          >
+                            {task.title}
+                          </div>
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-3 py-4 text-sm">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
+                        {task.status.replace(/_/g, ' ')}
+                      </span>
+                    </td>
+                    <td className="px-3 py-4 text-sm">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
+                        {task.priority}
+                      </span>
+                    </td>
+                    <td className="px-3 py-4 text-sm">
+                      {task.assignee ? (
+                        <div className="flex items-center gap-2">
+                          <UserAvatar 
+                            username={task.assignee.username} 
+                            avatarUrl={task.assignee.avatarUrl} 
+                            size="md" 
+                          />
+                          <span>{task.assignee.username}</span>
+                        </div>
+                      ) : (
+                        <span className="text-slate-400">Chưa gán</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-4 text-sm text-slate-500">
+                      {task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}
+                    </td>
+                    <td className="px-3 py-4 text-sm text-slate-500">
+                      {task.effort ? `${task.effort}h` : '-'}
+                    </td>
+                    <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                      <button 
+                        className="text-blue-600 hover:text-blue-900"
+                        title="Thao tác khác"
+                        aria-label="Thao tác khác"
+                      >
+                        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+                        </svg>
+                      </button>
+                    </td>
+                  </tr>
+                  {task.child_tasks && task.child_tasks.length > 0 && (
+                    <tr className={`hover:bg-slate-50`}>
+                      <td colSpan={8} className="px-6 py-4 text-sm text-slate-500">
+                        {task.child_tasks.map((childTask) => (
+                          <div key={childTask.task_id} className="ml-4">
+                            {childTask.title}
+                          </div>
+                        ))}
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
+              ))
             ) : (
               <tr>
                 <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
@@ -558,6 +574,17 @@ export function TaskListView({
         assignees={assignees}
         projects={projects}
       />
+
+      {/* TaskDetail khi được chọn */}
+      {selectedTask && (
+        <TaskDetail
+          task={selectedTask}
+          isOpen={isTaskDetailOpen}
+          onClose={() => setIsTaskDetailOpen(false)}
+          onTaskUpdate={handleTaskUpdate}
+          currentUser={user || undefined}
+        />
+      )}
     </div>
   );
 }

@@ -14,6 +14,7 @@ pub struct CommentResponse {
     pub is_deleted: bool,
     pub created_at: chrono::DateTime<Utc>,
     pub updated_at: chrono::DateTime<Utc>,
+    pub username: String,
 }
 
 #[Object]
@@ -53,6 +54,10 @@ impl CommentResponse {
     async fn updated_at(&self) -> chrono::DateTime<Utc> {
         self.updated_at
     }
+
+    async fn username(&self) -> &str {
+        &self.username
+    }
 }
 
 impl TryFrom<sqlx::postgres::PgRow> for CommentResponse {
@@ -62,13 +67,14 @@ impl TryFrom<sqlx::postgres::PgRow> for CommentResponse {
         Ok(Self {
             id: row.get::<Uuid, _>("comment_id").to_string(),
             content: row.get("content"),
-            author_id: row.get::<Uuid, _>("author_id").to_string(),
+            author_id: row.get::<Uuid, _>("user_id").to_string(),
             task_id: row.get::<Uuid, _>("task_id").to_string(),
             parent_id: row.get::<Option<Uuid>, _>("parent_id").map(|id| id.to_string()),
             metadata: row.get("metadata"),
             is_deleted: row.get("is_deleted"),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
+            username: row.get::<Option<String>, _>("name").unwrap_or_else(|| "Người dùng".to_string()),
         })
     }
 }
@@ -84,10 +90,11 @@ impl CommentQuery {
             .map_err(|_| async_graphql::Error::new("Invalid comment ID"))?;
 
         let record = sqlx::query(
-            "SELECT comment_id, content, author_id, task_id, parent_id, metadata, 
-                    is_deleted, created_at, updated_at 
-             FROM comments 
-             WHERE comment_id = $1 AND NOT is_deleted"
+            "SELECT c.comment_id, c.content, c.user_id, c.task_id, c.parent_id, c.metadata, 
+                    c.is_deleted, c.created_at, c.updated_at, u.username as name
+             FROM comments c
+             JOIN users u ON c.user_id = u.user_id
+             WHERE c.comment_id = $1 AND NOT c.is_deleted"
         )
         .bind(comment_id)
         .map(|row: sqlx::postgres::PgRow| CommentResponse::try_from(row))
@@ -110,11 +117,12 @@ impl CommentQuery {
             .map_err(|_| async_graphql::Error::new("Invalid task ID"))?;
 
         let records = sqlx::query(
-            "SELECT comment_id, content, author_id, task_id, parent_id, metadata,
-                    is_deleted, created_at, updated_at
-             FROM comments 
-             WHERE task_id = $1 AND NOT is_deleted
-             ORDER BY created_at ASC"
+            "SELECT c.comment_id, c.content, c.user_id, c.task_id, c.parent_id, c.metadata,
+                    c.is_deleted, c.created_at, c.updated_at, u.username as name
+             FROM comments c
+             JOIN users u ON c.user_id = u.user_id
+             WHERE c.task_id = $1 AND NOT c.is_deleted
+             ORDER BY c.created_at ASC"
         )
         .bind(task_uuid)
         .map(|row: sqlx::postgres::PgRow| CommentResponse::try_from(row))
@@ -148,9 +156,15 @@ impl CommentMutation {
         input: CreateCommentInput,
     ) -> Result<CommentResponse> {
         let db = ctx.data::<PgPool>().unwrap();
-        let user_id = ctx.data::<String>().unwrap();
-        let user_id = Uuid::parse_str(user_id)
-            .map_err(|_| async_graphql::Error::new("Invalid user ID"))?;
+        
+        let auth = ctx.data::<crate::graphql::Context>()
+            .map_err(|e| async_graphql::Error::new(format!("Không thể lấy context: {:?}", e)))?
+            .auth
+            .as_ref()
+            .ok_or_else(|| async_graphql::Error::new("Bạn cần đăng nhập để thêm bình luận"))?;
+        
+        let user_id = auth.user_id()
+            .map_err(|_| async_graphql::Error::new("ID người dùng không hợp lệ"))?;
 
         let task_id = Uuid::parse_str(&input.task_id)
             .map_err(|_| async_graphql::Error::new("Invalid task ID"))?;
@@ -166,13 +180,18 @@ impl CommentMutation {
         let now = Utc::now();
 
         let record = sqlx::query(
-            "INSERT INTO comments (
-                comment_id, content, author_id, task_id, parent_id,
-                metadata, is_deleted, created_at, updated_at
-            ) 
-            VALUES ($1, $2, $3, $4, $5, $6, false, $7, $7)
-            RETURNING comment_id, content, author_id, task_id, parent_id, 
-                      metadata, is_deleted, created_at, updated_at"
+            "WITH inserted_comment AS (
+                INSERT INTO comments (
+                    comment_id, content, user_id, task_id, parent_id,
+                    metadata, is_deleted, created_at, updated_at
+                ) 
+                VALUES ($1, $2, $3, $4, $5, $6, false, $7, $7)
+                RETURNING *
+            )
+            SELECT c.comment_id, c.content, c.user_id, c.task_id, c.parent_id, 
+                   c.metadata, c.is_deleted, c.created_at, c.updated_at, u.username as name
+            FROM inserted_comment c
+            JOIN users u ON c.user_id = u.user_id"
         )
         .bind(comment_id)
         .bind(&input.content)

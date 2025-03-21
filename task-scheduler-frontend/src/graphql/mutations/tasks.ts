@@ -35,3 +35,16 @@ export const UPDATE_TASK_STATUS = gql`
     }
   }
 `;
+
+export const CREATE_TASK_COMMENT = gql`
+  mutation CreateTaskComment($input: CreateCommentInput!) {
+    createComment(input: $input) {
+      id
+      content
+      authorId
+      username
+      createdAt
+      updatedAt
+    }
+  }
+`;
