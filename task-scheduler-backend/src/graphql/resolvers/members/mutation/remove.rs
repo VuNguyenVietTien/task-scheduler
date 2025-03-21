@@ -13,11 +13,11 @@ pub async fn remove_member(
     let pool = &context.db;
     let (project_id, user_id) = (Uuid::parse_str(&project_id)?, Uuid::parse_str(&user_id)?);
 
-    // Check if the user is trying to remove the owner
-    let is_owner = sqlx::query(
+    // Check if the user is trying to remove an admin
+    let is_admin = sqlx::query(
         r#"
         SELECT 1 FROM project_members 
-        WHERE project_id = $1 AND user_id = $2 AND role = 'owner'
+        WHERE project_id = $1 AND user_id = $2 AND role = 'admin'
         "#
     )
     .bind(project_id)
@@ -26,8 +26,8 @@ pub async fn remove_member(
     .await
     .map_err(|e| AuthError::Database(e))?;
 
-    if is_owner.is_some() {
-        return Err("Cannot remove the project owner".into());
+    if is_admin.is_some() {
+        return Err("Cannot remove a project admin".into());
     }
 
     let result = sqlx::query(
