@@ -1,4 +1,5 @@
 import { useQuery } from '@apollo/client';
+import { useState, useEffect } from 'react';
 import { 
   Task, 
   TaskStatus, 
@@ -9,9 +10,11 @@ import {
   TaskTag, 
   TaskAssignee,
   TaskStatuses,
-  Priorities 
+  Priorities,
+  TaskFilter,
+  PaginationData
 } from '@/types/task';
-import { GET_PROJECT_TASKS } from '@/graphql/queries/tasks';
+import { GET_PROJECT_TASKS, GET_PROJECT_TASKS_PAGINATED } from '@/graphql/queries/tasks';
 
 interface GraphQLTaskAssignee {
   userId: string;
@@ -133,16 +136,118 @@ const transformGraphQLTask = (graphqlTask: GraphQLTask): Task => {
 };
 
 export function useProjectTasks(projectId: string) {
-  const { data, loading, error, refetch } = useQuery(GET_PROJECT_TASKS, {
-    variables: { projectId },
-    skip: !projectId,
-    fetchPolicy: 'cache-and-network',
-    nextFetchPolicy: 'cache-first'
-  });
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [filters, setFilters] = useState<TaskFilter>({});
+  
+  // Kiểm tra nếu API pagination đã được triển khai ở backend
+  const isPaginationApiReady = false; // TODO: Set to true when backend is ready
+  
+  const { data, loading, error, refetch } = useQuery(
+    isPaginationApiReady ? GET_PROJECT_TASKS_PAGINATED : GET_PROJECT_TASKS, 
+    {
+      variables: isPaginationApiReady 
+        ? { projectId, page, pageSize, filters }
+        : { projectId },
+      skip: !projectId,
+      fetchPolicy: 'cache-and-network',
+      nextFetchPolicy: 'cache-first'
+    }
+  );
+  
+  const handleFilterChange = (newFilters: TaskFilter) => {
+    setFilters(newFilters);
+    setPage(1); // Reset về trang đầu tiên khi thay đổi filter
+  };
+  
+  const handlePageChange = (newPage: number) => {
+    setPage(newPage);
+  };
+  
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize);
+    setPage(1); // Reset về trang đầu tiên khi thay đổi page size
+  };
+  
+  // Xử lý dữ liệu từ API
+  let tasks: Task[] = [];
+  let paginationData: PaginationData = {
+    totalItems: 0,
+    totalPages: 0,
+    currentPage: page,
+    pageSize: pageSize
+  };
+  
+  if (isPaginationApiReady && data?.tasksPaginated) {
+    tasks = data.tasksPaginated.tasks.map((task: GraphQLTask) => transformGraphQLTask(task));
+    paginationData = data.tasksPaginated.pagination;
+  } else if (data?.tasks) {
+    // Fallback to client-side pagination and filtering if API is not ready
+    const allTasks = data.tasks.map((task: GraphQLTask) => transformGraphQLTask(task));
+    
+    // Apply filters client-side
+    const filteredTasks = allTasks.filter((task: Task) => {
+      if (filters.searchQuery) {
+        const query = filters.searchQuery.toLowerCase();
+        if (!task.title.toLowerCase().includes(query) &&
+            !task.description?.toLowerCase().includes(query)) {
+          return false;
+        }
+      }
 
-  const tasks = data?.tasks
-    ? data.tasks.map((task: GraphQLTask) => transformGraphQLTask(task))
-    : [];
+      if (filters.status && task.status !== filters.status) {
+        return false;
+      }
 
-  return { data: tasks, loading, error, refetch };
+      if (filters.priority && task.priority !== filters.priority) {
+        return false;
+      }
+
+      if (filters.assigneeId && task.assignee?.userId !== filters.assigneeId) {
+        return false;
+      }
+
+      if (filters.startDate && task.start_date && 
+          new Date(task.start_date) < new Date(filters.startDate)) {
+        return false;
+      }
+
+      if (filters.endDate && task.due_date && 
+          new Date(task.due_date) > new Date(filters.endDate)) {
+        return false;
+      }
+
+      if (filters.projectId && task.project_id !== filters.projectId) {
+        return false;
+      }
+
+      return true;
+    });
+    
+    // Apply client-side pagination
+    const totalItems = filteredTasks.length;
+    const totalPages = Math.ceil(totalItems / pageSize);
+    const startIndex = (page - 1) * pageSize;
+    const endIndex = startIndex + pageSize;
+    
+    tasks = filteredTasks.slice(startIndex, endIndex);
+    paginationData = {
+      totalItems,
+      totalPages,
+      currentPage: page,
+      pageSize
+    };
+  }
+
+  return {
+    data: tasks,
+    pagination: paginationData,
+    loading,
+    error,
+    refetch,
+    setPage: handlePageChange,
+    setPageSize: handlePageSizeChange,
+    filters,
+    setFilters: handleFilterChange
+  };
 }

@@ -1,4 +1,5 @@
-import { TaskFilter, TaskStatus, Priority, User, TaskStatuses, Priorities } from '../../types/task';
+import { TaskFilter, TaskStatus, Priority, TaskStatuses, Priorities } from '../../types/task';
+import { User } from '../../contexts/AuthContext';
 import { ProjectData } from '../../types/project';
 import { useState } from 'react';
 import { Dialog } from '../ui/Dialog';
@@ -78,6 +79,7 @@ export function TaskFilterBar({
   return (
     <>
       <button
+        type="button"
         onClick={() => setIsOpen(true)}
         className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out"
       >
@@ -118,11 +120,13 @@ export function TaskFilterBar({
               />
               {searchQuery && (
                 <button
+                  type="button"
                   onClick={() => {
                     setSearchQuery('');
                     handleFilterChange({ searchQuery: '' });
                   }}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-500"
+                  aria-label="Clear search"
                 >
                   <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -291,6 +295,7 @@ export function TaskFilterBar({
           {/* Additional Options */}
           <div className="grid grid-cols-3 gap-4 pt-2">
             <button
+              type="button"
               onClick={() => handleFilterChange({ searchQuery })}
               className="w-full inline-flex justify-center items-center px-6 py-3 border border-transparent text-sm font-medium rounded-lg shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out whitespace-nowrap"
             >
@@ -301,6 +306,7 @@ export function TaskFilterBar({
             </button>
 
             <button
+              type="button"
               className="w-full inline-flex justify-center items-center px-6 py-3 border border-slate-300 text-sm font-medium rounded-lg shadow-sm text-slate-700 bg-white hover:bg-slate-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out whitespace-nowrap"
               onClick={() => {
                 setSearchQuery('');
@@ -317,6 +323,7 @@ export function TaskFilterBar({
             </button>
 
             <button
+              type="button"
               onClick={onToggleCompleted}
               className={`w-full inline-flex justify-center items-center px-6 py-3 border text-sm font-medium rounded-lg shadow-sm transition-all duration-200 ease-in-out transform active:scale-95 whitespace-nowrap
                 ${showCompletedTasks 

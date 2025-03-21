@@ -9,6 +9,7 @@ import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { useUsers } from '@/hooks/useUsers';
 import { useProject } from '@/hooks/useProject';
 import type { ProjectData } from '@/types/project';
+import type { TaskFilter } from '@/types/task';
 import { useQuery } from '@apollo/client';
 import { GET_PROJECT_BY_ID } from '@/graphql/queries/project';
 import { GET_MY_PROJECT_ROLE } from '@/graphql/queries/member';
@@ -17,7 +18,17 @@ type ViewType = 'list' | 'kanban' | 'gantt' | 'members';
 
 export function ProjectDetailView({ project }: { project: ProjectData }) {
   const [activeView, setActiveView] = useState<ViewType>('list');
-  const { data: tasks, loading: tasksLoading, error, refetch } = useProjectTasks(project.id);
+  const { 
+    data: tasks, 
+    loading: tasksLoading, 
+    error, 
+    refetch,
+    pagination,
+    filters,
+    setPage,
+    setPageSize,
+    setFilters
+  } = useProjectTasks(project.id);
   const { data: users, loading: usersLoading } = useUsers();
   const { data: projectData, refetch: refetchProject } = useProject(project.id);
 
@@ -206,7 +217,21 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
           <EmptyState />
         ) : (
           <>
-            {activeView === 'list' && <TaskListView tasks={tasks} />}
+            {activeView === 'list' && (
+              <TaskListView 
+                tasks={tasks} 
+                pagination={{
+                  currentPage: pagination.currentPage,
+                  totalPages: pagination.totalPages,
+                  totalItems: pagination.totalItems,
+                  pageSize: pagination.pageSize,
+                  setPage: setPage,
+                  setPageSize: setPageSize
+                }}
+                filters={filters}
+                setFilters={setFilters}
+              />
+            )}
             {activeView === 'kanban' && (
               <div className="h-full overflow-x-auto">
                 <KanbanBoard 

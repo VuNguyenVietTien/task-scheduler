@@ -93,10 +93,30 @@ export interface TaskFilter {
   status?: TaskStatus;
   priority?: Priority;
   assigneeId?: string;
+  projectId?: string;
   startDate?: string;
   endDate?: string;
+}
+
+export interface TaskFiltersInput {
+  searchQuery?: string;
+  status?: TaskStatus;
+  priority?: Priority;
+  assigneeId?: string;
   projectId?: string;
-  category?: TaskCategory;
-  type?: TaskType;
-  progressType?: ProgressType;
+  startDate?: string;
+  endDate?: string;
+  tags?: string[];
+}
+
+export interface PaginationData {
+  totalItems: number;
+  totalPages: number;
+  currentPage: number;
+  pageSize: number;
+}
+
+export interface TasksPaginatedResponse {
+  tasks: Task[];
+  pagination: PaginationData;
 }

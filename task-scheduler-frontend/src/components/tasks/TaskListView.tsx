@@ -7,10 +7,22 @@ import { TaskFilterBar } from './TaskFilterBar';
 import { TaskBulkActions } from './TaskBulkActions';
 import { useUpdateTaskPriorityOrder } from '@/hooks/useTasks';
 import { UserAvatar } from '@/components/common/UserAvatar';
+import { TaskFilterModal } from './TaskFilterModal';
+import { Pagination } from '@/components/common/Pagination';
 
 interface TaskListViewProps {
   tasks: Task[];
   onTaskClick?: (taskId: string) => void;
+  pagination?: {
+    currentPage: number;
+    totalPages: number;
+    totalItems: number;
+    pageSize: number;
+    setPage: (page: number) => void;
+    setPageSize: (size: number) => void;
+  };
+  filters?: TaskFilter;
+  setFilters?: (filters: TaskFilter) => void;
 }
 
 interface SortConfig {
@@ -18,12 +30,19 @@ interface SortConfig {
   direction: 'asc' | 'desc';
 }
 
-export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
+export function TaskListView({ 
+  tasks, 
+  onTaskClick,
+  pagination,
+  filters = {},
+  setFilters
+}: TaskListViewProps) {
   const [filter, setFilter] = useState<TaskFilter>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'created_at', direction: 'desc' });
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
+  const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
 
   // Memoize assignees and projects
   const { assignees, projects } = useMemo(() => {
@@ -54,40 +73,71 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
     };
   }, [tasks]);
 
-  // Filter tasks
+  // Đếm các task theo trạng thái
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    
+    Object.values(TaskStatuses).forEach(status => {
+      counts[status] = 0;
+    });
+    
+    tasks.forEach(task => {
+      if (counts[task.status] !== undefined) {
+        counts[task.status]++;
+      }
+    });
+    
+    return counts;
+  }, [tasks]);
+
+  // Filter tasks client-side when server pagination is not available
   const { completedTasks, incompleteTasks } = useMemo(() => {
+    // Nếu có pagination từ server, chỉ phân loại theo hoàn thành/chưa hoàn thành
+    // không lọc thêm vì server đã xử lý
+    if (pagination) {
+      return {
+        completedTasks: tasks.filter(task => task.status === TaskStatuses.DONE),
+        incompleteTasks: tasks.filter(task => task.status !== TaskStatuses.DONE),
+      };
+    }
+
+    // Ngược lại, lọc client-side khi không có pagination từ server
     const filteredTasks = tasks.filter(task => {
+      // Skip child tasks as they will be displayed under parent
       if (task.parent_task_id) return false;
 
-      if (filter.searchQuery) {
-        const query = filter.searchQuery.toLowerCase();
+      // Apply filters only when no pagination is provided
+      if (filters.searchQuery) {
+        const query = filters.searchQuery.toLowerCase();
         if (!task.title.toLowerCase().includes(query) &&
             !task.description?.toLowerCase().includes(query)) {
           return false;
         }
       }
 
-      if (filter.status && task.status !== filter.status) {
+      if (filters.status && task.status !== filters.status) {
         return false;
       }
 
-      if (filter.priority && task.priority !== filter.priority) {
+      if (filters.priority && task.priority !== filters.priority) {
         return false;
       }
 
-      if (filter.assigneeId && task.assignee?.userId !== filter.assigneeId) {
+      if (filters.assigneeId && task.assignee?.userId !== filters.assigneeId) {
         return false;
       }
 
-      if (filter.startDate && new Date(task.start_date!) < new Date(filter.startDate)) {
+      if (filters.startDate && task.start_date && 
+          new Date(task.start_date) < new Date(filters.startDate)) {
         return false;
       }
 
-      if (filter.endDate && new Date(task.due_date!) > new Date(filter.endDate)) {
+      if (filters.endDate && task.due_date && 
+          new Date(task.due_date) > new Date(filters.endDate)) {
         return false;
       }
 
-      if (filter.projectId && task.project_id !== filter.projectId) {
+      if (filters.projectId && task.project_id !== filters.projectId) {
         return false;
       }
 
@@ -98,7 +148,7 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
       completedTasks: filteredTasks.filter(task => task.status === TaskStatuses.DONE),
       incompleteTasks: filteredTasks.filter(task => task.status !== TaskStatuses.DONE),
     };
-  }, [tasks, filter]);
+  }, [tasks, filters, pagination]);
 
   // Sort tasks
   const sortedIncompleteTasks = useMemo(() => {
@@ -165,7 +215,8 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                     toggleTaskExpansion(task.task_id);
                   }}
                   className="mr-2 p-1 hover:bg-slate-200 rounded"
-                  title={isExpanded ? "Collapse" : "Expand"}
+                  title={isExpanded ? "Thu gọn" : "Mở rộng"}
+                  aria-label={isExpanded ? "Thu gọn" : "Mở rộng"}
                 >
                   <svg
                     className={`w-4 h-4 transition-transform ${isExpanded ? 'transform rotate-90' : ''}`}
@@ -203,7 +254,7 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
                 <span>{task.assignee.username}</span>
               </div>
             ) : (
-              <span className="text-slate-400">Unassigned</span>
+              <span className="text-slate-400">Chưa gán</span>
             )}
           </td>
           <td className="px-3 py-4 text-sm text-slate-500">
@@ -215,7 +266,8 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
           <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
             <button 
               className="text-blue-600 hover:text-blue-900"
-              title="More actions"
+              title="Thao tác khác"
+              aria-label="Thao tác khác"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
@@ -272,14 +324,13 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
     console.log('Delete tasks:', Array.from(selectedTasks));
   }, [selectedTasks]);
 
-  const toggleTaskSelection = (taskId: string, e: React.MouseEvent | React.ChangeEvent<HTMLInputElement>) => {
-    e.stopPropagation();
+  const toggleTaskSelection = (taskId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     setSelectedTasks(prev => {
       const newSet = new Set(prev);
-      if (newSet.has(taskId)) {
-        newSet.delete(taskId);
-      } else {
+      if (e.target.checked) {
         newSet.add(taskId);
+      } else {
+        newSet.delete(taskId);
       }
       return newSet;
     });
@@ -295,33 +346,37 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
 
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
-      case Priorities.URGENT:
-        return 'text-red-600 bg-red-50';
-      case Priorities.HIGH:
-        return 'text-orange-600 bg-orange-50';
-      case Priorities.MEDIUM:
-        return 'text-amber-600 bg-amber-50';
       case Priorities.LOW:
-        return 'text-green-600 bg-green-50';
+        return "bg-slate-100 text-slate-800";
+      case Priorities.MEDIUM:
+        return "bg-blue-100 text-blue-800";
+      case Priorities.HIGH:
+        return "bg-orange-100 text-orange-800";
+      case Priorities.URGENT:
+        return "bg-red-100 text-red-800";
+      case Priorities.CRITICAL:
+        return "bg-red-100 text-red-800 ring-2 ring-red-500";
       default:
-        return 'text-slate-600 bg-slate-50';
+        return "bg-slate-100 text-slate-800";
     }
   };
 
   const getStatusColor = (status: TaskStatus) => {
     switch (status) {
-      case TaskStatuses.DONE:
-        return 'text-green-600 bg-green-50';
-      case TaskStatuses.DOING:
-        return 'text-blue-600 bg-blue-50';
-      case TaskStatuses.REVIEW:
-        return 'text-purple-600 bg-purple-50';
       case TaskStatuses.TODO:
-        return 'text-amber-600 bg-amber-50';
+        return "bg-slate-100 text-slate-800";
+      case TaskStatuses.DOING:
+        return "bg-blue-100 text-blue-800";
+      case TaskStatuses.DONE:
+        return "bg-green-100 text-green-800";
       case TaskStatuses.PENDING:
-        return 'text-slate-600 bg-slate-50';
+        return "bg-yellow-100 text-yellow-800";
+      case TaskStatuses.REVIEW:
+        return "bg-purple-100 text-purple-800";
+      case TaskStatuses.BLOCKED:
+        return "bg-red-100 text-red-800";
       default:
-        return 'text-red-600 bg-red-50';
+        return "bg-slate-100 text-slate-800";
     }
   };
 
@@ -344,89 +399,165 @@ export function TaskListView({ tasks, onTaskClick }: TaskListViewProps) {
 
   const updateTaskPriorityOrder = useUpdateTaskPriorityOrder();
 
+  const handleFilterChange = (newFilters: TaskFilter) => {
+    if (setFilters) {
+      setFilters(newFilters);
+    }
+  };
+
+  const hasFilters = Object.keys(filters).length > 0;
+  
   return (
-    <div>
-      <div className="flex justify-between items-center mb-4">
-        <TaskFilterBar 
-          onFilterChange={setFilter} 
-          assignees={assignees}
-          projects={projects} 
-          showCompletedTasks={showCompletedTasks}
-          onToggleCompleted={() => setShowCompletedTasks(prev => !prev)}
-        />
-      </div>
-      
-      <TaskBulkActions
-        selectedCount={selectedTasks.size}
-        onBulkStatusChange={handleBulkStatusChange}
-        onBulkPriorityChange={handleBulkPriorityChange}
-        onExport={handleExport}
-        onDelete={handleBulkDelete}
-      />
-      
-      <div className="bg-white rounded-lg border border-slate-200">
-        <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200">
-            <thead>
-              <tr className="bg-slate-50">
-                <th className="w-8 py-3.5 pl-4 pr-3">
-                  <input
-                    type="checkbox"
-                    className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
-                    checked={selectedTasks.size === displayedTasks.length && displayedTasks.length > 0}
-                    onChange={toggleAllTasks}
-                    title="Select all tasks"
-                  />
-                </th>
-                <th 
-                  scope="col" 
-                  className="py-3.5 pl-4 pr-3 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
-                  onClick={() => handleSort('title')}
-                >
-                  Title <SortIcon columnKey="title" />
-                </th>
-                <th 
-                  scope="col" 
-                  className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
-                  onClick={() => handleSort('status')}
-                >
-                  Status <SortIcon columnKey="status" />
-                </th>
-                <th 
-                  scope="col" 
-                  className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
-                  onClick={() => handleSort('priority')}
-                >
-                  Priority <SortIcon columnKey="priority" />
-                </th>
-                <th scope="col" className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900">
-                  Assignee
-                </th>
-                <th 
-                  scope="col" 
-                  className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
-                  onClick={() => handleSort('due_date')}
-                >
-                  Due Date <SortIcon columnKey="due_date" />
-                </th>
-                <th 
-                  scope="col" 
-                  className="px-3 py-3.5 text-left text-sm font-semibold text-slate-900 cursor-pointer hover:bg-slate-100"
-                  onClick={() => handleSort('effort')}
-                >
-                  Effort <SortIcon columnKey="effort" />
-                </th>
-                <th scope="col" className="relative py-3.5 pl-3 pr-4">
-                  <span className="sr-only">Actions</span>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-200">
-              {displayedTasks.map((task) => renderTaskRow(task))}
-            </tbody>
-          </table>
+    <div className="flex flex-col h-full">
+      {/* Filter and Actions Bar */}
+      <div className="mb-4 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={() => setIsFilterModalOpen(true)}
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition duration-150 ease-in-out"
+            aria-label="Mở modal lọc"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+            </svg>
+            Lọc công việc
+            {hasFilters && (
+              <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
+                {Object.keys(filters).length}
+              </span>
+            )}
+          </button>
+          
+          <button
+            onClick={() => setShowCompletedTasks(!showCompletedTasks)}
+            className={`inline-flex items-center px-3 py-2 border text-sm font-medium rounded-md transition-colors 
+              ${showCompletedTasks 
+                ? 'bg-slate-200 text-slate-800 border-slate-300' 
+                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
+            aria-label={showCompletedTasks ? "Ẩn công việc đã hoàn thành" : "Hiện công việc đã hoàn thành"}
+          >
+            <svg 
+              xmlns="http://www.w3.org/2000/svg" 
+              className={`h-5 w-5 mr-2 ${showCompletedTasks ? 'text-green-600' : 'text-slate-400'}`} 
+              fill="none" 
+              viewBox="0 0 24 24" 
+              stroke="currentColor"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            {showCompletedTasks ? 'Ẩn đã hoàn thành' : 'Hiện đã hoàn thành'}
+          </button>
         </div>
+        
+        {/* Status Summary */}
+        <div className="flex flex-wrap gap-2">
+          {Object.entries(statusCounts)
+            .filter(([status]) => statusCounts[status] > 0)
+            .map(([status, count]) => (
+              <span 
+                key={status} 
+                className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${getStatusColor(status as TaskStatus)}`}
+              >
+                {status.replace(/_/g, ' ')}: {count}
+              </span>
+            ))}
+        </div>
+
+        {/* Bulk Actions */}
+        {selectedTasks.size > 0 && (
+          <TaskBulkActions 
+            selectedCount={selectedTasks.size} 
+            onClearSelection={() => setSelectedTasks(new Set())}
+          />
+        )}
       </div>
+
+      {/* Task List */}
+      <div className="overflow-x-auto grow border border-slate-200 rounded-lg bg-white min-h-0">
+        <table className="min-w-full divide-y divide-slate-200">
+          <thead className="bg-slate-50">
+            <tr>
+              <th scope="col" className="w-8 px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                <input
+                  type="checkbox"
+                  className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                  title="Chọn tất cả"
+                  aria-label="Chọn tất cả công việc"
+                />
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Tiêu đề
+              </th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Trạng thái
+              </th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Ưu tiên
+              </th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Người được giao
+              </th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Hạn
+              </th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Công sức
+              </th>
+              <th scope="col" className="relative px-3 py-3">
+                <span className="sr-only">Thao tác</span>
+              </th>
+            </tr>
+          </thead>
+          <tbody className="bg-white divide-y divide-slate-200">
+            {displayedTasks.length > 0 ? (
+              displayedTasks.map(task => renderTaskRow(task))
+            ) : (
+              <tr>
+                <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
+                  <div className="py-12">
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-slate-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                    </svg>
+                    {hasFilters ? (
+                      <>
+                        <p className="text-lg font-medium">Không tìm thấy công việc nào</p>
+                        <p className="mt-1">Thử thay đổi bộ lọc hoặc tạo công việc mới</p>
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-lg font-medium">Chưa có công việc nào</p>
+                        <p className="mt-1">Thêm công việc mới ngay để bắt đầu</p>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Pagination */}
+      {pagination && pagination.totalPages > 0 && (
+        <Pagination
+          currentPage={pagination.currentPage}
+          totalPages={pagination.totalPages}
+          onPageChange={pagination.setPage}
+          pageSize={pagination.pageSize}
+          onPageSizeChange={pagination.setPageSize}
+          totalItems={pagination.totalItems}
+        />
+      )}
+
+      {/* Filter Modal */}
+      <TaskFilterModal
+        isOpen={isFilterModalOpen}
+        onClose={() => setIsFilterModalOpen(false)}
+        filter={filters}
+        onApply={handleFilterChange}
+        assignees={assignees}
+        projects={projects}
+      />
     </div>
   );
 }
