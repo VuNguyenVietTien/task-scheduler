@@ -186,6 +186,11 @@ type Mutation {
   addProjectMember(input: AddProjectMemberInput!): ProjectMember!
 
   """
+  Add member to project by email
+  """
+  addProjectMemberByEmail(projectId: ID!, email: String!, role: ProjectRole!): ProjectMember!
+
+  """
   Update project member role
   """
   updateProjectMember(projectId: ID!, userId: ID!, role: ProjectRole!): ProjectMember!
@@ -302,11 +307,9 @@ type Project {
 }
 
 type ProjectMember {
-  projectId: ID!
-  userId: ID!
-  user: User!
   role: ProjectRole!
   joinedAt: DateTime!
+  user: User!
 }
 
 type Task {

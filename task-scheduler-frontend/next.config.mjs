@@ -17,6 +17,15 @@ const config = {
     // your project has type errors.
     ignoreBuildErrors: true,
   },
+  // Cấu hình webpack để bỏ qua các cảnh báo về SWC
+  webpack: (config, { isServer }) => {
+    // Bỏ qua các cảnh báo từ quá trình xử lý webpack
+    config.infrastructureLogging = {
+      level: 'error',
+    };
+    
+    return config;
+  },
 };
 
 export default config;

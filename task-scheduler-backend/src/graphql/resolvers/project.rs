@@ -87,9 +87,12 @@ impl ProjectQuery {
             r#"
             SELECT
                 pm.role,
+                pm.joined_at,
                 u.user_id,
                 u.username,
-                u.avatar_url
+                u.avatar_url,
+                u.email,
+                u.full_name
             FROM project_members pm
             INNER JOIN users u ON pm.user_id = u.user_id
             WHERE pm.project_id = $1
@@ -104,10 +107,15 @@ impl ProjectQuery {
         let project_members: Vec<ProjectMember> = members
             .into_iter()
             .map(|row: PgRow| ProjectMember {
-                user_id: row.get("user_id"),
                 role: row.get("role"),
-                username: row.get("username"),
-                avatar_url: row.get::<Option<String>, _>("avatar_url").unwrap_or_default(),
+                joined_at: row.get("joined_at"),
+                user: User {
+                    user_id: row.get("user_id"),
+                    email: row.get("email"),
+                    username: row.get("username"),
+                    full_name: row.get("full_name"),
+                    avatar_url: row.get::<Option<String>, _>("avatar_url"),
+                },
             })
             .collect();
 
@@ -205,24 +213,44 @@ impl ProjectQuery {
         .map_err(|e| AuthError::Database(e))?;
 
         let result: Vec<Projects> = projects.into_iter().map(|row: PgRow| {
+            // Lấy giá trị date, xử lý null bằng cách sử dụng Option
+            let start_date: Option<NaiveDate> = row.get("start_date");
+            let end_date: Option<NaiveDate> = row.get("end_date");
+            
+            // Chuyển đổi NaiveDate sang DateTime<Utc> với xử lý null
+            let start_datetime = start_date.map_or_else(
+                || Utc::now(), // Giá trị mặc định nếu null
+                |date| DateTime::<Utc>::from_utc(
+                    date.and_hms_opt(0, 0, 0).unwrap_or_default(),
+                    Utc
+                )
+            );
+            let end_datetime = end_date.map_or_else(
+                || Utc::now() + chrono::Duration::days(30), // Giá trị mặc định nếu null
+                |date| DateTime::<Utc>::from_utc(
+                    date.and_hms_opt(0, 0, 0).unwrap_or_default(), 
+                    Utc
+                )
+            );
+            
             Projects {
                 project_id: row.get("project_id"),
                 name: row.get("name"),
-                start_date: row.get::<Option<_>, _>("start_date").unwrap_or_else(|| Utc::now()),
-                end_date: row.get::<Option<_>, _>("end_date").unwrap_or_else(|| Utc::now()),
+                start_date: start_datetime,
+                end_date: end_datetime,
                 status: row.get("status"),
                 member_count: row.get("member_count"),
-                progress: row.get::<f64, _>("progress"),
-                category: row.get::<Option<_>, _>("category").unwrap_or_else(|| "".to_string()),
+                progress: row.get("progress"),
+                category: row.get("category"),
                 priority: row.get("priority"),
                 visibility: row.get("visibility"),
                 icon_url: row.get("icon_url"),
                 owner: User {
                     user_id: row.get("owner_id"),
                     email: row.get("owner_email"),
-                    username: row.get("owner_name"),
-                    full_name: row.get("owner_full_name"),
-                    avatar_url: row.get::<Option<_>, _>("owner_avatar_url"),
+                    username: row.get::<Option<String>, _>("owner_name"),
+                    full_name: row.get::<Option<String>, _>("owner_full_name"),
+                    avatar_url: row.get::<Option<String>, _>("owner_avatar_url"),
                 },
             }
         }).collect();

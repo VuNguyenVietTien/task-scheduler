@@ -4,16 +4,19 @@ import { useState, useCallback, useEffect } from 'react';
 import { Timeline } from '@/components/timeline/Timeline';
 import { TaskListView } from '@/components/tasks/TaskListView';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
+import { MembersView } from '@/components/projects/MembersView';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { useUsers } from '@/hooks/useUsers';
+import { useProject } from '@/hooks/useProject';
 import type { ProjectData } from '@/types/project';
 
-type ViewType = 'list' | 'kanban' | 'gantt';
+type ViewType = 'list' | 'kanban' | 'gantt' | 'members';
 
 export function ProjectDetailView({ project }: { project: ProjectData }) {
   const [activeView, setActiveView] = useState<ViewType>('list');
   const { data: tasks, loading: tasksLoading, error, refetch } = useProjectTasks(project.id);
   const { data: users, loading: usersLoading } = useUsers();
+  const { data: projectData, refetch: refetchProject } = useProject(project.id);
 
   const handleTasksUpdated = useCallback(() => {
     refetch();
@@ -58,6 +61,15 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
       )
+    },
+    {
+      id: 'members',
+      label: 'Member',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+      )
     }
   ];
 
@@ -96,6 +108,19 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       </div>
     </div>
   );
+
+  // Kiểm tra nếu user hiện tại có quyền quản lý members
+  let currentUserRole = 'viewer';
+  if (projectData?.project?.members) {
+    // Lấy từ local storage userId
+    const currentUserId = localStorage.getItem('userId');
+    const currentMember = projectData.project.members.find(
+      (m: any) => m.user.userId === currentUserId
+    );
+    if (currentMember) {
+      currentUserRole = currentMember.role;
+    }
+  }
 
   return (
     <div className="p-6">
@@ -148,7 +173,26 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
 
       {/* View Content */}
       <div className="h-[calc(100vh-240px)]">
-        {tasksLoading || usersLoading ? (
+        {activeView === 'members' ? (
+          projectData?.project ? (
+            <MembersView 
+              projectId={project.id}
+              members={projectData.project.members?.map(member => ({
+                ...member,
+                role: mapRoleToMemberType(member.role),
+                user: {
+                  ...member.user,
+                  fullName: member.user.fullName || member.user.username || "",
+                  avatarUrl: member.user.avatarUrl || "",
+                }
+              })) || []}
+              currentUserRole={currentUserRole}
+              refetch={refetchProject}
+            />
+          ) : (
+            <LoadingState />
+          )
+        ) : tasksLoading || usersLoading ? (
           <LoadingState />
         ) : !tasks?.length ? (
           <EmptyState />
@@ -174,4 +218,21 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       </div>
     </div>
   );
+}
+
+// Helper function to map role string to Member type enum
+function mapRoleToMemberType(role: string): 'owner' | 'manager' | 'editor' | 'viewer' {
+  switch(role.toLowerCase()) {
+    case 'owner':
+      return 'owner';
+    case 'manager':
+    case 'admin':
+      return 'manager';
+    case 'editor':
+      return 'editor';
+    case 'viewer':
+    case 'guest':
+    default:
+      return 'viewer';
+  }
 }

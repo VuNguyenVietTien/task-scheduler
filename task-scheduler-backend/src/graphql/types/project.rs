@@ -50,7 +50,7 @@ pub struct Projects {
     pub status: ProjectStatus,
     pub member_count: i64,
     pub progress: f64, // Changed from i32 to f64
-    pub category: String,
+    pub category: Option<String>,
     pub priority: ProjectPriority,
     pub visibility: ProjectVisibility,
     pub icon_url: Option<String>,
@@ -82,10 +82,9 @@ pub struct ProjectResponse {
 #[derive(SimpleObject, Debug, Clone, Serialize, Deserialize)]
 #[graphql(rename_fields = "camelCase")]
 pub struct ProjectMember {
-    pub user_id: Uuid,
     pub role: MemberRole,
-    pub username: String,
-    pub avatar_url: String,
+    pub joined_at: Option<DateTime<Utc>>,
+    pub user: User,
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]

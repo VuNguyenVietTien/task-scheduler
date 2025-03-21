@@ -2,10 +2,15 @@ import { useQuery } from '@apollo/client';
 import { GET_PROJECT_BY_ID } from '@/graphql/queries/project';
 
 export interface ProjectMember {
-  userId: string;
-  username: string;
-  avatarUrl: string | null;
   role: string;
+  joinedAt: string;
+  user: {
+    userId: string;
+    email: string;
+    username: string;
+    fullName: string | null;
+    avatarUrl: string | null;
+  };
 }
 
 export interface ProjectOwner {

@@ -6,7 +6,7 @@ use serde_json::json;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
-use crate::graphql::types::{ProjectMember, MemberRole};
+use crate::graphql::types::{ProjectMember, MemberRole, User};
 
 #[derive(Default)]
 pub struct ProjectMemberQuery;
@@ -23,8 +23,11 @@ impl ProjectMemberQuery {
             r#"
             SELECT 
                 pm.role,
+                pm.joined_at,
                 u.user_id,
                 u.username,
+                u.email,
+                u.full_name,
                 u.avatar_url
             FROM project_members pm
             INNER JOIN users u ON pm.user_id = u.user_id
@@ -37,10 +40,15 @@ impl ProjectMemberQuery {
         .map_err(|e| AuthError::Database(e))?;
 
         Ok(members.into_iter().map(|row: PgRow| ProjectMember {
-            user_id: row.get("user_id"),
             role: row.get("role"),
-            username: row.get("username"),
-            avatar_url: row.get("avatar_url"),
+            joined_at: row.get("joined_at"),
+            user: User {
+                user_id: row.get("user_id"),
+                email: row.get("email"),
+                username: row.get("username"),
+                full_name: row.get("full_name"),
+                avatar_url: row.get::<Option<String>, _>("avatar_url"),
+            }
         }).collect())
     }
 
@@ -59,12 +67,15 @@ impl ProjectMemberQuery {
             r#"
             SELECT 
                 pm.role,
+                pm.joined_at,
                 u.user_id,
                 u.username,
+                u.email,
+                u.full_name,
                 u.avatar_url
             FROM project_members pm
             INNER JOIN users u ON pm.user_id = u.user_id
-            WHERE project_id = $1 AND user_id = $2
+            WHERE project_id = $1 AND u.user_id = $2
             "#
         )
         .bind(project_id)
@@ -74,10 +85,15 @@ impl ProjectMemberQuery {
         .map_err(|e| AuthError::Database(e))?;
 
         Ok(member.map(|row: PgRow| ProjectMember {
-            user_id: row.get("user_id"),
             role: row.get("role"),
-            username: row.get("username"),
-            avatar_url: row.get("avatar_url"),
+            joined_at: row.get("joined_at"),
+            user: User {
+                user_id: row.get("user_id"),
+                email: row.get("email"),
+                username: row.get("username"),
+                full_name: row.get("full_name"),
+                avatar_url: row.get::<Option<String>, _>("avatar_url"),
+            }
         }))
     }
 }
@@ -118,15 +134,16 @@ impl ProjectMemberMutation {
         }
 
         // Verify user exists
-        let user = sqlx::query("SELECT user_id FROM users WHERE user_id = $1")
+        let user = sqlx::query("SELECT user_id, email, username, full_name, avatar_url FROM users WHERE user_id = $1")
             .bind(user_id)
             .fetch_optional(pool)
             .await
             .map_err(|e| AuthError::Database(e))?;
 
-        if user.is_none() {
-            return Err("User not found".into());
-        }
+        let user_row = match user {
+            Some(row) => row,
+            None => return Err("User not found".into())
+        };
 
         // Check if member already exists
         let existing = sqlx::query(
@@ -157,7 +174,7 @@ impl ProjectMemberMutation {
             )
             VALUES ($1, $2, $3, $4, $5)
             RETURNING 
-                member_id, project_id, user_id, role
+                member_id, project_id, user_id, role, joined_at
             "#
         )
         .bind(member_id)
@@ -170,10 +187,15 @@ impl ProjectMemberMutation {
         .map_err(|e| AuthError::Database(e))?;
 
         let result = ProjectMember {
-            user_id: member.get("user_id"),
             role: member.get("role"),
-            username: String::new(),
-            avatar_url: String::new(),
+            joined_at: member.get("joined_at"),
+            user: User {
+                user_id: user_row.get("user_id"),
+                email: user_row.get("email"),
+                username: user_row.get("username"),
+                full_name: user_row.get("full_name"),
+                avatar_url: user_row.get("avatar_url"),
+            }
         };
 
         eprintln!("\n=== Add Project Member Response ===");
@@ -195,13 +217,31 @@ impl ProjectMemberMutation {
         let pool = &context.db;
         let (project_id, user_id) = (Uuid::parse_str(&project_id)?, Uuid::parse_str(&user_id)?);
 
+        // Get user info
+        let user_info = sqlx::query(
+            r#"
+            SELECT user_id, email, username, full_name, avatar_url 
+            FROM users 
+            WHERE user_id = $1
+            "#
+        )
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| AuthError::Database(e))?;
+
+        let user_row = match user_info {
+            Some(row) => row,
+            None => return Err("User not found".into())
+        };
+
         let member = sqlx::query(
             r#"
             UPDATE project_members 
             SET role = $3
             WHERE project_id = $1 AND user_id = $2
             RETURNING 
-                member_id, project_id, user_id, role
+                member_id, project_id, user_id, role, joined_at
             "#
         )
         .bind(project_id)
@@ -213,10 +253,15 @@ impl ProjectMemberMutation {
 
         match member {
             Some(row) => Ok(ProjectMember {
-                user_id: row.get("user_id"),
                 role: row.get("role"),
-                username: String::new(),
-                avatar_url: String::new(),
+                joined_at: row.get("joined_at"),
+                user: User {
+                    user_id: user_row.get("user_id"),
+                    email: user_row.get("email"),
+                    username: user_row.get("username"),
+                    full_name: user_row.get("full_name"),
+                    avatar_url: user_row.get("avatar_url"),
+                }
             }),
             None => Err("Project member not found".into())
         }

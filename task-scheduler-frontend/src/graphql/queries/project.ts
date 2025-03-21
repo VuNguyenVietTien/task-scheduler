@@ -52,10 +52,15 @@ export const GET_PROJECT_BY_ID = gql`
         avatarUrl
       }
       members {
-        userId
-        username
-        avatarUrl
         role
+        joinedAt
+        user {
+          userId
+          email
+          fullName
+          username
+          avatarUrl
+        }
       }
     }
   }
