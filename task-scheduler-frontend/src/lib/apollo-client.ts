@@ -1,5 +1,6 @@
 import { ApolloClient, InMemoryCache, createHttpLink, ApolloLink } from '@apollo/client';
 import { Observable } from '@apollo/client/utilities';
+import { setupGraphQLLogging } from './logging-apollo-client';
 
 // Kiểm tra xem có đang chạy ở phía client không
 const isBrowser = typeof window !== 'undefined';
@@ -123,35 +124,23 @@ const errorMiddleware = new ApolloLink((operation, forward) => {
   });
 });
 
-// Tạo Client chỉ khi ở browser
-let client: ApolloClient<any>;
-
-if (isBrowser) {
-  // Initialize Apollo Client
-  client = new ApolloClient({
-    link: ApolloLink.from([
-      loggerMiddleware,
-      errorMiddleware, 
-      authMiddleware,
-      httpLink
-    ]),
-    cache: new InMemoryCache(),
-    connectToDevTools: process.env.NODE_ENV !== 'production',
-    defaultOptions: {
-      watchQuery: {
-        fetchPolicy: 'cache-and-network',
-      },
+// Tạo client với logger
+export const client = setupGraphQLLogging(new ApolloClient({
+  connectToDevTools: isBrowser,
+  ssrMode: !isBrowser,
+  link: ApolloLink.from([
+    loggerMiddleware,
+    errorMiddleware, 
+    authMiddleware,
+    httpLink
+  ]),
+  cache: new InMemoryCache(),
+  defaultOptions: {
+    watchQuery: {
+      fetchPolicy: 'no-cache',
     },
-  });
-} else {
-  // Fallback client cho SSR/SSG
-  client = new ApolloClient({
-    cache: new InMemoryCache(),
-    ssrMode: true, // Kích hoạt chế độ SSR
-    link: createHttpLink({
-      uri: '', // URI trống không thực hiện request trong SSG/SSR
-    }),
-  });
-}
-
-export { client };
+    query: {
+      fetchPolicy: 'no-cache',
+    },
+  },
+}));

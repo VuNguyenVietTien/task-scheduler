@@ -7,6 +7,8 @@ use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::ops::Deref;
+use std::time::Instant;
+use serde_json::json;
 
 use crate::auth::{error::AuthError, jwt, types};
 use crate::config::Config;
@@ -25,6 +27,7 @@ pub async fn graphql_handler(
     project_loader: web::Data<ProjectLoader>,
     user_loader: web::Data<UserLoader>,
 ) -> Result<GraphQLResponse> {
+    let start = Instant::now();
     eprintln!("\n=== GraphQL Handler Start ===");
 
     // Log dependencies availability
@@ -90,8 +93,18 @@ pub async fn graphql_handler(
     request = request.data(context);
     let response = schema.execute(request).await;
 
+    let duration = start.elapsed();
+
     eprintln!("\n=== GraphQL Response ===");
-    eprintln!("{:#?}", response);
+    eprintln!("Duration: {:?}", duration);
+    
+    // Tạo phiên bản tinh gọn của response
+    let simplified_response = json!({
+        "data": response.data.clone(),
+        "errors": response.errors.len() > 0,
+    });
+    
+    eprintln!("Response: {}", serde_json::to_string_pretty(&simplified_response).unwrap_or_default());
     eprintln!("======================\n");
 
     Ok(response.into())
