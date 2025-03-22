@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/common/PageHeader';
 import { useProject } from '@/hooks/useProject';
 import { Spinner } from '@/components/ui/Spinner';
+import { useUpdateTask } from '@/hooks/useTasks';
 
 export default function TaskDetailsPage() {
   const params = useParams();
@@ -18,6 +19,7 @@ export default function TaskDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const { data: projectData } = useProject(projectId);
+  const updateTask = useUpdateTask();
 
   useEffect(() => {
     const fetchTaskDetails = async () => {
@@ -66,19 +68,8 @@ export default function TaskDetailsPage() {
     try {
       setLoading(true);
       
-      const response = await fetch(`/api/projects/${projectId}/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updates),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Không thể cập nhật công việc');
-      }
-      
-      const updatedTask = await response.json();
+      // Sử dụng useUpdateTask hook để gọi GraphQL mutation
+      const updatedTask = await updateTask(taskId, updates);
       
       // Cập nhật state với dữ liệu mới
       setTask(prev => prev ? { ...prev, ...updatedTask } : updatedTask);
@@ -87,13 +78,6 @@ export default function TaskDetailsPage() {
     } catch (err) {
       console.error('Error updating task:', err);
       setError('Không thể cập nhật công việc. Vui lòng thử lại sau.');
-      
-      // Fallback: Giả lập cập nhật thành công trong môi trường dev
-      if (process.env.NODE_ENV === 'development') {
-        setTask(prev => prev ? { ...prev, ...updates } : null);
-        return true;
-      }
-      
       return false;
     } finally {
       setLoading(false);

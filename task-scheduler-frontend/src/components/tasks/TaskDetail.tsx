@@ -3,6 +3,7 @@ import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '../../type
 import { User } from '../../contexts/AuthContext';
 import { Dialog } from '../ui/Dialog';
 import clsx from 'clsx';
+import { useUpdateTask } from '@/hooks/useTasks';
 
 interface TaskDetailProps {
   task: Task;
@@ -31,6 +32,7 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const commentRef = useRef<HTMLTextAreaElement>(null);
+  const updateTask = useUpdateTask();
 
   // Định dạng ngày tháng
   const formatDate = (dateString?: string) => {
@@ -239,13 +241,10 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
 
   // Xử lý cập nhật task
   const handleSaveTask = async () => {
-    if (!onTaskUpdate) return;
-    
     try {
       setIsSaving(true);
       setError(null);
       
-      const projectId = task.project_id || task.projectId;
       const taskId = task.task_id || task.id || '';
       
       // Chuẩn bị dữ liệu cập nhật
@@ -260,32 +259,24 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
       if (editedTask.due_date !== task.due_date) updates.due_date = editedTask.due_date;
       if (editedTask.effort !== task.effort) updates.effort = editedTask.effort;
       if (editedTask.progress !== task.progress) updates.progress = editedTask.progress;
+      if (editedTask.assignee_id !== task.assignee_id) updates.assignee_id = editedTask.assignee_id;
       
-      // Gọi API để cập nhật task
-      const response = await fetch(`/api/projects/${projectId}/tasks/${taskId}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(updates),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Không thể cập nhật task');
-      }
+      // Gọi GraphQL mutation để cập nhật task
+      const updatedTask = await updateTask(taskId, updates);
       
       // Cập nhật UI
-      onTaskUpdate(taskId, updates);
+      if (onTaskUpdate) {
+        onTaskUpdate(taskId, updates);
+      }
+      
+      // Hiển thị thông báo thành công tạm thời nếu cần
+      console.log('Cập nhật công việc thành công:', updatedTask);
+      
+      // Tắt chế độ chỉnh sửa
       setIsEditing(false);
     } catch (error) {
       console.error('Error updating task:', error);
       setError('Không thể cập nhật công việc. Vui lòng thử lại sau.');
-      
-      // Fallback: Giả lập cập nhật thành công nếu trong môi trường dev
-      if (process.env.NODE_ENV === 'development') {
-        onTaskUpdate(task.task_id || task.id || '', editedTask);
-        setIsEditing(false);
-      }
     } finally {
       setIsSaving(false);
     }

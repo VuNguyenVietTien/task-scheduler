@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Task, TaskStatus, Priority, TaskFilter, TaskAssignee, TaskStatuses, Priorities } from '@/types/task';
 import { ProjectData } from '@/types/project';
 import { TaskFilterBar } from './TaskFilterBar';
 import { TaskBulkActions } from './TaskBulkActions';
-import { useUpdateTaskPriorityOrder } from '@/hooks/useTasks';
+import { useUpdateTaskPriorityOrder, useUpdateTask } from '@/hooks/useTasks';
 import { UserAvatar } from '@/components/common/UserAvatar';
 import { TaskFilterModal } from './TaskFilterModal';
 import { Pagination } from '@/components/common/Pagination';
@@ -33,7 +33,7 @@ interface SortConfig {
 }
 
 export function TaskListView({ 
-  tasks, 
+  tasks: initialTasks, 
   onTaskClick,
   pagination,
   filters = {},
@@ -48,6 +48,13 @@ export function TaskListView({
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const { user } = useAuth();
+  const [editingCell, setEditingCell] = useState<{taskId: string, field: string} | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  
+  useEffect(() => {
+    setTasks(initialTasks);
+  }, [initialTasks]);
 
   // Memoize assignees and projects
   const { assignees, projects } = useMemo(() => {
@@ -177,6 +184,73 @@ export function TaskListView({
       ? [...sortedIncompleteTasks, ...sortedCompletedTasks]
       : sortedIncompleteTasks;
   }, [sortedIncompleteTasks, sortedCompletedTasks, showCompletedTasks]);
+
+  // Function cập nhật task trực tiếp vào danh sách hiện tại
+  const updateDisplayedTask = useCallback((taskId: string, updates: Partial<Task>) => {
+    const taskIndex = displayedTasks.findIndex(t => t.task_id === taskId);
+    if (taskIndex !== -1) {
+      const newTasks = [...displayedTasks];
+      newTasks[taskIndex] = {
+        ...newTasks[taskIndex],
+        ...updates
+      };
+      
+      // Cập nhật dữ liệu trong các collection gốc để tránh bị reset
+      const updatedTask = newTasks[taskIndex];
+      
+      // Cập nhật trong incompleteTasks và completedTasks để memoized state được cập nhật
+      const incompleteCopy = [...incompleteTasks];
+      const completeCopy = [...completedTasks];
+      
+      if (updatedTask.status === TaskStatuses.DONE) {
+        // Nếu task chuyển sang trạng thái hoàn thành
+        const incompleteIndex = incompleteCopy.findIndex(t => t.task_id === taskId);
+        if (incompleteIndex !== -1) {
+          // Xóa khỏi incompleteTasks và thêm vào completedTasks
+          incompleteCopy.splice(incompleteIndex, 1);
+          if (!completeCopy.some(t => t.task_id === taskId)) {
+            completeCopy.push(updatedTask);
+          } else {
+            // Cập nhật trong completedTasks nếu đã tồn tại
+            const completeIndex = completeCopy.findIndex(t => t.task_id === taskId);
+            completeCopy[completeIndex] = updatedTask;
+          }
+        }
+      } else {
+        // Nếu task không phải trạng thái hoàn thành
+        const completeIndex = completeCopy.findIndex(t => t.task_id === taskId);
+        if (completeIndex !== -1) {
+          // Xóa khỏi completedTasks và thêm vào incompleteTasks
+          completeCopy.splice(completeIndex, 1);
+          if (!incompleteCopy.some(t => t.task_id === taskId)) {
+            incompleteCopy.push(updatedTask);
+          }
+        } else {
+          // Cập nhật trong incompleteTasks nếu đã tồn tại
+          const incompleteIndex = incompleteCopy.findIndex(t => t.task_id === taskId);
+          if (incompleteIndex !== -1) {
+            incompleteCopy[incompleteIndex] = updatedTask;
+          }
+        }
+      }
+      
+      // Cập nhật cả trong mảng tasks gốc để đảm bảo dữ liệu nhất quán
+      const originalTaskIndex = tasks.findIndex(t => t.task_id === taskId);
+      if (originalTaskIndex !== -1) {
+        const updatedTasks = [...tasks];
+        updatedTasks[originalTaskIndex] = {
+          ...updatedTasks[originalTaskIndex],
+          ...updates
+        };
+        
+        // Không thể cập nhật trực tiếp 'tasks' nếu nó là prop, nhưng ta đã cập nhật các mảng dẫn xuất
+      }
+      
+      // Trả về danh sách mới
+      return newTasks;
+    }
+    return displayedTasks;
+  }, [displayedTasks, incompleteTasks, completedTasks, tasks]);
 
   const toggleTaskExpansion = (taskId: string) => {
     setExpandedTasks(prev => {
@@ -334,6 +408,7 @@ export function TaskListView({
   };
 
   const updateTaskPriorityOrder = useUpdateTaskPriorityOrder();
+  const { updateTask } = useUpdateTask();
 
   const handleFilterChange = (newFilters: TaskFilter) => {
     if (setFilters) {
@@ -342,6 +417,108 @@ export function TaskListView({
   };
 
   const hasFilters = Object.keys(filters).length > 0;
+
+  // Xử lý bắt đầu chỉnh sửa
+  const handleStartEditing = (taskId: string, field: string, value: any) => {
+    setEditingCell({ taskId, field });
+    setEditValue(String(value || ''));
+  };
+
+  // Xử lý hủy chỉnh sửa
+  const handleCancelEditing = () => {
+    setEditingCell(null);
+    setEditValue('');
+  };
+
+  // Xử lý lưu chỉnh sửa vào database
+  const handleSaveEditing = async (taskId: string, field: string) => {
+    // Tạo đối tượng cập nhật - CHỈ bao gồm trường đang cập nhật
+    const updates: Partial<Task> = {};
+    
+    // Chuyển đổi giá trị theo loại trường
+    if (field === 'status') {
+      updates.status = editValue as TaskStatus;
+      console.log(`Đang cập nhật trạng thái: ${editValue}`);
+    } else if (field === 'priority') {
+      updates.priority = editValue as Priority;
+      console.log(`Đang cập nhật độ ưu tiên: ${editValue}`);
+    } else if (field === 'effort') {
+      updates.effort = parseFloat(editValue) || 0;
+      console.log(`Đang cập nhật công sức: ${updates.effort}`);
+    } else if (field === 'due_date') {
+      updates.due_date = editValue;
+      console.log(`Đang cập nhật ngày hết hạn: ${editValue}`);
+    } else if (field === 'assignee_id') {
+      updates.assignee_id = editValue;
+      console.log(`Đang cập nhật người được giao: ${editValue}`);
+    }
+    
+    // Tạo một bản sao của task hiện tại để cập nhật UI optimistically
+    const currentTask = tasks.find(t => t.task_id === taskId);
+    if (!currentTask) {
+      console.error('Không tìm thấy task có ID:', taskId);
+      return;
+    }
+    
+    // Cập nhật UI ngay lập tức để phản hồi người dùng (optimistic update)
+    // Cập nhật task trong mảng tasks hiện tại
+    const updatedTasks = tasks.map(task => 
+      task.task_id === taskId 
+        ? { ...task, ...updates } 
+        : task
+    );
+    
+    // Cập nhật state với dữ liệu mới
+    setTasks(updatedTasks);
+    
+    // Cập nhật task
+    try {
+      // Hiển thị trạng thái đang cập nhật
+      console.log('Đang cập nhật công việc...', { taskId, updates });
+      
+      // Thực hiện API call để cập nhật vào database
+      // updateTask đã có xử lý chuyển đổi enum phù hợp
+      // Chỉ gửi trường cần cập nhật lên server, không gửi các trường khác
+      const updatedTaskData = await updateTask(taskId, updates);
+      
+      // Cập nhật state với dữ liệu từ API để đảm bảo dữ liệu chính xác
+      setTasks(prevTasks => 
+        prevTasks.map(task => 
+          task.task_id === taskId 
+            ? { ...task, ...updatedTaskData } 
+            : task
+        )
+      );
+      
+      // Thông báo thành công
+      console.log('Đã cập nhật công việc thành công trong database!', updatedTaskData);
+      
+      // Đóng chế độ chỉnh sửa
+      setEditingCell(null);
+      setEditValue('');
+    } catch (error) {
+      console.error('Lỗi khi cập nhật công việc:', error);
+      
+      // Vẫn giữ UI đã cập nhật mặc dù API có lỗi
+      // Không cần phải revert vì chúng ta đã cập nhật UI trong setTasks
+      
+      // Đóng chế độ chỉnh sửa
+      setEditingCell(null);
+      setEditValue('');
+      
+      // Hiển thị thông báo lỗi
+      alert('Không thể cập nhật công việc trên máy chủ, nhưng UI đã được cập nhật tạm thời!');
+    }
+  };
+
+  // Xử lý khi nhấn phím
+  const handleKeyDown = (e: React.KeyboardEvent, taskId: string, field: string) => {
+    if (e.key === 'Enter') {
+      handleSaveEditing(taskId, field);
+    } else if (e.key === 'Escape') {
+      handleCancelEditing();
+    }
+  };
   
   return (
     <div className="flex flex-col h-full">
@@ -473,34 +650,255 @@ export function TaskListView({
                       </div>
                     </td>
                     <td className="px-3 py-4 text-sm">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-                        {task.status.replace(/_/g, ' ')}
-                      </span>
-                    </td>
-                    <td className="px-3 py-4 text-sm">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
-                        {task.priority}
-                      </span>
-                    </td>
-                    <td className="px-3 py-4 text-sm">
-                      {task.assignee ? (
-                        <div className="flex items-center gap-2">
-                          <UserAvatar 
-                            username={task.assignee.username} 
-                            avatarUrl={task.assignee.avatarUrl} 
-                            size="md" 
-                          />
-                          <span>{task.assignee.username}</span>
+                      {editingCell?.taskId === task.task_id && editingCell?.field === 'status' ? (
+                        <div className="relative flex items-center">
+                          <div className="w-24 min-w-24 max-w-24">
+                            <select
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
+                              autoFocus
+                              aria-label="Trạng thái"
+                              title="Chọn trạng thái"
+                            >
+                              {Object.values(TaskStatuses).map((status) => (
+                                <option key={status} value={status}>
+                                  {status.replace(/_/g, ' ')}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex ml-2">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleSaveEditing(task.task_id, 'status'); }}
+                              className="text-green-600 hover:text-green-800 mr-1" 
+                              title="Lưu"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
+                              className="text-red-600 hover:text-red-800" 
+                              title="Hủy"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
                         </div>
                       ) : (
-                        <span className="text-slate-400">Chưa gán</span>
+                        <span 
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)} cursor-pointer hover:opacity-75`}
+                          onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'status', task.status); }}
+                        >
+                          {task.status.replace(/_/g, ' ')}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-4 text-sm">
+                      {editingCell?.taskId === task.task_id && editingCell?.field === 'priority' ? (
+                        <div className="relative flex items-center">
+                          <div className="w-24 min-w-24 max-w-24">
+                            <select
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
+                              autoFocus
+                              aria-label="Mức độ ưu tiên"
+                              title="Chọn mức độ ưu tiên"
+                            >
+                              {Object.values(Priorities).map((priority) => (
+                                <option key={priority} value={priority}>
+                                  {priority}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex ml-2">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleSaveEditing(task.task_id, 'priority'); }}
+                              className="text-green-600 hover:text-green-800 mr-1" 
+                              title="Lưu"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
+                              className="text-red-600 hover:text-red-800" 
+                              title="Hủy"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <span 
+                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)} cursor-pointer hover:opacity-75`}
+                          onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'priority', task.priority); }}
+                        >
+                          {task.priority}
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-4 text-sm">
+                      {editingCell?.taskId === task.task_id && editingCell?.field === 'assignee_id' ? (
+                        <div className="relative flex items-center">
+                          <div className="w-36 min-w-36 max-w-36">
+                            <select
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
+                              autoFocus
+                              aria-label="Người được giao"
+                              title="Chọn người được giao"
+                            >
+                              <option value="">Chưa gán</option>
+                              {assignees.map((assignee) => (
+                                <option key={assignee.userId} value={assignee.userId}>
+                                  {assignee.username}
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex ml-2">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleSaveEditing(task.task_id, 'assignee_id'); }}
+                              className="text-green-600 hover:text-green-800 mr-1" 
+                              title="Lưu"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
+                              className="text-red-600 hover:text-red-800" 
+                              title="Hủy"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <div 
+                          className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1 rounded"
+                          onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'assignee_id', task.assignee?.userId || ''); }}
+                        >
+                          {task.assignee ? (
+                            <>
+                              <UserAvatar 
+                                username={task.assignee.username} 
+                                avatarUrl={task.assignee.avatarUrl} 
+                                size="md" 
+                              />
+                              <span>{task.assignee.username}</span>
+                            </>
+                          ) : (
+                            <span className="text-slate-400">Chưa gán</span>
+                          )}
+                        </div>
                       )}
                     </td>
                     <td className="px-3 py-4 text-sm text-slate-500">
-                      {task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}
+                      {editingCell?.taskId === task.task_id && editingCell?.field === 'due_date' ? (
+                        <div className="relative flex items-center">
+                          <div className="w-36 min-w-36 max-w-36">
+                            <input
+                              type="date"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
+                              autoFocus
+                              aria-label="Ngày hết hạn"
+                              title="Chọn ngày hết hạn"
+                              placeholder="Nhập ngày hết hạn"
+                            />
+                          </div>
+                          <div className="flex ml-2">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleSaveEditing(task.task_id, 'due_date'); }}
+                              className="text-green-600 hover:text-green-800 mr-1" 
+                              title="Lưu"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
+                              className="text-red-600 hover:text-red-800" 
+                              title="Hủy"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <span 
+                          className="cursor-pointer hover:text-blue-600 hover:underline"
+                          onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'due_date', task.due_date ? new Date(task.due_date).toISOString().split('T')[0] : ''); }}
+                        >
+                          {task.due_date ? new Date(task.due_date).toLocaleDateString() : '-'}
+                        </span>
+                      )}
                     </td>
                     <td className="px-3 py-4 text-sm text-slate-500">
-                      {task.effort ? `${task.effort}h` : '-'}
+                      {editingCell?.taskId === task.task_id && editingCell?.field === 'effort' ? (
+                        <div className="relative flex items-center">
+                          <div className="w-20 min-w-20 max-w-20">
+                            <input
+                              type="number"
+                              min="0"
+                              step="0.5"
+                              value={editValue}
+                              onChange={(e) => setEditValue(e.target.value)}
+                              className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
+                              autoFocus
+                              aria-label="Công sức"
+                              title="Nhập số giờ công sức"
+                              placeholder="Nhập số giờ"
+                            />
+                          </div>
+                          <div className="flex ml-2">
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleSaveEditing(task.task_id, 'effort'); }}
+                              className="text-green-600 hover:text-green-800 mr-1" 
+                              title="Lưu"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                              </svg>
+                            </button>
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
+                              className="text-red-600 hover:text-red-800" 
+                              title="Hủy"
+                            >
+                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <span 
+                          className="cursor-pointer hover:text-blue-600 hover:underline"
+                          onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'effort', task.effort || ''); }}
+                        >
+                          {task.effort ? `${task.effort}h` : '-'}
+                        </span>
+                      )}
                     </td>
                     <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                       <button 
