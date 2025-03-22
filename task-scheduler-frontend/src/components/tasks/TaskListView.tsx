@@ -11,6 +11,13 @@ import { TaskFilterModal } from './TaskFilterModal';
 import { Pagination } from '@/components/common/Pagination';
 import { TaskDetail } from './TaskDetail';
 import { useAuth } from '@/contexts/AuthContext';
+import { 
+  useUpdateTaskStatus, 
+  useUpdateTaskPriority, 
+  useUpdateTaskEffort, 
+  useUpdateTaskDueDate, 
+  useUpdateTaskAssignee 
+} from '@/hooks/useTaskFieldMutations';
 
 interface TaskListViewProps {
   tasks: Task[];
@@ -430,29 +437,15 @@ export function TaskListView({
     setEditValue('');
   };
 
-  // Xử lý lưu chỉnh sửa vào database
+  // Thêm các hook cập nhật riêng theo từng trường
+  const { updateStatus, isUpdating: isUpdatingStatus } = useUpdateTaskStatus();
+  const { updatePriority, isUpdating: isUpdatingPriority } = useUpdateTaskPriority();
+  const { updateEffort, isUpdating: isUpdatingEffort } = useUpdateTaskEffort();
+  const { updateDueDate, isUpdating: isUpdatingDueDate } = useUpdateTaskDueDate();
+  const { updateAssignee, isUpdating: isUpdatingAssignee } = useUpdateTaskAssignee();
+
+  // Cập nhật hàm xử lý lưu chỉnh sửa để sử dụng các hook riêng biệt
   const handleSaveEditing = async (taskId: string, field: string) => {
-    // Tạo đối tượng cập nhật - CHỈ bao gồm trường đang cập nhật
-    const updates: Partial<Task> = {};
-    
-    // Chuyển đổi giá trị theo loại trường
-    if (field === 'status') {
-      updates.status = editValue as TaskStatus;
-      console.log(`Đang cập nhật trạng thái: ${editValue}`);
-    } else if (field === 'priority') {
-      updates.priority = editValue as Priority;
-      console.log(`Đang cập nhật độ ưu tiên: ${editValue}`);
-    } else if (field === 'effort') {
-      updates.effort = parseFloat(editValue) || 0;
-      console.log(`Đang cập nhật công sức: ${updates.effort}`);
-    } else if (field === 'due_date') {
-      updates.due_date = editValue;
-      console.log(`Đang cập nhật ngày hết hạn: ${editValue}`);
-    } else if (field === 'assignee_id') {
-      updates.assignee_id = editValue;
-      console.log(`Đang cập nhật người được giao: ${editValue}`);
-    }
-    
     // Tạo một bản sao của task hiện tại để cập nhật UI optimistically
     const currentTask = tasks.find(t => t.task_id === taskId);
     if (!currentTask) {
@@ -460,54 +453,122 @@ export function TaskListView({
       return;
     }
     
-    // Cập nhật UI ngay lập tức để phản hồi người dùng (optimistic update)
-    // Cập nhật task trong mảng tasks hiện tại
-    const updatedTasks = tasks.map(task => 
-      task.task_id === taskId 
-        ? { ...task, ...updates } 
-        : task
-    );
-    
-    // Cập nhật state với dữ liệu mới
-    setTasks(updatedTasks);
-    
-    // Cập nhật task
     try {
-      // Hiển thị trạng thái đang cập nhật
-      console.log('Đang cập nhật công việc...', { taskId, updates });
+      let updatedData: Partial<Task> = {};
       
-      // Thực hiện API call để cập nhật vào database
-      // updateTask đã có xử lý chuyển đổi enum phù hợp
-      // Chỉ gửi trường cần cập nhật lên server, không gửi các trường khác
-      const updatedTaskData = await updateTask(taskId, updates);
+      // Sử dụng hook riêng biệt cho từng loại trường
+      if (field === 'status') {
+        const status = editValue as TaskStatus;
+        
+        // Optimistic update cho UI
+        const updatedTasks = tasks.map(task => 
+          task.task_id === taskId 
+            ? { ...task, status } 
+            : task
+        );
+        setTasks(updatedTasks);
+        
+        // Gọi API
+        updatedData = await updateStatus(taskId, status);
+        console.log(`Đã cập nhật trạng thái thành: ${status}`);
+      } 
+      else if (field === 'priority') {
+        const priority = editValue as Priority;
+        
+        // Optimistic update cho UI
+        const updatedTasks = tasks.map(task => 
+          task.task_id === taskId 
+            ? { ...task, priority } 
+            : task
+        );
+        setTasks(updatedTasks);
+        
+        // Gọi API
+        updatedData = await updatePriority(taskId, priority);
+        console.log(`Đã cập nhật ưu tiên thành: ${priority}`);
+      } 
+      else if (field === 'effort') {
+        const effort = parseFloat(editValue) || 0;
+        
+        // Lấy thông tin đầy đủ của task hiện tại, bao gồm assignee
+        const currentTask = tasks.find(t => t.task_id === taskId);
+        if (!currentTask) {
+          console.error('Không tìm thấy task có ID:', taskId);
+          return;
+        }
+        
+        // Optimistic update cho UI - Giữ nguyên tất cả thông tin hiện có, chỉ cập nhật effort
+        const updatedTasks = tasks.map(task => 
+          task.task_id === taskId 
+            ? { ...task, effort } 
+            : task
+        );
+        setTasks(updatedTasks);
+        
+        // Gọi API - Hook đã được cập nhật để giữ nguyên thông tin assignee
+        updatedData = await updateEffort(taskId, effort);
+        console.log(`Đã cập nhật công sức thành: ${effort}`, updatedData);
+        
+        // Đảm bảo UI hiển thị đầy đủ thông tin assignee
+        if (!updatedData.assignee && currentTask.assignee) {
+          updatedData.assignee = currentTask.assignee;
+          updatedData.assignee_id = currentTask.assignee_id;
+          console.log('Đã khôi phục thông tin assignee từ dữ liệu hiện có');
+        }
+      } 
+      else if (field === 'due_date') {
+        const dueDate = editValue;
+        
+        // Optimistic update cho UI
+        const updatedTasks = tasks.map(task => 
+          task.task_id === taskId 
+            ? { ...task, due_date: dueDate } 
+            : task
+        );
+        setTasks(updatedTasks);
+        
+        // Gọi API
+        updatedData = await updateDueDate(taskId, dueDate);
+        console.log(`Đã cập nhật hạn thành: ${dueDate}`);
+      } 
+      else if (field === 'assignee_id') {
+        const assigneeId = editValue;
+        
+        // Optimistic update cho UI
+        const updatedTasks = tasks.map(task => 
+          task.task_id === taskId 
+            ? { ...task, assignee_id: assigneeId } 
+            : task
+        );
+        setTasks(updatedTasks);
+        
+        // Gọi API
+        updatedData = await updateAssignee(taskId, assigneeId);
+        
+        console.log(`Đã cập nhật người được giao thành: ${assigneeId}`);
+      }
       
-      // Cập nhật state với dữ liệu từ API để đảm bảo dữ liệu chính xác
+      // Cập nhật task với dữ liệu từ API
       setTasks(prevTasks => 
         prevTasks.map(task => 
           task.task_id === taskId 
-            ? { ...task, ...updatedTaskData } 
+            ? { ...task, ...updatedData } 
             : task
         )
       );
-      
-      // Thông báo thành công
-      console.log('Đã cập nhật công việc thành công trong database!', updatedTaskData);
       
       // Đóng chế độ chỉnh sửa
       setEditingCell(null);
       setEditValue('');
     } catch (error) {
-      console.error('Lỗi khi cập nhật công việc:', error);
-      
-      // Vẫn giữ UI đã cập nhật mặc dù API có lỗi
-      // Không cần phải revert vì chúng ta đã cập nhật UI trong setTasks
+      console.error(`Lỗi khi cập nhật ${field}:`, error);
       
       // Đóng chế độ chỉnh sửa
       setEditingCell(null);
       setEditValue('');
       
       // Hiển thị thông báo lỗi
-      alert('Không thể cập nhật công việc trên máy chủ, nhưng UI đã được cập nhật tạm thời!');
+      alert(`Không thể cập nhật ${field}. Lỗi: ${error}`);
     }
   };
 

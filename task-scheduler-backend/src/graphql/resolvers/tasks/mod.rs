@@ -45,6 +45,14 @@ impl TaskMutation {
         mutation::update_task(ctx, input).await
     }
 
+    async fn update_task_effort(
+        &self,
+        ctx: &Context<'_>,
+        input: mutation::update_effort::UpdateTaskEffortInput
+    ) -> Result<Task> {
+        mutation::update_task_effort(ctx, input).await
+    }
+
     async fn update_task_status(
         &self,
         ctx: &Context<'_>,

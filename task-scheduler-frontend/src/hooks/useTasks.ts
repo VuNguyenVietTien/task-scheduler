@@ -114,54 +114,61 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
     if (updates.title !== undefined) input.title = updates.title;
     if (updates.description !== undefined) input.description = updates.description;
     
-    // Xử lý đặc biệt cho các trường enum - cần giữ nguyên dạng (UPPERCASE) hoặc lowercase tùy backend
+    // Xử lý đặc biệt cho các trường enum - cần chuyển thành lowercase cho backend
     if (updates.status !== undefined) {
-      // Quan trọng: Chuyển đổi giống như cách làm trong KanbanBoard
-      // Chuyển từ snake_case sang UPPER_CASE cho API GraphQL
-      const statusMapping: Record<string, string> = {
-        'todo': 'TODO',
-        'doing': 'DOING',
-        'done': 'DONE',
-        'close': 'CLOSE',
-        'pending': 'PENDING',
-        'review': 'REVIEW',
-        'blocked': 'BLOCKED',
-        'rejected': 'REJECTED',
-        'archived': 'ARCHIVED'
-      };
-      
-      // Đảm bảo status là lowercase để khớp với mapping
+      // Đảm bảo status là lowercase để backend nhận
       const statusKey = String(updates.status).toLowerCase();
-      // Sau đó chuyển thành dạng UPPER_CASE cho GraphQL API
-      input.status = statusMapping[statusKey] || statusKey.toUpperCase();
+      input.status = statusKey;
       console.log(`Status đã chuyển đổi thành: ${input.status} (gốc: ${updates.status})`);
     }
     
     if (updates.priority !== undefined) {
-      // Tương tự với priority - chuyển thành dạng UPPER_CASE cho API
-      const priorityMapping: Record<string, string> = {
-        'low': 'LOW',
-        'medium': 'MEDIUM',
-        'high': 'HIGH',
-        'urgent': 'URGENT',
-        'critical': 'CRITICAL'
-      };
-      
+      // Chuyển priority thành lowercase cho backend
       const priorityKey = String(updates.priority).toLowerCase();
-      input.priority = priorityMapping[priorityKey] || priorityKey.toUpperCase();
+      input.priority = priorityKey;
       console.log(`Priority đã chuyển đổi thành: ${input.priority} (gốc: ${updates.priority})`);
     }
     
     if (updates.effort !== undefined) input.effort = Number(updates.effort);
     if (updates.progress !== undefined) input.progress = Number(updates.progress);
     
-    // Chuyển đổi các trường date từ snake_case sang camelCase
-    if (updates.start_date !== undefined) input.startDate = updates.start_date;
-    if (updates.due_date !== undefined) input.dueDate = updates.due_date;
-    if (updates.actual_start_date !== undefined) input.actualStartDate = updates.actual_start_date;
-    if (updates.actual_end_date !== undefined) input.actualEndDate = updates.actual_end_date;
+    // Chuyển đổi các trường date từ snake_case sang camelCase và đảm bảo định dạng ISO chuẩn
+    if (updates.start_date !== undefined) {
+      // Đảm bảo định dạng ISO đầy đủ cho datetime
+      if (updates.start_date) {
+        input.startDate = new Date(updates.start_date).toISOString();
+      } else {
+        input.startDate = null;
+      }
+    }
+
+    if (updates.due_date !== undefined) {
+      // Đảm bảo định dạng ISO đầy đủ cho datetime
+      if (updates.due_date) {
+        input.dueDate = new Date(updates.due_date).toISOString();
+      } else {
+        input.dueDate = null;
+      }
+    }
+
+    if (updates.actual_start_date !== undefined) {
+      // Đảm bảo định dạng ISO đầy đủ cho datetime
+      if (updates.actual_start_date) {
+        input.actualStartDate = new Date(updates.actual_start_date).toISOString();
+      } else {
+        input.actualStartDate = null;
+      }
+    }
+
+    if (updates.actual_end_date !== undefined) {
+      // Đảm bảo định dạng ISO đầy đủ cho datetime
+      if (updates.actual_end_date) {
+        input.actualEndDate = new Date(updates.actual_end_date).toISOString();
+      } else {
+        input.actualEndDate = null;
+      }
+    }
     
-    // Các trường khác - CHỚ GỬI undefined hoặc null trừ khi thực sự muốn đặt trường về null
     // Đối với assignee_id, CHỈ gửi khi nó được cung cấp trong updates, không gửi undefined
     // vì backend sẽ hiểu undefined là null và xóa assignee hiện tại
     if (updates.assignee_id !== undefined) {
@@ -173,16 +180,10 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
     if (updates.type !== undefined) input.type = updates.type;
     if (updates.category !== undefined) input.category = updates.category;
     
-    // Xử lý đặc biệt cho progress_type - tương tự như status và priority
+    // Xử lý đặc biệt cho progress_type - chuyển thành lowercase 
     if (updates.progress_type !== undefined) {
-      const progressTypeMapping: Record<string, string> = {
-        'percentage': 'PERCENTAGE',
-        'points': 'POINTS',
-        'binary': 'BINARY'
-      };
-      
       const progressTypeKey = String(updates.progress_type).toLowerCase();
-      input.progressType = progressTypeMapping[progressTypeKey] || progressTypeKey.toUpperCase();
+      input.progressType = progressTypeKey;
       console.log(`ProgressType đã chuyển đổi thành: ${input.progressType} (gốc: ${updates.progress_type})`);
     }
     

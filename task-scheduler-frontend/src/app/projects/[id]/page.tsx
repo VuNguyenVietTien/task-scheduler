@@ -1,11 +1,10 @@
 'use client';
 
 import { Suspense } from 'react';
-import type { ProjectData } from '@/types/project';
-import { ProjectDetailView } from '@/components/projects/ProjectDetailView';
+import dynamic from 'next/dynamic';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
-import { useProject } from '@/hooks/useProject';
 
+// Tạo component loading fallback
 function LoadingFallback() {
   return (
     <div className="p-6">
@@ -22,61 +21,34 @@ function LoadingFallback() {
   );
 }
 
+// Import component mà không sử dụng SSR để tránh lỗi Apollo Client
+// Sử dụng NoSSR trước để tránh lỗi hydration
+const DynamicProjectContent = dynamic(
+  () => import('@/components/projects/ProjectPage'),
+  { 
+    ssr: false, 
+    loading: () => <LoadingFallback />
+  }
+);
+
+// Tạo một wrapper component để truyền props một cách an toàn với type
+type ProjectPageProps = {
+  id: string;
+};
+
+// Wrapper component giúp xử lý truyền props id vào dynamic import
+function ProjectPageWrapper({ id }: ProjectPageProps) {
+  // Sử dụng cách truyền props an toàn với TypeScript
+  return <DynamicProjectContent {...({id} as any)} />;
+}
+
+// Component ProjectDetail được export mặc định
 export default function ProjectDetail({ params }: { params: { id: string } }) {
   return (
     <ProtectedRoute>
       <Suspense fallback={<LoadingFallback />}>
-        <ProjectPage id={params.id} />
+        <ProjectPageWrapper id={params.id} />
       </Suspense>
     </ProtectedRoute>
   );
-}
-
-function ProjectPage({ id }: { id: string }) {
-  const { loading, error, data } = useProject(id);
-
-  // Xử lý trạng thái loading
-  if (loading) {
-    return <LoadingFallback />;
-  }
-
-  // Xử lý trạng thái lỗi
-  if (error) {
-    return (
-      <div className="p-6">
-        <div className="card">
-          <h1 className="text-xl text-red-600">Error</h1>
-          <p className="text-slate-600">{error.message}</p>
-        </div>
-      </div>
-    );
-  }
-
-  // Xử lý trường hợp không tìm thấy project
-  if (!data || !data.project) {
-    return (
-      <div className="p-6">
-        <div className="card">
-          <h1 className="text-xl text-red-600">Project not found</h1>
-          <p className="text-slate-600">
-            The project you're looking for doesn't exist or has been deleted.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-  // Map dữ liệu từ GraphQL sang ProjectData
-  const project: ProjectData = {
-    id: id, // Sử dụng params.id thay vì data.project.projectId
-    name: data.project.name,
-    description: data.project.description || '',
-    dueDate: data.project.endDate,
-    members: data.project.memberCount,
-    status: data.project.status.toLowerCase() === 'completed' ? 'completed' :
-           data.project.status.toLowerCase() === 'on_hold' ? 'on-hold' :
-           'active'
-  };
-
-  return <ProjectDetailView project={project} />;
 }

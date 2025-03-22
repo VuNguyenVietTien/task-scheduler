@@ -36,6 +36,41 @@ export const UPDATE_TASK_STATUS = gql`
   }
 `;
 
+export const UPDATE_TASK_EFFORT = gql`
+  mutation UpdateTaskEffort($input: UpdateTaskEffortInput!) {
+    updateTaskEffort(input: $input) {
+      taskId
+      projectId
+      parentTaskId
+      title
+      description
+      assignee {
+        userId
+        username
+        avatarUrl
+        role
+      }
+      priorityOrder
+      startDate
+      dueDate
+      actualStartDate
+      actualEndDate
+      effort
+      progress
+      createdBy
+      createdAt
+      updatedAt
+      isDeleted
+      status
+      priority
+      type
+      category
+      tags
+      progressType
+    }
+  }
+`;
+
 export const UPDATE_TASK = gql`
   mutation UpdateTask($input: UpdateTaskInput!) {
     updateTask(input: $input) {

@@ -10,6 +10,7 @@ import { SyncProvider } from "@/providers/SyncProvider";
 import Layout from "@/components/ui/navigation/Layout";
 import { Toaster } from "sonner";
 import "./globals.css";
+import ApolloClientProvider from '@/hooks/ApolloClient';
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -24,22 +25,24 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <AuthProvider>
-          <QueryProvider>
-            <ApolloProvider client={client}>
-              <SyncProvider>
-                {isAuthRoute ? (
-                  children
-                ) : (
-                  <Layout>
-                    {children}
-                  </Layout>
-                )}
-                <Toaster richColors position="top-right" />
-              </SyncProvider>
-            </ApolloProvider>
-          </QueryProvider>
-        </AuthProvider>
+        <ApolloClientProvider>
+          <AuthProvider>
+            <QueryProvider>
+              <ApolloProvider client={client}>
+                <SyncProvider>
+                  {isAuthRoute ? (
+                    children
+                  ) : (
+                    <Layout>
+                      {children}
+                    </Layout>
+                  )}
+                  <Toaster richColors position="top-right" />
+                </SyncProvider>
+              </ApolloProvider>
+            </QueryProvider>
+          </AuthProvider>
+        </ApolloClientProvider>
       </body>
     </html>
   );
