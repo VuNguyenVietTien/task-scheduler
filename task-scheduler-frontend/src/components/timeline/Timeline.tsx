@@ -23,6 +23,7 @@ import {
   verticalListSortingStrategy
 } from '@dnd-kit/sortable';
 import { useReorderTasks } from '@/hooks/useTasks';
+import { useProject } from '@/hooks/useProject';
 
 interface TimelineProps {
   tasks: Task[];
@@ -237,6 +238,80 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
   const [viewMode, setViewMode] = useState<ViewMode>('project');
   const [selectedUserId, setSelectedUserId] = useState<string>('');
 
+  // Lấy projectId từ task đầu tiên (nếu có)
+  const projectId = useMemo(() => {
+    if (tasks.length > 0 && tasks[0].project_id) {
+      return tasks[0].project_id;
+    }
+    return '';
+  }, [tasks]);
+
+  // Sử dụng useProject hook để lấy thông tin chi tiết của project
+  const { data: projectData } = useProject(projectId);
+
+  // Lấy danh sách project members từ useProject hook
+  const projectMembers = useMemo(() => {
+    // Nếu có dữ liệu từ API, sử dụng nó
+    if (projectData?.project?.members) {
+      return projectData.project.members.map(member => ({
+        id: member.user.userId,
+        name: member.user.username || member.user.fullName || member.user.email,
+        avatarUrl: member.user.avatarUrl,
+        role: member.role
+      }));
+    }
+    // Nếu không có dữ liệu từ API, sử dụng users từ props
+    if (users && users.length > 0) {
+      return users.map(user => ({
+        id: user.id,
+        name: user.name,
+        avatarUrl: user.avatarUrl,
+        role: user.role
+      }));
+    }
+    return [];
+  }, [projectData, users]);
+
+  // Lấy danh sách assignees từ các task của dự án
+  const taskAssignees = useMemo(() => {
+    // Lấy thông tin assignee từ tất cả các task
+    const assignees = orderedTasks
+      .filter(task => task.assignee && task.assignee.userId) // Chỉ lấy task có assignee
+      .map(task => ({
+        id: task.assignee!.userId,
+        name: task.assignee!.username || 'Không có tên',
+        avatarUrl: task.assignee?.avatarUrl
+      }));
+    
+    // Loại bỏ các assignee trùng lặp bằng cách chuyển sang Set và lại thành Array
+    const uniqueAssignees = Array.from(
+      new Map(assignees.map(item => [item.id, item])).values()
+    );
+    
+    // Sắp xếp theo tên
+    return uniqueAssignees.sort((a, b) => a.name.localeCompare(b.name));
+  }, [orderedTasks]);
+
+  // Gộp cả projectMembers và taskAssignees để hiển thị đầy đủ
+  const allMembers = useMemo(() => {
+    const memberMap = new Map();
+    
+    // Thêm project members vào map
+    projectMembers.forEach(member => {
+      memberMap.set(member.id, member);
+    });
+    
+    // Thêm task assignees vào map (sẽ ghi đè nếu đã tồn tại)
+    taskAssignees.forEach(assignee => {
+      memberMap.set(assignee.id, assignee);
+    });
+    
+    // Chuyển map thành array và sắp xếp theo tên
+    return Array.from(memberMap.values())
+      .sort((a: any, b: any) => a.name.localeCompare(b.name));
+  }, [projectMembers, taskAssignees]);
+
+  // Filter tasks theo view mode (project hoặc user)
   const filteredTasks = useMemo(() => {
     if (viewMode === 'project') {
       return orderedTasks;
@@ -590,11 +665,32 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     >
       <div className="flex gap-4 h-full">
         <div className="w-80 flex-shrink-0 overflow-y-auto max-h-[calc(100vh-200px)] border-r border-slate-200">
-          <PriorityTaskList 
-            tasks={orderedTasks} 
-            onTaskClick={onTaskClick} 
-            onTaskReorder={handleTaskReorder}
-          />
+          {viewMode === 'project' ? (
+            <PriorityTaskList 
+              tasks={orderedTasks} 
+              onTaskClick={onTaskClick} 
+              onTaskReorder={handleTaskReorder}
+            />
+          ) : (
+            <>
+              <div className="p-3 border-b">
+                <h3 className="font-medium text-slate-700">
+                  Tasks của {allMembers.find(u => u.id === selectedUserId)?.name || 'Người dùng'}
+                </h3>
+              </div>
+              {selectedUserId ? (
+                <PriorityTaskList 
+                  tasks={filteredTasks} 
+                  onTaskClick={onTaskClick} 
+                  onTaskReorder={handleTaskReorder}
+                />
+              ) : (
+                <div className="p-3 text-slate-500 text-sm">
+                  Vui lòng chọn một người dùng để xem danh sách task
+                </div>
+              )}
+            </>
+          )}
         </div>
         <div className="flex-1 overflow-auto" ref={containerRef}>
           <div
@@ -636,13 +732,13 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                         value={selectedUserId}
                         onChange={(e) => setSelectedUserId(e.target.value)}
                         className="px-2 py-1 border rounded text-sm"
-                        aria-label="Select user to filter tasks"
-                        title="Select user"
+                        aria-label="Chọn người dùng để lọc task"
+                        title="Chọn người dùng"
                       >
-                        <option value="">Select User</option>
-                        {users.map(user => (
-                          <option key={user.id} value={user.id}>
-                            {user.name}
+                        <option value="">Chọn người dùng</option>
+                        {allMembers.map(member => (
+                          <option key={member.id} value={member.id}>
+                            {member.name}
                           </option>
                         ))}
                       </select>
