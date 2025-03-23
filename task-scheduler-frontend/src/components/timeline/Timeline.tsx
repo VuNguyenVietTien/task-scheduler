@@ -583,12 +583,18 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
       const reorderedTasks = arrayMove(orderedTasks, oldIndex, newIndex);
       
       // Đảm bảo tất cả task đều được tính toán lại ngày bắt đầu dựa trên thứ tự mới
-      const tasksToRecalculate = reorderedTasks.map((task, index) => ({
-        ...task,
-        priority_order: index + 1,
-        // Chỉ giữ start_date cho task đầu tiên hoặc task cố định
-        start_date: index === 0 && task.start_date ? task.start_date : undefined
-      }));
+      const tasksToRecalculate = reorderedTasks.map((task, index) => {
+        // Lấy index cũ của task trong mảng ban đầu
+        const oldIndex = orderedTasks.findIndex(t => t.task_id === task.task_id);
+        
+        return {
+          ...task,
+          priority_order: index + 1,
+          // Reset start_date của task được đưa lên đầu để tính toán lại
+          // Nếu task ban đầu ở vị trí đầu tiên thì vẫn giữ start_date (nếu có)
+          start_date: index === 0 && oldIndex !== 0 ? undefined : task.start_date
+        };
+      });
   
       const taskOrders = tasksToRecalculate.map((task, index) => ({
         taskId: task.task_id,
@@ -612,9 +618,22 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
         // Xác định ngày bắt đầu
         let startDate: Date;
         
-        if (index === 0 && task.start_date) {
-          // Giữ nguyên ngày bắt đầu cho task đầu tiên (nếu có)
-          startDate = new Date(task.start_date);
+        if (index === 0) {
+          if (task.start_date) {
+            // Nếu task đầu tiên đã có ngày bắt đầu, giữ nguyên
+            startDate = new Date(task.start_date);
+          } else {
+            // Nếu task đầu tiên không có ngày bắt đầu, gán bằng ngày hiện tại
+            startDate = new Date(currentDate);
+            
+            // Đảm bảo ngày bắt đầu không phải là ngày cuối tuần
+            while (isWeekend(startDate)) {
+              startDate = getNextWorkDay(startDate);
+              console.log(`Task đầu tiên rơi vào cuối tuần, dời đến ngày làm việc tiếp theo: ${formatDateVN(startDate)}`);
+            }
+            
+            console.log(`Task đầu tiên không có ngày bắt đầu, sử dụng ngày: ${formatDateVN(startDate)}`);
+          }
         } else {
           // Bắt đầu từ ngày hiện tại
           startDate = new Date(currentDate);
