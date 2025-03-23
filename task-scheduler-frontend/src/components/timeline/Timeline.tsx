@@ -169,15 +169,23 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
 
   const today = getCurrentDateVN();
 
-  // Hàm lấy ngày thứ 2 (Monday) của tuần trước đó hoặc tuần hiện tại
+  // Hàm lấy ngày thứ 2 (Monday) của tuần trước đó
   const getLastMonday = useCallback(() => {
     const date = new Date(getCurrentDateVN());
-    const day = date.getDay();
-    // Nếu hôm nay là chủ nhật (day = 0), lùi về 6 ngày để lấy thứ 2 tuần trước
-    // Nếu hôm nay là thứ 2 đến thứ 7 (day = 1-6), lùi về (day - 1) ngày để lấy thứ 2 tuần này
-    date.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
+    const day = date.getDay(); // 0 = Chủ nhật, 1 = Thứ 2, ..., 6 = Thứ 7
+    
+    // Nếu hôm nay là chủ nhật (0), lùi về 6 ngày để có thứ 2 tuần trước
+    // Nếu hôm nay là thứ 2 (1), lùi về 7 ngày để có thứ 2 tuần trước
+    // Nếu hôm nay là thứ 3-7 (2-6), lùi về (day + 6) ngày để có thứ 2 tuần trước
+    const daysToSubtract = day === 0 ? 6 : (day === 1 ? 7 : day + 6);
+    date.setDate(date.getDate() - daysToSubtract);
+    
+    console.log(`Tính ngày thứ 2 trước: Hôm nay là ${['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'][day]}, lùi ${daysToSubtract} ngày = ${formatDateVN(date)}`);
     return date;
   }, [getCurrentDateVN]);
+
+  // Tạo ref để theo dõi trạng thái đã khởi tạo từ localStorage
+  const initializedFromLocalStorage = useRef(false);
 
   // Khởi tạo dateRange từ localStorage hoặc sử dụng giá trị mặc định
   const [dateRange, setDateRange] = useState<DateRange>(() => {
@@ -188,6 +196,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
       if (savedRange) {
         const { startDate, endDate } = JSON.parse(savedRange);
         console.log('Đã tìm thấy dateRange trong localStorage:', { startDate, endDate });
+        initializedFromLocalStorage.current = true;
         return {
           startDate: new Date(startDate),
           endDate: new Date(endDate)
@@ -352,48 +361,54 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
   useEffect(() => {
     if (tasks.length === 0) return;
 
-    // Đảm bảo rằng dateRange bao gồm ngày hiện tại
-    const currentDate = getCurrentDateVN();
-    const taskDates = tasks
-      .flatMap(task => [
-        task.start_date ? new Date(task.start_date) : null,
-        task.due_date ? new Date(task.due_date) : null
-      ])
-      .filter((date): date is Date => date !== null);
+    // Chỉ tính toán dateRange nếu chưa khởi tạo từ localStorage
+    if (!initializedFromLocalStorage.current) {
+      // Đảm bảo rằng dateRange bao gồm ngày hiện tại
+      const currentDate = getCurrentDateVN();
+      const taskDates = tasks
+        .flatMap(task => [
+          task.start_date ? new Date(task.start_date) : null,
+          task.due_date ? new Date(task.due_date) : null
+        ])
+        .filter((date): date is Date => date !== null);
 
-    if (taskDates.length === 0) {
-      // Nếu không có task nào có ngày, sử dụng ngày hiện tại
-      const endDate = new Date(currentDate);
-      endDate.setDate(endDate.getDate() + 14);
-      setDateRange({ startDate: currentDate, endDate });
-      return;
+      if (taskDates.length === 0) {
+        // Nếu không có task nào có ngày, sử dụng ngày hiện tại
+        const startDate = getLastMonday();
+        const endDate = new Date(startDate);
+        endDate.setDate(endDate.getDate() + 30);
+        setDateRange({ startDate, endDate });
+        return;
+      }
+
+      // Tìm ngày sớm nhất và muộn nhất trong danh sách task
+      const earliestTaskDate = new Date(Math.min(...taskDates.map(d => d.getTime())));
+      const latestTaskDate = new Date(Math.max(...taskDates.map(d => d.getTime())));
+
+      // Đảm bảo rằng ngày bắt đầu không muộn hơn ngày hiện tại
+      const startDate = currentDate < earliestTaskDate ? currentDate : earliestTaskDate;
+      
+      // Đảm bảo rằng ngày kết thúc ít nhất là 14 ngày sau ngày bắt đầu
+      const endDate = new Date(latestTaskDate);
+      if (endDate < startDate) {
+        endDate.setDate(startDate.getDate() + 30);
+      } else {
+        endDate.setDate(endDate.getDate() + 2); // Thêm 2 ngày buffer
+      }
+
+      console.log('Date Range Calculation:', {
+        today: formatDateVN(currentDate),
+        earliestTaskDate: formatDateVN(earliestTaskDate),
+        latestTaskDate: formatDateVN(latestTaskDate),
+        startDate: formatDateVN(startDate),
+        endDate: formatDateVN(endDate)
+      });
+
+      setDateRange({ startDate, endDate });
     }
-
-    // Tìm ngày sớm nhất và muộn nhất trong danh sách task
-    const earliestTaskDate = new Date(Math.min(...taskDates.map(d => d.getTime())));
-    const latestTaskDate = new Date(Math.max(...taskDates.map(d => d.getTime())));
-
-    // Đảm bảo rằng ngày bắt đầu không muộn hơn ngày hiện tại
-    const startDate = currentDate < earliestTaskDate ? currentDate : earliestTaskDate;
-    
-    // Đảm bảo rằng ngày kết thúc ít nhất là 14 ngày sau ngày bắt đầu
-    const endDate = new Date(latestTaskDate);
-    if (endDate < startDate) {
-      endDate.setDate(startDate.getDate() + 14);
-    } else {
-      endDate.setDate(endDate.getDate() + 2); // Thêm 2 ngày buffer
-    }
-
-    console.log('Date Range Calculation:', {
-      today: formatDateVN(currentDate),
-      earliestTaskDate: formatDateVN(earliestTaskDate),
-      latestTaskDate: formatDateVN(latestTaskDate),
-      startDate: formatDateVN(startDate),
-      endDate: formatDateVN(endDate)
-    });
-
-    setDateRange({ startDate, endDate });
-  }, [tasks, getCurrentDateVN]);
+    // Sau khi đã xử lý một lần, đánh dấu là đã khởi tạo để không ghi đè lại
+    initializedFromLocalStorage.current = true;
+  }, [tasks, getCurrentDateVN, getLastMonday, initializedFromLocalStorage]);
 
   useEffect(() => {
     if (!containerRef.current) return;
