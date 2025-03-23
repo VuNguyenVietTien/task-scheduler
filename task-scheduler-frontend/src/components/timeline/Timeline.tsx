@@ -86,18 +86,20 @@ const calculateTaskSchedule = (
   const currentDate = new Date(startDate);
   const updatedSchedule = { ...workSchedule };
   const hoursPerDay: Record<string, number> = {}; // Số giờ task chiếm trong mỗi ngày
+  let lastWorkDate = new Date(startDate); // Theo dõi ngày làm việc cuối cùng
   
   // Đặt thời gian về 00:00:00 để so sánh chính xác
   currentDate.setHours(0, 0, 0, 0);
   
   while (remainingEffort > 0) {
     if (isWeekend(currentDate)) {
-      // Bỏ qua ngày cuối tuần
+      // Bỏ qua việc tính giờ làm cho ngày cuối tuần, nhưng vẫn tăng ngày
       currentDate.setDate(currentDate.getDate() + 1);
       continue;
     }
     
     const dateStr = formatDateVN(currentDate);
+    lastWorkDate = new Date(currentDate); // Cập nhật ngày làm việc cuối cùng
     
     // Số giờ còn lại trong ngày này (mặc định 8h nếu chưa có ai dùng)
     const remainingHoursInDay = updatedSchedule[dateStr] !== undefined 
@@ -128,8 +130,9 @@ const calculateTaskSchedule = (
     }
   }
   
+  // Trả về ngày làm việc cuối cùng làm ngày kết thúc
   return { 
-    endDate: new Date(currentDate), 
+    endDate: lastWorkDate, 
     updatedSchedule,
     hoursPerDay
   };
@@ -726,38 +729,32 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                   ? new Date(task.due_date)
                   : calculateTaskSchedule(taskStartDate, task.effort || 0).endDate;
 
-                // Tính số ngày làm việc giữa start_date và end_date
-                let totalDays = 0;
-                let currentDate = new Date(taskStartDate);
+                // Tính tổng số ngày (kể cả ngày nghỉ) giữa start_date và end_date
+                const startDayIndex = days.findIndex(day => isSameDay(day, taskStartDate));
+                const endDayIndex = days.findIndex(day => isSameDay(day, taskEndDate));
                 
-                // Xử lý đặc biệt cho task có effort = 0
-                if (task.effort === 0) {
-                  totalDays = 1; // Chỉ hiển thị 1 ngày
-                } else {
-                  while (currentDate <= taskEndDate) {
-                    if (!isWeekend(currentDate)) {
-                      totalDays++;
-                    }
-                    currentDate.setDate(currentDate.getDate() + 1);
-                  }
-                }
-
+                // Nếu không tìm thấy ngày trong timeline, bỏ qua task này
+                if (startDayIndex === -1) return null;
+                
+                // Tính số ngày hiển thị (bao gồm cả ngày cuối tuần)
+                // Nếu không tìm thấy ngày kết thúc trong timeline, hiển thị đến hết ngày cuối cùng của timeline
+                const totalDays = endDayIndex === -1
+                  ? days.length - startDayIndex
+                  : endDayIndex - startDayIndex + 1;
+                
                 // Đảm bảo task luôn có ít nhất 1 ngày hiển thị
-                const workDays = Math.max(1, totalDays);
-
-                // Tìm vị trí bắt đầu trên timeline
-                const dayIndex = days.findIndex(day => isSameDay(day, taskStartDate));
-
-                if (dayIndex === -1) return null;
+                const displayDays = Math.max(1, totalDays);
+                
+                console.log(`Task ${task.title}: start=${formatDateVN(taskStartDate)}, end=${formatDateVN(taskEndDate)}, days=${displayDays}`);
 
                 return (
                   <div
                     key={task.task_id}
                     style={{
                       position: 'absolute',
-                      left: `${dayIndex * dayWidth}px`,
+                      left: `${startDayIndex * dayWidth}px`,
                       top: `${rowIndex * rowHeight}px`,
-                      width: `${workDays * dayWidth}px`,
+                      width: `${displayDays * dayWidth}px`,
                       height: `${rowHeight}px`,
                       zIndex: 30,
                       display: 'flex',
@@ -768,7 +765,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                   >
                     <TaskBar
                       task={task}
-                      width={workDays * dayWidth - 8}
+                      width={displayDays * dayWidth - 8}
                       x={0}
                       y={0}
                       height={36}
