@@ -5,6 +5,7 @@ import { format } from 'date-fns';
 import { UserAvatar } from '@/components/common/UserAvatar';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+import { CalendarIcon, ClockIcon, ArrowsUpDownIcon } from '@heroicons/react/24/outline';
 
 interface PriorityTaskCardProps {
   task: Task;
@@ -66,6 +67,30 @@ export function PriorityTaskCard({ task, onClick }: PriorityTaskCardProps) {
         </div>
       </div>
 
+      <div className="flex flex-col gap-2 mt-2">
+        {/* Effort */}
+        {task.effort !== undefined && (
+          <div className="flex items-center gap-1 text-xs text-slate-600">
+            <ClockIcon className="h-3 w-3" />
+            <span>{task.effort}h</span>
+          </div>
+        )}
+
+        {/* Start Date */}
+        {task.start_date && (
+          <div className="flex items-center gap-1 text-xs text-slate-600">
+            <CalendarIcon className="h-3 w-3" />
+            <span>Start: {format(new Date(task.start_date), 'dd/MM')}</span>
+          </div>
+        )}
+
+        {/* Priority Order */}
+        <div className="flex items-center gap-1 text-xs text-slate-500">
+          <ArrowsUpDownIcon className="h-3 w-3" />
+          <span>Order: {task.priority_order}</span>
+        </div>
+      </div>
+
       <div className="mt-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
           {/* Assignee */}
@@ -86,7 +111,7 @@ export function PriorityTaskCard({ task, onClick }: PriorityTaskCardProps) {
         {/* Due Date */}
         {task.due_date && (
           <span className="text-xs text-slate-500">
-            {format(new Date(task.due_date), 'dd/MM')}
+            Due: {format(new Date(task.due_date), 'dd/MM')}
           </span>
         )}
       </div>

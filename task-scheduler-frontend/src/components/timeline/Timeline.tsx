@@ -6,7 +6,7 @@ import { TaskBar } from './TaskBar';
 import { TimelineSkeleton } from './TimelineSkeleton';
 import { PriorityTaskList } from './PriorityTaskList';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { getDatesBetween } from '@/lib/utils';
+import { getDatesBetween, formatDateVN, debugDate, isSameDay } from '@/lib/utils';
 import {
   DndContext,
   DragEndEvent,
@@ -61,30 +61,158 @@ const getWorkHoursInDay = (remainingEffort: number): number => {
   return Math.min(remainingEffort, 8); // Tối đa 8h/ngày
 };
 
-// Tính thời điểm kết thúc của task dựa trên effort
-const calculateTaskEndDate = (startDate: Date, effort: number): Date => {
+// Struct để theo dõi thời gian làm việc còn lại của mỗi ngày
+interface WorkSchedule {
+  // Key: yyyy-MM-dd, Value: Số giờ còn lại trong ngày (8 - đã sử dụng)
+  [date: string]: number;
+}
+
+// Tính thời điểm kết thúc của task dựa trên effort và thời gian làm việc còn lại
+const calculateTaskSchedule = (
+  startDate: Date, 
+  effort: number,
+  workSchedule: WorkSchedule = {}
+): { endDate: Date, updatedSchedule: WorkSchedule, hoursPerDay: Record<string, number> } => {
+  // Nếu effort là 0, task không chiếm thời gian làm việc nào
+  if (effort <= 0) {
+    return { 
+      endDate: new Date(startDate), // Kết thúc cùng ngày bắt đầu
+      updatedSchedule: { ...workSchedule },
+      hoursPerDay: { [formatDateVN(startDate)]: 0 } // Không có giờ làm việc
+    };
+  }
+
   let remainingEffort = effort;
-  const endDate = new Date(startDate);
+  const currentDate = new Date(startDate);
+  const updatedSchedule = { ...workSchedule };
+  const hoursPerDay: Record<string, number> = {}; // Số giờ task chiếm trong mỗi ngày
+  
+  // Đặt thời gian về 00:00:00 để so sánh chính xác
+  currentDate.setHours(0, 0, 0, 0);
   
   while (remainingEffort > 0) {
-    if (!isWeekend(endDate)) {
-      const hoursForDay = getWorkHoursInDay(remainingEffort);
-      remainingEffort -= hoursForDay;
-      if (remainingEffort > 0) {
-        endDate.setDate(endDate.getDate() + 1);
-      }
-    } else {
-      endDate.setDate(endDate.getDate() + 1);
+    if (isWeekend(currentDate)) {
+      // Bỏ qua ngày cuối tuần
+      currentDate.setDate(currentDate.getDate() + 1);
+      continue;
+    }
+    
+    const dateStr = formatDateVN(currentDate);
+    
+    // Số giờ còn lại trong ngày này (mặc định 8h nếu chưa có ai dùng)
+    const remainingHoursInDay = updatedSchedule[dateStr] !== undefined 
+      ? updatedSchedule[dateStr] 
+      : 8;
+    
+    if (remainingHoursInDay <= 0) {
+      // Ngày đã hết giờ làm việc, chuyển sang ngày tiếp theo
+      currentDate.setDate(currentDate.getDate() + 1);
+      continue;
+    }
+    
+    // Tính số giờ có thể làm trong ngày này
+    const hoursForThisDay = Math.min(remainingEffort, remainingHoursInDay);
+    
+    // Lưu số giờ task chiếm trong ngày
+    hoursPerDay[dateStr] = hoursForThisDay;
+    
+    // Cập nhật số giờ còn lại trong ngày
+    updatedSchedule[dateStr] = remainingHoursInDay - hoursForThisDay;
+    
+    // Cập nhật effort còn lại
+    remainingEffort -= hoursForThisDay;
+    
+    // Nếu còn effort, chuyển sang ngày tiếp theo
+    if (remainingEffort > 0) {
+      currentDate.setDate(currentDate.getDate() + 1);
     }
   }
   
-  return endDate;
+  return { 
+    endDate: new Date(currentDate), 
+    updatedSchedule,
+    hoursPerDay
+  };
+};
+
+// Hàm tìm thời gian bắt đầu khả dụng cho task tiếp theo (dựa trên người được gán)
+const findNextAvailableStartDate = (
+  assigneeId: string | undefined, 
+  lastTaskEndTime: Record<string, Date>,
+  currentTime: Date
+): Date => {
+  if (!assigneeId || !lastTaskEndTime[assigneeId]) {
+    return currentTime;
+  }
+  
+  const userLastEndTime = lastTaskEndTime[assigneeId];
+  return userLastEndTime > currentTime ? userLastEndTime : currentTime;
 };
 
 export function Timeline({ tasks, isLoading = false, onTaskClick, users }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
-  const [dateRange, setDateRange] = useState<DateRange>({ startDate: new Date(), endDate: new Date() });
+  const getCurrentDateVN = useCallback(() => {
+    // Sử dụng timeZone string
+    const now = new Date();
+    const vnTime = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+    
+    // Reset thời gian về 00:00:00 để so sánh chính xác
+    vnTime.setHours(0, 0, 0, 0);
+    
+    console.log('Current date VN:', debugDate(vnTime), vnTime);
+    return vnTime;
+  }, []);
+
+  const today = getCurrentDateVN();
+
+  // Hàm lấy ngày thứ 2 (Monday) của tuần trước đó hoặc tuần hiện tại
+  const getLastMonday = useCallback(() => {
+    const date = new Date(getCurrentDateVN());
+    const day = date.getDay();
+    // Nếu hôm nay là chủ nhật (day = 0), lùi về 6 ngày để lấy thứ 2 tuần trước
+    // Nếu hôm nay là thứ 2 đến thứ 7 (day = 1-6), lùi về (day - 1) ngày để lấy thứ 2 tuần này
+    date.setDate(date.getDate() - (day === 0 ? 6 : day - 1));
+    return date;
+  }, [getCurrentDateVN]);
+
+  // Khởi tạo dateRange từ localStorage hoặc sử dụng giá trị mặc định
+  const [dateRange, setDateRange] = useState<DateRange>(() => {
+    try {
+      // Kiểm tra xem có dữ liệu trong localStorage không
+      const savedRange = localStorage.getItem('ganttChartDateRange');
+      
+      if (savedRange) {
+        const { startDate, endDate } = JSON.parse(savedRange);
+        return {
+          startDate: new Date(startDate),
+          endDate: new Date(endDate)
+        };
+      }
+    } catch (error) {
+      console.error('Error reading date range from localStorage:', error);
+    }
+    
+    // Nếu không có dữ liệu hoặc có lỗi, sử dụng giá trị mặc định
+    const startDate = getLastMonday();
+    const endDate = new Date(startDate);
+    endDate.setDate(startDate.getDate() + 30); // Thêm 30 ngày = 1 tháng
+    
+    return { startDate, endDate };
+  });
+
+  // Lưu dateRange vào localStorage khi có thay đổi
+  useEffect(() => {
+    try {
+      localStorage.setItem('ganttChartDateRange', JSON.stringify({
+        startDate: dateRange.startDate.toISOString(),
+        endDate: dateRange.endDate.toISOString()
+      }));
+    } catch (error) {
+      console.error('Error saving date range to localStorage:', error);
+    }
+  }, [dateRange]);
+
   const [orderedTasks, setOrderedTasks] = useState<Task[]>(tasks);
   const reorderTasks = useReorderTasks();
   const [viewMode, setViewMode] = useState<ViewMode>('project');
@@ -108,74 +236,154 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     if (!tasks || tasks.length === 0) return;
 
     const processTasks = (inputTasks: Task[]): Task[] => {
+      // Lọc bỏ tasks đã hoàn thành (status = done)
+      const activeTasks = inputTasks.filter(task => task.status !== 'done');
+      
       // Sắp xếp tasks theo priority_order
-      const sortedTasks = [...inputTasks].sort((a, b) => a.priority_order - b.priority_order);
+      const sortedTasks = [...activeTasks].sort((a, b) => a.priority_order - b.priority_order);
       
-      let lastEndTime = new Date().getTime();
+      const currentDate = getCurrentDateVN();
+      console.log('Ngày hiện tại (VN):', formatDateVN(currentDate), currentDate);
       
-      return sortedTasks.map(task => {
-        // Nếu task đã có start_date, kiểm tra và điều chỉnh
+      // Theo dõi thời gian làm việc còn lại cho mỗi ngày và mỗi người dùng
+      const scheduleByUser: Record<string, WorkSchedule> = {};
+      
+      // Theo dõi thời gian kết thúc cho mỗi task
+      const taskSchedules: Record<string, { 
+        start: Date, 
+        end: Date, 
+        hoursPerDay: Record<string, number> 
+      }> = {};
+      
+      // Process tasks sequentially to handle dependencies correctly
+      const result = [];
+      
+      for (let i = 0; i < sortedTasks.length; i++) {
+        const task = sortedTasks[i];
+        const assigneeId = task.assignee?.userId || 'unassigned';
+        let updatedTask = { ...task };
+        
+        // Khởi tạo lịch làm việc cho người dùng nếu chưa có
+        if (!scheduleByUser[assigneeId]) {
+          scheduleByUser[assigneeId] = {};
+        }
+        
+        // Cập nhật priority_order bắt đầu từ 1 (thay vì 0)
+        updatedTask.priority_order = i + 1;
+        
+        // Nếu task đã có start_date, tính lại dựa trên effort và thời gian đã sử dụng
+        let startDate: Date;
+        
         if (task.start_date) {
-          const startDate = new Date(task.start_date);
-          if (task.effort) {
-            const endDate = calculateTaskEndDate(startDate, task.effort);
-            lastEndTime = endDate.getTime();
-            return {
-              ...task,
-              due_date: endDate.toISOString().split('T')[0]
-            };
+          console.log(`Task ${task.title} có start_date: ${task.start_date}`);
+          startDate = new Date(task.start_date);
+        } else {
+          console.log(`Task ${task.title} không có start_date, đặt từ ngày hiện tại hoặc theo task trước`);
+          // Mặc định bắt đầu từ ngày hiện tại
+          startDate = new Date(currentDate);
+          
+          // Kiểm tra các task trước của cùng assignee
+          for (let j = 0; j < i; j++) {
+            const prevTask = sortedTasks[j];
+            if (prevTask.assignee?.userId === assigneeId && taskSchedules[prevTask.task_id]) {
+              const prevSchedule = taskSchedules[prevTask.task_id];
+              if (prevSchedule.end > startDate) {
+                startDate = new Date(prevSchedule.end);
+                console.log(`- Dựa trên task trước (${prevTask.title}), bắt đầu từ: ${formatDateVN(startDate)}`);
+              }
+            }
           }
-          return task;
-        }
-
-        // Xác định start_date cho task mới
-        let startDate = new Date(lastEndTime);
-        
-        // Nếu là task đầu tiên, bắt đầu từ ngày hiện tại
-        if (lastEndTime === new Date().getTime()) {
-          startDate = new Date();
+          
+          // Bỏ qua ngày cuối tuần nếu cần
+          while (isWeekend(startDate)) {
+            startDate = getNextWorkDay(startDate);
+            console.log(`- Bỏ qua cuối tuần, bắt đầu từ: ${formatDateVN(startDate)}`);
+          }
         }
         
-        // Bỏ qua ngày cuối tuần cho ngày bắt đầu
-        while (isWeekend(startDate)) {
-          startDate = getNextWorkDay(startDate);
-        }
-
-        // Tính toán end_date dựa trên effort
-        const endDate = calculateTaskEndDate(startDate, task.effort || 8);
-        lastEndTime = endDate.getTime();
-
-        return {
-          ...task,
-          start_date: startDate.toISOString().split('T')[0],
-          due_date: endDate.toISOString().split('T')[0]
+        // Lấy effort thực tế, mặc định là 0 nếu không có
+        const taskEffort = task.effort !== undefined ? task.effort : 0;
+        
+        // Tính toán lịch trình làm việc
+        const { endDate, updatedSchedule, hoursPerDay } = calculateTaskSchedule(
+          startDate,
+          taskEffort,
+          scheduleByUser[assigneeId]
+        );
+        
+        // Cập nhật lịch làm việc cho người dùng
+        scheduleByUser[assigneeId] = updatedSchedule;
+        
+        // Lưu lịch trình của task
+        taskSchedules[task.task_id] = {
+          start: startDate,
+          end: endDate,
+          hoursPerDay
         };
-      });
+        
+        console.log(`Task ${task.title} (${taskEffort}h):`, {
+          startDate: formatDateVN(startDate),
+          endDate: formatDateVN(endDate),
+          hoursPerDay: Object.entries(hoursPerDay).map(([date, hours]) => `${date}: ${hours}h`).join(', ')
+        });
+        
+        updatedTask.start_date = formatDateVN(startDate);
+        updatedTask.due_date = formatDateVN(endDate);
+        
+        result.push(updatedTask);
+      }
+
+      return result;
     };
 
     setOrderedTasks(processTasks(tasks));
-  }, [tasks]);
+  }, [tasks, getCurrentDateVN]);
 
   useEffect(() => {
     if (tasks.length === 0) return;
 
-    const dates = tasks
+    // Đảm bảo rằng dateRange bao gồm ngày hiện tại
+    const currentDate = getCurrentDateVN();
+    const taskDates = tasks
       .flatMap(task => [
         task.start_date ? new Date(task.start_date) : null,
         task.due_date ? new Date(task.due_date) : null
       ])
       .filter((date): date is Date => date !== null);
 
-    if (dates.length === 0) return;
+    if (taskDates.length === 0) {
+      // Nếu không có task nào có ngày, sử dụng ngày hiện tại
+      const endDate = new Date(currentDate);
+      endDate.setDate(endDate.getDate() + 14);
+      setDateRange({ startDate: currentDate, endDate });
+      return;
+    }
 
-    const startDate = new Date(Math.min(...dates.map(d => d.getTime())));
-    const endDate = new Date(Math.max(...dates.map(d => d.getTime())));
+    // Tìm ngày sớm nhất và muộn nhất trong danh sách task
+    const earliestTaskDate = new Date(Math.min(...taskDates.map(d => d.getTime())));
+    const latestTaskDate = new Date(Math.max(...taskDates.map(d => d.getTime())));
 
-    startDate.setDate(startDate.getDate() - 2);
-    endDate.setDate(endDate.getDate() + 2);
+    // Đảm bảo rằng ngày bắt đầu không muộn hơn ngày hiện tại
+    const startDate = currentDate < earliestTaskDate ? currentDate : earliestTaskDate;
+    
+    // Đảm bảo rằng ngày kết thúc ít nhất là 14 ngày sau ngày bắt đầu
+    const endDate = new Date(latestTaskDate);
+    if (endDate < startDate) {
+      endDate.setDate(startDate.getDate() + 14);
+    } else {
+      endDate.setDate(endDate.getDate() + 2); // Thêm 2 ngày buffer
+    }
+
+    console.log('Date Range Calculation:', {
+      today: formatDateVN(currentDate),
+      earliestTaskDate: formatDateVN(earliestTaskDate),
+      latestTaskDate: formatDateVN(latestTaskDate),
+      startDate: formatDateVN(startDate),
+      endDate: formatDateVN(endDate)
+    });
 
     setDateRange({ startDate, endDate });
-  }, [tasks]);
+  }, [tasks, getCurrentDateVN]);
 
   useEffect(() => {
     if (!containerRef.current) return;
@@ -211,13 +419,95 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
 
     if (oldIndex !== -1 && newIndex !== -1) {
       const reorderedTasks = arrayMove(orderedTasks, oldIndex, newIndex);
+      
+      // Đảm bảo tất cả task đều được tính toán lại ngày bắt đầu dựa trên thứ tự mới
+      const tasksToRecalculate = reorderedTasks.map((task, index) => ({
+        ...task,
+        priority_order: index + 1,
+        // Chỉ giữ start_date cho task đầu tiên hoặc task cố định
+        start_date: index === 0 && task.start_date ? task.start_date : undefined
+      }));
   
-      const taskOrders = reorderedTasks.map((task, index) => ({
+      const taskOrders = tasksToRecalculate.map((task, index) => ({
         taskId: task.task_id,
         priorityOrder: index + 1
       }));
-  
-      setOrderedTasks(reorderedTasks);
+      
+      // Theo dõi thời gian làm việc còn lại cho mỗi ngày và mỗi người dùng
+      const scheduleByUser: Record<string, WorkSchedule> = {};
+      const currentDate = getCurrentDateVN();
+      const taskSchedules: Record<string, { start: Date, end: Date, hoursPerDay: Record<string, number> }> = {};
+      
+      // Tính toán lại task schedule dựa trên thứ tự mới
+      const processedTasks = tasksToRecalculate.map((task, index) => {
+        const assigneeId = task.assignee?.userId || 'unassigned';
+        
+        // Khởi tạo lịch làm việc cho người dùng nếu chưa có
+        if (!scheduleByUser[assigneeId]) {
+          scheduleByUser[assigneeId] = {};
+        }
+        
+        // Xác định ngày bắt đầu
+        let startDate: Date;
+        
+        if (index === 0 && task.start_date) {
+          // Giữ nguyên ngày bắt đầu cho task đầu tiên (nếu có)
+          startDate = new Date(task.start_date);
+        } else {
+          // Bắt đầu từ ngày hiện tại
+          startDate = new Date(currentDate);
+          
+          // Kiểm tra các task trước của cùng assignee
+          for (let j = 0; j < index; j++) {
+            const prevTask = tasksToRecalculate[j];
+            if (prevTask.assignee?.userId === assigneeId && taskSchedules[prevTask.task_id]) {
+              const prevSchedule = taskSchedules[prevTask.task_id];
+              if (prevSchedule.end > startDate) {
+                startDate = new Date(prevSchedule.end);
+              }
+            }
+          }
+          
+          // Bỏ qua ngày cuối tuần nếu cần
+          while (isWeekend(startDate)) {
+            startDate = getNextWorkDay(startDate);
+          }
+        }
+        
+        // Lấy effort thực tế, mặc định là 0 nếu không có
+        const taskEffort = task.effort !== undefined ? task.effort : 0;
+        
+        // Tính toán lịch trình
+        const { endDate, updatedSchedule, hoursPerDay } = calculateTaskSchedule(
+          startDate,
+          taskEffort,
+          scheduleByUser[assigneeId]
+        );
+        
+        // Cập nhật lịch làm việc cho người dùng
+        scheduleByUser[assigneeId] = updatedSchedule;
+        
+        // Lưu lịch trình của task
+        taskSchedules[task.task_id] = {
+          start: startDate,
+          end: endDate,
+          hoursPerDay
+        };
+        
+        console.log(`[Reordered] Task ${task.title} (${taskEffort}h):`, {
+          startDate: formatDateVN(startDate),
+          endDate: formatDateVN(endDate),
+          hoursPerDay: Object.entries(hoursPerDay).map(([date, hours]) => `${date}: ${hours}h`).join(', ')
+        });
+        
+        return {
+          ...task,
+          start_date: formatDateVN(startDate),
+          due_date: formatDateVN(endDate)
+        };
+      });
+      
+      setOrderedTasks(processedTasks as Task[]);
   
       if (reorderTasks && tasks[0]?.project_id) {
         reorderTasks.mutate({
@@ -226,7 +516,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
         });
       }
     }
-  }, [orderedTasks, tasks, reorderTasks]);
+  }, [orderedTasks, tasks, reorderTasks, getCurrentDateVN]);
 
   const onDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
@@ -234,6 +524,24 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
       handleTaskReorder(String(active.id), orderedTasks.findIndex(task => task.task_id === String(over.id)));
     }
   }, [orderedTasks, handleTaskReorder]);
+
+  // Xử lý khi thay đổi ngày bắt đầu
+  const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = new Date(e.target.value);
+    setDateRange(prev => ({
+      ...prev,
+      startDate: newDate
+    }));
+  };
+
+  // Xử lý khi thay đổi ngày kết thúc
+  const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newDate = new Date(e.target.value);
+    setDateRange(prev => ({
+      ...prev,
+      endDate: newDate
+    }));
+  };
 
   if (tasks.length === 0) {
     return (
@@ -246,8 +554,6 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     );
   }
 
-  const today = new Date();
-
   return (
     <DndContext
       sensors={sensors}
@@ -256,7 +562,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
       onDragEnd={onDragEnd}
     >
       <div className="flex gap-4 h-full">
-        <div className="w-80 flex-shrink-0 overflow-hidden">
+        <div className="w-80 flex-shrink-0 overflow-y-auto max-h-[calc(100vh-200px)] border-r border-slate-200">
           <PriorityTaskList 
             tasks={orderedTasks} 
             onTaskClick={onTaskClick} 
@@ -272,7 +578,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
             className="relative bg-white"
           >
             {/* Date Headers */}
-            <div className="sticky top-0 bg-white border-b border-slate-200 z-0">
+            <div className="sticky top-0 bg-white border-b border-slate-200 z-10">
               <div className="flex items-center justify-between p-2 border-b">
                 <div className="flex items-center gap-4">
                   <div className="flex items-center gap-4 mr-6">
@@ -317,65 +623,63 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                   </div>
                   <div className="flex items-center gap-2">
                     <label htmlFor="start-date" className="text-sm text-slate-600">
-                      Start:
+                      Bắt đầu:
                     </label>
                     <input
                       id="start-date"
                       type="date"
                       value={dateRange.startDate.toISOString().split('T')[0]}
-                      onChange={(e) => {
-                        const newDate = new Date(e.target.value);
-                        setDateRange(prev => ({
-                          ...prev,
-                          startDate: newDate
-                        }));
-                      }}
+                      onChange={handleStartDateChange}
                       className="px-2 py-1 text-sm border rounded"
-                      aria-label="Start date"
-                      title="Start date"
+                      aria-label="Ngày bắt đầu"
+                      title="Ngày bắt đầu hiển thị"
                     />
                   </div>
                   <div className="flex items-center gap-2">
                     <label htmlFor="end-date" className="text-sm text-slate-600">
-                      End:
+                      Kết thúc:
                     </label>
                     <input
                       id="end-date"
                       type="date"
                       value={dateRange.endDate.toISOString().split('T')[0]}
-                      onChange={(e) => {
-                        const newDate = new Date(e.target.value);
-                        setDateRange(prev => ({
-                          ...prev,
-                          endDate: newDate
-                        }));
-                      }}
+                      onChange={handleEndDateChange}
                       className="px-2 py-1 text-sm border rounded"
-                      aria-label="End date"
-                      title="End date"
+                      aria-label="Ngày kết thúc"
+                      title="Ngày kết thúc hiển thị"
                     />
                   </div>
                 </div>
               </div>
               <div className="flex" style={{ height: '40px' }}>
-                {days.map((day: Date) => (
-                  <div
-                    key={day.toISOString()}
-                    style={{ width: `${dayWidth}px` }}
-                    className={`
-                      flex-shrink-0 border-r border-slate-200 p-2
-                      ${isWeekend(day) ? 'bg-slate-100' : ''}
-                      ${day.toISOString().split('T')[0] === today.toISOString().split('T')[0] ? 'bg-yellow-100 font-semibold' : ''}
-                    `}
-                  >
-                    <div className="text-xs text-slate-600">
-                      {day.toLocaleDateString('en-GB', {
-                        day: '2-digit',
-                        month: '2-digit'
-                      })}
+                {days.map((day: Date, index: number) => {
+                  const isToday = isSameDay(day, today);
+                  const isWeekendDay = isWeekend(day);
+                  
+                  return (
+                    <div
+                      key={day.toISOString()}
+                      style={{ width: `${dayWidth}px` }}
+                      className={`
+                        flex-shrink-0 border-r border-slate-200 p-2
+                        ${isWeekendDay ? 'bg-slate-100/80' : ''}
+                        ${isToday ? 'bg-yellow-100/80 font-semibold' : ''}
+                      `}
+                    >
+                      <div className="flex flex-col justify-center h-full">
+                        <div className="text-xs text-slate-700 font-medium">
+                          {day.toLocaleDateString('vi-VN', {
+                            day: '2-digit',
+                            month: '2-digit'
+                          })}
+                        </div>
+                        <div className="text-[0.6rem] text-slate-500">
+                          {day.toLocaleDateString('vi-VN', { weekday: 'short' })}
+                        </div>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -393,43 +697,56 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                 }}
               >
                 {days.map((day: Date) => (
-                  orderedTasks.map((_, rowIndex) => (
-                    <div
-                      key={`${day.toISOString()}-${rowIndex}`}
-                      className={`
-                        border-r border-b border-slate-200 relative
-                        ${isWeekend(day) ? 'bg-slate-100/70' : ''}
-                        ${day.toISOString().split('T')[0] === today.toISOString().split('T')[0] ? 'bg-yellow-100/70' : ''}
-                      `}
-                    />
-                  ))
+                  orderedTasks.map((_, rowIndex) => {
+                    const isToday = isSameDay(day, today);
+                    const isWeekendDay = isWeekend(day);
+                    
+                    return (
+                      <div
+                        key={`${day.toISOString()}-${rowIndex}`}
+                        className={`
+                          border-r border-b border-slate-200 relative
+                          ${isWeekendDay ? 'bg-slate-100/50' : ''}
+                          ${isToday ? 'bg-yellow-100/30' : ''}
+                        `}
+                      />
+                    );
+                  })
                 ))}
               </div>
 
               {/* Task Bars */}
               {filteredTasks.map((task: Task, rowIndex: number) => {
-                if (!task.start_date) return null;
+                if (!task.start_date) {
+                  return null;
+                }
 
                 const taskStartDate = new Date(task.start_date);
                 const taskEndDate = task.due_date 
                   ? new Date(task.due_date)
-                  : calculateTaskEndDate(taskStartDate, task.effort || 8);
+                  : calculateTaskSchedule(taskStartDate, task.effort || 0).endDate;
 
-                // Tính số ngày làm việc giữa start_date và end_date (bỏ qua cuối tuần)
-                let workDays = 0;
+                // Tính số ngày làm việc giữa start_date và end_date
+                let totalDays = 0;
                 let currentDate = new Date(taskStartDate);
                 
-                while (currentDate <= taskEndDate) {
-                  if (!isWeekend(currentDate)) {
-                    workDays++;
+                // Xử lý đặc biệt cho task có effort = 0
+                if (task.effort === 0) {
+                  totalDays = 1; // Chỉ hiển thị 1 ngày
+                } else {
+                  while (currentDate <= taskEndDate) {
+                    if (!isWeekend(currentDate)) {
+                      totalDays++;
+                    }
+                    currentDate.setDate(currentDate.getDate() + 1);
                   }
-                  currentDate.setDate(currentDate.getDate() + 1);
                 }
 
+                // Đảm bảo task luôn có ít nhất 1 ngày hiển thị
+                const workDays = Math.max(1, totalDays);
+
                 // Tìm vị trí bắt đầu trên timeline
-                const dayIndex = days.findIndex(day => 
-                  day.toISOString().split('T')[0] === task.start_date
-                );
+                const dayIndex = days.findIndex(day => isSameDay(day, taskStartDate));
 
                 if (dayIndex === -1) return null;
 
@@ -442,19 +759,18 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                       top: `${rowIndex * rowHeight}px`,
                       width: `${workDays * dayWidth}px`,
                       height: `${rowHeight}px`,
+                      zIndex: 30,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'flex-start',
-                      padding: '0 8px',
-                      pointerEvents: 'none'
+                      padding: '0 4px'
                     }}
-                    className="z-30"
                   >
                     <TaskBar
                       task={task}
-                      width={workDays * dayWidth}
+                      width={workDays * dayWidth - 8}
                       x={0}
-                      y={rowHeight / 2}
+                      y={0}
                       height={36}
                       onClick={onTaskClick}
                     />
