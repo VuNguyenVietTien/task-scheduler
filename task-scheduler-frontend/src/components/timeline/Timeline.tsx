@@ -276,6 +276,8 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
 
   // Lấy danh sách project members từ useProject hook
   const projectMembers = useMemo(() => {
+    console.log("Project data từ useProject:", projectData);
+    
     // Nếu có dữ liệu từ API, sử dụng nó
     if (projectData?.project?.members) {
       return projectData.project.members.map(member => ({
@@ -285,6 +287,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
         role: member.role
       }));
     }
+    
     // Nếu không có dữ liệu từ API, sử dụng users từ props
     if (users && users.length > 0) {
       return users.map(user => ({
@@ -294,13 +297,20 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
         role: user.role
       }));
     }
+    
     return [];
   }, [projectData, users]);
+
+  // Log để debug
+  useEffect(() => {
+    console.log("ProjectID:", projectId);
+    console.log("Project Members:", projectMembers);
+  }, [projectId, projectMembers]);
 
   // Lấy danh sách assignees từ các task của dự án
   const taskAssignees = useMemo(() => {
     // Lấy thông tin assignee từ tất cả các task
-    const assignees = orderedTasks
+    const assignees = tasks
       .filter(task => task.assignee && task.assignee.userId) // Chỉ lấy task có assignee
       .map(task => ({
         id: task.assignee!.userId,
@@ -313,28 +323,55 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
       new Map(assignees.map(item => [item.id, item])).values()
     );
     
-    // Sắp xếp theo tên
-    return uniqueAssignees.sort((a, b) => a.name.localeCompare(b.name));
-  }, [orderedTasks]);
+    return uniqueAssignees;
+  }, [tasks]);
 
   // Gộp cả projectMembers và taskAssignees để hiển thị đầy đủ
   const allMembers = useMemo(() => {
+    // Tạo Map để lưu trữ members và loại bỏ trùng lặp
     const memberMap = new Map();
     
-    // Thêm project members vào map
-    projectMembers.forEach(member => {
-      memberMap.set(member.id, member);
-    });
+    // Nếu có thông tin members từ useProject, ưu tiên sử dụng
+    if (projectMembers.length > 0) {
+      projectMembers.forEach(member => {
+        memberMap.set(member.id, member);
+      });
+    }
     
-    // Thêm task assignees vào map (sẽ ghi đè nếu đã tồn tại)
-    taskAssignees.forEach(assignee => {
-      memberMap.set(assignee.id, assignee);
-    });
+    // Nếu không, kiểm tra từ tasks
+    else if (tasks.length > 0) {
+      // Lấy unique assignees từ tasks
+      tasks
+        .filter(task => task.assignee && task.assignee.userId)
+        .forEach(task => {
+          const assignee = task.assignee!;
+          if (!memberMap.has(assignee.userId)) {
+            memberMap.set(assignee.userId, {
+              id: assignee.userId,
+              name: assignee.username || 'Không có tên',
+              avatarUrl: assignee.avatarUrl,
+              role: 'member'
+            });
+          }
+        });
+    }
+    
+    // Sử dụng users từ props khi không có dữ liệu khác
+    if (memberMap.size === 0 && users && users.length > 0) {
+      users.forEach(user => {
+        memberMap.set(user.id, {
+          id: user.id,
+          name: user.name,
+          avatarUrl: user.avatarUrl,
+          role: user.role
+        });
+      });
+    }
     
     // Chuyển map thành array và sắp xếp theo tên
     return Array.from(memberMap.values())
       .sort((a: any, b: any) => a.name.localeCompare(b.name));
-  }, [projectMembers, taskAssignees]);
+  }, [projectMembers, tasks, users]);
 
   // Filter tasks theo view mode (project hoặc user)
   const filteredTasks = useMemo(() => {
@@ -936,11 +973,6 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
               />
             ) : (
               <>
-                <div className="p-3 border-b">
-                  <h3 className="font-medium text-slate-700">
-                    Tasks của {allMembers.find(u => u.id === selectedUserId)?.name || 'Người dùng'}
-                  </h3>
-                </div>
                 {selectedUserId ? (
                   <PriorityTaskList 
                     tasks={filteredTasks} 
