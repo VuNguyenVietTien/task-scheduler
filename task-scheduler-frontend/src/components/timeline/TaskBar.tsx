@@ -24,16 +24,28 @@ const getPriorityColor = (priority: string | undefined) => {
   }
 };
 
-const getStatusColor = (status: string | undefined) => {
-  switch (status?.toLowerCase()) {
-    case 'done':
-      return 'bg-green-500 hover:bg-green-600';
+// Hàm quyết định màu dựa trên status thay vì priority
+const getStatusColor = (status: string | number): string => {
+  if (!status) return 'bg-gray-300';
+  
+  switch(String(status).toLowerCase()) {
+    case 'todo':
+    case 'to_do':
+      return 'bg-blue-500';
     case 'in_progress':
-      return 'bg-blue-500 hover:bg-blue-600';
+      return 'bg-yellow-500';
+    case 'pending':
+      return 'bg-amber-200';
+    case 'review':
+      return 'bg-purple-500';
+    case 'done':
+      return 'bg-green-500';
+    case 'cancelled':
+      return 'bg-red-500';
     case 'blocked':
-      return 'bg-red-500 hover:bg-red-600';
+      return 'bg-red-500';
     default:
-      return 'bg-gray-400 hover:bg-gray-500';
+      return 'bg-gray-300';
   }
 };
 
@@ -67,21 +79,14 @@ export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
     }
   }, [showTooltip]);
 
-  // Lấy màu dựa trên trạng thái nếu đã hoàn thành, nếu không thì dựa trên độ ưu tiên
-  const barColor = task.status === 'done' 
-    ? getStatusColor(task.status) 
-    : getPriorityColor(task.priority);
+  // Lấy màu dựa vào status thay vì priority
+  const bgColor = getStatusColor(task.status);
   
   return (
     <>
       <div 
         ref={barRef}
-        className={cn(
-          'rounded px-2 py-1 text-xs text-white cursor-pointer',
-          'transition-colors duration-200 ease-in-out',
-          'whitespace-nowrap overflow-hidden text-ellipsis',
-          barColor
-        )}
+        className={`${bgColor} rounded-sm text-gray-800 text-xs relative cursor-pointer group shadow hover:brightness-95 transition-all overflow-hidden`}
         style={{ 
           width: `${Math.max(width, 20)}px`,
           height: `${height}px`,
@@ -92,7 +97,7 @@ export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
         onMouseEnter={() => setShowTooltip(true)}
         onMouseLeave={() => setShowTooltip(false)}
       >
-        <span className="truncate font-medium">
+        <span className="truncate font-medium pl-2">
           {task.title}
         </span>
         
