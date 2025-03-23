@@ -187,19 +187,24 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
       
       if (savedRange) {
         const { startDate, endDate } = JSON.parse(savedRange);
+        console.log('Đã tìm thấy dateRange trong localStorage:', { startDate, endDate });
         return {
           startDate: new Date(startDate),
           endDate: new Date(endDate)
         };
       }
     } catch (error) {
-      console.error('Error reading date range from localStorage:', error);
+      console.error('Lỗi khi đọc dateRange từ localStorage:', error);
     }
     
     // Nếu không có dữ liệu hoặc có lỗi, sử dụng giá trị mặc định
     const startDate = getLastMonday();
     const endDate = new Date(startDate);
     endDate.setDate(startDate.getDate() + 30); // Thêm 30 ngày = 1 tháng
+    console.log('Sử dụng dateRange mặc định:', { 
+      startDate: formatDateVN(startDate), 
+      endDate: formatDateVN(endDate) 
+    });
     
     return { startDate, endDate };
   });
@@ -207,12 +212,14 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
   // Lưu dateRange vào localStorage khi có thay đổi
   useEffect(() => {
     try {
-      localStorage.setItem('ganttChartDateRange', JSON.stringify({
+      const rangeToSave = {
         startDate: dateRange.startDate.toISOString(),
         endDate: dateRange.endDate.toISOString()
-      }));
+      };
+      localStorage.setItem('ganttChartDateRange', JSON.stringify(rangeToSave));
+      console.log('Đã lưu dateRange vào localStorage:', rangeToSave);
     } catch (error) {
-      console.error('Error saving date range to localStorage:', error);
+      console.error('Lỗi khi lưu dateRange vào localStorage:', error);
     }
   }, [dateRange]);
 
@@ -531,6 +538,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
   // Xử lý khi thay đổi ngày bắt đầu
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = new Date(e.target.value);
+    console.log('Thay đổi ngày bắt đầu:', formatDateVN(newDate));
     setDateRange(prev => ({
       ...prev,
       startDate: newDate
@@ -540,6 +548,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
   // Xử lý khi thay đổi ngày kết thúc
   const handleEndDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newDate = new Date(e.target.value);
+    console.log('Thay đổi ngày kết thúc:', formatDateVN(newDate));
     setDateRange(prev => ({
       ...prev,
       endDate: newDate
@@ -689,33 +698,52 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
             {/* Grid Container */}
             <div className="relative inset-0">
               {/* Grid Background */}
-              <div 
-                className="grid border-t border-slate-200"
-                style={{
-                  gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
-                  gridTemplateRows: `repeat(${orderedTasks.length}, ${rowHeight}px)`,
-                  gridAutoFlow: 'row',
-                  height: `${orderedTasks.length * rowHeight}px`,
-                  minHeight: rowHeight
-                }}
-              >
-                {days.map((day: Date) => (
-                  orderedTasks.map((_, rowIndex) => {
+              <div className="relative">
+                {/* Columns for days - highlight background first */}
+                <div 
+                  className="absolute inset-0 grid"
+                  style={{
+                    gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
+                    height: `${orderedTasks.length * rowHeight}px`,
+                    minHeight: rowHeight,
+                    zIndex: 5
+                  }}
+                >
+                  {days.map((day: Date, index: number) => {
                     const isToday = isSameDay(day, today);
                     const isWeekendDay = isWeekend(day);
                     
                     return (
                       <div
-                        key={`${day.toISOString()}-${rowIndex}`}
+                        key={`column-${day.toISOString()}`}
                         className={`
-                          border-r border-b border-slate-200 relative
-                          ${isWeekendDay ? 'bg-slate-100/50' : ''}
-                          ${isToday ? 'bg-yellow-100/30' : ''}
+                          ${isWeekendDay ? 'bg-slate-100' : ''}
+                          ${isToday ? 'bg-yellow-100' : ''}
                         `}
                       />
                     );
-                  })
-                ))}
+                  })}
+                </div>
+                
+                {/* Grid lines on top of the background */}
+                <div 
+                  className="grid relative"
+                  style={{
+                    gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
+                    gridTemplateRows: `repeat(${orderedTasks.length}, ${rowHeight}px)`,
+                    gridAutoFlow: 'row',
+                    height: `${orderedTasks.length * rowHeight}px`,
+                    minHeight: rowHeight,
+                    zIndex: 10
+                  }}
+                >
+                  {Array.from({ length: days.length * orderedTasks.length }).map((_, index) => (
+                    <div
+                      key={`grid-cell-${index}`}
+                      className="border-r border-b border-slate-200 relative"
+                    />
+                  ))}
+                </div>
               </div>
 
               {/* Task Bars */}
