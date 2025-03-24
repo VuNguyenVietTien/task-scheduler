@@ -325,12 +325,15 @@ type Task {
   description: String
   status: TaskStatus!
   assigneeId: ID
+  assignee: UserBasic
   priority: TaskPriority!
   priorityOrder: Int!
   effort: Float
   startDate: DateTime
+  dueDate: DateTime
   deadline: DateTime
-  createdBy: User!
+  createdBy: ID
+  creator: UserBasic
   assignees: [User!]!
   comments: [Comment!]!
   attachments: [Attachment!]!
@@ -475,3 +478,10 @@ input TaskOrderInput {
 scalar DateTime
 scalar JSON
 scalar Upload
+
+type UserBasic {
+  userId: ID!
+  username: String
+  avatarUrl: String
+  role: String
+}

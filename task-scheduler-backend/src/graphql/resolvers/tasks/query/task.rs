@@ -16,23 +16,33 @@ pub async fn task(ctx: &Context<'_>, task_id: ID) -> Result<Option<Task>> {
         r#"
         WITH RECURSIVE child_tasks AS (
             SELECT t.*, 
-                u.user_id as assignee_user_id,
-                u.username as assignee_username,
-                u.avatar_url as assignee_avatar_url,
-                u.role::text as assignee_role
+                au.user_id as assignee_user_id,
+                au.username as assignee_username,
+                au.avatar_url as assignee_avatar_url,
+                au.role::text as assignee_role,
+                cu.user_id as creator_user_id,
+                cu.username as creator_username,
+                cu.avatar_url as creator_avatar_url,
+                cu.role::text as creator_role
             FROM tasks t
-            LEFT JOIN users u ON t.assignee_id = u.user_id
+            LEFT JOIN users au ON t.assignee_id = au.user_id
+            LEFT JOIN users cu ON t.created_by = cu.user_id
             WHERE t.task_id = $1 AND NOT t.is_deleted
             
             UNION ALL
             
             SELECT t.*, 
-                u.user_id as assignee_user_id,
-                u.username as assignee_username,
-                u.avatar_url as assignee_avatar_url,
-                u.role::text as assignee_role
+                au.user_id as assignee_user_id,
+                au.username as assignee_username,
+                au.avatar_url as assignee_avatar_url,
+                au.role::text as assignee_role,
+                cu.user_id as creator_user_id,
+                cu.username as creator_username,
+                cu.avatar_url as creator_avatar_url,
+                cu.role::text as creator_role
             FROM tasks t
-            LEFT JOIN users u ON t.assignee_id = u.user_id
+            LEFT JOIN users au ON t.assignee_id = au.user_id
+            LEFT JOIN users cu ON t.created_by = cu.user_id
             INNER JOIN child_tasks ct ON t.parent_task_id = ct.task_id
             WHERE NOT t.is_deleted
         )
@@ -70,6 +80,12 @@ pub async fn task(ctx: &Context<'_>, task_id: ID) -> Result<Option<Task>> {
         effort: row.get("effort"),
         progress: row.get("progress"),
         created_by: row.get("created_by"),
+        creator: row.get::<Option<Uuid>, _>("creator_user_id").map(|_| Assignee {
+            user_id: row.get("creator_user_id"),
+            username: row.get("creator_username"),
+            avatar_url: row.get("creator_avatar_url"),
+            role: row.get("creator_role")
+        }),
         created_at: row.get("created_at"),
         updated_at: row.get("updated_at"),
         is_deleted: row.get("is_deleted"),
@@ -103,6 +119,12 @@ pub async fn task(ctx: &Context<'_>, task_id: ID) -> Result<Option<Task>> {
         effort: parent_task.get("effort"),
         progress: parent_task.get("progress"),
         created_by: parent_task.get("created_by"),
+        creator: parent_task.get::<Option<Uuid>, _>("creator_user_id").map(|_| Assignee {
+            user_id: parent_task.get("creator_user_id"),
+            username: parent_task.get("creator_username"),
+            avatar_url: parent_task.get("creator_avatar_url"),
+            role: parent_task.get("creator_role")
+        }),
         created_at: parent_task.get("created_at"),
         updated_at: parent_task.get("updated_at"),
         is_deleted: parent_task.get("is_deleted"),

@@ -24,12 +24,17 @@ pub async fn tasks(
         r#"
         WITH RECURSIVE task_tree AS (
             SELECT t.*, 
-                u.user_id as assignee_user_id,
-                u.username as assignee_username,
-                u.avatar_url as assignee_avatar_url,
-                u.role::text as assignee_role
+                au.user_id as assignee_user_id,
+                au.username as assignee_username,
+                au.avatar_url as assignee_avatar_url,
+                au.role::text as assignee_role,
+                cu.user_id as creator_user_id,
+                cu.username as creator_username,
+                cu.avatar_url as creator_avatar_url,
+                cu.role::text as creator_role
             FROM tasks t
-            LEFT JOIN users u ON t.assignee_id = u.user_id
+            LEFT JOIN users au ON t.assignee_id = au.user_id
+            LEFT JOIN users cu ON t.created_by = cu.user_id
             WHERE NOT t.is_deleted
             AND t.parent_task_id IS NULL
             AND ($1::uuid IS NULL OR t.project_id = $1)
@@ -39,12 +44,17 @@ pub async fn tasks(
             UNION ALL
             
             SELECT t.*, 
-                u.user_id as assignee_user_id,
-                u.username as assignee_username,
-                u.avatar_url as assignee_avatar_url,
-                u.role::text as assignee_role
+                au.user_id as assignee_user_id,
+                au.username as assignee_username,
+                au.avatar_url as assignee_avatar_url,
+                au.role::text as assignee_role,
+                cu.user_id as creator_user_id,
+                cu.username as creator_username,
+                cu.avatar_url as creator_avatar_url,
+                cu.role::text as creator_role
             FROM tasks t
-            LEFT JOIN users u ON t.assignee_id = u.user_id
+            LEFT JOIN users au ON t.assignee_id = au.user_id
+            LEFT JOIN users cu ON t.created_by = cu.user_id
             INNER JOIN task_tree tt ON t.parent_task_id = tt.task_id
             WHERE NOT t.is_deleted
         )
@@ -85,6 +95,12 @@ pub async fn tasks(
             effort: row.get("effort"),
             progress: row.get("progress"), 
             created_by: row.get("created_by"),
+            creator: row.get::<Option<Uuid>, _>("creator_user_id").map(|_| Assignee {
+                user_id: row.get("creator_user_id"),
+                username: row.get("creator_username"),
+                avatar_url: row.get("creator_avatar_url"),
+                role: row.get("creator_role")
+            }),
             created_at: row.get("created_at"),
             updated_at: row.get("updated_at"),
             is_deleted: row.get("is_deleted"),

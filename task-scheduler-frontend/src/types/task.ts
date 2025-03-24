@@ -40,7 +40,7 @@ export const TASK_TYPES: TaskType[] = ['Feature', 'Bug', 'Enhancement', 'Documen
 export const TASK_CATEGORIES: TaskCategory[] = ['Frontend', 'Backend', 'Design', 'Testing', 'DevOps'];
 export const TASK_TAGS: TaskTag[] = ['Urgent', 'High Priority', 'Low Priority', 'In Progress', 'Blocked'];
 
-export interface TaskAssignee {
+export interface UserBasic {
   userId: string;
   username: string;
   avatarUrl?: string;
@@ -58,8 +58,7 @@ export interface Task {
   // Basic info
   title: string;
   description?: string;
-  assignee_id?: string;
-  assignee?: TaskAssignee;
+  assignee?: UserBasic;
   priority_order: number;
   
   // Dates
@@ -82,7 +81,7 @@ export interface Task {
   progress_type?: ProgressType;
   
   // Additional info
-  created_by: string;
+  created_by: string | UserBasic;
   is_deleted?: boolean;
   tags?: TaskTag[];
   child_tasks?: Task[];

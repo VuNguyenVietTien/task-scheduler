@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
 import { User } from '@/contexts/AuthContext';
 import dynamic from 'next/dynamic';
@@ -29,6 +29,17 @@ interface TaskDetailPageProps {
   currentUser?: User;
   onTaskUpdate: (updates: Partial<Task>) => Promise<boolean>;
   isLoadingProp?: boolean;
+  projectMembers?: { 
+    role: string;
+    joinedAt: string;
+    user: {
+      userId: string;
+      email: string;
+      fullName: string;
+      username: string;
+      avatarUrl: string;
+    };
+  }[];
 }
 
 interface Comment {
@@ -66,7 +77,7 @@ interface CreateCommentData {
   createComment: TaskComment;
 }
 
-export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isLoadingProp = false }: TaskDetailPageProps) {
+export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isLoadingProp = false, projectMembers }: TaskDetailPageProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -78,14 +89,13 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const [error, setError] = useState<string | null>(null);
   const commentRef = React.useRef<HTMLTextAreaElement>(null);
   const [activeTab, setActiveTab] = useState('details');
-  const [projectMembers, setProjectMembers] = useState<User[]>([]);
   const [userId, setUserId] = useState<string | null>(null);
   
   // Các trường có thể edit
   const [editingField, setEditingField] = useState<string | null>(null);
 
   // GraphQL Queries và Mutations
-  const taskId = task.task_id || task.id;
+  const taskId = task.task_id || task.id || '';
   const { loading: commentsLoading, data: commentsData, refetch: refetchComments } = 
     useQuery<TaskCommentsData>(GET_TASK_COMMENTS, {
       variables: { taskId },
@@ -211,12 +221,51 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         displayValue = task.progress ? `${task.progress}%` : 'Chưa cập nhật';
         break;
       case 'assignee':
-        fieldValue = editedTask.assignee_id || '';
-        displayValue = task.assignee?.username || 'Chưa gán';
+        fieldValue = editedTask.assignee?.userId || '';
+        displayValue = task.assignee ? (
+          <div className="flex items-center">
+            {task.assignee.avatarUrl ? (
+              <img 
+                src={task.assignee.avatarUrl} 
+                alt={task.assignee.username} 
+                className="w-6 h-6 rounded-full mr-2" 
+              />
+            ) : (
+              <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center mr-2">
+                {task.assignee.username?.charAt(0).toUpperCase() || '?'}
+              </div>
+            )}
+            <span>{task.assignee.username || 'Chưa gán'}</span>
+          </div>
+        ) : (
+          'Chưa gán'
+        );
         break;
       case 'created_by':
         fieldValue = editedTask.created_by || '';
-        displayValue = task.created_by || 'Không có thông tin';
+        
+        // Hiển thị created_by dựa trên kiểu dữ liệu
+        if (typeof task.created_by === 'object' && task.created_by !== null) {
+          displayValue = (
+            <div className="flex items-center">
+              {task.created_by.avatarUrl ? (
+                <img 
+                  src={task.created_by.avatarUrl} 
+                  alt={task.created_by.username} 
+                  className="w-6 h-6 rounded-full mr-2" 
+                />
+              ) : (
+                <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center mr-2">
+                  {task.created_by.username?.charAt(0).toUpperCase() || '?'}
+                </div>
+              )}
+              <span>{task.created_by.username}</span>
+            </div>
+          );
+        } else {
+          // Fallback cho trường hợp không có thông tin hoặc chỉ có ID
+          displayValue = task.created_by === 'system' ? 'Hệ thống' : task.created_by || 'Không có thông tin';
+        }
         break;
       default:
         fieldValue = editedTask[fieldName as keyof Task] || '';
@@ -236,7 +285,24 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                   onChange={(e) => {
                     const newEditedTask = {...editedTask};
                     if (fieldName === 'assignee') {
-                      newEditedTask.assignee_id = e.target.value;
+                      if (e.target.value) {
+                        // Tìm thông tin member được chọn từ danh sách
+                        const selectedMember = projectMembers?.find(member => 
+                          member.user.userId === e.target.value
+                        );
+
+                        if (selectedMember) {
+                          newEditedTask.assignee = {
+                            userId: selectedMember.user.userId,
+                            username: selectedMember.user.username || selectedMember.user.fullName || selectedMember.user.email,
+                            avatarUrl: selectedMember.user.avatarUrl || '',
+                            role: selectedMember.role || ''
+                          };
+                        }
+                      } else {
+                        // Nếu không chọn ai, gán assignee là undefined
+                        newEditedTask.assignee = undefined;
+                      }
                     } else {
                       (newEditedTask as any)[fieldName] = e.target.value;
                     }
@@ -244,7 +310,15 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                   }}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 >
-                  {options?.map((option) => (
+                  {fieldName === 'assignee' && <option value="">Chưa gán</option>}
+                  
+                  {fieldName === 'assignee' && projectMembers && projectMembers.length > 0 ? (
+                    projectMembers.map((member) => (
+                      <option key={member.user.userId} value={member.user.userId}>
+                        {member.user.username || member.user.fullName || member.user.email}
+                      </option>
+                    ))
+                  ) : options?.map((option) => (
                     <option key={option.value} value={option.value}>
                       {option.label}
                     </option>
@@ -258,7 +332,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                   value={fieldValue}
                   onChange={(e) => {
                     const newEditedTask = {...editedTask};
-                    (newEditedTask as any)[fieldName] = e.target.value ? `${e.target.value}T00:00:00Z` : undefined;
+                    (newEditedTask as any)[fieldName] = e.target.value;
                     setEditedTask(newEditedTask);
                   }}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
@@ -268,12 +342,12 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                   type="number"
                   title={`Nhập ${label.toLowerCase()}`}
                   placeholder={`Nhập ${label.toLowerCase()}`}
-                  min="0"
-                  max={fieldName === 'progress' ? 100 : undefined}
                   value={fieldValue}
+                  min={0}
+                  max={fieldName === 'progress' ? 100 : undefined}
                   onChange={(e) => {
                     const newEditedTask = {...editedTask};
-                    (newEditedTask as any)[fieldName] = e.target.value ? Number(e.target.value) : undefined;
+                    (newEditedTask as any)[fieldName] = e.target.valueAsNumber || 0;
                     setEditedTask(newEditedTask);
                   }}
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
@@ -292,37 +366,38 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                   className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
                 />
               )}
-              <button 
-                onClick={() => saveField(fieldName)} 
-                className="p-1 text-blue-600 hover:text-blue-800"
+              <button
+                type="button"
+                onClick={() => saveField(fieldName)}
+                className="inline-flex items-center rounded-md border border-transparent bg-green-600 p-1 text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
                 title="Lưu"
-                aria-label="Lưu thay đổi"
               >
                 <CheckIcon className="h-4 w-4" />
               </button>
-              <button 
-                onClick={cancelEditing} 
-                className="p-1 text-red-600 hover:text-red-800"
+              <button
+                type="button"
+                onClick={cancelEditing}
+                className="inline-flex items-center rounded-md border border-gray-300 bg-white p-1 text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 title="Hủy"
-                aria-label="Hủy thay đổi"
               >
                 <XMarkIcon className="h-4 w-4" />
               </button>
             </div>
           </div>
         ) : (
-          <div>
-            <div className="text-xs font-medium text-gray-500">{label}</div>
-            <div 
-              className="mt-1 text-sm text-gray-900 cursor-pointer hover:bg-gray-50 p-1 rounded transition-colors group"
-              onClick={() => startEditing(fieldName)}
-              title={`Nhấn để chỉnh sửa ${label.toLowerCase()}`}
-            >
-              <div className="flex items-center">
-                <span className="mr-2">{displayValue}</span>
-                <PencilIcon className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
+          <div className="flex justify-between items-start group">
+            <div>
+              <div className="text-xs font-medium text-gray-500">{label}</div>
+              <div className="mt-1">{displayValue}</div>
             </div>
+            <button
+              type="button"
+              onClick={() => startEditing(fieldName)}
+              className="hidden group-hover:block p-1 text-gray-400 hover:text-gray-500"
+              title={`Chỉnh sửa ${label.toLowerCase()}`}
+            >
+              <PencilIcon className="h-4 w-4" />
+            </button>
           </div>
         )}
       </div>
@@ -541,6 +616,9 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
           case 'progress':
             updates.progress = editedTask.progress;
             break;
+          case 'assignee':
+            updates.assignee = editedTask.assignee;
+            break;
           default:
             break;
         }
@@ -554,6 +632,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         if (editedTask.due_date !== task.due_date) updates.due_date = editedTask.due_date;
         if (editedTask.effort !== task.effort) updates.effort = editedTask.effort;
         if (editedTask.progress !== task.progress) updates.progress = editedTask.progress;
+        if (JSON.stringify(editedTask.assignee) !== JSON.stringify(task.assignee)) updates.assignee = editedTask.assignee;
       }
       
       // Gọi hàm update từ props
@@ -611,19 +690,35 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     setEditingField(null);
   };
 
-  // Cách hiển thị tùy chỉnh cho CommentCard - cập nhật để hiển thị trạng thái 'local'
+  // Thêm biến taskIdString
+  const taskIdString: string = task.task_id || task.id || 'unknown-task';
+
+  // Cập nhật hàm renderComment để tương thích với CommentCard
   const renderComment = (comment: Comment) => {
+    // Chuyển đổi Comment nội bộ sang định dạng CommentCard
+    const commentForCard = {
+      id: comment.id,
+      content: comment.content,
+      user_id: comment.user_id,
+      username: comment.username,
+      avatar_url: comment.avatar_url,
+      created_at: comment.created_at,
+      task_id: task.task_id || task.id || 'unknown'  // Sử dụng giá trị mặc định
+    };
+
     // Hiển thị bình luận đã lưu
     if (!comment.status || comment.status === 'saved') {
       return (
         <CommentCard
           key={comment.id}
-          comment={comment}
+          comment={commentForCard}
           currentUserId={currentUser?.id}
+          onDelete={comment.user_id === currentUser?.id ? 
+            (id) => handleDeleteFailedComment(id) : undefined}
         />
       );
     }
-    
+
     // Hiển thị bình luận local (chỉ lưu ở client)
     if (comment.status === 'local') {
       return (
@@ -651,7 +746,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         </div>
       );
     }
-    
+
     // Hiển thị bình luận đang được gửi
     if (comment.status === 'pending') {
       return (
@@ -682,7 +777,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         </div>
       );
     }
-    
+
     // Hiển thị bình luận thất bại
     if (comment.status === 'failed') {
       return (
@@ -820,10 +915,10 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 value={editedTask.description || ''}
                 onChange={(content) => setEditedTask({...editedTask, description: content})}
                 modules={quillModules}
-                className="bg-white h-64"
+                className="bg-white h-64 mb-16" // Thêm margin-bottom để không bị đè lên button
               />
               
-              <div className="flex justify-end space-x-3 mt-4">
+              <div className="flex justify-end space-x-3 mt-8 pt-4"> {/* Tăng margin-top và thêm padding-top */}
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -865,28 +960,36 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
               {renderEditableField('Trạng thái', 'status', 'select', 
-                Object.values(TaskStatuses).map(status => ({ value: status, label: status })))}
+                Object.entries(TaskStatuses).map(([_, value]) => ({ 
+                  value, 
+                  label: value.charAt(0).toUpperCase() + value.slice(1) 
+                })))}
               
-              {renderEditableField('Người được giao', 'assignee', 'select',
-                [{ value: '', label: 'Chưa gán' }, ...projectMembers.map(member => ({ 
-                  value: member.id, 
-                  label: member.name || member.email || 'Người dùng' 
-                }))])}
-              
-              {renderEditableField('Ngày bắt đầu', 'start_date', 'date')}
+              {renderEditableField('Mức độ ưu tiên', 'priority', 'select', 
+                Object.entries(Priorities).map(([_, value]) => ({ 
+                  value, 
+                  label: value.charAt(0).toUpperCase() + value.slice(1) 
+                })))}
               
               {renderEditableField('Nỗ lực (giờ)', 'effort', 'number')}
+              {renderEditableField('Tiến độ (%)', 'progress', 'number')}
             </div>
             
             <div className="space-y-4">
-              {renderEditableField('Mức ưu tiên', 'priority', 'select',
-                Object.values(Priorities).map(priority => ({ value: priority, label: priority })))}
+              {renderEditableField('Ngày bắt đầu', 'start_date', 'date')}
+              {renderEditableField('Ngày đến hạn', 'due_date', 'date')}
               
-              {renderEditableField('Ngày tạo', 'created_at', 'text')}
+              {/* Cập nhật renderEditableField cho assignee, kiểm tra projectMembers có tồn tại không */}
+              {renderEditableField('Người được giao', 'assignee', 'select',
+                projectMembers && projectMembers.length > 0 ? 
+                  [{ value: '', label: 'Chưa gán' }, ...projectMembers.map(member => ({ 
+                    value: member.user.userId, 
+                    label: member.user.username || member.user.fullName || member.user.email 
+                  }))] : 
+                  [{ value: '', label: 'Chưa gán' }]
+              )}
               
-              {renderEditableField('Hạn hoàn thành', 'due_date', 'date')}
-              
-              {renderEditableField('Tiến độ (%)', 'progress', 'number')}
+              {renderEditableField('Người tạo', 'created_by')}
             </div>
           </div>
         </div>

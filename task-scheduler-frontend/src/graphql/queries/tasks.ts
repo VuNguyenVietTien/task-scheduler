@@ -58,6 +58,54 @@ export const GET_PROJECT_TASKS = gql`
   }
 `;
 
+// Query để lấy chi tiết của một task theo ID
+export const GET_TASK_BY_ID = gql`
+  query GetTaskById($taskId: ID!) {
+    task(taskId: $taskId) {
+      taskId
+      title
+      description
+      status
+      priority
+      effort
+      progress
+      startDate
+      dueDate
+      actualStartDate
+      actualEndDate
+      createdAt
+      updatedAt
+      projectId
+      parentTaskId
+      assignee {
+        userId
+        username
+        avatarUrl
+        role
+      }
+      creator {
+        userId
+        username
+        avatarUrl
+        role
+      }
+      priorityOrder
+      type
+      category
+      progressType
+      tags
+      childTasks {
+        taskId
+        title
+        status
+        priority
+        effort
+        progress
+      }
+    }
+  }
+`;
+
 // Query mới: lấy tasks có phân trang và lọc
 export const GET_PROJECT_TASKS_PAGINATED = gql`
   query GetTasksPaginated(

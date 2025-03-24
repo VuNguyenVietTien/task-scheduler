@@ -169,11 +169,10 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
       }
     }
     
-    // Đối với assignee_id, CHỈ gửi khi nó được cung cấp trong updates, không gửi undefined
-    // vì backend sẽ hiểu undefined là null và xóa assignee hiện tại
-    if (updates.assignee_id !== undefined) {
-      // Nếu assignee_id là chuỗi rỗng, chuyển thành null
-      input.assigneeId = updates.assignee_id === '' ? null : updates.assignee_id;
+    // Đối với assignee, CHỈ gửi khi nó được cung cấp trong updates
+    if (updates.assignee !== undefined) {
+      // Nếu assignee là undefined, chuyển thành null để xóa assignee hiện tại
+      input.assigneeId = updates.assignee?.userId || null;
     }
     
     if (updates.priority_order !== undefined) input.priorityOrder = Number(updates.priority_order);
@@ -248,7 +247,6 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
       actual_end_date: result.actualEndDate,
       effort: result.effort,
       progress: result.progress,
-      assignee_id: result.assignee?.userId,
       assignee: result.assignee ? {
         userId: result.assignee.userId,
         username: result.assignee.username,

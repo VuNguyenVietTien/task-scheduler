@@ -3,6 +3,7 @@ use chrono::Utc;
 use sqlx::Row;
 use uuid::Uuid;
 use serde_json::Value as JsonValue;
+use log::error;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
@@ -11,73 +12,86 @@ use crate::graphql::types::{Task, Assignee, ReorderTasksInput};
 pub async fn reorder_tasks(ctx: &Context<'_>, input: ReorderTasksInput) -> Result<Vec<Task>, async_graphql::Error> {
     let context = ctx.data::<GraphQLContext>()?;
     let pool = &context.db;
-    let mut tx = pool.begin().await.map_err(|e| AuthError::Database(e))?;
-    let mut updated_tasks = Vec::new();
+    let mut tasks = Vec::new();
     
-    for order in input.task_orders {
+    let mut tx = pool.begin().await.map_err(|e| AuthError::Database(e))?;
+
+    for order in input.task_orders.iter() {
         let task_id = Uuid::parse_str(&order.task_id.to_string())?;
-        
-        let updated = sqlx::query(
+        let now = Utc::now();
+
+        let updated_task = sqlx::query(
             r#"
-            WITH reordered_task AS (
-                UPDATE tasks
-                SET 
-                    priority_order = $1,
-                    updated_at = $2
+            WITH updated_task AS (
+                UPDATE tasks 
+                SET priority_order = $1, updated_at = $2
                 WHERE task_id = $3
                 RETURNING *
             )
             SELECT t.*, 
-                   u.user_id as assignee_user_id,
-                   u.username as assignee_username,
-                   u.avatar_url as assignee_avatar_url,
-                   u.role::text as assignee_role
-            FROM reordered_task t
-            LEFT JOIN users u ON t.assignee_id = u.user_id
+                   au.user_id as assignee_user_id,
+                   au.username as assignee_username,
+                   au.avatar_url as assignee_avatar_url,
+                   au.role::text as assignee_role,
+                   cu.user_id as creator_user_id,
+                   cu.username as creator_username,
+                   cu.avatar_url as creator_avatar_url,
+                   cu.role::text as creator_role
+            FROM updated_task t
+            LEFT JOIN users au ON t.assignee_id = au.user_id
+            LEFT JOIN users cu ON t.created_by = cu.user_id
             "#
         )
         .bind(order.priority_order)
-        .bind(Utc::now())
+        .bind(now)
         .bind(task_id)
         .fetch_one(&mut *tx)
         .await
-        .map_err(|e| AuthError::Database(e))?;
+        .map_err(|e| {
+            error!("Error reordering task: {:?}", e);
+            AuthError::Database(e)
+        })?;
 
-        updated_tasks.push(Task {
-            task_id: updated.get("task_id"),
-            project_id: updated.get("project_id"),
-            parent_task_id: updated.get("parent_task_id"),
-            title: updated.get("title"),
-            description: updated.get("description"),
-            assignee: updated.get::<Option<Uuid>, _>("assignee_user_id").map(|_| Assignee {
-                user_id: updated.get("assignee_user_id"),
-                username: updated.get("assignee_username"),
-                avatar_url: updated.get("assignee_avatar_url"),
-                role: updated.get("assignee_role")
+        tasks.push(Task {
+            task_id: updated_task.get("task_id"),
+            project_id: updated_task.get("project_id"),
+            parent_task_id: updated_task.get("parent_task_id"),
+            title: updated_task.get("title"),
+            description: updated_task.get("description"),
+            assignee: updated_task.get::<Option<Uuid>, _>("assignee_user_id").map(|_| Assignee {
+                user_id: updated_task.get("assignee_user_id"),
+                username: updated_task.get("assignee_username"),
+                avatar_url: updated_task.get("assignee_avatar_url"),
+                role: updated_task.get("assignee_role")
             }),
-            priority_order: updated.get("priority_order"),
-            start_date: updated.get("start_date"),
-            due_date: updated.get("due_date"),
-            actual_start_date: updated.get("actual_start_date"),
-            actual_end_date: updated.get("actual_end_date"),
-            effort: updated.get("effort"),
-            progress: updated.get("progress"),
-            created_by: updated.get("created_by"),
-            created_at: updated.get("created_at"),
-            updated_at: updated.get("updated_at"),
-            is_deleted: updated.get("is_deleted"),
-            status: updated.get::<String, _>("status").into(),
-            priority: updated.get::<String, _>("priority").into(),
-            type_: updated.get("type"),
-            category: updated.get("category"),
-            progress_type: updated.get::<Option<String>, _>("progress_type")
-                .map(|s| s.into()),
-            tags: updated.get::<Option<JsonValue>, _>("tags"),
-            child_tasks: Some(Vec::new())
+            priority_order: updated_task.get("priority_order"),
+            start_date: updated_task.get("start_date"),
+            due_date: updated_task.get("due_date"),
+            actual_start_date: updated_task.get("actual_start_date"),
+            actual_end_date: updated_task.get("actual_end_date"),
+            effort: updated_task.get("effort"),
+            progress: updated_task.get("progress"),
+            created_by: updated_task.get("created_by"),
+            creator: updated_task.get::<Option<Uuid>, _>("creator_user_id").map(|_| Assignee {
+                user_id: updated_task.get("creator_user_id"),
+                username: updated_task.get("creator_username"),
+                avatar_url: updated_task.get("creator_avatar_url"),
+                role: updated_task.get("creator_role")
+            }),
+            created_at: updated_task.get("created_at"),
+            updated_at: updated_task.get("updated_at"),
+            is_deleted: updated_task.get("is_deleted"),
+            status: updated_task.get("status"),
+            priority: updated_task.get("priority"),
+            type_: updated_task.get("type"),
+            category: updated_task.get("category"),
+            progress_type: updated_task.get("progress_type"),
+            tags: updated_task.get::<Option<JsonValue>, _>("tags"),
+            child_tasks: None
         });
     }
 
     tx.commit().await.map_err(|e| AuthError::Database(e))?;
-    
-    Ok(updated_tasks)
+
+    Ok(tasks)
 }

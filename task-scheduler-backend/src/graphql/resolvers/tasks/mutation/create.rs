@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use sqlx::Row;
 use uuid::Uuid;
 use serde_json::{json, Value as JsonValue};
+use log::error;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
@@ -43,12 +44,17 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
             RETURNING *
         )
         SELECT t.*, 
-               u.user_id as assignee_user_id,
-               u.username as assignee_username,
-               u.avatar_url as assignee_avatar_url,
-               u.role::text as assignee_role
+               au.user_id as assignee_user_id,
+               au.username as assignee_username,
+               au.avatar_url as assignee_avatar_url,
+               au.role::text as assignee_role,
+               cu.user_id as creator_user_id,
+               cu.username as creator_username,
+               cu.avatar_url as creator_avatar_url,
+               cu.role::text as creator_role
         FROM inserted_task t
-        LEFT JOIN users u ON t.assignee_id = u.user_id
+        LEFT JOIN users au ON t.assignee_id = au.user_id
+        LEFT JOIN users cu ON t.created_by = cu.user_id
         "#
     )
     .bind(task_id)
@@ -77,7 +83,7 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
-        eprintln!("Error creating task: {:?}", e);
+        error!("Error creating task: {:?}", e);
         AuthError::Database(e)
     })?;
 
@@ -103,6 +109,12 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
         effort: created.get("effort"),
         progress: created.get("progress"),
         created_by: created.get("created_by"),
+        creator: created.get::<Option<Uuid>, _>("creator_user_id").map(|_| Assignee {
+            user_id: created.get("creator_user_id"),
+            username: created.get("creator_username"),
+            avatar_url: created.get("creator_avatar_url"),
+            role: created.get("creator_role")
+        }),
         created_at: created.get("created_at"),
         updated_at: created.get("updated_at"),
         is_deleted: created.get("is_deleted"),
@@ -112,6 +124,6 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
         category: created.get("category"),
         progress_type: created.get("progress_type"),
         tags: created.get::<Option<JsonValue>, _>("tags"),
-        child_tasks: Some(Vec::new())
+        child_tasks: None
     })
 }

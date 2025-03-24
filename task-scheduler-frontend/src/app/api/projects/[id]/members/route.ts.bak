@@ -1,0 +1,108 @@
+import { NextResponse } from 'next/server';
+import { cookies } from 'next/headers';
+
+export async function GET(
+  request: Request,
+  { params }: { params: { id: string } }
+) {
+  try {
+    console.log(`[API] GET project members: projectId=${params.id}`);
+    
+    const cookieStore = cookies();
+    const token = cookieStore.get('auth_token');
+
+    if (!token) {
+      console.error('[API] Authentication required - No auth_token cookie');
+      return NextResponse.json(
+        { error: 'Authentication required' },
+        { status: 401 }
+      );
+    }
+
+    // Khởi tạo URL GraphQL endpoint
+    const apiUrl = process.env.NEXT_PUBLIC_API_URL || '';
+    if (!apiUrl) {
+      console.error('[API] NEXT_PUBLIC_API_URL is not defined');
+      return NextResponse.json(
+        { error: 'API configuration error' },
+        { status: 500 }
+      );
+    }
+
+    const graphqlEndpoint = `${apiUrl}/graphql`;
+    console.log(`[API] Using GraphQL endpoint: ${graphqlEndpoint}`);
+
+    // GraphQL query để lấy thông tin thành viên dự án
+    const query = `
+      query GetProjectMembers($projectId: ID!) {
+        projectMembers(projectId: $projectId) {
+          role
+          joinedAt
+          user {
+            userId
+            email
+            username
+            fullName
+            avatarUrl
+          }
+        }
+      }
+    `;
+
+    const variables = { projectId: params.id };
+    console.log(`[API] GraphQL variables:`, JSON.stringify(variables));
+
+    // Gọi API GraphQL để lấy danh sách thành viên
+    console.log(`[API] Sending GraphQL request to ${graphqlEndpoint}`);
+    const response = await fetch(
+      graphqlEndpoint,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token.value}`,
+        },
+        body: JSON.stringify({
+          query,
+          variables,
+        }),
+      }
+    );
+
+    // Log response status
+    console.log(`[API] GraphQL response status: ${response.status}`);
+    
+    const result = await response.json();
+    
+    // Log GraphQL errors if any
+    if (result.errors) {
+      console.error('[API] GraphQL errors:', JSON.stringify(result.errors));
+      return NextResponse.json(
+        { error: result.errors?.[0]?.message || 'Failed to fetch project members' },
+        { status: 500 }
+      );
+    }
+
+    // Chuyển đổi từ camelCase sang snake_case để tương thích với frontend
+    const members = result.data?.projectMembers;
+    if (!members) {
+      console.error('[API] Project members not found in GraphQL response');
+      console.log('[API] GraphQL response:', JSON.stringify(result));
+      return NextResponse.json(
+        { error: 'Project members not found' },
+        { status: 404 }
+      );
+    }
+
+    console.log('[API] Successfully fetched project members from GraphQL');
+    
+    return NextResponse.json(members);
+  } catch (error: any) {
+    console.error('[API] Fetch project members error:', error);
+    const errorMessage = error?.message || 'Failed to fetch project members';
+    return NextResponse.json(
+      { error: errorMessage },
+      { status: 500 }
+    );
+  }
+} 

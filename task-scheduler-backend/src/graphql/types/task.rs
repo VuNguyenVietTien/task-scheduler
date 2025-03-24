@@ -34,6 +34,7 @@ pub struct Task {
     pub effort: Option<f64>,
     pub progress: Option<f64>,
     pub created_by: Uuid,
+    pub creator: Option<Assignee>,
     pub created_at: Option<DateTime<Utc>>,
     pub updated_at: Option<DateTime<Utc>>,
     pub is_deleted: Option<bool>,
