@@ -3,8 +3,8 @@ import { GET_USERS } from '@/graphql/queries/users';
 import { AssignedUser } from '@/types/user';
 
 interface GraphQLUser {
-  id: string;
-  name: string;
+  userId: string;
+  fullName: string;
   email: string;
   avatarUrl?: string;
   role?: string;
@@ -18,8 +18,8 @@ export function useUsers() {
   const { loading, error, data } = useQuery<UsersQueryResult>(GET_USERS);
 
   const users: AssignedUser[] = data?.users?.map((user: GraphQLUser) => ({
-    id: user.id,
-    name: user.name,
+    id: user.userId,
+    name: user.fullName,
     avatarUrl: user.avatarUrl,
     role: user.role
   })) || [];

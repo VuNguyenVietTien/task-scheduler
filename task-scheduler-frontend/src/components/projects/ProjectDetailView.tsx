@@ -13,6 +13,9 @@ import type { TaskFilter } from '@/types/task';
 import { useQuery } from '@apollo/client';
 import { GET_PROJECT_BY_ID } from '@/graphql/queries/project';
 import { GET_MY_PROJECT_ROLE } from '@/graphql/queries/member';
+import { useAppDispatch, useAppSelector } from '@/redux/hooks';
+import { fetchProjectTasks } from '@/redux/features/tasksSlice';
+import { fetchProjectMembers } from '@/redux/features/membersSlice';
 
 type ViewType = 'list' | 'kanban' | 'gantt' | 'members';
 
@@ -141,6 +144,112 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
   console.log('Project data available:', !!projectData?.project);
   console.log('All members count:', projectData?.project?.members?.length || 0);
 
+  // Redux hooks
+  const dispatch = useAppDispatch();
+  const { tasks: reduxTasks, loading: loadingTasks } = useAppSelector(state => state.tasks);
+  const { members: reduxMembers, loading: loadingMembers } = useAppSelector(state => state.members);
+  
+  // Fetch data khi component mount hoặc project ID thay đổi
+  useEffect(() => {
+    // Đảm bảo chỉ fetch dữ liệu khi đang ở client side
+    if (typeof window !== 'undefined' && project.id) {
+      // Fetch tasks using Redux
+      dispatch(fetchProjectTasks(project.id));
+      
+      // Fetch members using Redux
+      dispatch(fetchProjectMembers(project.id));
+    }
+  }, [dispatch, project.id]);
+  
+  // Sử dụng state để quyết định nguồn dữ liệu (Redux hoặc React Query)
+  const [useReduxData, setUseReduxData] = useState(true); // Chuyển sang sử dụng Redux
+  
+  // Hàm chuyển đổi cấu trúc dữ liệu từ camelCase sang snake_case
+  const transformTask = (task: any) => {
+    // Nếu task đã có task_id, có thể đã được chuyển đổi rồi
+    if (task.task_id) return task;
+    
+    return {
+      task_id: task.taskId,
+      id: task.taskId, // Alias
+      project_id: task.projectId,
+      projectId: task.projectId, // Alias
+      parent_task_id: task.parentTaskId,
+      title: task.title,
+      description: task.description,
+      assignee_id: task.assignee?.userId,
+      assignee: task.assignee ? {
+        userId: task.assignee.userId,
+        username: task.assignee.username,
+        avatarUrl: task.assignee.avatarUrl || "",
+        role: task.assignee.role || ""
+      } : undefined,
+      priority_order: task.priorityOrder,
+      start_date: task.startDate,
+      due_date: task.dueDate,
+      actual_start_date: task.actualStartDate,
+      actual_end_date: task.actualEndDate,
+      effort: task.effort,
+      progress: task.progress,
+      created_by: task.createdBy,
+      created_at: task.createdAt,
+      updated_at: task.updatedAt,
+      is_deleted: task.isDeleted,
+      status: task.status,
+      priority: task.priority,
+      type: task.type,
+      category: task.category,
+      progress_type: task.progressType,
+      tags: task.tags,
+      child_tasks: task.childTasks ? task.childTasks.map(transformTask) : undefined
+    };
+  };
+  
+  // Dữ liệu được sử dụng trong component - chuyển đổi kiểu dữ liệu để đảm bảo tương thích
+  const displayedTasks = useReduxData 
+    ? reduxTasks.map(transformTask)
+    : (tasks as any)?.tasks?.map(transformTask) || [];
+    
+  // Debug log để kiểm tra dữ liệu
+  console.log("DEBUG TASKS DATA:", {
+    reduxTasks: reduxTasks?.length,
+    apiTasks: (tasks as any)?.tasks?.length,
+    displayedTasks: displayedTasks?.length,
+    sampleTask: displayedTasks[0]
+  });
+
+  interface Member {
+    role: string;
+    joinedAt: string;
+    user: {
+      userId: string;
+      email: string;
+      username: string;
+      fullName: string | null;
+      avatarUrl: string | null;
+    };
+  }
+  
+  const displayedMembers = useReduxData 
+    ? reduxMembers.map(member => ({
+        ...member,
+        user: {
+          ...member.user,
+          fullName: member.user.fullName || member.user.username || "",
+          avatarUrl: member.user.avatarUrl || ""
+        }
+      }))
+    : projectData?.project?.members?.map(member => ({
+        ...member,
+        role: member.role.toLowerCase(),
+        user: {
+          ...member.user,
+          fullName: member.user.fullName || member.user.username || "",
+          avatarUrl: member.user.avatarUrl || "",
+        }
+      })) || [];
+  const isLoading = useReduxData ? (loadingTasks || loadingMembers) : (tasksLoading || usersLoading);
+
   return (
     <div className="p-6">
       {/* Project Header */}
@@ -196,30 +305,22 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
           projectData?.project ? (
             <MembersView 
               projectId={project.id}
-              members={projectData.project.members?.map(member => ({
-                ...member,
-                role: member.role.toLowerCase(),
-                user: {
-                  ...member.user,
-                  fullName: member.user.fullName || member.user.username || "",
-                  avatarUrl: member.user.avatarUrl || "",
-                }
-              })) || []}
+              members={displayedMembers}
               currentUserRole={currentUserRole}
               refetch={refetchProject}
             />
           ) : (
             <LoadingState />
           )
-        ) : tasksLoading || usersLoading ? (
+        ) : isLoading ? (
           <LoadingState />
-        ) : !tasks?.length ? (
+        ) : !displayedTasks.length ? (
           <EmptyState />
         ) : (
           <>
             {activeView === 'list' && (
               <TaskListView 
-                tasks={tasks} 
+                tasks={displayedTasks} 
                 pagination={{
                   currentPage: pagination.currentPage,
                   totalPages: pagination.totalPages,
@@ -235,7 +336,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
             {activeView === 'kanban' && (
               <div className="h-full overflow-x-auto">
                 <KanbanBoard 
-                  tasks={tasks} 
+                  tasks={displayedTasks} 
                   projectId={project.id}
                   onTasksReorder={handleTasksUpdated} 
                 />
@@ -243,7 +344,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
             )}
             {activeView === 'gantt' && (
               <div className="card h-full overflow-auto">
-                <Timeline tasks={tasks} users={users || []} />
+                <Timeline tasks={displayedTasks} users={users || []} />
               </div>
             )}
           </>

@@ -275,7 +275,9 @@ type Mutation {
 type User {
   userId: ID!
   email: String!
-  name: String!
+  fullName: String!
+  username: String
+  avatarUrl: String
   role: UserRole!
   workCapacity: Float!
   createdAt: DateTime!

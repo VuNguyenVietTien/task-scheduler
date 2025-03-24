@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Typography, Paper, Grid } from '@mui/material';
 import { useQuery, gql } from '@apollo/client';
-import { useParams } from 'react-router-dom';
+import { usePathname } from 'next/navigation';
 
 interface ProjectOverview {
   name: string;
@@ -49,8 +49,8 @@ const GET_PROJECT_OVERVIEW = gql`
   }
 `;
 
-export const OverviewTab: React.FC = () => {
-  const { projectId } = useParams<{ projectId: string }>();
+export const OverviewTab: React.FC<{ projectId: string }> = ({ projectId }) => {
+  const pathname = usePathname();
   const { loading, error, data } = useQuery<ProjectOverviewResponse>(GET_PROJECT_OVERVIEW, {
     variables: { projectId },
   });

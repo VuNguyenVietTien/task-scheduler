@@ -3,8 +3,6 @@ import { gql } from '@apollo/client';
 export const GET_PROJECT_MEMBERS = gql`
   query ProjectMembers($projectId: ID!) {
     projectMembers(projectId: $projectId) {
-      memberId
-      userId
       role
       joinedAt
       user {

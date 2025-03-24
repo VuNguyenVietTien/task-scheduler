@@ -18,6 +18,15 @@ import {
   useUpdateTaskDueDate, 
   useUpdateTaskAssignee 
 } from '@/hooks/useTaskFieldMutations';
+import { useAppDispatch, useAppSelector } from '@/redux/hooks';
+import { 
+  updateTaskStatus, 
+  updateTaskPriority, 
+  updateTaskEffort, 
+  updateTaskAssignee
+} from '@/redux/features/tasksSlice';
+import { useRouter } from 'next/navigation';
+import { ProjectMember } from '@/hooks/useProject';
 
 interface TaskListViewProps {
   tasks: Task[];
@@ -59,12 +68,53 @@ export function TaskListView({
   const [editValue, setEditValue] = useState<string>('');
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   
+  // Khởi tạo Redux dispatch
+  const dispatch = useAppDispatch();
+  
+  // Khởi tạo các hook mutation
+  const { updateStatus, isUpdating: isUpdatingStatus } = useUpdateTaskStatus();
+  const { updatePriority, isUpdating: isUpdatingPriority } = useUpdateTaskPriority();
+  const { updateEffort, isUpdating: isUpdatingEffort } = useUpdateTaskEffort();
+  const { updateDueDate, isUpdating: isUpdatingDueDate } = useUpdateTaskDueDate();
+  const { updateAssignee, isUpdating: isUpdatingAssignee } = useUpdateTaskAssignee();
+  
+  // Lấy danh sách members từ Redux store
+  const reduxMembers = useAppSelector(state => state.members.members);
+  
+  // Function cập nhật một task cụ thể, giữ nguyên các task khác
+  const updateSingleTaskInState = useCallback((taskId: string, updates: Partial<Task>) => {
+    setTasks(currentTasks => {
+      // Tìm task cần cập nhật
+      const taskIndex = currentTasks.findIndex(t => t.task_id === taskId);
+      
+      // Nếu không tìm thấy task, trả về danh sách hiện tại
+      if (taskIndex === -1) {
+        console.warn('Không tìm thấy task có ID:', taskId);
+        return currentTasks;
+      }
+      
+      // Tạo bản sao của mảng tasks và cập nhật task cụ thể
+      const updatedTasks = [...currentTasks];
+      updatedTasks[taskIndex] = {
+        ...updatedTasks[taskIndex],
+        ...updates
+      };
+      
+      return updatedTasks;
+    });
+  }, []);
+  
   useEffect(() => {
-    setTasks(initialTasks);
-  }, [initialTasks]);
+    // Chỉ cập nhật dữ liệu nếu không có chỉnh sửa đang diễn ra
+    if (!editingCell) {
+      setTasks(initialTasks);
+    }
+  }, [initialTasks, editingCell]);
 
   // Memoize assignees and projects
   const { assignees, projects } = useMemo(() => {
+    // Lưu code cũ như một tham khảo
+    /* 
     const uniqueAssignees = new Map<string, TaskAssignee>();
     const uniqueProjects = new Map<string, ProjectData>();
     
@@ -90,7 +140,53 @@ export function TaskListView({
       assignees: Array.from(uniqueAssignees.values()),
       projects: Array.from(uniqueProjects.values())
     };
-  }, [tasks]);
+    */
+
+    // Sử dụng members từ Redux store
+    const uniqueAssignees = new Map<string, TaskAssignee>();
+    const uniqueProjects = new Map<string, ProjectData>();
+    
+    // Thêm assignees từ tasks (giữ lại logic cũ)
+    tasks.forEach(task => {
+      if (task.assignee) {
+        uniqueAssignees.set(task.assignee.userId, task.assignee);
+      }
+      
+      if (task.project_id) {
+        const project: ProjectData = {
+          id: task.project_id,
+          name: `Project ${task.project_id}`,
+          description: '',
+          dueDate: '',
+          members: 0,
+          status: 'active'
+        };
+        uniqueProjects.set(task.project_id, project);
+      }
+    });
+    
+    // Thêm tất cả members từ Redux store (nếu có)
+    if (reduxMembers && reduxMembers.length > 0) {
+      reduxMembers.forEach((member: ProjectMember) => {
+        if (member.user && member.user.userId) {
+          uniqueAssignees.set(member.user.userId, {
+            userId: member.user.userId,
+            username: member.user.username || member.user.fullName || member.user.email,
+            avatarUrl: member.user.avatarUrl || undefined,
+            role: member.role
+          });
+        }
+      });
+    }
+    
+    console.log('Redux members:', reduxMembers);
+    console.log('Assignees cho dropdown:', Array.from(uniqueAssignees.values()));
+    
+    return {
+      assignees: Array.from(uniqueAssignees.values()),
+      projects: Array.from(uniqueProjects.values())
+    };
+  }, [tasks, reduxMembers]);
 
   // Đếm các task theo trạng thái
   const statusCounts = useMemo(() => {
@@ -437,14 +533,7 @@ export function TaskListView({
     setEditValue('');
   };
 
-  // Thêm các hook cập nhật riêng theo từng trường
-  const { updateStatus, isUpdating: isUpdatingStatus } = useUpdateTaskStatus();
-  const { updatePriority, isUpdating: isUpdatingPriority } = useUpdateTaskPriority();
-  const { updateEffort, isUpdating: isUpdatingEffort } = useUpdateTaskEffort();
-  const { updateDueDate, isUpdating: isUpdatingDueDate } = useUpdateTaskDueDate();
-  const { updateAssignee, isUpdating: isUpdatingAssignee } = useUpdateTaskAssignee();
-
-  // Cập nhật hàm xử lý lưu chỉnh sửa để sử dụng các hook riêng biệt
+  // Cập nhật hàm xử lý lưu chỉnh sửa để sử dụng Redux
   const handleSaveEditing = async (taskId: string, field: string) => {
     // Tạo một bản sao của task hiện tại để cập nhật UI optimistically
     const currentTask = tasks.find(t => t.task_id === taskId);
@@ -454,108 +543,137 @@ export function TaskListView({
     }
     
     try {
-      let updatedData: Partial<Task> = {};
-      
       // Sử dụng hook riêng biệt cho từng loại trường
       if (field === 'status') {
         const status = editValue as TaskStatus;
         
-        // Optimistic update cho UI
-        const updatedTasks = tasks.map(task => 
-          task.task_id === taskId 
-            ? { ...task, status } 
-            : task
-        );
-        setTasks(updatedTasks);
+        // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
+        const originalTasks = [...tasks];
         
-        // Gọi API
-        updatedData = await updateStatus(taskId, status);
-        console.log(`Đã cập nhật trạng thái thành: ${status}`);
+        // Optimistic update cho UI - Chỉ cập nhật task được chọn
+        updateSingleTaskInState(taskId, { status });
+        
+        try {
+          // CÁCH MỚI: Sử dụng Redux dispatch
+          await dispatch(updateTaskStatus({ taskId, status })).unwrap();
+          console.log(`Đã cập nhật trạng thái thành: ${status} (qua Redux)`);
+          
+          /* CÁCH CŨ: Sử dụng hook mutation
+          const result = await updateStatus(taskId, status);
+          console.log(`Đã cập nhật trạng thái thành: ${status}`, result);
+          */
+        } catch (error) {
+          console.error('Lỗi khi gọi API cập nhật trạng thái:', error);
+          // Khôi phục trạng thái cũ nếu API call thất bại
+          setTasks(originalTasks);
+          alert(`Không thể cập nhật trạng thái: ${error}`);
+          return; // Thoát sớm, không đóng chế độ chỉnh sửa
+        }
       } 
       else if (field === 'priority') {
         const priority = editValue as Priority;
         
-        // Optimistic update cho UI
-        const updatedTasks = tasks.map(task => 
-          task.task_id === taskId 
-            ? { ...task, priority } 
-            : task
-        );
-        setTasks(updatedTasks);
+        // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
+        const originalTasks = [...tasks];
         
-        // Gọi API
-        updatedData = await updatePriority(taskId, priority);
-        console.log(`Đã cập nhật ưu tiên thành: ${priority}`);
+        // Optimistic update cho UI - Chỉ cập nhật task được chọn
+        updateSingleTaskInState(taskId, { priority });
+        
+        try {
+          // CÁCH MỚI: Sử dụng Redux dispatch
+          await dispatch(updateTaskPriority({ taskId, priority })).unwrap();
+          console.log(`Đã cập nhật ưu tiên thành: ${priority} (qua Redux)`);
+          
+          /* CÁCH CŨ: Sử dụng hook mutation
+          const result = await updatePriority(taskId, priority);
+          console.log(`Đã cập nhật ưu tiên thành: ${priority}`, result);
+          */
+        } catch (error) {
+          console.error('Lỗi khi gọi API cập nhật ưu tiên:', error);
+          // Khôi phục trạng thái cũ nếu API call thất bại
+          setTasks(originalTasks);
+          alert(`Không thể cập nhật ưu tiên: ${error}`);
+          return; // Thoát sớm, không đóng chế độ chỉnh sửa
+        }
       } 
       else if (field === 'effort') {
         const effort = parseFloat(editValue) || 0;
         
-        // Lấy thông tin đầy đủ của task hiện tại, bao gồm assignee
-        const currentTask = tasks.find(t => t.task_id === taskId);
-        if (!currentTask) {
-          console.error('Không tìm thấy task có ID:', taskId);
-          return;
-        }
+        // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
+        const originalTasks = [...tasks];
         
-        // Optimistic update cho UI - Giữ nguyên tất cả thông tin hiện có, chỉ cập nhật effort
-        const updatedTasks = tasks.map(task => 
-          task.task_id === taskId 
-            ? { ...task, effort } 
-            : task
-        );
-        setTasks(updatedTasks);
+        // Optimistic update cho UI - Chỉ cập nhật task được chọn
+        updateSingleTaskInState(taskId, { effort });
         
-        // Gọi API - Hook đã được cập nhật để giữ nguyên thông tin assignee
-        updatedData = await updateEffort(taskId, effort);
-        console.log(`Đã cập nhật công sức thành: ${effort}`, updatedData);
-        
-        // Đảm bảo UI hiển thị đầy đủ thông tin assignee
-        if (!updatedData.assignee && currentTask.assignee) {
-          updatedData.assignee = currentTask.assignee;
-          updatedData.assignee_id = currentTask.assignee_id;
-          console.log('Đã khôi phục thông tin assignee từ dữ liệu hiện có');
+        try {
+          // CÁCH MỚI: Sử dụng Redux dispatch
+          await dispatch(updateTaskEffort({ taskId, effort })).unwrap();
+          console.log(`Đã cập nhật công sức thành: ${effort} (qua Redux)`);
+          
+          /* CÁCH CŨ: Sử dụng hook mutation
+          const result = await updateEffort(taskId, effort);
+          console.log(`Đã cập nhật công sức thành: ${effort}`, result);
+          */
+        } catch (error) {
+          console.error('Lỗi khi gọi API cập nhật công sức:', error);
+          // Khôi phục trạng thái cũ nếu API call thất bại
+          setTasks(originalTasks);
+          alert(`Không thể cập nhật công sức: ${error}`);
+          return; // Thoát sớm, không đóng chế độ chỉnh sửa
         }
       } 
+      else if (field === 'assignee_id') {
+        const assigneeId = editValue === "" ? null : editValue;
+        
+        // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
+        const originalTasks = [...tasks];
+        
+        // Optimistic update cho UI - Chỉ cập nhật task được chọn
+        updateSingleTaskInState(taskId, { assignee_id: assigneeId as string || undefined });
+        
+        try {
+          // CÁCH MỚI: Sử dụng Redux dispatch
+          await dispatch(updateTaskAssignee({ taskId, assigneeId: assigneeId as string | null })).unwrap();
+          console.log(`Đã cập nhật người được giao thành: ${assigneeId} (qua Redux)`);
+          
+          /* CÁCH CŨ: Sử dụng hook mutation
+          const result = await updateAssignee(taskId, assigneeId as string | null);
+          console.log(`Đã cập nhật người được giao thành: ${assigneeId}`, result);
+          
+          // Cập nhật thông tin assignee đầy đủ nếu có
+          if (result && result.assignee) {
+            updateSingleTaskInState(taskId, { assignee: result.assignee });
+          }
+          */
+        } catch (error) {
+          console.error('Lỗi khi gọi API cập nhật người được giao:', error);
+          // Khôi phục trạng thái cũ nếu API call thất bại
+          setTasks(originalTasks);
+          alert(`Không thể cập nhật người được giao: ${error}`);
+          return; // Thoát sớm, không đóng chế độ chỉnh sửa
+        }
+      }
       else if (field === 'due_date') {
         const dueDate = editValue;
         
-        // Optimistic update cho UI
-        const updatedTasks = tasks.map(task => 
-          task.task_id === taskId 
-            ? { ...task, due_date: dueDate } 
-            : task
-        );
-        setTasks(updatedTasks);
+        // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
+        const originalTasks = [...tasks];
         
-        // Gọi API
-        updatedData = await updateDueDate(taskId, dueDate);
-        console.log(`Đã cập nhật hạn thành: ${dueDate}`);
-      } 
-      else if (field === 'assignee_id') {
-        const assigneeId = editValue;
+        // Optimistic update cho UI - Chỉ cập nhật task được chọn
+        updateSingleTaskInState(taskId, { due_date: dueDate });
         
-        // Optimistic update cho UI
-        const updatedTasks = tasks.map(task => 
-          task.task_id === taskId 
-            ? { ...task, assignee_id: assigneeId } 
-            : task
-        );
-        setTasks(updatedTasks);
-        
-        // Gọi API
-        updatedData = await updateAssignee(taskId, assigneeId);
-        
-        console.log(`Đã cập nhật người được giao thành: ${assigneeId}`);
+        try {
+          // CÁCH CŨ: Hiện tại chưa có Redux action cho due_date, sử dụng hook cũ
+          const result = await updateDueDate(taskId, dueDate);
+          console.log(`Đã cập nhật hạn thành: ${dueDate}`, result);
+        } catch (error) {
+          console.error('Lỗi khi gọi API cập nhật hạn:', error);
+          // Khôi phục trạng thái cũ nếu API call thất bại
+          setTasks(originalTasks);
+          alert(`Không thể cập nhật hạn: ${error}`);
+          return; // Thoát sớm, không đóng chế độ chỉnh sửa
+        }
       }
-      
-      // Cập nhật task với dữ liệu từ API
-      setTasks(prevTasks => 
-        prevTasks.map(task => 
-          task.task_id === taskId 
-            ? { ...task, ...updatedData } 
-            : task
-        )
-      );
       
       // Đóng chế độ chỉnh sửa
       setEditingCell(null);

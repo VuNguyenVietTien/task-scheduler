@@ -1,7 +1,7 @@
 import React from 'react';
 import { Box, Typography, Paper, Grid } from '@mui/material';
 import { useQuery, gql } from '@apollo/client';
-import { useParams } from 'react-router-dom';
+import { usePathname } from 'next/navigation';
 import { Task, ProjectTasksResponse } from '../../types/task';
 
 const GET_PROJECT_TASKS = gql`
@@ -27,8 +27,8 @@ const GET_PROJECT_TASKS = gql`
   }
 `;
 
-export const TasksTab: React.FC = () => {
-  const { projectId } = useParams<{ projectId: string }>();
+export const TasksTab: React.FC<{ projectId: string }> = ({ projectId }) => {
+  const pathname = usePathname();
   const { loading, error, data } = useQuery<ProjectTasksResponse>(GET_PROJECT_TASKS, {
     variables: { projectId },
   });

@@ -24,18 +24,16 @@ import {
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon } from '@mui/icons-material';
 import { useQuery, useMutation, gql } from '@apollo/client';
-import { useParams } from 'react-router-dom';
+import { usePathname } from 'next/navigation';
 import { Task, ProjectTasksResponse } from '../../types/task';
 
 const GET_PROJECT_MEMBERS = gql`
   query GetProjectMembers($projectId: ID!) {
     projectMembers(projectId: $projectId) {
-      memberId
-      userId
       role
       joinedAt
       user {
-        id
+        userId
         email
         username
         fullName
@@ -117,7 +115,7 @@ interface Member {
   role: 'Admin' | 'Member' | 'Viewer';
   joinedAt: string;
   user: {
-    id: string;
+    userId: string;
     email: string;
     username: string;
     fullName: string | null;
@@ -125,8 +123,8 @@ interface Member {
   };
 }
 
-export const MembersTab: React.FC = () => {
-  const { projectId } = useParams<{ projectId: string }>();
+export const MembersTab: React.FC<{ projectId: string }> = ({ projectId }) => {
+  const pathname = usePathname();
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [selectedMember, setSelectedMember] = useState<Member | null>(null);
@@ -164,7 +162,7 @@ export const MembersTab: React.FC = () => {
               data: {
                 projectTasks: existingTasks.projectTasks.map((task: Task) => ({
                   ...task,
-                  assignee: task.assigneeId === data.addProjectMember.userId ? data.addProjectMember.user : task.assignee,
+                  assignee: task.assignee_id === data.addProjectMember.userId ? data.addProjectMember.user : task.assignee,
                 })),
               },
             });
@@ -219,7 +217,7 @@ export const MembersTab: React.FC = () => {
               data: {
                 projectTasks: existingTasks.projectTasks.map((task: Task) => ({
                   ...task,
-                  assignee: task.assigneeId === data.removeProjectMember ? null : task.assignee,
+                  assignee: task.assignee_id === data.removeProjectMember ? null : task.assignee,
                 })),
               },
             });

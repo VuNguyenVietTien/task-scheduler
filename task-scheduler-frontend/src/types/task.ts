@@ -120,3 +120,7 @@ export interface TasksPaginatedResponse {
   tasks: Task[];
   pagination: PaginationData;
 }
+
+export interface ProjectTasksResponse {
+  projectTasks: Task[];
+}

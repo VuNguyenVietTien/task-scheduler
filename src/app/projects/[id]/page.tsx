@@ -4,6 +4,11 @@ import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
+// Ngăn chặn static generation cho route này
+export const dynamic = 'force-dynamic';
+export const dynamicParams = true;
+export const revalidate = 0; // Thêm cấu hình này để tránh cache
+
 // Tạo component loading fallback
 function LoadingFallback() {
   return (
@@ -49,4 +54,4 @@ export default function ProjectDetail({ params }: { params: { id: string } }) {
       </Suspense>
     </ProtectedRoute>
   );
-}
+} 

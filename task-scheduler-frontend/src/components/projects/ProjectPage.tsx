@@ -1,9 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useProject } from '@/hooks/useProject';
+// Comment out hook cũ nhưng vẫn giữ lại để tham khảo
+// import { useProject } from '@/hooks/useProject';
 import { ProjectDetailView } from '@/components/projects/ProjectDetailView';
 import type { ProjectData } from '@/types/project';
+// Thêm imports cần thiết cho Redux
+import { useAppDispatch, useAppSelector } from '@/redux/hooks';
+import { fetchProject, resetProject } from '@/redux/features/projectSlice';
 
 interface ProjectPageProps {
   id: string;
@@ -27,9 +31,47 @@ function LoadingFallback() {
 
 // Export default component thay vì named export
 export default function ProjectPage({ id }: ProjectPageProps) {
-  const { loading, error, data } = useProject(id);
+  // Comment out code cũ
+  // const { loading, error, data } = useProject(id);
   const [projectData, setProjectData] = useState<ProjectData | null>(null);
+  
+  // Sử dụng Redux hooks 
+  const dispatch = useAppDispatch();
+  const { project, loading, error } = useAppSelector(state => state.project);
 
+  useEffect(() => {
+    // Đảm bảo chỉ dispatch khi đã load ở client side
+    if (typeof window !== 'undefined') {
+      // Dispatch action để fetch project
+      dispatch(fetchProject(id));
+      
+      // Cleanup function để reset project state khi unmount
+      return () => {
+        dispatch(resetProject());
+      };
+    }
+  }, [dispatch, id]);
+
+  useEffect(() => {
+    if (project) {
+      // Map dữ liệu từ Redux store sang ProjectData
+      const mapped: ProjectData = {
+        id: id,
+        name: project.name,
+        description: project.description || '',
+        dueDate: project.endDate,
+        members: project.memberCount,
+        status: project.status.toLowerCase() === 'completed' ? 'completed' :
+               project.status.toLowerCase() === 'on_hold' ? 'on-hold' :
+               'active'
+      };
+      
+      setProjectData(mapped);
+    }
+  }, [project, id]);
+
+  /* 
+  // Code cũ - Comment out để tham khảo
   useEffect(() => {
     if (data?.project) {
       // Map dữ liệu từ GraphQL sang ProjectData
@@ -47,6 +89,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       setProjectData(mapped);
     }
   }, [data, id]);
+  */
 
   // Xử lý trạng thái loading
   if (loading) {
@@ -59,7 +102,7 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       <div className="p-6">
         <div className="card">
           <h1 className="text-xl text-red-600">Error</h1>
-          <p className="text-slate-600">{error.message}</p>
+          <p className="text-slate-600">{error}</p>
         </div>
       </div>
     );
