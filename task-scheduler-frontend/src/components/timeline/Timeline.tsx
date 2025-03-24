@@ -26,6 +26,8 @@ import { useReorderTasks } from '@/hooks/useTasks';
 import { useProject } from '@/hooks/useProject';
 import { Button } from '@/components/ui/Button';
 import { toast } from 'sonner';
+import { useAppDispatch, useAppSelector } from '@/redux/hooks';
+import { updateTaskPriority } from '@/redux/features/tasksSlice';
 
 interface TimelineProps {
   tasks: Task[];
@@ -181,6 +183,14 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
   const [showSavePlanDialog, setShowSavePlanDialog] = useState(false);
   const [showLoadPlanDialog, setShowLoadPlanDialog] = useState(false);
   const [plans, setPlans] = useState<Plan[]>([]);
+  const dispatch = useAppDispatch();
+
+  // Có thể sử dụng Redux store để lấy danh sách tasks và users
+  // const { tasks: reduxTasks } = useAppSelector(state => state.tasks);
+  // const { users: reduxUsers } = useAppSelector(state => state.users);
+  
+  // Sử dụng tasks từ props vì có thể đã được lọc hoặc xử lý trước đó
+  
   const getCurrentDateVN = useCallback(() => {
     // Sử dụng timeZone string
     const now = new Date();
@@ -699,12 +709,61 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     }
   }, [orderedTasks, tasks, reorderTasks, getCurrentDateVN]);
 
-  const onDragEnd = useCallback((event: DragEndEvent) => {
+  const onDragEnd = useCallback(async (event: DragEndEvent) => {
     const { active, over } = event;
-    if (over && active.id !== over.id) {
-      handleTaskReorder(String(active.id), orderedTasks.findIndex(task => task.task_id === String(over.id)));
+    
+    if (!over) return;
+    
+    const activeTaskId = active.id as string;
+    const overTaskId = over.id as string;
+    
+    if (activeTaskId === overTaskId) return;
+    
+    // Tìm vị trí mới trong danh sách
+    const taskListIds = orderedTasks.map(task => task.task_id);
+    const oldIndex = taskListIds.indexOf(activeTaskId);
+    const newIndex = taskListIds.indexOf(overTaskId);
+    
+    if (oldIndex === -1 || newIndex === -1) return;
+    
+    // Tạo mảng mới theo thứ tự ưu tiên
+    const newTasksOrder = arrayMove(orderedTasks, oldIndex, newIndex);
+    
+    // Cập nhật UI trước (optimistic update)
+    setOrderedTasks(newTasksOrder);
+    
+    try {
+      // Lấy task trước và sau vị trí mới để tính toán priority_order
+      const prevTask = newIndex > 0 ? newTasksOrder[newIndex - 1] : null;
+      const nextTask = newIndex < newTasksOrder.length - 1 ? newTasksOrder[newIndex + 1] : null;
+      const activeTask = newTasksOrder[newIndex];
+      
+      let newPriority;
+      if (!prevTask) {
+        // Đầu danh sách, lấy priority của task sau và trừ đi 1000
+        newPriority = (nextTask?.priority_order || 1000) - 1000;
+      } else if (!nextTask) {
+        // Cuối danh sách, lấy priority của task trước và cộng 1000
+        newPriority = (prevTask?.priority_order || 0) + 1000;
+      } else {
+        // Giữa danh sách, lấy trung bình priority của task trước và sau
+        newPriority = Math.floor((prevTask.priority_order + nextTask.priority_order) / 2);
+      }
+      
+      // Sử dụng Redux để cập nhật
+      await dispatch(updateTaskPriority({
+        taskId: activeTask.task_id,
+        priorityOrder: newPriority
+      })).unwrap();
+      
+      console.log(`Đã cập nhật priority cho task ${activeTask.task_id} thành ${newPriority}`);
+    } catch (error) {
+      console.error('Lỗi khi cập nhật thứ tự ưu tiên:', error);
+      // Khôi phục lại danh sách cũ nếu có lỗi
+      setOrderedTasks(orderedTasks);
+      toast.error('Không thể cập nhật thứ tự ưu tiên. Vui lòng thử lại.');
     }
-  }, [orderedTasks, handleTaskReorder]);
+  }, [orderedTasks, dispatch]);
 
   // Xử lý khi thay đổi ngày bắt đầu
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {

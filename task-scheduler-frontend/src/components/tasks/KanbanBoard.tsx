@@ -27,6 +27,8 @@ import {
 import { useUpdateTaskStatus } from '@/hooks/useTaskMutations';
 import { DroppableColumn } from './DroppableColumn';
 import { SortableTaskItem } from './SortableTaskItem';
+import { useAppDispatch } from '@/redux/hooks';
+import { updateTaskStatus } from '@/redux/features/tasksSlice';
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -88,7 +90,8 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
   const [activeId, setActiveId] = useState<UniqueIdentifier | null>(null);
   const [clonedTasks, setClonedTasks] = useState<Task[]>(tasks);
   const [overId, setOverId] = useState<UniqueIdentifier | null>(null);
-  const [updateTaskStatus, { loading }] = useUpdateTaskStatus();
+  const [updateTaskStatusAPI, { loading }] = useUpdateTaskStatus();
+  const dispatch = useAppDispatch();
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Reset the cloned tasks when the original tasks change
@@ -234,58 +237,63 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
           const newStatus = toGraphQLStatus(overContainer.id as TaskStatus);
           console.log('Updating task status:', { taskId: activeTask.task_id, status: newStatus });
           
-          // Prepare optimistic response
-          const optimisticResponse = {
-            updateTaskStatus: {
-              __typename: 'Task',
-              task_id: activeTask.task_id,
-              project_id: projectId,
-              status: newStatus,
-              // Include other required fields that won't change
-              title: activeTask.title,
-              description: activeTask.description,
-              // ... other required fields
-            }
-          };
+          // Sử dụng Redux dispatch để cập nhật trạng thái
+          await dispatch(updateTaskStatus({
+            taskId: activeTask.task_id,
+            status: overContainer.id as TaskStatus
+          })).unwrap();
           
-          // Perform optimistic UI update to avoid flickering
-          await updateTaskStatus({
-            variables: {
-              input: {
-                taskId: activeTask.task_id,
-                status: newStatus
-              }
-            },
-            optimisticResponse
-          });
+          console.log('Task status updated successfully via Redux');
           
-          // On success, notify parent of changes
+          // Notify about success
           if (onTasksReorder) {
             onTasksReorder(newTasks);
           }
         } catch (error) {
-          console.error('Failed to update task:', error);
-          
-          // On error, revert the optimistic update
-          if (targetTask) {
-            targetTask.status = oldStatus;
-            setClonedTasks([...newTasks]);
-          }
+          console.error('Failed to update task status:', error);
+          // Rollback optimistic update on error
+          setClonedTasks(tasks);
+          // Show notification
+          const event = new CustomEvent('show-notification', {
+            detail: {
+              type: 'error',
+              message: 'Failed to update task status. Please try again.'
+            }
+          });
+          window.dispatchEvent(event);
         }
       }
+      
+      // If moving within the same column, just reorder
+      if (activeContainer.id === overContainer.id && activeContainer.tasks.length > 1) {
+        // Handle reordering for REST API
+        const movedTaskIds = activeContainer.tasks.map(t => t.task_id);
+        const activeTaskIndex = movedTaskIds.indexOf(String(active.id));
+        const overTaskIndex = movedTaskIds.indexOf(String(over.id));
+        
+        if (activeTaskIndex !== overTaskIndex) {
+          // Reorder the tasks
+          const newOrder = arrayMove(movedTaskIds, activeTaskIndex, overTaskIndex);
+          
+          // Update UI with new order
+          // ... handle reordering API calls here for priority/order changes
+          
+          console.log('Reordering tasks:', { fromIndex: activeTaskIndex, toIndex: overTaskIndex, newOrder });
+        }
+      }
+      
     } catch (error) {
-      console.error('Error in drag end handler:', error);
+      console.error('Error in drag end:', error);
     }
-  }, [findContainer, getTaskById, clonedTasks, updateTaskStatus, onTasksReorder, projectId]);
+  }, [clonedTasks, tasks, findContainer, getTaskById, dispatch, onTasksReorder, projectId]);
 
   const handleDragCancel = useCallback(() => {
     setActiveId(null);
     setOverId(null);
     document.body.classList.remove('dragging');
-    
-    // If needed, revert any temporary UI changes made during drag
   }, []);
 
+  // Find the active task when dragging
   const activeTask = useMemo(() => {
     if (!activeId) return null;
     return getTaskById(activeId);

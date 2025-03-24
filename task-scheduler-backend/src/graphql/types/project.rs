@@ -172,25 +172,31 @@ impl From<String> for ProjectStatus {
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]
-#[graphql(rename_items = "lowercase")]
 #[sqlx(rename_all = "lowercase", type_name = "member_role")]
 pub enum MemberRole {
     Admin,
     Member,
     Viewer,
-    Guest,
+}
+
+impl MemberRole {
+    // Hàm chuyển đổi từ chuỗi sang enum mà không phân biệt cách viết hoa/thường
+    pub fn from_str_case_insensitive(s: &str) -> Option<Self> {
+        let lowercase = s.to_lowercase();
+        match lowercase.as_str() {
+            "admin" => Some(MemberRole::Admin),
+            "member" => Some(MemberRole::Member),
+            "viewer" => Some(MemberRole::Viewer),
+            _ => None,
+        }
+    }
 }
 
 impl FromStr for MemberRole {
     type Err = String;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        match s.to_lowercase().as_str() {
-            "admin" => Ok(MemberRole::Admin),
-            "member" => Ok(MemberRole::Member),
-            "viewer" => Ok(MemberRole::Viewer),
-            "guest" => Ok(MemberRole::Guest),
-            _ => Err(format!("Invalid member role: {}", s))
-        }
+        MemberRole::from_str_case_insensitive(s)
+            .ok_or_else(|| format!("Invalid member role: {}", s))
     }
 }
 

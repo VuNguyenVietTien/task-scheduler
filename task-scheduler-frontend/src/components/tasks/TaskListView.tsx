@@ -107,7 +107,7 @@ export function TaskListView({
   useEffect(() => {
     // Chỉ cập nhật dữ liệu nếu không có chỉnh sửa đang diễn ra
     if (!editingCell) {
-      setTasks(initialTasks);
+    setTasks(initialTasks);
     }
   }, [initialTasks, editingCell]);
 

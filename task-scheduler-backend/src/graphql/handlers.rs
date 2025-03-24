@@ -2,13 +2,16 @@ use actix_web::{web, HttpRequest, HttpResponse, Result};
 use async_graphql::{
     http::{GraphiQLSource, ALL_WEBSOCKET_PROTOCOLS},
     Schema,
+    ServerError, 
+    Value,
+    PathSegment,
 };
 use async_graphql_actix_web::{GraphQLRequest, GraphQLResponse};
 use sqlx::PgPool;
 use std::sync::Arc;
 use std::ops::Deref;
 use std::time::Instant;
-use serde_json::json;
+use serde_json::{json, Value as JsonValue};
 
 use crate::auth::{error::AuthError, jwt, types};
 use crate::config::Config;
@@ -90,6 +93,10 @@ pub async fn graphql_handler(
 
     let schema = schema.get_ref();
     let mut request = request;
+    
+    // Hiển thị thông tin trước khi thực thi
+    eprintln!("GraphQL Request: {:?}", request);
+    
     request = request.data(context);
     let response = schema.execute(request).await;
 
@@ -98,13 +105,61 @@ pub async fn graphql_handler(
     eprintln!("\n=== GraphQL Response ===");
     eprintln!("Duration: {:?}", duration);
     
-    // Tạo phiên bản tinh gọn của response
-    let simplified_response = json!({
+    // Chi tiết hóa thông tin lỗi thay vì chỉ hiển thị errors: true
+    if response.errors.len() > 0 {
+        eprintln!("ERRORS DETAILS:");
+        for (i, err) in response.errors.iter().enumerate() {
+            eprintln!("Error #{}: {}", i + 1, err);
+            
+            // Kiểm tra path an toàn hơn
+            if !err.path.is_empty() {
+                eprintln!("  Path: {:?}", err.path);
+                
+                // Debug thêm về argument errors nếu lỗi liên quan đến MemberRole
+                if err.message.contains("enumeration type") && 
+                   (err.message.contains("MemberRole") || err.message.contains("ProjectMemberRole")) {
+                    eprintln!("  DETECTED ENUM PARSING ERROR FOR MemberRole!");
+                    if let Some(extensions) = &err.extensions {
+                        if let Some(value) = extensions.get("value") {
+                            eprintln!("  Value being parsed: {:?}", value);
+                        }
+                    }
+                    
+                    // Hiển thị thêm thông tin về request
+                    if let Some(argument_name) = err.message.split("argument \"").nth(1).and_then(|s| s.split("\"").next()) {
+                        eprintln!("  Argument name: {}", argument_name);
+                    }
+                }
+            }
+            
+            if let Some(extensions) = &err.extensions {
+                eprintln!("  Extensions: {}", serde_json::to_string_pretty(extensions).unwrap_or_default());
+            }
+            eprintln!("  Message: {}", err.message);
+            if !err.locations.is_empty() {
+                eprintln!("  Locations: {:?}", err.locations);
+            }
+        }
+    }
+    
+    // Tạo phiên bản đầy đủ của response để log
+    let full_response = json!({
         "data": response.data.clone(),
-        "errors": response.errors.len() > 0,
+        "errors": if response.errors.len() > 0 { 
+            response.errors.iter().map(|e| {
+                json!({
+                    "message": e.message.clone(),
+                    "path": e.path.clone(),
+                    "extensions": e.extensions.clone(),
+                    "locations": e.locations.clone()
+                })
+            }).collect::<Vec<_>>()
+        } else {
+            Vec::<JsonValue>::new()
+        }
     });
     
-    eprintln!("Response: {}", serde_json::to_string_pretty(&simplified_response).unwrap_or_default());
+    eprintln!("Response: {}", serde_json::to_string_pretty(&full_response).unwrap_or_default());
     eprintln!("======================\n");
 
     Ok(response.into())

@@ -1,8 +1,10 @@
 pub mod query;
 pub mod mutation;
+pub mod types;
 
 use async_graphql::{Context, Object, Result, ID};
 use crate::graphql::types::{ProjectMember, MemberRole};
+use crate::graphql::resolvers::members::types::{MemberRoleUpdate, BulkUpdateResponse, BulkRemoveResponse};
 
 #[derive(Default)]
 pub struct MemberQuery;
@@ -64,5 +66,25 @@ impl MemberMutation {
         user_id: ID
     ) -> Result<bool> {
         mutation::remove_member(ctx, project_id, user_id).await
+    }
+    
+    /// Cập nhật vai trò của nhiều thành viên cùng lúc
+    async fn update_multiple_members(
+        &self,
+        ctx: &Context<'_>,
+        project_id: ID,
+        updates: Vec<MemberRoleUpdate>
+    ) -> Result<BulkUpdateResponse> {
+        mutation::update_multiple_members(ctx, project_id, updates).await
+    }
+    
+    /// Xóa nhiều thành viên cùng lúc
+    async fn remove_multiple_project_members(
+        &self,
+        ctx: &Context<'_>,
+        project_id: ID,
+        member_ids: Vec<ID>
+    ) -> Result<BulkRemoveResponse> {
+        mutation::remove_multiple_members(ctx, project_id, member_ids).await
     }
 } 

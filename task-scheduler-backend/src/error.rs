@@ -108,8 +108,26 @@ impl AppError {
 
         err = err.extend_with(|_, e| {
             e.set("code", code);
-            if let AppError::Database(db_err) = self {
-                e.set("database_error", db_err.to_string());
+            e.set("detailed_message", self.to_string());
+            
+            // Thêm thông tin chi tiết dựa vào loại lỗi
+            match self {
+                AppError::Database(db_err) => {
+                    e.set("database_error", db_err.to_string());
+                    if let Some(err_code) = db_err.as_database_error().and_then(|dbe| dbe.code()) {
+                        e.set("db_error_code", err_code.to_string());
+                    }
+                },
+                AppError::Validation(msg) => {
+                    e.set("validation_error", msg.to_string());
+                },
+                AppError::Auth(auth_err) => {
+                    e.set("auth_error_type", format!("{:?}", auth_err));
+                    e.set("auth_error_message", auth_err.to_string());
+                },
+                _ => {
+                    e.set("error_type", format!("{:?}", self));
+                }
             }
         });
 

@@ -1,4 +1,7 @@
 import { format } from 'date-fns';
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
+import { MemberRole } from "@/types/project"
 
 // Trả về mảng các ngày từ startDate đến endDate (bao gồm cả 2 ngày này)
 export function getDatesBetween(startDate: Date, endDate: Date): Date[] {
@@ -39,8 +42,8 @@ export function formatDateRange(startDate?: string, endDate?: string): string {
 }
 
 // Kết hợp các class name
-export function cn(...classes: (string | undefined | null | false)[]): string {
-  return classes.filter(Boolean).join(' ');
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
 }
 
 // Chuyển đổi ngày về định dạng YYYY-MM-DD với múi giờ Việt Nam
@@ -63,4 +66,51 @@ export function isSameDay(date1: Date, date2: Date): boolean {
     date1.getMonth() === date2.getMonth() &&
     date1.getDate() === date2.getDate()
   );
+}
+
+export function normalizeRole(role: string): MemberRole {
+  const normalized = role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
+  if (['Admin', 'Member', 'Viewer'].includes(normalized)) {
+    return normalized as MemberRole;
+  }
+  throw new Error(`Invalid role: ${role}`);
+}
+
+export function formatRole(role: MemberRole): string {
+  switch (role) {
+    case 'Admin':
+      return 'Admin';
+    case 'Member':
+      return 'Member';
+    case 'Viewer':
+      return 'Viewer';
+    default:
+      return role;
+  }
+}
+
+export function getRoleColor(role: MemberRole): string {
+  switch (role) {
+    case 'Admin':
+      return 'bg-red-100 text-red-800';
+    case 'Member':
+      return 'bg-blue-100 text-blue-800';
+    case 'Viewer':
+      return 'bg-gray-100 text-gray-800';
+    default:
+      return 'bg-gray-100 text-gray-800';
+  }
+}
+
+export function getRoleIcon(role: MemberRole): string {
+  switch (role) {
+    case 'Admin':
+      return '👑';
+    case 'Member':
+      return '👤';
+    case 'Viewer':
+      return '👁️';
+    default:
+      return '👤';
+  }
 }

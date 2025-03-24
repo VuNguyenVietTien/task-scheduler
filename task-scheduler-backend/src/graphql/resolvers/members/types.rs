@@ -1,16 +1,54 @@
 use async_graphql::*;
 use uuid::Uuid;
 use sqlx::{PgPool, Row};
+use serde;
 
-#[derive(Enum, Copy, Clone, Eq, PartialEq, sqlx::Type)]
+#[derive(Enum, Copy, Clone, Eq, PartialEq, sqlx::Type, Debug)]
+#[graphql(name = "ProjectMemberRole")]
 #[sqlx(type_name = "member_role", rename_all = "lowercase")]
 pub enum MemberRole {
+    #[graphql(name = "Admin")]
     Admin,
+    #[graphql(name = "Member")]
     Member,
+    #[graphql(name = "Viewer")]
     Viewer,
 }
 
+impl MemberRole {
+    // Hàm chuyển đổi từ chuỗi sang enum mà không phân biệt cách viết hoa/thường
+    pub fn from_str_case_insensitive(s: &str) -> Option<Self> {
+        let lowercase = s.to_lowercase();
+        match lowercase.as_str() {
+            "admin" => Some(MemberRole::Admin),
+            "member" => Some(MemberRole::Member),
+            "viewer" => Some(MemberRole::Viewer),
+            _ => None,
+        }
+    }
+}
+
+// Implement Deserialize để có thể chuyển đổi từ chuỗi GraphQL query
+impl<'de> serde::Deserialize<'de> for MemberRole {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        // Deserialize thành chuỗi trước
+        let s = String::deserialize(deserializer)?;
+        
+        // Chuyển đổi từ chuỗi sang enum, không phân biệt hoa thường
+        MemberRole::from_str_case_insensitive(&s)
+            .ok_or_else(|| {
+                serde::de::Error::custom(format!(
+                    "Giá trị không hợp lệ cho enum MemberRole: {}. Chỉ chấp nhận: admin/member/viewer (không phân biệt hoa/thường)", s
+                ))
+            })
+    }
+}
+
 #[derive(SimpleObject)]
+#[graphql(name = "ResolverProjectMember")]
 pub struct ProjectMember {
     pub member_id: String,
     pub project_id: String,
@@ -22,6 +60,7 @@ pub struct ProjectMember {
 }
 
 #[derive(SimpleObject)]
+#[graphql(name = "MemberUserResponse")]
 pub struct UserResponse {
     pub id: String,
     pub email: String,
@@ -62,4 +101,24 @@ pub struct AddMemberInput {
 pub struct UpdateMemberRoleInput {
     pub member_id: String,
     pub role: MemberRole,
+}
+
+// Định nghĩa mới cho các hoạt động hàng loạt
+
+#[derive(InputObject)]
+pub struct MemberRoleUpdate {
+    pub user_id: ID,
+    pub role: MemberRole,
+}
+
+#[derive(SimpleObject)]
+pub struct BulkUpdateResponse {
+    pub success_count: i32,
+    pub members: Vec<ProjectMember>,
+}
+
+#[derive(SimpleObject)]
+pub struct BulkRemoveResponse {
+    pub success_count: i32,
+    pub failed_count: i32,
 } 

@@ -4,13 +4,15 @@ import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useMutation } from '@apollo/client';
 import { ADD_PROJECT_MEMBER_BY_EMAIL, UPDATE_PROJECT_MEMBER_ROLE, REMOVE_PROJECT_MEMBER } from '@/graphql/mutations/projectMember';
+import { UPDATE_MULTIPLE_MEMBER_ROLES } from '@/graphql/mutations/projectMembers';
 import { GET_PROJECT_BY_ID } from '@/graphql/queries/project';
 import { Dialog } from '@/components/ui/Dialog';
 import { toast } from 'sonner';
+import { MemberRole } from '@/types/members';
+import { useAppDispatch, useAppSelector } from '@/redux/hooks';
+import { updateMultipleMemberRolesInStore, updateMemberRoleInStore } from '@/redux/features/membersSlice';
 
 // Định nghĩa các type cần thiết
-type MemberRole = 'admin' | 'member' | 'viewer' | 'guest';
-
 type Member = {
   role: string; // Role từ API 
   joinedAt: string;
@@ -35,12 +37,70 @@ type AddMemberFormValues = {
   role: MemberRole;
 };
 
-export function MembersView({ projectId, members, currentUserRole, refetch }: ProjectMembersProps) {
+// Định nghĩa thêm kiểu dữ liệu cho API response
+type UpdatedMember = {
+  userId: string;
+  role: string;
+  memberId: string;
+  projectId: string;
+  joinedAt: string;
+  user: {
+    id: string;
+    email: string;
+    username: string;
+    fullName: string | null;
+    avatarUrl: string | null;
+  };
+};
+
+type UpdateMultipleMembersResponse = {
+  updateMultipleMembers: {
+    successCount: number;
+    members: UpdatedMember[];
+  };
+};
+
+export function MembersView({ projectId, members: propMembers, currentUserRole, refetch }: ProjectMembersProps) {
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Map<string, MemberRole>>(new Map());
   const [addError, setAddError] = useState<string | null>(null);
+  const [updating, setUpdating] = useState(false);
+  
+  // Sử dụng Redux
+  const dispatch = useAppDispatch();
+  const storeMembers = useAppSelector(state => state.members.members);
+  
+  // State để lưu giá trị members hiển thị trên UI
+  const [displayMembers, setDisplayMembers] = useState<Member[]>(propMembers);
+  
+  // Theo dõi thay đổi từ cả props và redux store
+  useEffect(() => {
+    if (propMembers && propMembers.length > 0) {
+      setDisplayMembers(propMembers);
+    }
+  }, [propMembers]);
+  
+  // Theo dõi thay đổi từ Redux store
+  useEffect(() => {
+    if (storeMembers && storeMembers.length > 0) {
+      // Cập nhật từ Redux store nếu có dữ liệu mới
+      const updatedMembers = propMembers.map(propMember => {
+        // Tìm thành viên tương ứng trong Redux store
+        const storeMember = storeMembers.find(m => m.user.userId === propMember.user.userId);
+        if (storeMember) {
+          // Nếu tìm thấy, cập nhật vai trò từ store
+          return {
+            ...propMember,
+            role: storeMember.role
+          };
+        }
+        return propMember;
+      });
+      setDisplayMembers(updatedMembers);
+    }
+  }, [storeMembers, propMembers]);
 
   // Kiểm tra quyền dựa trên vai trò trong dự án
   const canManageMembers = String(currentUserRole).toLowerCase() === 'admin';
@@ -57,8 +117,8 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
     
     // Kiểm tra members được truyền vào component
     console.log('===== CHI TIẾT MEMBERS =====');
-    console.log('Members array:', members);
-    console.log('Members roles:', members?.map(m => ({
+    console.log('Members array:', propMembers);
+    console.log('Members roles:', propMembers?.map(m => ({
       userId: m.user.userId,
       username: m.user.username || m.user.email,
       role: m.role,
@@ -68,26 +128,24 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
       isAdmin: m.role === 'admin' || m.role === 'Admin' || String(m.role).toLowerCase() === 'admin',
       isCurrentUser: false // Không còn sử dụng localStorage
     })));
-  }, [currentUserRole, canManageMembers, members]);
+  }, [currentUserRole, canManageMembers, propMembers]);
   
   const { register, handleSubmit, reset, formState: { errors } } = useForm<AddMemberFormValues>({
     defaultValues: {
       email: '',
-      role: 'viewer'
+      role: 'Viewer'
     }
   });
 
   // Mutation để thêm thành viên
   const [addMember, { loading: addLoading }] = useMutation(ADD_PROJECT_MEMBER_BY_EMAIL, {
-    refetchQueries: [
-      { query: GET_PROJECT_BY_ID, variables: { projectId } },
-    ],
-    onCompleted: () => {
+    onCompleted: (data) => {
       toast.success('Thành viên đã được thêm vào dự án thành công');
       setIsAddDialogOpen(false);
       setEmailInput('');
       setAddError(null);
       reset();
+      // Vẫn cần refetch vì đây là thêm mới, không phải update
       refetch();
     },
     onError: (error) => {
@@ -105,15 +163,66 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
 
   // Mutation để cập nhật vai trò thành viên
   const [updateRole, { loading: updateLoading }] = useMutation(UPDATE_PROJECT_MEMBER_ROLE, {
-    refetchQueries: [
-      { query: GET_PROJECT_BY_ID, variables: { projectId } },
-    ],
-    onCompleted: () => {
+    onCompleted: (data) => {
       toast.success('Vai trò thành viên đã được cập nhật');
-      refetch();
+      
+      // Cập nhật Redux store
+      if (data?.updateProjectMember) {
+        dispatch(updateMemberRoleInStore({
+          userId: data.updateProjectMember.userId,
+          role: data.updateProjectMember.role
+        }));
+      }
     },
     onError: (error) => {
       toast.error(error.message || 'Không thể cập nhật vai trò');
+    }
+  });
+
+  // Mutation để cập nhật vai trò nhiều thành viên cùng lúc
+  const [updateMultipleRoles, { loading: updateMultipleLoading }] = useMutation(UPDATE_MULTIPLE_MEMBER_ROLES, {
+    onCompleted: (data: UpdateMultipleMembersResponse) => {
+      if (data?.updateMultipleMembers?.successCount > 0) {
+        toast.success(`Đã cập nhật ${data.updateMultipleMembers.successCount} thành viên thành công`);
+        
+        // Tạo dữ liệu cập nhật cho Redux store
+        const updatedRoles = data.updateMultipleMembers.members.map(member => ({
+          userId: member.userId,
+          role: member.role as MemberRole
+        }));
+        
+        // Dispatch action cập nhật Redux store
+        dispatch(updateMultipleMemberRolesInStore(updatedRoles));
+        
+        // Cập nhật UI trực tiếp 
+        setDisplayMembers(prevMembers => 
+          prevMembers.map(member => {
+            const updatedMember = data.updateMultipleMembers.members.find(
+              m => m.userId === member.user.userId
+            );
+            if (updatedMember) {
+              return {
+                ...member,
+                role: updatedMember.role
+              };
+            }
+            return member;
+          })
+        );
+        
+        // Đặt lại state
+        setEditMode(false);
+        setPendingChanges(new Map());
+      }
+    },
+    onError: (error) => {
+      console.error('Chi tiết lỗi GraphQL:', error);
+      if (error.graphQLErrors && error.graphQLErrors.length > 0) {
+        const errorMessages = error.graphQLErrors.map(e => e.message).join('\n');
+        toast.error(`Lỗi: ${errorMessages}`);
+      } else {
+        toast.error(error.message || 'Không thể cập nhật vai trò của các thành viên');
+      }
     }
   });
 
@@ -163,7 +272,7 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
       variables: {
         projectId,
         email: emailInput,
-        role: 'viewer'
+        role: 'Viewer'
       }
     });
   };
@@ -181,11 +290,14 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
       setPendingChanges(newChanges);
     } else {
       // In direct mode, apply change immediately
+      // Chuyển đổi role từ chữ thường sang chữ hoa đầu tiên
+      const capitalizedRole = newRole.charAt(0).toUpperCase() + newRole.slice(1).toLowerCase();
+      
       updateRole({
         variables: {
           projectId,
           userId,
-          role: newRole
+          role: capitalizedRole
         }
       });
     }
@@ -215,38 +327,33 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
   };
 
   const handleSaveChanges = async () => {
-    if (!canManageMembers) {
-      toast.error('Bạn không có quyền chỉnh sửa vai trò thành viên');
-      return;
-    }
-    
-    if (pendingChanges.size === 0) {
-      setEditMode(false);
-      return;
-    }
-    
-    // Apply all role changes
-    const promises: Array<Promise<any>> = [];
-    pendingChanges.forEach((role, userId) => {
-      promises.push(
-        updateRole({
-          variables: {
-            projectId,
-            userId,
-            role: role
-          }
-        })
-      );
-    });
-    
     try {
-      await Promise.all(promises);
-      setPendingChanges(new Map());
-      setEditMode(false);
-      toast.success('Đã lưu tất cả thay đổi');
+      setUpdating(true);
+      
+      // Tạo mảng updates từ những thay đổi chưa lưu
+      const updates = Array.from(pendingChanges).map(([userId, role]) => {
+        // Chuyển đổi role từ chữ thường sang chữ hoa đầu tiên
+        const capitalizedRole = role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
+        return {
+          userId: userId,
+          role: capitalizedRole // Đảm bảo role có chữ cái đầu viết hoa
+        };
+      });
+
+      // Gọi API cập nhật vai trò
+      const { data } = await updateMultipleRoles({
+        variables: {
+          projectId,
+          updates
+        }
+      });
+      
+      // Cập nhật UI hiện tại. Không cần lấy lại dữ liệu từ server vì đã được cập nhật trong onCompleted
+      setUpdating(false);
     } catch (error) {
-      toast.error('Lỗi khi cập nhật vai trò thành viên');
-      console.error(error);
+      console.error('Lỗi khi cập nhật vai trò:', error);
+      toast.error('Không thể cập nhật vai trò thành viên. Vui lòng thử lại sau!');
+      setUpdating(false);
     }
   };
 
@@ -267,10 +374,14 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
   // Hàm chuyển đổi role thành dạng hiển thị
   const getRoleDisplay = (role: string): string => {
     if (!role) return 'Viewer';
-    const normalizedRole = String(role).toLowerCase();
-    if (normalizedRole === 'admin') return 'Admin';
-    if (normalizedRole === 'member') return 'Member';
-    if (normalizedRole === 'guest') return 'Guest';
+    
+    // Chuẩn hóa role: chữ cái đầu viết hoa, còn lại viết thường
+    const capitalizedRole = role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
+    
+    // Bây giờ so sánh với các giá trị MemberRole đã chuẩn hóa
+    if (capitalizedRole === 'Admin') return 'Admin';
+    if (capitalizedRole === 'Member') return 'Member';
+    if (capitalizedRole === 'Guest') return 'Guest';
     return 'Viewer';
   };
 
@@ -295,9 +406,9 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
               <button 
                 className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition"
                 onClick={handleSaveChanges}
-                disabled={updateLoading}
+                disabled={updateMultipleLoading}
               >
-                {updateLoading ? 'Đang lưu...' : 'Lưu thay đổi'}
+                {updateMultipleLoading ? 'Đang lưu...' : 'Lưu thay đổi'}
               </button>
             ) : (
               <button 
@@ -342,10 +453,10 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
               {...register('role')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
             >
-              <option value="admin">Admin</option>
-              <option value="member">Member</option>
-              <option value="viewer">Viewer</option>
-              <option value="guest">Guest</option>
+              <option value="Admin">Admin</option>
+              <option value="Member">Member</option>
+              <option value="Viewer">Viewer</option>
+              <option value="Guest">Guest</option>
             </select>
           </div>
           
@@ -419,8 +530,9 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-gray-200">
-            {members.map((member: Member) => {
-              const normalizedRole = member.role.toLowerCase();
+            {displayMembers.map((member: Member) => {
+              // Sử dụng chuẩn hóa vai trò: chữ cái đầu viết hoa, còn lại viết thường
+              const normalizedRole = member.role.charAt(0).toUpperCase() + member.role.slice(1).toLowerCase();
               
               // Kiểm tra có phải người dùng hiện tại không
               const isCurrentUser = false; // Sẽ được xác định từ thông tin project
@@ -465,10 +577,10 @@ export function MembersView({ projectId, members, currentUserRole, refetch }: Pr
                         aria-label={`Thay đổi vai trò của ${member.user.fullName || member.user.username}`}
                         disabled={!canEditThisMember}
                       >
-                        <option value="admin">Admin</option>
-                        <option value="member">Member</option>
-                        <option value="viewer">Viewer</option>
-                        <option value="guest">Guest</option>
+                        <option value="Admin">Admin</option>
+                        <option value="Member">Member</option>
+                        <option value="Viewer">Viewer</option>
+                        <option value="Guest">Guest</option>
                       </select>
                     ) : (
                       <span>
