@@ -1,0 +1,18 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+# Your rule content
+
+- cấu trúc source code như sau: 
+root/
+  |-task-scheduler-backend/
+  |-task-scheduler-frontend/
+  |-git
+khi sửa frontend xong thì call mcp server để get console log kiểm tra xem có gì bất thường không thì fix. Không capture screen shot
+Khi sửa backend thì run cargo build hoặc cargo check để xem có lỗi gì không để fix
+- backend đang dùng rust, các component được tách ra. Khi phát triển chức năng mới thì kiểm tra xem chức năng đang có code thế nào thì làm theo cho đồng bộ, tránh phát sinh lỗi
+- frontend dùng nextjs, trước khi install package mới thì kiểm tra xem package.json đã có lib chưa rồi mới install
+- không execute command: cargo run, npm run dev. 2 cái này do user làm

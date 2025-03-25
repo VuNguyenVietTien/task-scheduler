@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, forwardRef } from 'react';
 import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
 import { User } from '@/contexts/AuthContext';
 import dynamic from 'next/dynamic';
@@ -16,12 +16,18 @@ import { useMutation, useQuery } from '@apollo/client';
 import { GET_TASK_COMMENTS } from '@/graphql/queries/tasks';
 import { CREATE_TASK_COMMENT } from '@/graphql/mutations/tasks';
 
-// Dynamic import cho React Quill để tránh lỗi SSR
-const ReactQuill = dynamic(() => import('react-quill'), { 
-  ssr: false,
-  loading: () => <div className="h-64 flex items-center justify-center bg-gray-100 rounded-md"><Spinner /></div>,
-});
-import 'react-quill/dist/quill.snow.css';
+// RichTextEditor với dynamic import để tránh lỗi SSR
+const RichTextEditor = dynamic(
+  () => import('@/components/common/RichTextEditor'),
+  { 
+    ssr: false,
+    loading: () => (
+      <div className="h-[300px] bg-gray-50 rounded-md animate-pulse flex items-center justify-center">
+        <Spinner size="lg" />
+      </div>
+    ),
+  }
+);
 
 interface TaskDetailPageProps {
   task: Task;
@@ -91,6 +97,10 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const [activeTab, setActiveTab] = useState('details');
   const [userId, setUserId] = useState<string | null>(null);
   
+  // Sử dụng useRef để theo dõi các editor
+  const descriptionEditorRef = useRef<any>(null);
+  const commentEditorRef = useRef<any>(null);
+  
   // Các trường có thể edit
   const [editingField, setEditingField] = useState<string | null>(null);
 
@@ -105,19 +115,10 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const [createComment, { loading: createCommentLoading }] = 
     useMutation<CreateCommentData, { input: CreateCommentInput }>(CREATE_TASK_COMMENT);
 
-  // Quill editor configuration
-  const quillModules = {
-    toolbar: [
-      [{ header: [1, 2, 3, false] }],
-      ['bold', 'italic', 'underline', 'strike'],
-      [{ list: 'ordered' }, { list: 'bullet' }],
-      [{ indent: '-1' }, { indent: '+1' }],
-      [{ align: [] }],
-      [{ color: [] }, { background: [] }],
-      ['link', 'image', 'video'],
-      ['clean'],
-    ],
-  };
+  // Khởi tạo tất cả modules Quill khi component mount
+  useEffect(() => {
+    // Chúng ta đã chuyển phần này vào dynamic import của ReactQuill
+  }, []);
 
   // Định dạng ngày tháng
   const formatDate = (dateString?: string) => {
@@ -738,9 +739,10 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 <p className="text-sm font-medium text-gray-900">{comment.username}</p>
                 <span className="ml-2 text-xs text-blue-500 italic">Chỉ hiển thị cho bạn</span>
               </div>
-              <div className="mt-1 text-sm text-gray-700">
-                {comment.content}
-              </div>
+              <div 
+                className="mt-1 text-sm text-gray-700 rich-text-content"
+                dangerouslySetInnerHTML={{ __html: comment.content }}
+              />
             </div>
           </div>
         </div>
@@ -769,9 +771,10 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                   <Spinner size="sm" />
                 </span>
               </div>
-              <div className="mt-1 text-sm text-gray-700">
-                {comment.content}
-              </div>
+              <div 
+                className="mt-1 text-sm text-gray-700 rich-text-content"
+                dangerouslySetInnerHTML={{ __html: comment.content }}
+              />
             </div>
           </div>
         </div>
@@ -797,9 +800,10 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 <p className="text-sm font-medium text-gray-900">{comment.username}</p>
                 <span className="ml-2 text-xs text-red-500 italic">Gửi thất bại</span>
               </div>
-              <div className="mt-1 text-sm text-gray-700">
-                {comment.content}
-              </div>
+              <div 
+                className="mt-1 text-sm text-gray-700 rich-text-content"
+                dangerouslySetInnerHTML={{ __html: comment.content }}
+              />
               <div className="mt-2 flex space-x-2">
                 <button 
                   onClick={() => handleRetryComment(comment.id, comment.content)}
@@ -822,6 +826,24 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     
     return null;
   };
+
+  // Cập nhật hàm handleDescriptionChange
+  const handleDescriptionChange = useCallback((content: string) => {
+    console.log('Description changed:', content?.substring(0, 50));
+    setEditedTask((prev) => {
+      if (prev.description === content) return prev;
+      return {
+        ...prev,
+        description: content || ''
+      };
+    });
+  }, []);
+
+  // Cập nhật hàm handleCommentChange
+  const handleCommentChange = useCallback((content: string) => {
+    console.log('Comment changed:', content?.substring(0, 50));
+    setNewComment(content || '');
+  }, []);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -898,7 +920,14 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
             
             {!isDescriptionEditing && (
               <button 
-                onClick={() => setIsDescriptionEditing(true)}
+                onClick={() => {
+                  // Đảm bảo giá trị mô tả hợp lệ trước khi bắt đầu chỉnh sửa
+                  setEditedTask(prev => ({
+                    ...prev,
+                    description: prev.description || ''
+                  }));
+                  setIsDescriptionEditing(true);
+                }}
                 className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
                 title="Chỉnh sửa mô tả"
                 aria-label="Chỉnh sửa mô tả"
@@ -910,19 +939,25 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
           
           {isDescriptionEditing ? (
             <div className="space-y-4">
-              <ReactQuill
-                theme="snow"
+              <RichTextEditor
+                ref={descriptionEditorRef}
                 value={editedTask.description || ''}
-                onChange={(content) => setEditedTask({...editedTask, description: content})}
-                modules={quillModules}
-                className="bg-white h-64 mb-16" // Thêm margin-bottom để không bị đè lên button
+                onChange={handleDescriptionChange}
+                placeholder="Thêm mô tả chi tiết cho task..."
+                mode="full"
+                minHeight="300px"
+                readOnly={isSaving}
               />
               
-              <div className="flex justify-end space-x-3 mt-8 pt-4"> {/* Tăng margin-top và thêm padding-top */}
+              <div className="flex justify-end space-x-3 pt-4">
                 <Button
                   variant="outline"
                   onClick={() => {
-                    setEditedTask({...editedTask, description: task.description});
+                    // Reset lại giá trị và tắt chế độ chỉnh sửa
+                    setEditedTask(prev => ({
+                      ...prev,
+                      description: task.description || ''
+                    }));
                     setIsDescriptionEditing(false);
                   }}
                   disabled={isSaving}
@@ -939,20 +974,76 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 </Button>
               </div>
             </div>
-          ) : task.description ? (
-            <div 
-              className="prose max-w-none cursor-pointer hover:bg-gray-50 p-2 rounded-sm transition-colors group" 
-              dangerouslySetInnerHTML={{ __html: task.description }}
-              onClick={() => setIsDescriptionEditing(true)}
-            />
           ) : (
-            <p className="text-gray-500 italic cursor-pointer hover:bg-gray-50 p-2 rounded-sm transition-colors group" onClick={() => setIsDescriptionEditing(true)}>
-              Không có mô tả
-              <PencilIcon className="inline-block ml-2 h-4 w-4 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-            </p>
+            <div
+              className="prose max-w-none rich-text-content cursor-pointer hover:bg-gray-50 p-4 rounded-md transition-colors"
+              dangerouslySetInnerHTML={{ __html: task.description || '<p class="text-gray-500 italic">Không có mô tả</p>' }}
+              onClick={() => {
+                // Đảm bảo giá trị mô tả hợp lệ trước khi bắt đầu chỉnh sửa
+                setEditedTask(prev => ({
+                  ...prev,
+                  description: prev.description || ''
+                }));
+                setIsDescriptionEditing(true);
+              }}
+            />
           )}
         </div>
         
+        {/* CSS cho chế độ xem rich text, đặc biệt là bảng */}
+        <style jsx global>{`
+          .rich-text-content table {
+            border-collapse: collapse;
+            margin: 1rem 0;
+            overflow: hidden;
+            width: 100%;
+            border: 2px solid #d1d5db;
+            table-layout: fixed;
+          }
+          
+          .rich-text-content table td,
+          .rich-text-content table th {
+            border: 2px solid #d1d5db;
+            box-sizing: border-box;
+            min-width: 1em;
+            padding: 0.75rem;
+            position: relative;
+            vertical-align: top;
+          }
+          
+          .rich-text-content table th {
+            background-color: #f3f4f6;
+            font-weight: 600;
+            border-bottom: 3px solid #9ca3af;
+          }
+          
+          .rich-text-content img {
+            max-width: 100%;
+            height: auto;
+          }
+          
+          .rich-text-content blockquote {
+            border-left: 3px solid #e5e7eb;
+            padding-left: 1rem;
+            margin-left: 0;
+            margin-right: 0;
+            color: #6b7280;
+          }
+
+          .rich-text-content ul,
+          .rich-text-content ol {
+            padding-left: 1.5rem;
+          }
+
+          .rich-text-content ul {
+            list-style-type: disc;
+          }
+
+          .rich-text-content ol {
+            list-style-type: decimal;
+          }
+        `}</style>
+
         {/* Bảng thông tin chi tiết */}
         <div className="p-6 border-b border-gray-200">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Thông tin chi tiết</h2>
@@ -1015,12 +1106,12 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
           
           {/* Form thêm bình luận */}
           <div className="bg-gray-50 p-4 rounded-lg">
-            <textarea
-              ref={commentRef}
+            <RichTextEditor
+              ref={commentEditorRef}
               value={newComment}
-              onChange={(e) => setNewComment(e.target.value)}
-              className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              rows={3}
+              onChange={handleCommentChange}
+              mode="compact"
+              minHeight="150px"
               placeholder="Nhập bình luận của bạn..."
             />
             <div className="mt-2 flex justify-end">

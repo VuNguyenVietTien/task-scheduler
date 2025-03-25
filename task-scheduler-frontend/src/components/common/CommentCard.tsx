@@ -67,7 +67,7 @@ export function CommentCard({ comment, currentUserId, onDelete }: CommentCardPro
           </div>
           
           <div
-            className="prose prose-sm max-w-none text-gray-700 overflow-auto"
+            className="prose prose-sm max-w-none text-gray-700 overflow-auto rich-text-content"
             dangerouslySetInnerHTML={renderHTML(comment.content)}
           />
         </div>
