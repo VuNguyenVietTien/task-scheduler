@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, forwardRef } from 'react';
-import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
+import { Task, TaskStatus, Priority, TaskStatuses, Priorities, UserBasic } from '@/types/task';
 import { User } from '@/contexts/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { Card } from '@/components/ui/Card';
@@ -19,8 +19,6 @@ import { GET_PROJECT_TASKS } from '@/graphql/queries/tasks';
 import TaskDescriptionPanel from './description/TaskDescriptionPanel';
 import { AdvancedEditor } from '@/components/common/AdvancedEditor';
 import { imageService } from "@/services/imageService";
-import { Input } from '@/components/ui/Input';
-import { SearchIcon } from '@heroicons/react/24/outline';
 
 interface TaskDetailPageProps {
   task: Task;
@@ -200,216 +198,247 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     return colors[priority] || colors.medium;
   };
   
-  // Render field có thể chỉnh sửa
-  const renderEditableField = (label: string, fieldName: string, type: string = 'text', options?: any[]) => {
-    const isEditing = editingField === fieldName;
-    let fieldValue: any;
-    let displayValue: any;
-
-    switch (fieldName) {
-      case 'status':
-        fieldValue = editedTask.status;
-        displayValue = <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-          {task.status}
-        </span>;
-        break;
-      case 'priority':
-        fieldValue = editedTask.priority;
-        displayValue = <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
-          {task.priority}
-        </span>;
-        break;
-      case 'start_date':
-      case 'due_date':
-        fieldValue = editedTask[fieldName]?.split('T')[0] || '';
-        displayValue = formatDate(task[fieldName]);
-        break;
-      case 'effort':
-        fieldValue = editedTask.effort || '';
-        displayValue = formatEffort(task.effort);
-        break;
-      case 'progress':
-        fieldValue = editedTask.progress || '';
-        displayValue = task.progress ? `${task.progress}%` : 'Chưa cập nhật';
-        break;
-      case 'assignee':
-        fieldValue = editedTask.assignee?.userId || '';
-        displayValue = task.assignee ? (
+  // Hiển thị các trường editable
+  const renderEditableField = (label: string, fieldName: string, type: 'text' | 'number' | 'date' | 'select' = 'text', options?: {value: string, label: string}[]) => {
+    // Lấy giá trị hiện tại từ trạng thái editedTask
+    const value = (editedTask as any)[fieldName];
+    
+    // Xác định giá trị hiển thị dựa trên loại trường
+    let displayValue: string | React.ReactNode = '';
+    
+    if (type === 'date') {
+      displayValue = value ? formatDate(value) : 'Chưa thiết lập';
+    } else if (fieldName === 'effort') {
+      displayValue = formatEffort(value);
+    } else if (fieldName === 'assignee') {
+      // Xử lý đặc biệt cho assignee vì có thể là object hoặc id
+      if (typeof value === 'object' && value !== null) {
+        // Nếu value là object
+        displayValue = (
           <div className="flex items-center">
-            {task.assignee.avatarUrl ? (
-              <img 
-                src={task.assignee.avatarUrl} 
-                alt={task.assignee.username} 
-                className="w-6 h-6 rounded-full mr-2" 
-              />
+            {value.avatarUrl ? (
+              <img src={value.avatarUrl} alt={value.username} className="h-5 w-5 rounded-full mr-2" />
             ) : (
-              <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center mr-2">
-                {task.assignee.username?.charAt(0).toUpperCase() || '?'}
+              <div className="h-5 w-5 bg-gray-300 rounded-full flex items-center justify-center mr-2">
+                <span className="text-xs font-medium text-gray-700">
+                  {value.username ? value.username.charAt(0).toUpperCase() : '?'}
+                </span>
               </div>
             )}
-            <span>{task.assignee.username || 'Chưa gán'}</span>
+            <span>{value.username || value.fullName || 'Chưa gán'}</span>
           </div>
-        ) : (
-          'Chưa gán'
         );
-        break;
-      case 'created_by':
-        fieldValue = editedTask.created_by || '';
-        
-        // Hiển thị created_by dựa trên kiểu dữ liệu
-        if (typeof task.created_by === 'object' && task.created_by !== null) {
+      } else if (value) {
+        // Nếu value là ID
+        const assigneeData = projectMembers?.find(member => member.user.userId === value);
+        displayValue = (
+          <div className="flex items-center">
+            {assigneeData?.user?.avatarUrl ? (
+              <img src={assigneeData.user.avatarUrl} alt={assigneeData.user.username} className="h-5 w-5 rounded-full mr-2" />
+            ) : (
+              <div className="h-5 w-5 bg-gray-300 rounded-full flex items-center justify-center mr-2">
+                <span className="text-xs font-medium text-gray-700">
+                  {assigneeData?.user?.username ? assigneeData.user.username.charAt(0).toUpperCase() : '?'}
+                </span>
+              </div>
+            )}
+            <span>{assigneeData?.user?.username || assigneeData?.user?.fullName || String(value)}</span>
+          </div>
+        );
+      } else {
+        displayValue = 'Chưa gán';
+      }
+    } else if (fieldName === 'created_by') {
+      // Đặc biệt xử lý người tạo - hiển thị username thay vì ID
+      if (typeof value === 'object' && value !== null) {
           displayValue = (
             <div className="flex items-center">
-              {task.created_by.avatarUrl ? (
-                <img 
-                  src={task.created_by.avatarUrl} 
-                  alt={task.created_by.username} 
-                  className="w-6 h-6 rounded-full mr-2" 
-                />
-              ) : (
-                <div className="w-6 h-6 rounded-full bg-gray-300 flex items-center justify-center mr-2">
-                  {task.created_by.username?.charAt(0).toUpperCase() || '?'}
+            {value.avatarUrl ? (
+              <img src={value.avatarUrl} alt={value.username} className="h-5 w-5 rounded-full mr-2" />
+            ) : (
+              <div className="h-5 w-5 bg-gray-300 rounded-full flex items-center justify-center mr-2">
+                <span className="text-xs font-medium text-gray-700">
+                  {value.username ? value.username.charAt(0).toUpperCase() : '?'}
+                </span>
                 </div>
               )}
-              <span>{task.created_by.username}</span>
+            <span>{value.username || 'Không xác định'}</span>
+          </div>
+        );
+      } else if (typeof value === 'string') {
+        // Nếu chỉ có ID, tìm thông tin từ danh sách members
+        const creatorData = projectMembers?.find(member => member.user.userId === value);
+        if (creatorData) {
+          displayValue = (
+            <div className="flex items-center">
+              {creatorData.user.avatarUrl ? (
+                <img src={creatorData.user.avatarUrl} alt={creatorData.user.username} className="h-5 w-5 rounded-full mr-2" />
+              ) : (
+                <div className="h-5 w-5 bg-gray-300 rounded-full flex items-center justify-center mr-2">
+                  <span className="text-xs font-medium text-gray-700">
+                    {creatorData.user.username ? creatorData.user.username.charAt(0).toUpperCase() : '?'}
+                  </span>
+                </div>
+              )}
+              <span>{creatorData.user.username || creatorData.user.fullName || 'Người dùng'}</span>
             </div>
           );
         } else {
-          // Fallback cho trường hợp không có thông tin hoặc chỉ có ID
-          displayValue = task.created_by === 'system' ? 'Hệ thống' : task.created_by || 'Không có thông tin';
+          // Nếu không tìm thấy thông tin từ projectMembers, hiển thị ID ngắn gọn hơn
+          const shortId = value.length > 8 ? `${value.substring(0, 8)}...` : value;
+          displayValue = (
+            <div className="flex items-center">
+              <div className="h-5 w-5 bg-gray-300 rounded-full flex items-center justify-center mr-2">
+                <span className="text-xs font-medium text-gray-700">?</span>
+              </div>
+              <span title={value}>{shortId}</span>
+            </div>
+          );
         }
-        break;
-      default:
-        fieldValue = editedTask[fieldName as keyof Task] || '';
-        displayValue = task[fieldName as keyof Task] || 'Chưa thiết lập';
+      } else {
+        displayValue = 'Không xác định';
+      }
+    } else if (fieldName === 'progress') {
+      displayValue = value ? `${value}%` : '0%';
+    } else {
+      // Đảm bảo displayValue luôn là string hoặc ReactNode, không phải object
+      displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value || '');
     }
 
     return (
-      <div>
-        {isEditing ? (
+      <div className="mb-3">
+        {editingField === fieldName ? (
           <div className="space-y-2">
-            <div className="text-xs font-medium text-gray-500">{label}</div>
-            <div className="flex items-center space-x-2">
-              {type === 'select' ? (
+            <label className="block text-sm font-medium text-gray-700" htmlFor={`field-${fieldName}`}>{label}</label>
+            
+            {type === 'select' && options ? (
                 <select
-                  value={fieldValue}
+                id={`field-${fieldName}`}
                   title={`Chọn ${label.toLowerCase()}`}
+                value={typeof value === 'object' ? (value?.userId || value?.id || '') : (value || '')}
                   onChange={(e) => {
-                    const newEditedTask = {...editedTask};
                     if (fieldName === 'assignee') {
+                    // Đặc biệt xử lý cho trường assignee để tránh lưu trữ object
                       if (e.target.value) {
-                        // Tìm thông tin member được chọn từ danh sách
+                      // Tìm dữ liệu người dùng từ projectMembers
                         const selectedMember = projectMembers?.find(member => 
                           member.user.userId === e.target.value
                         );
 
                         if (selectedMember) {
-                          newEditedTask.assignee = {
+                        // Tạo đối tượng UserBasic hợp lệ
+                        const userBasic: UserBasic = {
                             userId: selectedMember.user.userId,
                             username: selectedMember.user.username || selectedMember.user.fullName || selectedMember.user.email,
-                            avatarUrl: selectedMember.user.avatarUrl || '',
-                            role: selectedMember.role || ''
-                          };
+                          avatarUrl: selectedMember.user.avatarUrl,
+                          role: selectedMember.role
+                        };
+                        
+                        setEditedTask({
+                          ...editedTask,
+                          assignee: userBasic
+                        });
+                      } else {
+                        // Nếu không tìm thấy, xoá assignee
+                        setEditedTask({
+                          ...editedTask,
+                          assignee: undefined
+                        });
                         }
                       } else {
-                        // Nếu không chọn ai, gán assignee là undefined
-                        newEditedTask.assignee = undefined;
+                      // Nếu không chọn người dùng nào, xoá assignee
+                      setEditedTask({
+                        ...editedTask,
+                        assignee: undefined
+                      });
                       }
                     } else {
-                      (newEditedTask as any)[fieldName] = e.target.value;
-                    }
-                    setEditedTask(newEditedTask);
-                  }}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                >
-                  {fieldName === 'assignee' && <option value="">Chưa gán</option>}
-                  
-                  {fieldName === 'assignee' && projectMembers && projectMembers.length > 0 ? (
-                    projectMembers.map((member) => (
-                      <option key={member.user.userId} value={member.user.userId}>
-                        {member.user.username || member.user.fullName || member.user.email}
-                      </option>
-                    ))
-                  ) : options?.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label}
-                    </option>
+                    setEditedTask({...editedTask, [fieldName]: e.target.value});
+                  }
+                }}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+              >
+                {options.map(option => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
                 </select>
               ) : type === 'date' ? (
                 <input
+                id={`field-${fieldName}`}
                   type="date"
                   title={`Chọn ${label.toLowerCase()}`}
                   placeholder={`Nhập ${label.toLowerCase()}`}
-                  value={fieldValue}
-                  onChange={(e) => {
-                    const newEditedTask = {...editedTask};
-                    (newEditedTask as any)[fieldName] = e.target.value;
-                    setEditedTask(newEditedTask);
-                  }}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                value={value || ''}
+                onChange={(e) => setEditedTask({...editedTask, [fieldName]: e.target.value})}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
                 />
               ) : type === 'number' ? (
                 <input
+                id={`field-${fieldName}`}
                   type="number"
                   title={`Nhập ${label.toLowerCase()}`}
                   placeholder={`Nhập ${label.toLowerCase()}`}
-                  value={fieldValue}
+                value={value || ''}
+                onChange={(e) => setEditedTask({...editedTask, [fieldName]: parseInt(e.target.value) || 0})}
                   min={0}
                   max={fieldName === 'progress' ? 100 : undefined}
-                  onChange={(e) => {
-                    const newEditedTask = {...editedTask};
-                    (newEditedTask as any)[fieldName] = e.target.valueAsNumber || 0;
-                    setEditedTask(newEditedTask);
-                  }}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
                 />
               ) : (
                 <input
+                id={`field-${fieldName}`}
                   type="text"
                   title={`Nhập ${label.toLowerCase()}`}
                   placeholder={`Nhập ${label.toLowerCase()}`}
-                  value={fieldValue}
-                  onChange={(e) => {
-                    const newEditedTask = {...editedTask};
-                    (newEditedTask as any)[fieldName] = e.target.value;
-                    setEditedTask(newEditedTask);
-                  }}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                />
-              )}
+                value={typeof value === 'object' ? JSON.stringify(value) : (value || '')}
+                onChange={(e) => setEditedTask({...editedTask, [fieldName]: e.target.value})}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+              />
+            )}
+            
+            <div className="flex justify-end space-x-2">
               <button
-                type="button"
                 onClick={() => saveField(fieldName)}
-                className="inline-flex items-center rounded-md border border-transparent bg-green-600 p-1 text-white shadow-sm hover:bg-green-700 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-2"
-                title="Lưu"
+                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                disabled={isSaving}
               >
-                <CheckIcon className="h-4 w-4" />
+                {isSaving ? 'Đang lưu...' : 'Lưu'}
               </button>
               <button
-                type="button"
                 onClick={cancelEditing}
-                className="inline-flex items-center rounded-md border border-gray-300 bg-white p-1 text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-                title="Hủy"
+                className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300"
               >
-                <XMarkIcon className="h-4 w-4" />
+                Hủy
               </button>
             </div>
           </div>
         ) : (
-          <div className="flex justify-between items-start group">
-            <div>
-              <div className="text-xs font-medium text-gray-500">{label}</div>
-              <div className="mt-1">{displayValue}</div>
-            </div>
+          <div 
+            className="flex items-center p-1.5 rounded-md group hover:bg-gray-50 cursor-pointer transition-colors"
+            onClick={() => startEditing(fieldName)}
+          >
+            <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">{label}:</div>
+            <div className="flex-1 text-sm text-gray-900 flex items-center">
+              {fieldName === 'status' && (
+                <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${getStatusColor(value as TaskStatus)}`}>
+                  {displayValue}
+                </span>
+              )}
+              {fieldName === 'priority' && (
+                <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${getPriorityColor(value as Priority)}`}>
+                  {displayValue}
+                </span>
+              )}
+              {fieldName !== 'status' && fieldName !== 'priority' && displayValue}
+              
             <button
               type="button"
-              onClick={() => startEditing(fieldName)}
-              className="hidden group-hover:block p-1 text-gray-400 hover:text-gray-500"
+                className="ml-1.5 p-1 text-gray-400 hover:text-gray-700 bg-gray-100 opacity-0 group-hover:opacity-100 rounded-full transition-opacity"
               title={`Chỉnh sửa ${label.toLowerCase()}`}
             >
-              <PencilIcon className="h-4 w-4" />
+                <PencilIcon className="h-3 w-3" />
             </button>
+            </div>
           </div>
         )}
       </div>
@@ -1069,8 +1098,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
 
   // Thêm hàm để xử lý khi chọn task cha
   const handleSelectParentTask = (parentTask: Task) => {
-    setEditedTask(prev => ({
-      ...prev,
+              setEditedTask(prev => ({
+                ...prev,
       parent_task_id: parentTask.task_id
     }));
     setParentSearchQuery('');
@@ -1087,237 +1116,268 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     handleParentTaskSearch(query);
   };
 
+  // Thêm đoạn JavaScript để tính toán vị trí sticky dựa trên chiều cao header
+  useEffect(() => {
+    function calculateStickyPosition() {
+      const appHeader = document.querySelector('header'); // Lấy header chính của ứng dụng
+      const sidebar = document.getElementById('task-tabs-sidebar');
+      
+      if (sidebar) {
+        // Tính toán khoảng cách top cho sidebar
+        if (appHeader) {
+          // Lấy chiều cao của header ứng dụng
+          const appHeaderHeight = appHeader.getBoundingClientRect().height;
+          
+          // Gán vị trí top cho sidebar bằng chiều cao của header
+          sidebar.style.position = 'sticky';
+          sidebar.style.top = `${appHeaderHeight}px`;
+        } else {
+          // Nếu không tìm thấy header ứng dụng, dùng giá trị mặc định
+          sidebar.style.position = 'sticky';
+          sidebar.style.top = '0px';
+        }
+      }
+    }
+    
+    // Gọi hàm khi scroll
+    window.addEventListener('scroll', calculateStickyPosition);
+    // Gọi hàm khi resize cửa sổ
+    window.addEventListener('resize', calculateStickyPosition);
+    // Gọi lần đầu để thiết lập vị trí ban đầu
+    calculateStickyPosition();
+    
+    // Cleanup event listeners khi component unmount
+    return () => {
+      window.removeEventListener('scroll', calculateStickyPosition);
+      window.removeEventListener('resize', calculateStickyPosition);
+    };
+  }, []);
+
   return (
     <div className="w-full space-y-8">
       {/* CSS cho rich text content và tabs */}
       <style jsx={true} global={true}>{`
-        .rich-text-content table {
-          border-collapse: collapse;
-          margin: 1rem 0;
-          overflow: hidden;
-          width: 100%;
-          border: 2px solid #d1d5db;
-          table-layout: fixed;
-        }
-        
-        .rich-text-content table td,
-        .rich-text-content table th {
-          border: 2px solid #d1d5db;
-          box-sizing: border-box;
-          min-width: 1em;
-          padding: 0.75rem;
-          position: relative;
-          vertical-align: top;
-        }
-        
-        .rich-text-content table th {
-          background-color: #f3f4f6;
-          font-weight: 600;
-          border-bottom: 3px solid #9ca3af;
-        }
-        
-        .rich-text-content img {
-          max-width: 100%;
-          height: auto;
-        }
-        
-        .rich-text-content blockquote {
-          border-left: 3px solid #e5e7eb;
-          padding-left: 1rem;
-          margin-left: 0;
-          margin-right: 0;
-          color: #6b7280;
-        }
+          .rich-text-content table {
+            border-collapse: collapse;
+            margin: 1rem 0;
+            overflow: hidden;
+            width: 100%;
+            border: 2px solid #d1d5db;
+            table-layout: fixed;
+          }
+          
+          .rich-text-content table td,
+          .rich-text-content table th {
+            border: 2px solid #d1d5db;
+            box-sizing: border-box;
+            min-width: 1em;
+            padding: 0.75rem;
+            position: relative;
+            vertical-align: top;
+          }
+          
+          .rich-text-content table th {
+            background-color: #f3f4f6;
+            font-weight: 600;
+            border-bottom: 3px solid #9ca3af;
+          }
+          
+          .rich-text-content img {
+            max-width: 100%;
+            height: auto;
+          }
+          
+          .rich-text-content blockquote {
+            border-left: 3px solid #e5e7eb;
+            padding-left: 1rem;
+            margin-left: 0;
+            margin-right: 0;
+            color: #6b7280;
+          }
 
-        .rich-text-content ul,
-        .rich-text-content ol {
-          padding-left: 1.5rem;
-          margin: 0.5rem 0;
-        }
+          .rich-text-content ul,
+          .rich-text-content ol {
+            padding-left: 1.5rem;
+            margin: 0.5rem 0;
+          }
 
-        .rich-text-content ul {
-          list-style-type: disc;
-        }
+          .rich-text-content ul {
+            list-style-type: disc;
+          }
 
-        .rich-text-content ol {
-          list-style-type: decimal;
-        }
-        
-        /* Thêm style cho nested lists */
-        .rich-text-content ul ul,
-        .rich-text-content ol ol,
-        .rich-text-content ul ol,
-        .rich-text-content ol ul {
-          margin-top: 0.25rem;
-          margin-bottom: 0;
-        }
-        
-        .rich-text-content ul ul {
-          list-style-type: circle;
-        }
-        
-        .rich-text-content ul ul ul {
-          list-style-type: square;
-        }
-        
-        .rich-text-content ol ol {
-          list-style-type: lower-alpha;
-        }
-        
-        .rich-text-content ol ol ol {
-          list-style-type: lower-roman;
-        }
-        
-        /* Style cho heading */
-        .rich-text-content h1 {
-          font-size: 1.75rem;
-          font-weight: 700;
-          margin-top: 1.5rem;
-          margin-bottom: 1rem;
-          line-height: 1.25;
-        }
-        
-        .rich-text-content h2 {
-          font-size: 1.5rem;
-          font-weight: 600;
-          margin-top: 1.4rem;
-          margin-bottom: 0.8rem;
-          line-height: 1.3;
-        }
-        
-        .rich-text-content h3 {
-          font-size: 1.25rem;
-          font-weight: 600;
-          margin-top: 1.3rem;
-          margin-bottom: 0.6rem;
-          line-height: 1.35;
-        }
-        
-        /* Style cho text-align */
-        .rich-text-content [style*="text-align: center"] {
-          text-align: center;
-        }
-        
-        .rich-text-content [style*="text-align: right"] {
-          text-align: right;
-        }
-        
-        .rich-text-content [style*="text-align: justify"] {
-          text-align: justify;
-        }
-        
-        /* Style cho line-height */
-        .rich-text-content [style*="line-height"] {
-          line-height: inherit;
-        }
-        
-        /* Style cho các thẻ p */
-        .rich-text-content p {
-          margin-bottom: 0.75rem;
-        }
-        
-        /* Style cho inline text formatting */
-        .rich-text-content strong {
-          font-weight: 600;
-        }
-        
-        .rich-text-content em {
-          font-style: italic;
-        }
-        
-        .rich-text-content u {
-          text-decoration: underline;
-        }
-        
-        .rich-text-content s {
-          text-decoration: line-through;
-        }
+          .rich-text-content ol {
+            list-style-type: decimal;
+          }
+          
+          /* Thêm style cho nested lists */
+          .rich-text-content ul ul,
+          .rich-text-content ol ol,
+          .rich-text-content ul ol,
+          .rich-text-content ol ul {
+            margin-top: 0.25rem;
+            margin-bottom: 0;
+          }
+          
+          .rich-text-content ul ul {
+            list-style-type: circle;
+          }
+          
+          .rich-text-content ul ul ul {
+            list-style-type: square;
+          }
+          
+          .rich-text-content ol ol {
+            list-style-type: lower-alpha;
+          }
+          
+          .rich-text-content ol ol ol {
+            list-style-type: lower-roman;
+          }
+          
+          /* Style cho heading */
+          .rich-text-content h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-top: 1.5rem;
+            margin-bottom: 1rem;
+            line-height: 1.25;
+          }
+          
+          .rich-text-content h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-top: 1.4rem;
+            margin-bottom: 0.8rem;
+            line-height: 1.3;
+          }
+          
+          .rich-text-content h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 1.3rem;
+            margin-bottom: 0.6rem;
+            line-height: 1.35;
+          }
+          
+          /* Style cho text-align */
+          .rich-text-content [style*="text-align: center"] {
+            text-align: center;
+          }
+          
+          .rich-text-content [style*="text-align: right"] {
+            text-align: right;
+          }
+          
+          .rich-text-content [style*="text-align: justify"] {
+            text-align: justify;
+          }
+          
+          /* Style cho line-height */
+          .rich-text-content [style*="line-height"] {
+            line-height: inherit;
+          }
+          
+          /* Style cho các thẻ p */
+          .rich-text-content p {
+            margin-bottom: 0.75rem;
+          }
+          
+          /* Style cho inline text formatting */
+          .rich-text-content strong {
+            font-weight: 600;
+          }
+          
+          .rich-text-content em {
+            font-style: italic;
+          }
+          
+          .rich-text-content u {
+            text-decoration: underline;
+          }
+          
+          .rich-text-content s {
+            text-decoration: line-through;
+          }
 
         /* CSS cho tabs */
-        .task-detail-container {
-          position: relative;
+        .task-detail-page-container {
           display: flex;
-          background: white;
-          border-radius: 0.5rem;
-          overflow: visible;
-          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+          flex-direction: column;
           width: 100%;
-          margin-left: 0; /* Bỏ margin để container đúng vị trí */
+        }
+
+        .task-header {
+          width: 100%;
+          margin-bottom: 1rem;
+          flex: 0 0 auto;
+        }
+
+        .tabs-content-wrapper {
+          display: flex;
+          flex-direction: row;
+          width: 100%;
+          align-items: flex-start;
         }
 
         .task-tabs-sidebar {
-          width: 220px;
+          flex: 0 0 auto;
+          width: fit-content;
+          min-width: 180px;
+          max-width: 220px;
           padding: 1.25rem 1rem;
           background-color: #f9fafb;
-          position: sticky; /* Dùng sticky thay vì fixed */
+          position: sticky;
           left: 0;
-          top: 0; /* Bắt đầu từ đầu container */
+          top: 0;
           border-radius: 0.5rem 0 0 0.5rem;
           box-shadow: 4px 0 10px rgba(0, 0, 0, 0.1);
           z-index: 10;
-          max-height: 100vh;
+          height: fit-content;
           overflow-y: auto;
           border: 1px solid #e5e7eb;
           border-right: none;
         }
 
-        .task-tabs-sidebar .tabs-list {
+        .task-content-area {
+          flex: 1 1 auto;
+          padding: 1.5rem;
+          background-color: white;
+          border-radius: 0.5rem;
+          box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+          border: 1px solid #e5e7eb;
+          overflow-x: auto;
+          min-width: 0;
+        }
+
+        .tabs-list {
           display: flex;
           flex-direction: column;
           gap: 0.5rem;
         }
 
-        .task-tabs-sidebar .tab-item {
-          padding: 0.75rem 1rem;
-          width: 100%;
-          text-align: left;
-          border-radius: 0.375rem;
-          transition: all 0.3s ease;
+        .tab-item {
           display: flex;
           align-items: center;
-          gap: 0.75rem;
-          font-weight: 500;
-          color: #4b5563;
+          padding: 0.5rem 0.75rem;
+          border-radius: 0.375rem;
+          font-size: 0.875rem;
+          transition: all 0.2s ease;
           cursor: pointer;
-          background: transparent;
-          border: none;
+          color: #4b5563;
+          white-space: nowrap;
         }
 
-        .task-tabs-sidebar .tab-item:hover {
-          background: #f3f4f6;
+        .tab-item:hover {
+          background-color: #e5e7eb;
+          color: #1f2937;
+        }
+
+        .tab-item.active {
+          background-color: #e0e7ff;
           color: #4f46e5;
+          font-weight: 500;
         }
 
-        .task-tabs-sidebar .tab-item.active {
-          background: #4f46e5;
-          color: white;
-        }
-
-        .task-tabs-sidebar .tab-item svg {
-          width: 1.25rem;
-          height: 1.25rem;
-        }
-
-        .task-content-area {
-          flex: 1;
-          padding: 1.5rem;
-          min-height: 500px;
-          width: 100%;
-        }
-
-        /* Điều chỉnh khoảng cách toàn màn hình */
-        .w-full-screen {
-          width: 100vw;
-          position: relative;
-          left: 50%;
-          right: 50%;
-          margin-left: -50vw;
-          margin-right: -50vw;
-          padding-left: 220px; /* Khoảng cách để không bị che bởi sidebar */
-          box-sizing: border-box;
-        }
-
-        /* Tab switching animation */
         .tab-content {
           animation: fadeIn 0.3s ease-in-out;
           display: none;
@@ -1364,11 +1424,6 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         .tab-item.active::after {
           width: 100%;
         }
-
-        .task-header {
-          padding: 1.5rem;
-          border-bottom: 1px solid #e5e7eb;
-        }
       `}</style>
 
       {error && (
@@ -1386,68 +1441,121 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         </div>
       )}
 
-      {/* Card chính chứa nội dung task - Full width */}
-      <div className="w-full">
-        <div className="task-detail-container">
-          {/* Left sidebar contains the tab menu */}
-          <div className="task-tabs-sidebar">
-            <div className="mb-5">
-              <h2 className="font-semibold text-lg">{task.title}</h2>
-              
-              {/* Ô tìm kiếm parent task */}
-              <div className="mt-4 relative">
+      {/* Container chính cho trang chi tiết task - 2 hàng */}
+      <div className="task-detail-page-container">
+        {/* Hàng 1: Header ở trên cùng */}
+        <div id="task-header" className="task-header bg-white p-4 mb-4 border border-gray-200 rounded-lg shadow-sm">
+          <div className="flex flex-col space-y-3">
+            {/* Task title */}
+            {editingField === 'title' ? (
+              <div className="flex flex-col space-y-2">
+                <input
+                  type="text"
+                  value={editedTask.title}
+                  onChange={(e) => setEditedTask({...editedTask, title: e.target.value})}
+                  className="block w-full text-lg font-bold rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+                  placeholder="Tiêu đề công việc"
+                  aria-label="Tiêu đề công việc"
+                />
                 <div className="flex space-x-2">
-                  <input
-                    type="text"
-                    placeholder="Tìm parent task..."
-                    value={parentTaskIdInput}
-                    onChange={(e) => {
-                      setParentTaskIdInput(e.target.value);
-                      handleSearchParentTasks(e.target.value);
-                    }}
-                    className="text-sm pl-2 py-1 h-9 w-full border rounded-md"
-                  />
-                  <Button
-                    className="px-2 h-9 w-9 flex items-center justify-center"
-                    onClick={handleSearchClick}
-                    title="Tìm kiếm parent task"
+                  <button 
+                    onClick={() => saveField('title')} 
+                    className="p-1 text-blue-600 hover:text-blue-800 rounded-full hover:bg-blue-50 flex items-center"
+                    title="Lưu"
+                    aria-label="Lưu thay đổi"
                   >
-                    <MagnifyingGlassIcon className="h-4 w-4" />
-                  </Button>
+                    <CheckIcon className="h-4 w-4" />
+                    <span className="ml-1 text-sm">Lưu</span>
+                  </button>
+                  <button 
+                    onClick={cancelEditing}
+                    className="p-1 text-red-600 hover:text-red-800 rounded-full hover:bg-red-50 flex items-center"
+                    title="Hủy"
+                    aria-label="Hủy thay đổi"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                    <span className="ml-1 text-sm">Hủy</span>
+                  </button>
                 </div>
-                
-                {/* Dropdown results */}
-                {showParentResults && filteredParentTasks.length > 0 && (
-                  <div className="absolute z-10 w-full mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
-                    {filteredParentTasks.map((parentTask) => (
-                      <div 
-                        key={parentTask.task_id} 
-                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                        onClick={() => handleSelectParentTask(parentTask)}
-                      >
-                        <div className="font-medium truncate">{parentTask.title}</div>
-                        <div className="text-xs text-gray-500 truncate">ID: {parentTask.task_id}</div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-                
-                {task.parent_task_id && (
-                  <div className="mt-2 text-sm">
-                    <div className="flex items-center">
-                      <span className="text-gray-600">Parent:</span>
-                      <Link 
-                        href={`/projects/${projectId}/tasks/${task.parent_task_id}`}
-                        className="ml-1 text-blue-600 hover:text-blue-800 truncate"
-                      >
-                        {parentTaskDetails?.title || task.parent_task_id}
-                      </Link>
-                    </div>
-                  </div>
-                )}
               </div>
+            ) : (
+              <div className="flex justify-between items-center">
+                <h1 
+                  className="font-semibold text-xl cursor-pointer hover:text-blue-600" 
+                  onClick={() => startEditing('title')}
+                  title="Nhấp để chỉnh sửa tiêu đề"
+                >
+                  {task.title}
+                </h1>
+                <button 
+                  onClick={() => startEditing('title')} 
+                  className="p-1 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100"
+                  title="Chỉnh sửa tiêu đề"
+                >
+                  <PencilIcon className="h-4 w-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Ô tìm kiếm parent task */}
+            <div className="relative">
+              <div className="flex space-x-2">
+                <input
+                  type="text"
+                  placeholder="Tìm parent task..."
+                  value={parentTaskIdInput}
+                  onChange={(e) => {
+                    setParentTaskIdInput(e.target.value);
+                    handleSearchParentTasks(e.target.value);
+                  }}
+                  className="text-sm pl-2 py-1 h-9 w-full max-w-md border rounded-md"
+                />
+                <Button
+                  className="px-2 h-9 w-9 flex items-center justify-center"
+                  onClick={handleSearchClick}
+                  title="Tìm kiếm parent task"
+                >
+                  <MagnifyingGlassIcon className="h-4 w-4" />
+                </Button>
+              </div>
+              
+              {/* Dropdown results */}
+              {showParentResults && filteredParentTasks.length > 0 && (
+                <div className="absolute z-10 w-full max-w-md mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+                  {filteredParentTasks.map((parentTask) => (
+                    <div 
+                      key={parentTask.task_id} 
+                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                      onClick={() => handleSelectParentTask(parentTask)}
+                    >
+                      <div className="font-medium truncate">{parentTask.title}</div>
+                      <div className="text-xs text-gray-500 truncate">ID: {parentTask.task_id}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              {task.parent_task_id && (
+                <div className="mt-2 text-sm">
+                  <div className="flex items-center">
+                    <span className="text-gray-600">Parent:</span>
+                    <Link 
+                      href={`/projects/${projectId}/tasks/${task.parent_task_id}`}
+                      className="ml-1 text-blue-600 hover:text-blue-800 truncate"
+                    >
+                      {parentTaskDetails?.title || task.parent_task_id}
+                    </Link>
+                  </div>
+                </div>
+              )}
             </div>
-            
+          </div>
+        </div>
+
+        {/* Hàng 2: Container chứa tabs và content */}
+        <div className="tabs-content-wrapper">
+          {/* Cột 1: Left sidebar contains the tab menu */}
+          <div id="task-tabs-sidebar" className="task-tabs-sidebar">
             <div className="tabs-list">
               <button 
                 className={`tab-item ${activeTab === 'description' ? 'active' : ''}`}
@@ -1482,7 +1590,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
             </div>
           </div>
 
-          {/* Tab content area */}
+          {/* Cột 2: Tab content area */}
           <div className="task-content-area">
             <div className={`tab-content ${activeTab === 'description' ? 'active' : ''}`}>
               <div className="bg-white rounded-lg">
@@ -1503,65 +1611,64 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
               <div className="bg-white rounded-lg">
                 <h2 className="text-lg font-medium text-gray-900 mb-4">Thông tin chi tiết</h2>
                 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                  <div className="space-y-4">
-                    {renderEditableField('Trạng thái', 'status', 'select', 
-                      Object.entries(TaskStatuses).map(([_, value]) => ({ 
-                        value, 
-                        label: value.charAt(0).toUpperCase() + value.slice(1) 
-                      })))}
-                      
-                    {renderEditableField('Mức độ ưu tiên', 'priority', 'select', 
-                      Object.entries(Priorities).map(([_, value]) => ({ 
-                        value, 
-                        label: value.charAt(0).toUpperCase() + value.slice(1) 
-                      })))}
-                      
-                    {renderEditableField('Người được giao', 'assignee', 'select',
-                      projectMembers && projectMembers.length > 0 ? 
-                        [{ value: '', label: 'Chưa gán' }, ...projectMembers.map(member => ({ 
-                          value: member.user.userId, 
-                          label: member.user.username || member.user.fullName || member.user.email 
-                        }))] : 
-                        [{ value: '', label: 'Chưa gán' }]
-                    )}
-                    
-                    {renderEditableField('Nỗ lực (giờ)', 'effort', 'number')}
-                    {renderEditableField('Tiến độ (%)', 'progress', 'number')}
-                  </div>
+                <div className="grid grid-cols-1 gap-2">
+                  {renderEditableField('Trạng thái', 'status', 'select', 
+                    Object.entries(TaskStatuses).map(([_, value]) => ({ 
+                      value, 
+                      label: value.charAt(0).toUpperCase() + value.slice(1) 
+                    })))}
                   
-                  <div className="space-y-4">
-                    {renderEditableField('Ngày bắt đầu', 'start_date', 'date')}
-                    {renderEditableField('Ngày đến hạn', 'due_date', 'date')}
-                    {calculateDaysRemaining() && (
-                      <div className="mb-2">
-                        <span className="block text-sm font-medium text-gray-700">Thời gian còn lại</span>
-                        <span className={`inline-block mt-1 px-2 py-1 text-sm rounded ${calculateDaysRemaining()?.includes('Quá hạn') ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
+                  {renderEditableField('Mức độ ưu tiên', 'priority', 'select', 
+                    Object.entries(Priorities).map(([_, value]) => ({ 
+                      value, 
+                      label: value.charAt(0).toUpperCase() + value.slice(1) 
+                    })))}
+                  
+                  {renderEditableField('Ngày bắt đầu', 'start_date', 'date')}
+                  {renderEditableField('Ngày đến hạn', 'due_date', 'date')}
+                  
+                  {calculateDaysRemaining() && (
+                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Thời gian còn lại:</div>
+                      <div className="flex-1">
+                        <span className={`inline-block px-2 py-1 text-sm rounded ${calculateDaysRemaining()?.includes('Quá hạn') ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
                           {calculateDaysRemaining()}
                         </span>
                       </div>
-                    )}
-                    
-                    {renderEditableField('Người tạo', 'created_by')}
-                    
-                    <div className="mb-2">
-                      <span className="block text-sm font-medium text-gray-700">Thời gian tạo</span>
-                      <span className="block text-sm text-gray-900 mt-1">
-                        {formatDate(task.created_at)}
-                      </span>
                     </div>
+                  )}
                     
-                    <div className="mb-2">
-                      <span className="block text-sm font-medium text-gray-700">Cập nhật cuối</span>
-                      <span className="block text-sm text-gray-900 mt-1">
-                        {formatDate(task.updated_at)}
-                      </span>
+                  {renderEditableField('Người được giao', 'assignee', 'select',
+                    projectMembers && projectMembers.length > 0 ? 
+                      [{ value: '', label: 'Chưa gán' }, ...projectMembers.map(member => ({ 
+                        value: member.user.userId, 
+                        label: member.user.username || member.user.fullName || member.user.email 
+                      }))] : 
+                      [{ value: '', label: 'Chưa gán' }]
+                  )}
+                  
+                  {renderEditableField('Nỗ lực (giờ)', 'effort', 'number')}
+                  {renderEditableField('Tiến độ (%)', 'progress', 'number')}
+              
+                  {renderEditableField('Người tạo', 'created_by')}
+                  
+                  <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                    <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Thời gian tạo:</div>
+                    <div className="flex-1 text-sm text-gray-900">
+                      {formatDate(task.created_at)}
+                    </div>
+                  </div>
+                  
+                  <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                    <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Cập nhật cuối:</div>
+                    <div className="flex-1 text-sm text-gray-900">
+                      {formatDate(task.updated_at)}
                     </div>
                   </div>
                 </div>
               </div>
             </div>
-            
+        
             <div className={`tab-content ${activeTab === 'comments' ? 'active' : ''}`}>
               <div className="bg-white rounded-lg">
                 <h2 className="text-lg font-medium text-gray-900 mb-4">Bình luận và hoạt động</h2>
@@ -1607,7 +1714,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                   />
                   
                   <div className="mt-3 flex justify-end">
-                    <Button 
+                    <Button
                       onClick={handleSubmitComment}
                       disabled={isPostingComment || !newComment}
                       isLoading={isPostingComment}
