@@ -4,14 +4,14 @@ import { gql } from '@apollo/client';
  * Mutation để tải lên hình ảnh lên server
  */
 export const uploadImageMutation = gql`
-  mutation UploadImage($file: Upload!, $storageType: StorageType) {
-    uploadImage(file: $file, storageType: $storageType) {
+  mutation UploadImage($input: MediaUploadInput!) {
+    uploadImage(input: $input) {
       id
       filename
       mimetype
       size
       url
-      created_at
+      createdAt
     }
   }
 `;

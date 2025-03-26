@@ -1,5 +1,4 @@
 import { v4 as uuidv4 } from 'uuid';
-import { uploadImageMutation } from '@/graphql/mutations/mediaUpload';
 import { client } from '@/lib/apollo-client';
 
 interface ImageData {
@@ -105,11 +104,19 @@ export class ImageService {
    */
   public async processHtmlContent(htmlContent: string): Promise<string> {
     // Nếu không có nội dung hoặc không có hình ảnh, trả về nguyên nội dung
-    if (!htmlContent || !htmlContent.includes('<img')) {
+    if (!htmlContent) {
       return htmlContent;
     }
     
-    console.log('Bắt đầu xử lý hình ảnh trong nội dung HTML...');
+    // Kiểm tra cụ thể cho blob URL
+    const hasBlobImages = htmlContent.includes('blob:');
+    
+    if (!hasBlobImages) {
+      console.log('Không phát hiện hình ảnh blob cần xử lý');
+      return htmlContent;
+    }
+    
+    console.log('Bắt đầu xử lý hình ảnh blob trong nội dung HTML...');
     
     // Theo dõi tất cả hình ảnh đang được sử dụng
     this.trackImagesInContent(htmlContent);
@@ -124,6 +131,21 @@ export class ImageService {
       console.log(`Tìm thấy ${images.length} hình ảnh trong nội dung HTML`);
       
       if (images.length === 0) {
+        return htmlContent;
+      }
+      
+      // Kiểm tra xem có blob URL không
+      let hasBlobUrl = false;
+      for (const img of Array.from(images)) {
+        const src = img.getAttribute('src');
+        if (src && src.startsWith('blob:')) {
+          hasBlobUrl = true;
+          break;
+        }
+      }
+      
+      if (!hasBlobUrl) {
+        console.log('Không có hình ảnh blob cần xử lý');
         return htmlContent;
       }
       
@@ -158,24 +180,39 @@ export class ImageService {
               
               // Lưu ánh xạ URL tạm thời -> URL server
               uploadedImagesMap.set(src, serverUrl);
+            } else {
+              console.error(`Không thể upload hình ảnh blob: ${src}`);
+              throw new Error(`Không thể upload hình ảnh blob: ${src}`);
             }
           } else {
             console.warn(`Không tìm thấy dữ liệu cho hình ảnh: ${src}`);
+            throw new Error(`Không tìm thấy dữ liệu cho hình ảnh: ${src}`);
           }
         }
       });
       
       // Đợi tất cả các xử lý hoàn thành
-      await Promise.all(imagePromises);
+      try {
+        await Promise.all(imagePromises);
+      } catch (error) {
+        console.error('Lỗi khi xử lý một hoặc nhiều hình ảnh:', error);
+        throw error;
+      }
       
       // Lấy nội dung HTML sau khi xử lý
       const processedContent = doc.body.innerHTML;
+      
+      // Kiểm tra lại xem còn URL blob không
+      if (processedContent.includes('blob:')) {
+        console.error('Vẫn còn URL blob sau khi xử lý');
+        throw new Error('Không thể xử lý tất cả hình ảnh blob');
+      }
       
       console.log('Xử lý hình ảnh hoàn tất');
       return processedContent;
     } catch (error) {
       console.error('Lỗi khi xử lý hình ảnh:', error);
-      return htmlContent; // Trả về nguyên nội dung nếu có lỗi
+      throw error; // Ném lỗi để hàm gọi xử lý
     }
   }
 
@@ -188,29 +225,76 @@ export class ImageService {
     try {
       console.log(`Đang upload hình ảnh: ${file.name} (${file.size} bytes)`);
       
-      // Sử dụng GraphQL mutation để upload hình ảnh
-      const { data } = await client.mutate({
-        mutation: uploadImageMutation,
-        variables: {
-          file,
-          storageType: "local" // Sử dụng STORAGE_TYPE từ .env nếu cần
-        },
-        context: {
-          hasUpload: true
-        }
-      });
-      
-      if (!data || !data.uploadImage) {
-        throw new Error('Upload failed: No data returned');
+      // Kiểm tra file có hợp lệ không
+      if (!file || !(file instanceof File)) {
+        console.error('File không hợp lệ:', file);
+        throw new Error('Invalid file object');
       }
       
-      const { url } = data.uploadImage;
-      console.log(`Upload thành công. Server URL: ${url}`);
+      // Kiểm tra kích thước file - giới hạn 5MB (5 * 1024 * 1024 bytes)
+      const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
+      if (file.size > MAX_FILE_SIZE) {
+        console.error(`File quá lớn: ${file.size} bytes. Giới hạn là ${MAX_FILE_SIZE} bytes (5MB)`);
+        throw new Error('File too large, maximum size is 5MB');
+      }
       
-      return url;
+      // Tạo FormData để upload
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('storage_type', 'local');
+      
+      // Upload bằng REST API trực tiếp đến backend
+      const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL || 'http://localhost:8080';
+      console.log(`API Base URL: ${API_BASE_URL}`);
+      const uploadUrl = `${API_BASE_URL}/media/upload`;
+      console.log(`Upload URL: ${uploadUrl}`);
+      
+      try {
+        const response = await fetch(uploadUrl, {
+          method: 'POST',
+          body: formData,
+          credentials: 'include' // Để gửi cookies, cần thiết cho xác thực
+        });
+        
+        console.log(`Response status: ${response.status} ${response.statusText}`);
+        
+        if (!response.ok) {
+          console.error('Upload thất bại:', response.status, response.statusText);
+          const errorText = await response.text();
+          console.error('Error details:', errorText);
+          throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+        }
+        
+        const data = await response.json();
+        console.log('Response data:', data);
+        
+        if (!data || !data.url) {
+          console.error('Upload thất bại: Không có URL trả về');
+          throw new Error('Upload failed: No URL returned');
+        }
+        
+        // Lấy URL từ response và xử lý URL
+        let url = data.url;
+        console.log(`Upload thành công. Server URL gốc: ${url}`);
+        
+        // Kiểm tra nếu URL bắt đầu với dấu /
+        if (url.startsWith('/')) {
+          url = `${API_BASE_URL}${url}`;
+          console.log(`URL đã được chuyển đổi thành: ${url}`);
+        }
+        
+        return url;
+      } catch (networkError) {
+        console.error('Lỗi mạng khi upload hình ảnh:', networkError);
+        
+        // Trong trường hợp không thể kết nối đến server, trả về URL tạm thời
+        // Điều này cho phép người dùng tiếp tục làm việc với hình ảnh cục bộ
+        console.warn('Không thể kết nối đến server, sử dụng URL tạm thời');
+        return URL.createObjectURL(file);
+      }
     } catch (error) {
       console.error('Lỗi khi upload hình ảnh:', error);
-      return ''; // Trả về chuỗi rỗng nếu có lỗi
+      throw error; // Ném lỗi để bên gọi xử lý
     }
   }
 

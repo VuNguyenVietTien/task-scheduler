@@ -130,7 +130,7 @@ export function CommentCard({ comment, currentUserId, onDelete }: CommentCardPro
           )}
         </div>
         
-        <div className="mt-2 text-sm text-gray-700 comment-content" dangerouslySetInnerHTML={{ __html: comment.content }} />
+        <div className="mt-2 text-sm text-gray-700 rich-text-content" dangerouslySetInnerHTML={{ __html: comment.content }} />
       </div>
     </div>
   );

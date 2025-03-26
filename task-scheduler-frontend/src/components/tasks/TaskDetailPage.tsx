@@ -15,6 +15,7 @@ import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQuery } from '@apollo/client';
 import { GET_TASK_COMMENTS } from '@/graphql/queries/tasks';
 import { CREATE_TASK_COMMENT, DELETE_TASK_COMMENT } from '@/graphql/mutations/tasks';
+import TaskDescriptionPanel from './description/TaskDescriptionPanel';
 
 // RichTextEditor với dynamic import để tránh lỗi SSR
 const RichTextEditor = dynamic(
@@ -944,79 +945,21 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         
         {/* Phần mô tả */}
         <div className="p-6 border-b border-gray-200">
-          <div className="flex justify-between items-start mb-4">
-            <h2 className="text-lg font-medium text-gray-900">Mô tả chi tiết</h2>
-            
-            {!isDescriptionEditing && (
-              <button 
-                onClick={() => {
-                  // Đảm bảo giá trị mô tả hợp lệ trước khi bắt đầu chỉnh sửa
-                  setEditedTask(prev => ({
-                    ...prev,
-                    description: prev.description || ''
-                  }));
-                  setIsDescriptionEditing(true);
-                }}
-                className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-full"
-                title="Chỉnh sửa mô tả"
-                aria-label="Chỉnh sửa mô tả"
-              >
-                <PencilIcon className="h-5 w-5" />
-              </button>
-            )}
+          <div className="flex justify-between items-center mb-4">
+            <h2 className="text-lg font-medium text-gray-900">Mô tả</h2>
           </div>
           
-          {isDescriptionEditing ? (
-            <div className="space-y-4">
-              <RichTextEditor
-                ref={descriptionEditorRef}
-                value={editedTask.description || ''}
-                onChange={handleDescriptionChange}
-                placeholder="Thêm mô tả chi tiết cho task..."
-                mode="full"
-                minHeight="300px"
-                readOnly={isSaving}
-              />
-              
-              <div className="flex justify-end space-x-3 pt-4">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    // Reset lại giá trị và tắt chế độ chỉnh sửa
-                    setEditedTask(prev => ({
-                      ...prev,
-                      description: task.description || ''
-                    }));
-                    setIsDescriptionEditing(false);
-                  }}
-                  disabled={isSaving}
-                >
-                  Hủy
-                </Button>
-                <Button
-                  variant="primary"
-                  onClick={handleSaveDescription}
-                  disabled={isSaving}
-                >
-                  {isSaving ? <Spinner size="sm" className="mr-2" /> : null}
-                  Lưu mô tả
-                </Button>
-              </div>
-            </div>
-          ) : (
-            <div
-              className="prose max-w-none rich-text-content cursor-pointer hover:bg-gray-50 p-4 rounded-md transition-colors"
-              dangerouslySetInnerHTML={{ __html: task.description || '<p class="text-gray-500 italic">Không có mô tả</p>' }}
-              onClick={() => {
-                // Đảm bảo giá trị mô tả hợp lệ trước khi bắt đầu chỉnh sửa
-                setEditedTask(prev => ({
-                  ...prev,
-                  description: prev.description || ''
-                }));
-                setIsDescriptionEditing(true);
-              }}
-            />
-          )}
+          <TaskDescriptionPanel 
+            task={task}
+            onTaskUpdated={(updatedTask) => {
+              // Cập nhật description mà không làm refetch comments
+              setEditedTask(prev => ({
+                ...prev,
+                description: updatedTask.description
+              }));
+            }}
+            className="w-full"
+          />
         </div>
         
         {/* CSS cho chế độ xem rich text, đặc biệt là bảng */}
@@ -1062,6 +1005,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
           .rich-text-content ul,
           .rich-text-content ol {
             padding-left: 1.5rem;
+            margin: 0.5rem 0;
           }
 
           .rich-text-content ul {
@@ -1070,6 +1014,96 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
 
           .rich-text-content ol {
             list-style-type: decimal;
+          }
+          
+          /* Thêm style cho nested lists */
+          .rich-text-content ul ul,
+          .rich-text-content ol ol,
+          .rich-text-content ul ol,
+          .rich-text-content ol ul {
+            margin-top: 0.25rem;
+            margin-bottom: 0;
+          }
+          
+          .rich-text-content ul ul {
+            list-style-type: circle;
+          }
+          
+          .rich-text-content ul ul ul {
+            list-style-type: square;
+          }
+          
+          .rich-text-content ol ol {
+            list-style-type: lower-alpha;
+          }
+          
+          .rich-text-content ol ol ol {
+            list-style-type: lower-roman;
+          }
+          
+          /* Style cho heading */
+          .rich-text-content h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            margin-top: 1.5rem;
+            margin-bottom: 1rem;
+            line-height: 1.25;
+          }
+          
+          .rich-text-content h2 {
+            font-size: 1.5rem;
+            font-weight: 600;
+            margin-top: 1.4rem;
+            margin-bottom: 0.8rem;
+            line-height: 1.3;
+          }
+          
+          .rich-text-content h3 {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-top: 1.3rem;
+            margin-bottom: 0.6rem;
+            line-height: 1.35;
+          }
+          
+          /* Style cho text-align */
+          .rich-text-content [style*="text-align: center"] {
+            text-align: center;
+          }
+          
+          .rich-text-content [style*="text-align: right"] {
+            text-align: right;
+          }
+          
+          .rich-text-content [style*="text-align: justify"] {
+            text-align: justify;
+          }
+          
+          /* Style cho line-height */
+          .rich-text-content [style*="line-height"] {
+            line-height: inherit;
+          }
+          
+          /* Style cho các thẻ p */
+          .rich-text-content p {
+            margin-bottom: 0.75rem;
+          }
+          
+          /* Style cho inline text formatting */
+          .rich-text-content strong {
+            font-weight: 600;
+          }
+          
+          .rich-text-content em {
+            font-style: italic;
+          }
+          
+          .rich-text-content u {
+            text-decoration: underline;
+          }
+          
+          .rich-text-content s {
+            text-decoration: line-through;
           }
         `}</style>
 

@@ -1,11 +1,13 @@
 'use client';
 
-import React, { forwardRef } from 'react';
+import React, { forwardRef, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { Spinner } from '@/components/ui/Spinner';
+import { toast } from 'react-hot-toast';
+import { imageService } from '@/services/imageService';
 
 // Định nghĩa kiểu
-export type EditorMode = 'full' | 'compact';
+export type EditorMode = 'full' | 'compact' | 'simple';
 
 export interface AdvancedEditorProps {
   value?: string;
@@ -37,13 +39,17 @@ export const AdvancedEditor = forwardRef<any, AdvancedEditorProps>(({
   className = '',
   readOnly = false
 }, ref) => {
+  // Chuẩn bị mode cho RichTextEditor
+  // RichTextEditor chỉ chấp nhận 'full' hoặc 'compact'
+  const editorMode = mode === 'simple' ? 'compact' : mode;
+
   return (
     <RichTextEditor
       ref={ref}
       value={value}
       onChange={onChange || (() => {})}
       placeholder={placeholder}
-      mode={mode}
+      mode={editorMode}
       minHeight={minHeight}
       className={className}
       readOnly={readOnly}

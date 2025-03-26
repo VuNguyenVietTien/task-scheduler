@@ -547,7 +547,7 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
             {task.description && (
               <div className="bg-gray-50 p-4 rounded-md">
                 <h3 className="text-lg font-medium text-gray-900 mb-2">Mô tả</h3>
-                <div className="text-gray-700">
+                <div className="text-gray-700 rich-text-content">
                   {renderHTML(task.description)}
                 </div>
               </div>
@@ -673,7 +673,7 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
                               minute: '2-digit'
                             })}
                           </div>
-                          <div className="mt-1 text-sm text-gray-700">
+                          <div className="mt-1 text-sm text-gray-700 rich-text-content">
                             {renderHTML(comment.content)}
                           </div>
                         </div>

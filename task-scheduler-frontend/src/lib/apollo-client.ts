@@ -8,7 +8,10 @@ const isBrowser = typeof window !== 'undefined';
 // Tạo httpLink chỉ khi biết chắc chắn URI
 const httpLink = createHttpLink({
   uri: isBrowser ? `${process.env.NEXT_PUBLIC_BACKEND_URL}/graphql` : '',
-  credentials: 'include'
+  credentials: 'include',
+  headers: {
+    'Apollo-Require-Preflight': 'true'
+  }
 });
 
 // Debug helper to safely stringify objects
