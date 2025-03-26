@@ -149,7 +149,7 @@ export default function TaskDescription({ task, onUpdate, className = '' }: Task
         <div>
           {task.description ? (
             <div 
-              className="prose prose-sm max-w-none prose-img:rounded-md prose-img:my-2 prose-headings:mt-3 prose-headings:mb-2 cursor-pointer hover:bg-gray-50 p-3 rounded-lg transition-colors group"
+              className="prose prose-sm max-w-none prose-img:rounded-md prose-img:my-2 prose-headings:mt-3 prose-headings:mb-2 prose-ul:list-disc prose-ul:pl-6 prose-ol:list-decimal prose-ol:pl-6 cursor-pointer hover:bg-gray-50 p-3 rounded-lg transition-colors group"
               onClick={startEditing}
               title="Nhấn để chỉnh sửa mô tả"
             >

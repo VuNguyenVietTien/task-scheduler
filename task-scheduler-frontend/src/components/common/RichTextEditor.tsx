@@ -652,6 +652,52 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
           margin-right: 0;
           color: #6b7280;
         }
+        
+        /* Styles for lists */
+        .rich-text-editor ul {
+          list-style-type: disc;
+          padding-left: 1.5rem;
+          margin: 0.5rem 0;
+        }
+        
+        .rich-text-editor ol {
+          list-style-type: decimal;
+          padding-left: 1.5rem;
+          margin: 0.5rem 0;
+        }
+        
+        .rich-text-editor li {
+          margin-bottom: 0.25rem;
+        }
+        
+        .rich-text-editor li p {
+          margin: 0;
+        }
+        
+        /* Fix for nested lists */
+        .rich-text-editor ul ul,
+        .rich-text-editor ol ol,
+        .rich-text-editor ul ol,
+        .rich-text-editor ol ul {
+          margin-top: 0.25rem;
+          margin-bottom: 0;
+        }
+        
+        .rich-text-editor ul ul {
+          list-style-type: circle;
+        }
+        
+        .rich-text-editor ul ul ul {
+          list-style-type: square;
+        }
+        
+        .rich-text-editor ol ol {
+          list-style-type: lower-alpha;
+        }
+        
+        .rich-text-editor ol ol ol {
+          list-style-type: lower-roman;
+        }
       `}</style>
 
       {!readOnly && (

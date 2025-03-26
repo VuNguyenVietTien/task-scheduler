@@ -14,7 +14,7 @@ import { vi } from 'date-fns/locale';
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQuery } from '@apollo/client';
 import { GET_TASK_COMMENTS } from '@/graphql/queries/tasks';
-import { CREATE_TASK_COMMENT } from '@/graphql/mutations/tasks';
+import { CREATE_TASK_COMMENT, DELETE_TASK_COMMENT } from '@/graphql/mutations/tasks';
 
 // RichTextEditor với dynamic import để tránh lỗi SSR
 const RichTextEditor = dynamic(
@@ -114,6 +114,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
 
   const [createComment, { loading: createCommentLoading }] = 
     useMutation<CreateCommentData, { input: CreateCommentInput }>(CREATE_TASK_COMMENT);
+    
+  const [deleteComment] = useMutation(DELETE_TASK_COMMENT);
 
   // Khởi tạo tất cả modules Quill khi component mount
   useEffect(() => {
@@ -550,11 +552,38 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     }
   };
 
-  // Hàm xóa bình luận thất bại
+  // Hàm xóa bình luận
   const handleDeleteFailedComment = (commentId: string) => {
+    // Trước tiên xóa comment khỏi UI để phản hồi ngay lập tức
     setComments(prevComments => 
       prevComments.filter(comment => comment.id !== commentId)
     );
+    
+    // Check if it's a pending or failed local comment
+    const comment = comments.find(c => c.id === commentId);
+    if (comment && comment.status && (comment.status === 'pending' || comment.status === 'failed')) {
+      // This is a local comment that hasn't been saved to the server yet, không cần gọi API
+      return;
+    }
+    
+    // Nếu là comment đã lưu, gọi API xóa
+    try {
+      deleteComment({
+        variables: {
+          commentId: commentId
+        }
+      })
+      .catch((error) => {
+        console.error('Error deleting comment:', error);
+        // Thông báo lỗi cho người dùng
+        setError('Không thể xóa bình luận. Vui lòng thử lại sau.');
+        // Nếu lỗi, cũng không cần refetch lại dữ liệu
+      });
+    } catch (error) {
+      console.error('Error processing delete comment:', error);
+      setError('Đã xảy ra lỗi khi xóa bình luận.');
+      // Không cần refetch
+    }
   };
 
   // Chuyển đổi dữ liệu comment từ GraphQL sang định dạng cần thiết

@@ -118,3 +118,9 @@ export const CREATE_TASK_COMMENT = gql`
     }
   }
 `;
+
+export const DELETE_TASK_COMMENT = gql`
+  mutation DeleteTaskComment($commentId: ID!) {
+    deleteComment(commentId: $commentId)
+  }
+`;

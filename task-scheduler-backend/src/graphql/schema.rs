@@ -10,6 +10,7 @@ use crate::graphql::{
         ProjectMemberMutation, ProjectMemberQuery,
         TaskMutation, TaskQuery,
         MemberMutation, MemberQuery,
+        MediaUploadMutation,
     },
     dataloaders::{ProjectLoader, UserLoader},
     types::{ProjectPriority, ProjectStatus, ProjectVisibility, MemberRole},
@@ -20,7 +21,7 @@ use crate::config::Config;
 pub struct Query(ProjectQuery, CommentQuery, UserQuery, ProjectMemberQuery, TaskQuery, MemberQuery);
 
 #[derive(MergedObject, Default)]
-pub struct Mutation(AuthMutation, ProjectMutation, CommentMutation, UserMutation, ProjectMemberMutation, TaskMutation, MemberMutation);
+pub struct Mutation(AuthMutation, ProjectMutation, CommentMutation, UserMutation, ProjectMemberMutation, TaskMutation, MemberMutation, MediaUploadMutation);
 
 pub type AppSchema = Schema<Query, Mutation, EmptySubscription>;
 

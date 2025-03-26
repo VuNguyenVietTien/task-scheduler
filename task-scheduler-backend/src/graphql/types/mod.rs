@@ -8,6 +8,7 @@ pub mod task;
 pub mod auth;
 pub mod comment;
 pub mod user;
+pub mod media_upload;
 
 // Re-export project types
 pub use self::project::{
@@ -40,6 +41,12 @@ pub use self::comment::{
 // Re-export user types
 pub use self::user::{
     UserResponse,
+};
+
+// Re-export media upload types
+pub use self::media_upload::{
+    MediaUploadResponse,
+    StorageType,
 };
 
 // Common type aliases

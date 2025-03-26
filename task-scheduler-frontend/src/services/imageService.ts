@@ -1,4 +1,6 @@
 import { v4 as uuidv4 } from 'uuid';
+import { uploadImageMutation } from '@/graphql/mutations/mediaUpload';
+import { client } from '@/lib/apollo-client';
 
 interface ImageData {
   file: File;
@@ -178,36 +180,34 @@ export class ImageService {
   }
 
   /**
-   * Upload một hình ảnh lên server
+   * Upload một hình ảnh lên server sử dụng GraphQL mutation
    * @param file File hình ảnh cần upload
    * @returns URL của hình ảnh sau khi upload
    */
   private async uploadImageToServer(file: File): Promise<string> {
     try {
-      console.log(`Đang upload hình ảnh: ${file.name}`);
+      console.log(`Đang upload hình ảnh: ${file.name} (${file.size} bytes)`);
       
-      // Tạo tên file duy nhất
-      const uniqueFileName = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9.]/g, '_')}`;
-      
-      // Tạo FormData để upload
-      const formData = new FormData();
-      formData.append('file', file, uniqueFileName);
-      
-      // Gọi API để upload file
-      const response = await fetch('/api/uploadImage', {
-        method: 'POST',
-        body: formData,
+      // Sử dụng GraphQL mutation để upload hình ảnh
+      const { data } = await client.mutate({
+        mutation: uploadImageMutation,
+        variables: {
+          file,
+          storageType: "local" // Sử dụng STORAGE_TYPE từ .env nếu cần
+        },
+        context: {
+          hasUpload: true
+        }
       });
       
-      if (!response.ok) {
-        throw new Error(`Upload failed: ${response.status} ${response.statusText}`);
+      if (!data || !data.uploadImage) {
+        throw new Error('Upload failed: No data returned');
       }
       
-      const data = await response.json();
-      const serverUrl = data.url;
+      const { url } = data.uploadImage;
+      console.log(`Upload thành công. Server URL: ${url}`);
       
-      console.log(`Upload thành công. Server URL: ${serverUrl}`);
-      return serverUrl;
+      return url;
     } catch (error) {
       console.error('Lỗi khi upload hình ảnh:', error);
       return ''; // Trả về chuỗi rỗng nếu có lỗi
@@ -251,24 +251,22 @@ export class ImageService {
       URL.revokeObjectURL(data.tempUrl);
     });
     
-    // Xóa map
+    // Xóa tất cả phần tử
     tempImagesMap.clear();
-    
-    // Xóa danh sách URL đang hoạt động
     activeImageUrls.length = 0;
     
     console.log('Đã xóa tất cả hình ảnh tạm thời');
   }
-  
+
   /**
-   * Lấy số lượng hình ảnh tạm thời hiện tại
+   * Lấy số lượng hình ảnh tạm thời
    */
   public getTempImagesCount(): number {
     return tempImagesMap.size;
   }
-  
+
   /**
-   * Lấy số lượng hình ảnh đang sử dụng
+   * Lấy số lượng hình ảnh đang hoạt động
    */
   public getActiveImagesCount(): number {
     return activeImageUrls.length;

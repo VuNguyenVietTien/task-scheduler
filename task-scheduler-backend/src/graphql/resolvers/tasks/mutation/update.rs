@@ -31,8 +31,8 @@ pub async fn update_task(ctx: &Context<'_>, input: UpdateTaskInput) -> Result<Ta
                 progress = COALESCE($10, progress),
                 status = COALESCE($11::task_status, status),
                 priority = COALESCE($12::task_priority, priority),
-                type = COALESCE($13::task_type, type),
-                category = COALESCE($14::task_category, category),
+                type = COALESCE($13, type),
+                category = COALESCE($14, category),
                 progress_type = COALESCE($15::task_progress_type, progress_type),
                 tags = COALESCE($16, tags),
                 updated_at = NOW()

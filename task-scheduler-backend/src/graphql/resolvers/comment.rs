@@ -208,4 +208,59 @@ impl CommentMutation {
 
         Ok(record)
     }
+    
+    pub async fn delete_comment(
+        &self,
+        ctx: &Context<'_>,
+        comment_id: ID,
+    ) -> Result<bool> {
+        let db = ctx.data::<PgPool>().unwrap();
+        
+        // Lấy thông tin xác thực người dùng từ context
+        let auth = ctx.data::<crate::graphql::Context>()
+            .map_err(|e| async_graphql::Error::new(format!("Không thể lấy context: {:?}", e)))?
+            .auth
+            .as_ref()
+            .ok_or_else(|| async_graphql::Error::new("Bạn cần đăng nhập để xóa bình luận"))?;
+        
+        let user_id = auth.user_id()
+            .map_err(|_| async_graphql::Error::new("ID người dùng không hợp lệ"))?;
+            
+        let comment_uuid = Uuid::parse_str(&comment_id)
+            .map_err(|_| async_graphql::Error::new("Invalid comment ID"))?;
+            
+        // Lấy thông tin comment để kiểm tra quyền xóa
+        let comment = sqlx::query(
+            "SELECT * FROM comments WHERE comment_id = $1 AND NOT is_deleted"
+        )
+        .bind(comment_uuid)
+        .fetch_optional(db)
+        .await
+        .map_err(|e| async_graphql::Error::new(format!("Database error: {}", e)))?;
+        
+        // Kiểm tra comment có tồn tại không
+        let comment = match comment {
+            Some(comment) => comment,
+            None => return Err(async_graphql::Error::new("Không tìm thấy bình luận này")),
+        };
+        
+        // Kiểm tra quyền xóa comment
+        let comment_user_id: Uuid = comment.get("user_id");
+        if comment_user_id != user_id {
+            return Err(async_graphql::Error::new("Bạn không có quyền xóa bình luận này"));
+        }
+        
+        // Thực hiện xóa comment (soft delete)
+        let now = Utc::now();
+        let result = sqlx::query(
+            "UPDATE comments SET is_deleted = true, updated_at = $1 WHERE comment_id = $2"
+        )
+        .bind(now)
+        .bind(comment_uuid)
+        .execute(db)
+        .await
+        .map_err(|e| async_graphql::Error::new(format!("Không thể xóa bình luận: {}", e)))?;
+        
+        Ok(result.rows_affected() > 0)
+    }
 }
