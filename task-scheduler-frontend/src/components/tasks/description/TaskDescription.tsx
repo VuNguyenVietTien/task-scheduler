@@ -209,8 +209,6 @@ export default function TaskDescription({ task, onUpdate, className = '' }: Task
 
   return (
     <div className={`task-description ${className}`}>
-      <h2 className="text-lg font-medium text-gray-900 mb-4">Mô tả</h2>
-      
       {error && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4 rounded-md">
           <div className="flex">

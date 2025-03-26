@@ -5,6 +5,7 @@
 /* Drag & Drop Styles */
 [data-rbd-draggable-context-id] {
   cursor: grab !important;
+  -webkit-user-select: none;
   user-select: none;
 }
 
@@ -256,5 +257,29 @@ body.dragging [data-rbd-droppable-id][data-rbd-droppable-context-id][aria-label*
   }
   body {
     @apply bg-background text-foreground;
+  }
+}
+
+/* Thêm vào cuối file */
+.container-fluid {
+  width: 100%;
+  max-width: 100%;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+@media (min-width: 640px) {
+  .container-fluid {
+    padding-left: 1.5rem;
+    padding-right: 1.5rem;
+  }
+}
+
+@media (min-width: 1024px) {
+  .container-fluid {
+    padding-left: 2rem;
+    padding-right: 2rem;
   }
 }

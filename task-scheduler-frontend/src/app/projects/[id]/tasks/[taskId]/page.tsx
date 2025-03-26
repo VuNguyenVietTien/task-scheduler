@@ -235,12 +235,11 @@ export default function TaskDetailsPage() {
   }
 
   return (
-    <div className="container mx-auto py-6 px-4">
+    <div className="container-fluid py-6 px-4">
       <PageHeader 
-        title="Chi tiết công việc" 
+        title=""
         backLink={`/projects/${projectId}`}
         backLabel="Quay lại dự án"
-        projectName={projectName}
       />
       
       <TaskDetailPage 
@@ -249,7 +248,8 @@ export default function TaskDetailsPage() {
         projectId={projectId}
         currentUser={user || undefined}
         isLoadingProp={loading}
-        projectMembers={projectMembers} // Truyền danh sách thành viên vào component
+        projectMembers={projectMembers}
+        hideTitleHeader={false}
       />
     </div>
   );
