@@ -3,7 +3,6 @@
 import React, { useState, useEffect, useCallback, useRef, forwardRef } from 'react';
 import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
 import { User } from '@/contexts/AuthContext';
-import dynamic from 'next/dynamic';
 import { Spinner } from '@/components/ui/Spinner';
 import { Card } from '@/components/ui/Card';
 import { CommentCard } from '@/components/common/CommentCard';
@@ -16,19 +15,8 @@ import { useMutation, useQuery } from '@apollo/client';
 import { GET_TASK_COMMENTS } from '@/graphql/queries/tasks';
 import { CREATE_TASK_COMMENT, DELETE_TASK_COMMENT } from '@/graphql/mutations/tasks';
 import TaskDescriptionPanel from './description/TaskDescriptionPanel';
-
-// RichTextEditor với dynamic import để tránh lỗi SSR
-const RichTextEditor = dynamic(
-  () => import('@/components/common/RichTextEditor'),
-  { 
-    ssr: false,
-    loading: () => (
-      <div className="h-[300px] bg-gray-50 rounded-md animate-pulse flex items-center justify-center">
-        <Spinner size="lg" />
-      </div>
-    ),
-  }
-);
+import { AdvancedEditor } from '@/components/common/AdvancedEditor';
+import { imageService } from "@/services/imageService";
 
 interface TaskDetailPageProps {
   task: Task;
@@ -97,6 +85,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const commentRef = React.useRef<HTMLTextAreaElement>(null);
   const [activeTab, setActiveTab] = useState('details');
   const [userId, setUserId] = useState<string | null>(null);
+  const [isProcessingImages, setIsProcessingImages] = useState(false);
   
   // Sử dụng useRef để theo dõi các editor
   const descriptionEditorRef = useRef<any>(null);
@@ -408,6 +397,12 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     );
   };
 
+  // Cập nhật hàm handleCommentChange
+  const handleCommentChange = useCallback((content: string) => {
+    console.log('Comment changed:', content?.substring(0, 50));
+    setNewComment(content || '');
+  }, []);
+
   // Xử lý gửi comment với GraphQL - đã khôi phục API call
   const handleSubmitComment = async () => {
     if (!newComment.trim() || !currentUser) return;
@@ -421,6 +416,54 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       }
       
       const commentContent = newComment.trim();
+      
+      // Kiểm tra xem có hình ảnh không
+      const hasImages = commentContent.includes('<img');
+      const containsBlob = commentContent.includes('blob:');
+      
+      console.log('Phân tích bình luận:', {
+        hasImages,
+        containsBlob,
+        contentLength: commentContent.length
+      });
+      
+      // Xử lý hình ảnh trước khi gửi comment
+      let processedContent = commentContent;
+      
+      if (hasImages && containsBlob) {
+        try {
+          setIsProcessingImages(true);
+          console.log('Bắt đầu xử lý hình ảnh trong bình luận...');
+          processedContent = await imageService.processHtmlContent(commentContent);
+          console.log('Xử lý hình ảnh hoàn tất, độ dài nội dung mới:', processedContent.length);
+          
+          // Kiểm tra nếu còn blob URL trong processedContent
+          if (processedContent.includes('blob:')) {
+            console.warn('Vẫn còn URL blob trong nội dung sau khi xử lý');
+            setError('Lưu ý: Một số hình ảnh có thể chưa được tải lên. Vui lòng thử lại.');
+            setIsPostingComment(false);
+            setIsProcessingImages(false);
+            return;
+          }
+        } catch (imageError) {
+          console.error('Lỗi khi xử lý hình ảnh:', imageError);
+          let errorMessage = 'Một số hình ảnh không thể tải lên. Vui lòng thử lại.';
+          if (imageError instanceof Error) {
+            const errorText = imageError.message;
+            if (errorText.includes('File too large')) {
+              errorMessage = 'Hình ảnh quá lớn. Vui lòng sử dụng ảnh có kích thước nhỏ hơn 5MB.';
+            }
+          }
+          setError(`Lỗi: ${errorMessage}`);
+          setIsPostingComment(false);
+          setIsProcessingImages(false);
+          return;
+        } finally {
+          setIsProcessingImages(false);
+        }
+      }
+      
+      // Đặt lại trường newComment
       setNewComment('');
       
       // Tạo ID tạm thời cho comment
@@ -429,7 +472,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       // Thêm comment tạm thời vào danh sách ngay lập tức
       const tempComment: Comment = {
         id: tempId,
-        content: commentContent,
+        content: processedContent,
         user_id: currentUser.id,
         username: currentUser.name, // Tạm thời dùng currentUser.name cho UI
         avatar_url: currentUser.providerData?.[0]?.photoURL || undefined,
@@ -441,8 +484,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       setComments(prevComments => [...prevComments, tempComment]);
       
       // Focus vào textarea sau khi gửi
-      if (commentRef.current) {
-        commentRef.current.focus();
+      if (commentEditorRef.current) {
+        commentEditorRef.current.focus();
       }
       
       try {
@@ -450,7 +493,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         const { data } = await createComment({
           variables: {
             input: {
-              content: commentContent,
+              content: processedContent,
               taskId,
             }
           }
@@ -473,6 +516,9 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 : comment
             )
           );
+          
+          // Dọn dẹp hình ảnh không sử dụng
+          imageService.cleanupUnusedImages();
         }
       } catch (apiError) {
         console.error('Error posting comment to API:', apiError);
@@ -498,6 +544,50 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     try {
       setError(null);
       
+      // Kiểm tra xem có hình ảnh không
+      const hasImages = content.includes('<img');
+      const containsBlob = content.includes('blob:');
+      
+      console.log('Phân tích bình luận:', {
+        hasImages,
+        containsBlob,
+        contentLength: content.length
+      });
+      
+      // Xử lý hình ảnh trước khi gửi comment
+      let processedContent = content;
+      
+      if (hasImages && containsBlob) {
+        try {
+          setIsProcessingImages(true);
+          console.log('Bắt đầu xử lý hình ảnh trong bình luận...');
+          processedContent = await imageService.processHtmlContent(content);
+          console.log('Xử lý hình ảnh hoàn tất, độ dài nội dung mới:', processedContent.length);
+          
+          // Kiểm tra nếu còn blob URL trong processedContent
+          if (processedContent.includes('blob:')) {
+            console.warn('Vẫn còn URL blob trong nội dung sau khi xử lý');
+            setError('Lưu ý: Một số hình ảnh có thể chưa được tải lên. Vui lòng thử lại.');
+            setIsProcessingImages(false);
+            return;
+          }
+        } catch (imageError) {
+          console.error('Lỗi khi xử lý hình ảnh:', imageError);
+          let errorMessage = 'Một số hình ảnh không thể tải lên. Vui lòng thử lại.';
+          if (imageError instanceof Error) {
+            const errorText = imageError.message;
+            if (errorText.includes('File too large')) {
+              errorMessage = 'Hình ảnh quá lớn. Vui lòng sử dụng ảnh có kích thước nhỏ hơn 5MB.';
+            }
+          }
+          setError(`Lỗi: ${errorMessage}`);
+          setIsProcessingImages(false);
+          return;
+        } finally {
+          setIsProcessingImages(false);
+        }
+      }
+      
       // Cập nhật trạng thái comment thành đang xử lý
       setComments(prevComments => 
         prevComments.map(comment => 
@@ -512,7 +602,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         const { data } = await createComment({
           variables: {
             input: {
-              content: content,
+              content: processedContent,
               taskId,
             }
           }
@@ -535,6 +625,9 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 : comment
             )
           );
+          
+          // Dọn dẹp hình ảnh không sử dụng
+          imageService.cleanupUnusedImages();
         }
       } catch (apiError) {
         console.error('Error retrying comment:', apiError);
@@ -724,12 +817,27 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   // Thêm biến taskIdString
   const taskIdString: string = task.task_id || task.id || 'unknown-task';
 
-  // Cập nhật hàm renderComment để tương thích với CommentCard
+  // Thêm hàm xử lý bình luận với url localhost:3000 thành localhost:8080
+  const processCommentContent = (content: string): string => {
+    // Thay thế localhost:3000 bằng localhost:8080 trong đường dẫn hình ảnh
+    if (!content) return '';
+    
+    // Sử dụng regex để thay thế URL trong thẻ img
+    return content.replace(
+      /(src=["'])(http:\/\/localhost:3000|https:\/\/localhost:3000|localhost:3000)/g, 
+      '$1http://localhost:8080'
+    );
+  };
+
+  // Sửa lại renderComment để xử lý URL trước khi hiển thị
   const renderComment = (comment: Comment) => {
+    // Xử lý nội dung comment để thay đổi URL
+    const processedContent = processCommentContent(comment.content);
+    
     // Chuyển đổi Comment nội bộ sang định dạng CommentCard
     const commentForCard = {
       id: comment.id,
-      content: comment.content,
+      content: processedContent,
       user_id: comment.user_id,
       username: comment.username,
       avatar_url: comment.avatar_url,
@@ -771,7 +879,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
               </div>
               <div 
                 className="mt-1 text-sm text-gray-700 rich-text-content"
-                dangerouslySetInnerHTML={{ __html: comment.content }}
+                dangerouslySetInnerHTML={{ __html: processedContent }}
               />
             </div>
           </div>
@@ -803,7 +911,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
               </div>
               <div 
                 className="mt-1 text-sm text-gray-700 rich-text-content"
-                dangerouslySetInnerHTML={{ __html: comment.content }}
+                dangerouslySetInnerHTML={{ __html: processedContent }}
               />
             </div>
           </div>
@@ -832,7 +940,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
               </div>
               <div 
                 className="mt-1 text-sm text-gray-700 rich-text-content"
-                dangerouslySetInnerHTML={{ __html: comment.content }}
+                dangerouslySetInnerHTML={{ __html: processedContent }}
               />
               <div className="mt-2 flex space-x-2">
                 <button 
@@ -867,12 +975,6 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         description: content || ''
       };
     });
-  }, []);
-
-  // Cập nhật hàm handleCommentChange
-  const handleCommentChange = useCallback((content: string) => {
-    console.log('Comment changed:', content?.substring(0, 50));
-    setNewComment(content || '');
   }, []);
 
   return (
@@ -1169,7 +1271,21 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
           
           {/* Form thêm bình luận */}
           <div className="bg-gray-50 p-4 rounded-lg">
-            <RichTextEditor
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4 rounded-md">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
+                  <div className="ml-3 flex-1">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
+            <AdvancedEditor
               ref={commentEditorRef}
               value={newComment}
               onChange={handleCommentChange}
@@ -1182,10 +1298,10 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 variant="primary"
                 size="sm"
                 onClick={handleSubmitComment}
-                disabled={!newComment.trim() || createCommentLoading}
+                disabled={!newComment.trim() || createCommentLoading || isProcessingImages}
               >
-                {createCommentLoading ? <Spinner size="sm" className="mr-2" /> : null}
-                Gửi bình luận
+                {(createCommentLoading || isProcessingImages) ? <Spinner size="sm" className="mr-2" /> : null}
+                {isProcessingImages ? 'Đang xử lý hình ảnh...' : 'Gửi bình luận'}
               </Button>
             </div>
           </div>
