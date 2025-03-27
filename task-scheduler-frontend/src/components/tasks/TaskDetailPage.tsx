@@ -1423,8 +1423,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
 
         .tab-item.active::after {
           width: 100%;
-        }
-      `}</style>
+          }
+        `}</style>
 
       {error && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
@@ -1609,24 +1609,24 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
             
             <div className={`tab-content ${activeTab === 'details' ? 'active' : ''}`}>
               <div className="bg-white rounded-lg">
-                <h2 className="text-lg font-medium text-gray-900 mb-4">Thông tin chi tiết</h2>
-                
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Thông tin chi tiết</h2>
+          
                 <div className="grid grid-cols-1 gap-2">
-                  {renderEditableField('Trạng thái', 'status', 'select', 
-                    Object.entries(TaskStatuses).map(([_, value]) => ({ 
-                      value, 
-                      label: value.charAt(0).toUpperCase() + value.slice(1) 
-                    })))}
-                  
-                  {renderEditableField('Mức độ ưu tiên', 'priority', 'select', 
-                    Object.entries(Priorities).map(([_, value]) => ({ 
-                      value, 
-                      label: value.charAt(0).toUpperCase() + value.slice(1) 
-                    })))}
-                  
-                  {renderEditableField('Ngày bắt đầu', 'start_date', 'date')}
-                  {renderEditableField('Ngày đến hạn', 'due_date', 'date')}
-                  
+              {renderEditableField('Trạng thái', 'status', 'select', 
+                Object.entries(TaskStatuses).map(([_, value]) => ({ 
+                  value, 
+                  label: value.charAt(0).toUpperCase() + value.slice(1) 
+                })))}
+              
+              {renderEditableField('Mức độ ưu tiên', 'priority', 'select', 
+                Object.entries(Priorities).map(([_, value]) => ({ 
+                  value, 
+                  label: value.charAt(0).toUpperCase() + value.slice(1) 
+                })))}
+              
+              {renderEditableField('Ngày bắt đầu', 'start_date', 'date')}
+              {renderEditableField('Ngày đến hạn', 'due_date', 'date')}
+              
                   {calculateDaysRemaining() && (
                     <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
                       <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Thời gian còn lại:</div>
@@ -1638,19 +1638,19 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                     </div>
                   )}
                     
-                  {renderEditableField('Người được giao', 'assignee', 'select',
-                    projectMembers && projectMembers.length > 0 ? 
-                      [{ value: '', label: 'Chưa gán' }, ...projectMembers.map(member => ({ 
-                        value: member.user.userId, 
-                        label: member.user.username || member.user.fullName || member.user.email 
-                      }))] : 
-                      [{ value: '', label: 'Chưa gán' }]
-                  )}
+              {renderEditableField('Người được giao', 'assignee', 'select',
+                projectMembers && projectMembers.length > 0 ? 
+                  [{ value: '', label: 'Chưa gán' }, ...projectMembers.map(member => ({ 
+                    value: member.user.userId, 
+                    label: member.user.username || member.user.fullName || member.user.email 
+                  }))] : 
+                  [{ value: '', label: 'Chưa gán' }]
+              )}
                   
                   {renderEditableField('Nỗ lực (giờ)', 'effort', 'number')}
                   {renderEditableField('Tiến độ (%)', 'progress', 'number')}
               
-                  {renderEditableField('Người tạo', 'created_by')}
+              {renderEditableField('Người tạo', 'created_by')}
                   
                   <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
                     <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Thời gian tạo:</div>
@@ -1665,62 +1665,62 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                       {formatDate(task.updated_at)}
                     </div>
                   </div>
-                </div>
-              </div>
             </div>
+          </div>
+        </div>
         
             <div className={`tab-content ${activeTab === 'comments' ? 'active' : ''}`}>
               <div className="bg-white rounded-lg">
-                <h2 className="text-lg font-medium text-gray-900 mb-4">Bình luận và hoạt động</h2>
-                
-                {/* Danh sách bình luận */}
-                <div className="space-y-4 mb-6">
-                  {commentsLoading || isLoading ? (
-                    <div className="flex justify-center py-10">
-                      <Spinner size="lg" />
-                    </div>
-                  ) : comments.length > 0 ? (
-                    <div className="space-y-4">
-                      {comments.map((comment) => renderComment(comment))}
-                    </div>
-                  ) : (
-                    <p className="text-center text-gray-500 py-8">Chưa có bình luận nào</p>
-                  )}
-                </div>
-                
-                {/* Form thêm bình luận */}
-                <div className="bg-gray-50 p-4 rounded-lg">
-                  {error && (
-                    <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4 rounded-md">
-                      <div className="flex">
-                        <div className="flex-shrink-0">
-                          <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                            <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                          </svg>
-                        </div>
+          <h2 className="text-lg font-medium text-gray-900 mb-4">Bình luận và hoạt động</h2>
+          
+          {/* Danh sách bình luận */}
+          <div className="space-y-4 mb-6">
+            {commentsLoading || isLoading ? (
+              <div className="flex justify-center py-10">
+                <Spinner size="lg" />
+              </div>
+            ) : comments.length > 0 ? (
+              <div className="space-y-4">
+                {comments.map((comment) => renderComment(comment))}
+              </div>
+            ) : (
+              <p className="text-center text-gray-500 py-8">Chưa có bình luận nào</p>
+            )}
+          </div>
+          
+          {/* Form thêm bình luận */}
+          <div className="bg-gray-50 p-4 rounded-lg">
+            {error && (
+              <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4 rounded-md">
+                <div className="flex">
+                  <div className="flex-shrink-0">
+                    <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                  </div>
                         <div className="ml-3">
-                          <p className="text-sm text-red-700">{error}</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
+              </div>
+            )}
                   
-                  <AdvancedEditor
-                    ref={commentEditorRef}
-                    value={newComment}
+            <AdvancedEditor
+              ref={commentEditorRef}
+              value={newComment}
                     onChange={setNewComment}
                     placeholder="Thêm bình luận..."
-                    mode="compact"
-                  />
+              mode="compact"
+            />
                   
                   <div className="mt-3 flex justify-end">
-                    <Button
-                      onClick={handleSubmitComment}
+              <Button
+                onClick={handleSubmitComment}
                       disabled={isPostingComment || !newComment}
                       isLoading={isPostingComment}
-                    >
+              >
                       {isPostingComment ? 'Đang gửi...' : 'Gửi bình luận'}
-                    </Button>
+              </Button>
                   </div>
                 </div>
               </div>
