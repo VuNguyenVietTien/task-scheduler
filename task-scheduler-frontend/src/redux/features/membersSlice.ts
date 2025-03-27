@@ -383,7 +383,7 @@ export const membersSlice = createSlice({
       })
       .addCase(removeMember.fulfilled, (state, action) => {
         state.loading = false;
-        state.members = state.members.filter(member => member.userId !== action.payload);
+        state.members = state.members.filter(member => member.user.userId !== action.payload);
       })
       .addCase(removeMember.rejected, (state, action) => {
         state.loading = false;
