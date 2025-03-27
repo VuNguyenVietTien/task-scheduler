@@ -307,7 +307,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
               projectId={project.id}
               members={displayedMembers}
               currentUserRole={currentUserRole}
-              refetch={refetchProject}
+              refetch={() => {}}
             />
           ) : (
             <LoadingState />

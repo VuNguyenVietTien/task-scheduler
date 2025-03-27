@@ -5,12 +5,16 @@ import { useForm } from 'react-hook-form';
 import { useMutation } from '@apollo/client';
 import { ADD_PROJECT_MEMBER_BY_EMAIL, UPDATE_PROJECT_MEMBER_ROLE, REMOVE_PROJECT_MEMBER } from '@/graphql/mutations/projectMember';
 import { UPDATE_MULTIPLE_MEMBER_ROLES } from '@/graphql/mutations/projectMembers';
-import { GET_PROJECT_BY_ID } from '@/graphql/queries/project';
 import { Dialog } from '@/components/ui/Dialog';
 import { toast } from 'sonner';
 import { MemberRole } from '@/types/members';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
-import { updateMultipleMemberRolesInStore, updateMemberRoleInStore } from '@/redux/features/membersSlice';
+import { 
+  updateMultipleMemberRolesInStore, 
+  updateMemberRoleInStore,
+  addMemberByEmail,
+  removeMember 
+} from '@/redux/features/membersSlice';
 import { toBackendRole, toFrontendRole } from '@/lib/utils';
 
 // Định nghĩa các type cần thiết
@@ -140,126 +144,60 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
     }
   });
 
-  // Mutation để thêm thành viên
-  const [addMember, { loading: addLoading }] = useMutation(ADD_PROJECT_MEMBER_BY_EMAIL, {
-    onCompleted: (data) => {
-      toast.success('Thành viên đã được thêm vào dự án thành công');
-      setIsAddDialogOpen(false);
-      setEmailInput('');
-      setAddError(null);
-      reset();
-      // Vẫn cần refetch vì đây là thêm mới, không phải update
-      refetch();
-    },
-    onError: (error) => {
-      const errorMessage = error.message;
-      setAddError(errorMessage);
-      if (errorMessage.includes("User with this email not found")) {
-        setAddError("Email không tồn tại trong hệ thống.");
-      } else if (errorMessage.includes("User is already a member")) {
-        setAddError("Người dùng này đã là thành viên của dự án.");
-      } else {
-        setAddError("Không thể thêm thành viên. Vui lòng thử lại sau.");
-      }
-    }
-  });
+  // Sử dụng mutations từ Apollo Client
+  const [updateRole, { loading: updateLoading }] = useMutation(UPDATE_PROJECT_MEMBER_ROLE);
+  const [updateMultipleRoles, { loading: updateMultipleLoading }] = useMutation(UPDATE_MULTIPLE_MEMBER_ROLES);
+  
+  // State để tracking loading state của các action từ Redux
+  const [addLoading, setAddLoading] = useState(false);
+  const [removeLoading, setRemoveLoading] = useState(false);
 
-  // Mutation để cập nhật vai trò thành viên
-  const [updateRole, { loading: updateLoading }] = useMutation(UPDATE_PROJECT_MEMBER_ROLE, {
-    onCompleted: (data) => {
-      toast.success('Vai trò thành viên đã được cập nhật');
-      
-      // Cập nhật Redux store
-      if (data?.updateProjectMember) {
-        dispatch(updateMemberRoleInStore({
-          userId: data.updateProjectMember.userId,
-          role: data.updateProjectMember.role
-        }));
-      }
-    },
-    onError: (error) => {
-      toast.error(error.message || 'Không thể cập nhật vai trò');
-    }
-  });
-
-  // Mutation để cập nhật vai trò nhiều thành viên cùng lúc
-  const [updateMultipleRoles, { loading: updateMultipleLoading }] = useMutation(UPDATE_MULTIPLE_MEMBER_ROLES, {
-    onCompleted: (data: UpdateMultipleMembersResponse) => {
-      if (data?.updateMultipleMembers?.successCount > 0) {
-        toast.success(`Đã cập nhật ${data.updateMultipleMembers.successCount} thành viên thành công`);
-        
-        // Tạo dữ liệu cập nhật cho Redux store
-        const updatedRoles = data.updateMultipleMembers.members.map(member => ({
-          userId: member.userId,
-          role: member.role as MemberRole
-        }));
-        
-        // Dispatch action cập nhật Redux store
-        dispatch(updateMultipleMemberRolesInStore(updatedRoles));
-        
-        // Cập nhật UI trực tiếp 
-        setDisplayMembers(prevMembers => 
-          prevMembers.map(member => {
-            const updatedMember = data.updateMultipleMembers.members.find(
-              m => m.userId === member.user.userId
-            );
-            if (updatedMember) {
-              return {
-                ...member,
-                role: updatedMember.role
-              };
-            }
-            return member;
-          })
-        );
-        
-        // Đặt lại state
-        setEditMode(false);
-        setPendingChanges(new Map());
-      }
-    },
-    onError: (error) => {
-      console.error('Chi tiết lỗi GraphQL:', error);
-      if (error.graphQLErrors && error.graphQLErrors.length > 0) {
-        const errorMessages = error.graphQLErrors.map(e => e.message).join('\n');
-        toast.error(`Lỗi: ${errorMessages}`);
-      } else {
-        toast.error(error.message || 'Không thể cập nhật vai trò của các thành viên');
-      }
-    }
-  });
-
-  // Mutation để xóa thành viên
-  const [removeMember, { loading: removeLoading }] = useMutation(REMOVE_PROJECT_MEMBER, {
-    refetchQueries: [
-      { query: GET_PROJECT_BY_ID, variables: { projectId } },
-    ],
-    onCompleted: () => {
-      toast.success('Thành viên đã được xóa khỏi dự án');
-      refetch();
-    },
-    onError: (error) => {
-      toast.error(error.message || 'Không thể xóa thành viên');
-    }
-  });
-
-  const onAddMemberSubmit = (data: AddMemberFormValues) => {
+  // Xử lý thêm thành viên bằng Redux thunk
+  const onAddMemberSubmit = async (data: AddMemberFormValues) => {
     if (!canManageMembers) {
       toast.error('Bạn không có quyền thêm thành viên');
       return;
     }
     
     setAddError(null);
-    addMember({
-      variables: {
+    setAddLoading(true);
+    
+    try {
+      // Gọi Redux thunk thay vì mutation trực tiếp
+      const resultAction = await dispatch(
+        addMemberByEmail({
         projectId,
         email: data.email,
-        role: data.role
+          role: toBackendRole(data.role)
+        })
+      );
+      
+      // Kiểm tra kết quả action
+      if (addMemberByEmail.fulfilled.match(resultAction)) {
+        toast.success('Thành viên đã được thêm vào dự án thành công');
+        setIsAddDialogOpen(false);
+        reset();
+        // Redux store đã cập nhật state, không cần gọi refetch
+        // UI sẽ tự động cập nhật từ redux state
+      } else {
+        const errorMessage = resultAction.payload as string;
+        if (errorMessage.includes("User with this email not found")) {
+          setAddError("Email không tồn tại trong hệ thống.");
+        } else if (errorMessage.includes("User is already a member")) {
+          setAddError("Người dùng này đã là thành viên của dự án.");
+        } else {
+          setAddError("Không thể thêm thành viên. Vui lòng thử lại sau.");
+        }
       }
-    });
+    } catch (error: any) {
+      setAddError(error.message || "Có lỗi xảy ra khi thêm thành viên.");
+    } finally {
+      setAddLoading(false);
+    }
   };
 
-  const handleQuickAdd = () => {
+  // Xử lý thêm nhanh thành viên bằng Redux thunk
+  const handleQuickAdd = async () => {
     if (!canManageMembers) {
       toast.error('Bạn không có quyền thêm thành viên');
       return;
@@ -271,13 +209,82 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
     }
 
     setAddError(null);
-    addMember({
-      variables: {
+    setAddLoading(true);
+    
+    try {
+      // Gọi Redux thunk thay vì mutation trực tiếp
+      const resultAction = await dispatch(
+        addMemberByEmail({
         projectId,
         email: emailInput,
-        role: 'Viewer'
+          role: toBackendRole('Viewer' as MemberRole)
+        })
+      );
+      
+      // Kiểm tra kết quả action
+      if (addMemberByEmail.fulfilled.match(resultAction)) {
+        toast.success('Thành viên đã được thêm vào dự án thành công');
+        setEmailInput('');
+        // Không cần gọi refetch vì Redux store đã được cập nhật
+        // Component sẽ tự động cập nhật từ state
+      } else {
+        const errorMessage = resultAction.payload as string;
+        if (errorMessage.includes("User with this email not found")) {
+          setAddError("Email không tồn tại trong hệ thống.");
+        } else if (errorMessage.includes("User is already a member")) {
+          setAddError("Người dùng này đã là thành viên của dự án.");
+        } else {
+          setAddError("Không thể thêm thành viên. Vui lòng thử lại sau.");
+        }
       }
-    });
+    } catch (error: any) {
+      setAddError(error.message || "Có lỗi xảy ra khi thêm thành viên.");
+    } finally {
+      setAddLoading(false);
+    }
+  };
+
+  // Xử lý xóa thành viên bằng Redux thunk
+  const handleRemoveMember = async (userId: string) => {
+    if (!canManageMembers) {
+      toast.error('Bạn không có quyền xóa thành viên');
+      return;
+    }
+    
+    // Không cho phép xóa chính mình khỏi dự án
+    const currentUserId = localStorage.getItem('userId');
+    if (userId === currentUserId) {
+      toast.error('Bạn không thể xóa chính mình khỏi dự án');
+      return;
+    }
+    
+    if (confirm('Bạn có chắc chắn muốn xóa thành viên này?')) {
+      setRemoveLoading(true);
+      
+      try {
+        // Gọi Redux thunk thay vì mutation trực tiếp
+        const resultAction = await dispatch(
+          removeMember({
+            projectId,
+            userId
+          })
+        );
+        
+        // Kiểm tra kết quả action
+        if (removeMember.fulfilled.match(resultAction)) {
+          toast.success('Thành viên đã được xóa khỏi dự án');
+          // Không cần gọi refetch vì Redux đã cập nhật state
+          // UI sẽ tự động cập nhật nhờ useSelector và useEffect
+        } else {
+          const errorMessage = resultAction.payload as string;
+          toast.error(errorMessage || 'Không thể xóa thành viên');
+        }
+      } catch (error: any) {
+        toast.error(error.message || 'Có lỗi xảy ra khi xóa thành viên');
+      } finally {
+        setRemoveLoading(false);
+      }
+    }
   };
 
   // Xử lý khi người dùng thay đổi vai trò của thành viên
@@ -300,29 +307,6 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
           projectId,
           userId,
           role: toBackendRole(newRole) // Sử dụng hàm chuyển đổi
-        }
-      });
-    }
-  };
-
-  const handleRemoveMember = (userId: string) => {
-    if (!canManageMembers) {
-      toast.error('Bạn không có quyền xóa thành viên');
-      return;
-    }
-    
-    // Không cho phép xóa chính mình khỏi dự án
-    const currentUserId = localStorage.getItem('userId');
-    if (userId === currentUserId) {
-      toast.error('Bạn không thể xóa chính mình khỏi dự án');
-      return;
-    }
-    
-    if (confirm('Bạn có chắc chắn muốn xóa thành viên này?')) {
-      removeMember({
-        variables: {
-          projectId,
-          userId
         }
       });
     }
@@ -418,6 +402,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
         const newChanges = new Map(pendingChanges);
         newChanges.delete(userId);
         setPendingChanges(newChanges);
+        // UI sẽ tự động cập nhật từ redux state, không cần refetch
       }
     } catch (err) {
       console.error('Failed to update role:', err);
@@ -455,10 +440,8 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
         // Xóa tất cả pending changes
         setPendingChanges(new Map());
         
-        // Làm mới dữ liệu
-        if (refetch) {
-          refetch();
-        }
+        // Không cần refetch vì Redux đã cập nhật state
+        // UI sẽ tự động cập nhật dựa trên redux state
       }
     } catch (err) {
       console.error('Failed to update roles:', err);
@@ -500,8 +483,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
         // Thông báo thành công
         setSuccess('Đã cập nhật vai trò thành công');
         
-        // Làm mới dữ liệu nếu cần
-        if (refetch) refetch();
+        // UI sẽ tự động cập nhật từ redux state, không cần refetch
       }
     } catch (error) {
       console.error('Failed to update role:', error);
@@ -547,8 +529,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
         // Thông báo thành công
         setSuccess(`Đã cập nhật ${data.updateMultipleMembers.successCount} thành viên`);
         
-        // Làm mới dữ liệu nếu cần
-        if (refetch) refetch();
+        // Không cần refetch, UI sẽ tự động cập nhật từ redux state
       }
     } catch (error) {
       console.error('Failed to update roles:', error);

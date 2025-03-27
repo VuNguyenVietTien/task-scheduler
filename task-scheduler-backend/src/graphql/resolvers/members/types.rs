@@ -7,11 +7,11 @@ use serde;
 #[graphql(name = "ProjectMemberRole")]
 #[sqlx(type_name = "member_role", rename_all = "lowercase")]
 pub enum MemberRole {
-    #[graphql(name = "Admin")]
+    #[graphql(name = "admin")]
     Admin,
-    #[graphql(name = "Member")]
+    #[graphql(name = "member")]
     Member,
-    #[graphql(name = "Viewer")]
+    #[graphql(name = "viewer")]
     Viewer,
 }
 
