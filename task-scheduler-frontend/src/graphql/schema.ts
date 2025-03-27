@@ -2,9 +2,9 @@ import { gql } from '@apollo/client';
 
 export const typeDefs = gql`
   enum MemberRole {
-    Admin
-    Member
-    Viewer
+    admin
+    member
+    viewer
   }
 
   type ProjectMember {

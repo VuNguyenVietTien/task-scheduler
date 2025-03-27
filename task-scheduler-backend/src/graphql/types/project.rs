@@ -174,8 +174,11 @@ impl From<String> for ProjectStatus {
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]
 #[sqlx(rename_all = "lowercase", type_name = "member_role")]
 pub enum MemberRole {
+    #[graphql(name = "Admin")]
     Admin,
+    #[graphql(name = "Member")]
     Member,
+    #[graphql(name = "Viewer")]
     Viewer,
 }
 

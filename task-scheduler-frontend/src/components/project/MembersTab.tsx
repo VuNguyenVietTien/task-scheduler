@@ -57,6 +57,7 @@ import {
   REMOVE_MULTIPLE_PROJECT_MEMBERS
 } from '@/graphql/mutations/projectMembers';
 import { GET_PROJECT_TASKS } from '@/graphql/queries/projectMembers';
+import { toBackendRole, toFrontendRole } from '@/lib/utils';
 
 export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
   const pathname = usePathname();
@@ -133,19 +134,16 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
     if (selectedMembers.length === 0) return;
 
     try {
-      // Chuyển role sang chữ hoa đầu tiên
-      const capitalizedRole = bulkEditRole.charAt(0).toUpperCase() + bulkEditRole.slice(1).toLowerCase();
-      
       // Tạo danh sách updates chỉ với những thành viên được chọn
       const updates = selectedMembers.map(userId => ({
         userId,
-        role: capitalizedRole // Đảm bảo role có chữ cái đầu viết hoa
+        role: toBackendRole(bulkEditRole) // Sử dụng hàm toBackendRole để chuyển đổi sang định dạng backend
       }));
 
       // Chỉ cập nhật những thành viên có vai trò khác với hiện tại
       const changedUpdates = updates.filter(update => {
         const member = members.find(m => m.user.userId === update.userId);
-        return member && member.role !== update.role;
+        return member && toBackendRole(member.role) !== update.role; // So sánh sau khi đã chuyển đổi
       });
 
       // Nếu không có thay đổi, hiển thị thông báo và thoát
@@ -167,7 +165,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
       if (data?.updateMultipleMembers?.members) {
         const updatedMembers = data.updateMultipleMembers.members.map((member: any) => ({
           userId: member.user.userId,
-          role: member.role
+          role: toFrontendRole(member.role) // Chuyển đổi từ định dạng backend sang frontend
         }));
         
         dispatch(updateMultipleMemberRolesInStore(updatedMembers));
@@ -207,49 +205,72 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
     }
   };
 
-  // Thêm hàm để lưu tất cả thay đổi đang chờ
+  // Xử lý lưu các thay đổi tạm thời vào database
   const handleSaveBulkChanges = async () => {
-    if (Object.keys(pendingChanges).length === 0) return;
-
     try {
-      // Lưu số lượng thay đổi để hiển thị trong thông báo
-      const changeCount = Object.keys(pendingChanges).length;
-      
-      // Tạo mảng updates từ pendingChanges
-      const updates = Object.entries(pendingChanges).map(([userId, role]) => {
-        // Chuyển đổi role từ chữ thường sang chữ hoa đầu tiên
-        const capitalizedRole = role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
+      // Chuẩn bị dữ liệu theo đúng định dạng API cần
+      const updatedMembers = Object.entries(pendingChanges).map(([userId, role]) => {
         return {
-          userId: userId,
-          role: capitalizedRole // Đảm bảo role có chữ cái đầu viết hoa
+          userId,
+          role: toBackendRole(role)  // Chuyển đổi thành lowercase
         } as MemberRoleUpdate;
       });
-      
-      // Gọi mutation để cập nhật tất cả các role
+
+      // Gọi API để cập nhật
       const { data } = await updateMultipleMemberRoles({
         variables: {
           projectId,
-          updates
+          updates: updatedMembers
+        }
+      });
+
+      // Cập nhật Redux store từ kết quả API trả về
+      if (data?.updateMultipleMembers?.members) {
+        const processedMembers = data.updateMultipleMembers.members.map((member: any) => ({
+          userId: member.user.userId,
+          role: toFrontendRole(member.role)  // Chuyển đổi từ backend về frontend
+        }));
+        
+        dispatch(updateMultipleMemberRolesInStore(processedMembers));
+      }
+
+      // Xóa các thay đổi tạm thời sau khi đã lưu thành công
+      setPendingChanges({});
+      setHasPendingChanges(false);
+      
+      showNotification('success', `Đã cập nhật vai trò cho ${updatedMembers.length} thành viên`);
+    } catch (error) {
+      console.error('Error updating member roles:', error);
+      showNotification('error', 'Không thể cập nhật vai trò thành viên. Vui lòng thử lại.');
+    }
+  };
+
+  // Xử lý cập nhật vai trò của một thành viên
+  const handleUpdateMemberRole = async () => {
+    if (!selectedMember) return;
+    
+    try {
+      const { data } = await updateProjectMemberRole({
+        variables: {
+          projectId, 
+          userId: selectedMember.user.userId,
+          role: toBackendRole(selectedRole)  // Chuyển đổi role sang lowercase
         }
       });
       
       // Cập nhật Redux store
-      const updatedMembers = data.updateMultipleMembers.members.map((member: any) => ({
-        userId: member.user.userId,
-        role: member.role
-      }));
-      
-      dispatch(updateMultipleMemberRolesInStore(updatedMembers));
-
-      // Xóa tất cả pending changes
-      setPendingChanges({});
-      setHasPendingChanges(false);
-      
-      // Chỉ hiển thị một thông báo duy nhất
-      showNotification('success', `Đã cập nhật vai trò cho ${changeCount} thành viên`);
+      if (data && data.updateProjectMember) {
+        dispatch(updateMemberRoleInStore({
+          userId: selectedMember.user.userId,
+          role: toFrontendRole(data.updateProjectMember.role)  // Chuyển đổi từ backend về frontend
+        }));
+        
+        setOpenEditDialog(false);
+        showNotification('success', 'Cập nhật vai trò thành công');
+      }
     } catch (error) {
-      console.error('Error saving bulk changes:', error);
-      showNotification('error', 'Không thể lưu thay đổi. Vui lòng thử lại.');
+      console.error('Error updating member role:', error);
+      showNotification('error', 'Không thể cập nhật vai trò. Vui lòng thử lại.');
     }
   };
 
@@ -260,7 +281,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
           projectId,
           input: {
             email: newMemberEmail,
-            role: newMemberRole,
+            role: toBackendRole(newMemberRole),
           },
         },
         update: (cache, { data }) => {
@@ -276,7 +297,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
               data: {
                 projectTasks: existingTasks.projectTasks.map((task: Task) => ({
                   ...task,
-                  assignee: task.assignee_id === data.addProjectMember.userId ? data.addProjectMember.user : task.assignee,
+                  assignee: task.assignee?.userId === data.addProjectMember.userId ? data.addProjectMember.user : task.assignee,
                 })),
               },
             });
@@ -288,7 +309,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
       const newMember: Member = {
         memberId: `member-${data.addProjectMember.userId}`,
         userId: data.addProjectMember.userId,
-        role: data.addProjectMember.role,
+        role: toFrontendRole(data.addProjectMember.role),
         joinedAt: data.addProjectMember.joinedAt,
         user: {
           userId: data.addProjectMember.user.id,
@@ -313,44 +334,13 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
     }
   };
 
-  const handleUpdateRole = async () => {
-    if (!selectedMember) return;
-    try {
-      // Chuyển đổi role từ chữ thường sang chữ hoa đầu tiên
-      const capitalizedRole = selectedRole.charAt(0).toUpperCase() + selectedRole.slice(1).toLowerCase();
-      
-      // Sử dụng mutation mới
-      const { data } = await updateProjectMemberRole({
-        variables: {
-          projectId,
-          userId: selectedMember.user.userId,
-          role: capitalizedRole,
-        },
-      });
-      
-      if (data?.updateProjectMember) {
-        // Cập nhật Redux store trực tiếp 
-        dispatch(updateMemberRoleInStore({
-          userId: selectedMember.user.userId,
-          role: data.updateProjectMember.role
-        }));
-        
-      setOpenEditDialog(false);
-      setSelectedMember(null);
-        showNotification('success', 'Cập nhật vai trò thành công');
-      }
-    } catch (error) {
-      console.error('Error updating role:', error);
-      showNotification('error', 'Không thể cập nhật vai trò. Vui lòng thử lại.');
-    }
-  };
-
   const handleRemoveMember = async (memberId: string, userId: string) => {
     try {
+      // In GraphQL mutation vị trí biến là userId theo schema backend
       const { data } = await removeMember({
         variables: {
           projectId,
-          memberId,
+          userId, // Sử dụng userId thay vì memberId để phù hợp với schema backend
         },
         update: (cache) => {
           // Cập nhật cache cho danh sách task
@@ -365,7 +355,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
               data: {
                 projectTasks: existingTasks.projectTasks.map((task: Task) => ({
                   ...task,
-                  assignee: task.assignee_id === data.removeProjectMember ? null : task.assignee,
+                  assignee: task.assignee?.userId === userId ? null : task.assignee,
                 })),
               },
             });
@@ -373,11 +363,16 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
         },
       });
       
-      // Cập nhật Redux store trực tiếp
-      dispatch(removeMemberFromStore(userId));
-      showNotification('success', 'Xóa thành viên thành công');
+      // Kiểm tra kết quả
+      console.log('Remove member result:', data);
       
-      // Không cần fetch lại dữ liệu từ server vì đã cập nhật Redux store
+      // Cập nhật Redux store trực tiếp - chỉ khi API trả về thành công
+      if (data && data.removeProjectMember) {
+        dispatch(removeMemberFromStore(userId));
+        showNotification('success', 'Xóa thành viên thành công');
+      } else {
+        throw new Error('Không nhận được dữ liệu phản hồi từ API');
+      }
     } catch (error) {
       console.error('Error removing member:', error);
       showNotification('error', 'Không thể xóa thành viên. Vui lòng thử lại.');
@@ -695,7 +690,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
         <DialogActions>
           <Button onClick={() => setOpenEditDialog(false)} disabled={updatingProjectRole}>Hủy</Button>
           <Button 
-            onClick={handleUpdateRole} 
+            onClick={handleUpdateMemberRole} 
             variant="contained" 
             color="primary"
             disabled={updatingProjectRole}

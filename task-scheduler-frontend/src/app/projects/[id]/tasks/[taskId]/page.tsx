@@ -8,6 +8,8 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Spinner } from '@/components/ui/Spinner';
 import { useUpdateTask } from '@/hooks/useTasks';
+import { useAppDispatch, useAppSelector } from '@/redux/hooks';
+import { fetchProjectMembers } from '@/redux/features/membersSlice';
 
 // Import Apollo Client và GET_TASK_BY_ID query
 import { ApolloClient, InMemoryCache, createHttpLink, ApolloProvider, useLazyQuery, useQuery } from '@apollo/client';
@@ -41,6 +43,10 @@ export default function TaskDetailsPage() {
   // Thêm state cho project members
   const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
   const updateTaskHook = useUpdateTask();
+  const dispatch = useAppDispatch();
+  
+  // Lấy members từ Redux store
+  const { members: reduxMembers } = useAppSelector(state => state.members);
 
   // Setup Apollo Client lazy query cho task detail
   const [getTask, { loading: taskLoading, error: taskError, data: taskData }] = useLazyQuery(GET_TASK_BY_ID, {
@@ -126,7 +132,7 @@ export default function TaskDetailsPage() {
   });
 
   // Hàm để lấy danh sách thành viên dự án
-  const fetchProjectMembers = async () => {
+  const fetchProjectMembersData = async () => {
     try {
       // Sử dụng Apollo Client để gọi trực tiếp GraphQL query
       const { data } = await client.query({
@@ -150,10 +156,21 @@ export default function TaskDetailsPage() {
       // Fetch task details sử dụng Apollo Client
       getTask({ variables: { taskId } });
       
-      // Fetch project members
-      fetchProjectMembers();
+      // Fetch project members bằng hàm local
+      fetchProjectMembersData();
+      
+      // Dispatch action để load project members vào Redux store
+      dispatch(fetchProjectMembers(projectId));
     }
-  }, [projectId, taskId, getTask]);
+  }, [projectId, taskId, getTask, dispatch]);
+  
+  // Theo dõi thay đổi members từ Redux và cập nhật UI
+  useEffect(() => {
+    if (reduxMembers && reduxMembers.length > 0) {
+      // Cập nhật state local từ data Redux, với chuyển đổi type
+      fetchProjectMembersData(); // Gọi lại API thay vì cố gắng chuyển đổi kiểu dữ liệu
+    }
+  }, [reduxMembers]);
 
   const handleTaskUpdate = async (updates: Partial<Task>) => {
     try {
@@ -249,7 +266,7 @@ export default function TaskDetailsPage() {
         currentUser={user || undefined}
         isLoadingProp={loading}
         projectMembers={projectMembers}
-        hideTitleHeader={false}
+        refetchMembers={fetchProjectMembersData}
       />
     </div>
   );

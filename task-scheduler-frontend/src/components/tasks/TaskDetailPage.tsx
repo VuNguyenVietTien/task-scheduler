@@ -19,6 +19,7 @@ import { GET_PROJECT_TASKS } from '@/graphql/queries/tasks';
 import TaskDescriptionPanel from './description/TaskDescriptionPanel';
 import { AdvancedEditor } from '@/components/common/AdvancedEditor';
 import { imageService } from "@/services/imageService";
+import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 
 interface TaskDetailPageProps {
   task: Task;
@@ -38,6 +39,7 @@ interface TaskDetailPageProps {
     };
   }[];
   hideTitleHeader?: boolean;
+  refetchMembers?: () => void;
 }
 
 interface Comment {
@@ -75,7 +77,7 @@ interface CreateCommentData {
   createComment: TaskComment;
 }
 
-export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isLoadingProp = false, projectMembers, hideTitleHeader = false }: TaskDetailPageProps) {
+export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isLoadingProp = false, projectMembers, hideTitleHeader = false, refetchMembers }: TaskDetailPageProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -1152,6 +1154,17 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       window.removeEventListener('resize', calculateStickyPosition);
     };
   }, []);
+
+  // Sử dụng Redux để lắng nghe sự thay đổi của members
+  const { members: reduxMembers } = useAppSelector(state => state.members);
+  
+  // Theo dõi sự thay đổi trong Redux store để cập nhật UI
+  useEffect(() => {
+    if (reduxMembers && reduxMembers.length >= 0 && refetchMembers) {
+      // Khi danh sách members trong Redux thay đổi, gọi hàm refetchMembers
+      refetchMembers();
+    }
+  }, [reduxMembers, refetchMembers]);
 
   return (
     <div className="w-full space-y-8">

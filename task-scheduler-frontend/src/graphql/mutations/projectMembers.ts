@@ -75,8 +75,8 @@ export const UPDATE_MULTIPLE_MEMBER_ROLES = gql`
 `;
 
 export const REMOVE_PROJECT_MEMBER = gql`
-  mutation RemoveProjectMember($projectId: ID!, $memberId: ID!) {
-    removeProjectMember(projectId: $projectId, memberId: $memberId)
+  mutation RemoveProjectMember($projectId: ID!, $userId: ID!) {
+    removeProjectMember(projectId: $projectId, userId: $userId)
   }
 `;
 

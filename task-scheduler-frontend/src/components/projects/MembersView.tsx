@@ -11,6 +11,7 @@ import { toast } from 'sonner';
 import { MemberRole } from '@/types/members';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { updateMultipleMemberRolesInStore, updateMemberRoleInStore } from '@/redux/features/membersSlice';
+import { toBackendRole, toFrontendRole } from '@/lib/utils';
 
 // Định nghĩa các type cần thiết
 type Member = {
@@ -67,6 +68,8 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
   const [pendingChanges, setPendingChanges] = useState<Map<string, MemberRole>>(new Map());
   const [addError, setAddError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
+  const [success, setSuccess] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
   
   // Sử dụng Redux
   const dispatch = useAppDispatch();
@@ -277,6 +280,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
     });
   };
 
+  // Xử lý khi người dùng thay đổi vai trò của thành viên
   const handleRoleChange = (userId: string, newRole: MemberRole) => {
     if (!canManageMembers) {
       toast.error('Bạn không có quyền chỉnh sửa vai trò thành viên');
@@ -290,14 +294,12 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
       setPendingChanges(newChanges);
     } else {
       // In direct mode, apply change immediately
-      // Chuyển đổi role từ chữ thường sang chữ hoa đầu tiên
-      const capitalizedRole = newRole.charAt(0).toUpperCase() + newRole.slice(1).toLowerCase();
-      
+      // Chuyển đổi role sang lowercase cho backend
       updateRole({
         variables: {
           projectId,
           userId,
-          role: capitalizedRole
+          role: toBackendRole(newRole) // Sử dụng hàm chuyển đổi
         }
       });
     }
@@ -388,6 +390,172 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
   // Kiểm tra xem người dùng hiện tại có phải là chủ sở hữu dự án không
   const isCurrentUserProjectOwner = () => {
     return canManageMembers;
+  };
+
+  // Xử lý update role của member
+  const handleRoleUpdate = async (userId: string, newRole: MemberRole) => {
+    try {
+      const { data } = await updateRole({
+        variables: {
+          projectId,
+          userId,
+          role: toBackendRole(newRole) // Chuyển đổi sang lowercase trước khi gửi đi
+        },
+        onError: (error) => {
+          console.error('Error updating role:', error);
+          setError('Không thể cập nhật vai trò thành viên');
+        }
+      });
+
+      if (data) {
+        setSuccess('Cập nhật vai trò thành công');
+        // Cập nhật redux store
+        dispatch(updateMemberRoleInStore({
+          userId,
+          role: toFrontendRole(data.updateProjectMember.role) // Chuyển đổi về định dạng frontend
+        }));
+        // Khi cập nhật thành công, xóa khỏi pending changes
+        const newChanges = new Map(pendingChanges);
+        newChanges.delete(userId);
+        setPendingChanges(newChanges);
+      }
+    } catch (err) {
+      console.error('Failed to update role:', err);
+      setError('Có lỗi xảy ra khi cập nhật vai trò');
+    }
+  };
+
+  // Xử lý cập nhật hàng loạt
+  const handleBulkUpdate = async () => {
+    try {
+      // Chuyển các pendingChanges thành mảng updates
+      const updates = Array.from(pendingChanges).map(([userId, role]) => ({
+        userId,
+        role: toBackendRole(role) // Chuyển về lowercase
+      }));
+
+      const { data } = await updateMultipleRoles({
+        variables: {
+          projectId,
+          updates
+        }
+      });
+
+      if (data) {
+        setSuccess(`Đã cập nhật ${data.updateMultipleMembers.successCount} thành viên`);
+        
+        // Chuyển đổi dữ liệu từ API và đưa vào Redux
+        const updatedRoles = data.updateMultipleMembers.members.map((member: any) => ({
+          userId: member.user.userId,
+          role: toFrontendRole(member.role) // Chuyển từ backend về frontend
+        }));
+        
+        dispatch(updateMultipleMemberRolesInStore(updatedRoles));
+        
+        // Xóa tất cả pending changes
+        setPendingChanges(new Map());
+        
+        // Làm mới dữ liệu
+        if (refetch) {
+          refetch();
+        }
+      }
+    } catch (err) {
+      console.error('Failed to update roles:', err);
+      setError('Có lỗi xảy ra khi cập nhật vai trò hàng loạt');
+    }
+  };
+
+  // Xử lý lưu thay đổi vai trò của một thành viên
+  const handleSaveRoleChange = async (userId: string) => {
+    if (!canManageMembers) return;
+    
+    const newRole = pendingChanges.get(userId);
+    if (!newRole) return;
+    
+    try {
+      setUpdating(true);
+      
+      // Gọi mutation GraphQL để cập nhật vai trò
+      const { data } = await updateRole({
+        variables: {
+          projectId,
+          userId,
+          role: toBackendRole(newRole) // Chuyển đổi role thành lowercase
+        }
+      });
+      
+      if (data) {
+        // Cập nhật Redux store
+        dispatch(updateMemberRoleInStore({
+          userId,
+          role: toFrontendRole(data.updateProjectMember.role) // Chuyển đổi dữ liệu trả về
+        }));
+        
+        // Xóa khỏi pendingChanges
+        const newChanges = new Map(pendingChanges);
+        newChanges.delete(userId);
+        setPendingChanges(newChanges);
+        
+        // Thông báo thành công
+        setSuccess('Đã cập nhật vai trò thành công');
+        
+        // Làm mới dữ liệu nếu cần
+        if (refetch) refetch();
+      }
+    } catch (error) {
+      console.error('Failed to update role:', error);
+      setError('Có lỗi xảy ra khi cập nhật vai trò');
+    } finally {
+      setUpdating(false);
+    }
+  };
+
+  // Xử lý lưu tất cả thay đổi vai trò 
+  const handleSaveAllChanges = async () => {
+    if (!canManageMembers || pendingChanges.size === 0) return;
+    
+    try {
+      setUpdating(true);
+      
+      // Chuyển đổi từ Map thành mảng updates
+      const updates = Array.from(pendingChanges.entries()).map(([userId, role]) => ({
+        userId,
+        role: toBackendRole(role) // Chuyển đổi role thành lowercase
+      }));
+      
+      // Gọi mutation để cập nhật hàng loạt
+      const { data } = await updateMultipleRoles({
+        variables: {
+          projectId,
+          updates
+        }
+      });
+      
+      if (data) {
+        // Cập nhật Redux store
+        const processedUpdates = data.updateMultipleMembers.members.map((member: any) => ({
+          userId: member.user.userId,
+          role: toFrontendRole(member.role) // Chuyển đổi dữ liệu trả về
+        }));
+        
+        dispatch(updateMultipleMemberRolesInStore(processedUpdates));
+        
+        // Xóa tất cả pendingChanges
+        setPendingChanges(new Map());
+        
+        // Thông báo thành công
+        setSuccess(`Đã cập nhật ${data.updateMultipleMembers.successCount} thành viên`);
+        
+        // Làm mới dữ liệu nếu cần
+        if (refetch) refetch();
+      }
+    } catch (error) {
+      console.error('Failed to update roles:', error);
+      setError('Có lỗi xảy ra khi cập nhật vai trò');
+    } finally {
+      setUpdating(false);
+    }
   };
 
   return (

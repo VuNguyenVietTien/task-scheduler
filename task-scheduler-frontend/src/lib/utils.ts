@@ -2,6 +2,7 @@ import { format } from 'date-fns';
 import { type ClassValue, clsx } from "clsx"
 import { twMerge } from "tailwind-merge"
 import { MemberRole } from "@/types/project"
+import { MemberRole as MemberRoleType } from "@/types/members"
 
 // Trả về mảng các ngày từ startDate đến endDate (bao gồm cả 2 ngày này)
 export function getDatesBetween(startDate: Date, endDate: Date): Date[] {
@@ -114,3 +115,22 @@ export function getRoleIcon(role: MemberRole): string {
       return '👤';
   }
 }
+
+/**
+ * Chuyển đổi role từ frontend sang định dạng backend
+ * Frontend: 'Admin', 'Member', 'Viewer'
+ * Backend: 'admin', 'member', 'viewer'
+ */
+export const toBackendRole = (role: MemberRoleType): string => {
+  return role.toLowerCase();
+};
+
+/**
+ * Chuyển đổi role từ backend sang định dạng frontend
+ * Backend: 'admin', 'member', 'viewer'
+ * Frontend: 'Admin', 'Member', 'Viewer'
+ */
+export const toFrontendRole = (role: string): MemberRoleType => {
+  const capitalizedRole = role.charAt(0).toUpperCase() + role.slice(1);
+  return capitalizedRole as MemberRoleType;
+};
