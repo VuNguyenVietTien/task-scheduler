@@ -102,6 +102,7 @@ export function SortableTaskItem({
         ${getTaskStateClasses()}
         transition-all duration-200 ease-out transform-gpu
         will-change-transform
+        group
       `}
       data-task-id={task.task_id}
       data-status={task.status}
@@ -110,6 +111,7 @@ export function SortableTaskItem({
       data-is-over={isOver}
       data-drag-position={dragPosition}
       data-is-overlay={isDragOverlay}
+      aria-label={`Task: ${task.title} - Status: ${task.status} - Priority: ${task.priority}`}
     >
       <div className="p-3 relative">
         {/* Task Header */}
@@ -168,6 +170,7 @@ export function SortableTaskItem({
               absolute inset-y-0 left-0 w-1 bg-current opacity-0
               group-hover:opacity-100 transition-opacity duration-200
             `}
+            aria-hidden="true"
           />
         )}
 
@@ -181,6 +184,7 @@ export function SortableTaskItem({
               transition-opacity duration-200
               drop-spotlight
             "
+            aria-hidden="true"
           />
         )}
       </div>
@@ -196,6 +200,7 @@ export function SortableTaskItem({
             }
             transition-opacity duration-200
           `}
+          aria-hidden="true"
         />
       )}
     </div>

@@ -1,7 +1,7 @@
 'use client';
 
 import { Task, TaskStatus } from '@/types/task';
-import { useDroppable } from '@dnd-kit/core';
+import { useDroppable, UniqueIdentifier } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { SortableTaskItem } from './SortableTaskItem';
 import { useMemo } from 'react';
@@ -10,8 +10,8 @@ interface DroppableColumnProps {
   id: TaskStatus;
   title: string;
   tasks: Task[];
-  activeId: string | null;
-  overId: string | null;
+  activeId: UniqueIdentifier | null;
+  overId: UniqueIdentifier | null;
 }
 
 const getColumnColor = (status: TaskStatus, isOver: boolean) => {
@@ -77,20 +77,20 @@ export function DroppableColumn({
     [sortedTasks]
   );
 
-  // Helper to determine if a task is being dragged
+  // Helper để xác định nếu một task đang được kéo
   const isTaskActive = (taskId: string) => activeId === taskId;
   
-  // Helper to determine if we're dragging over a specific task
+  // Helper để xác định nếu đang kéo qua một task cụ thể
   const isTaskTarget = (taskId: string) => overId === taskId;
   
-  // Helper to find task index in sorted array
+  // Helper để tìm vị trí task trong mảng đã sắp xếp
   const getTaskIndex = (taskId: string) => sortedTasks.findIndex(t => t.task_id === taskId);
   
-  // Helper to determine position relative to active item
+  // Helper để xác định vị trí tương đối so với mục đang kéo
   const getTaskPosition = (taskId: string) => {
     if (!activeId || activeId === taskId) return 'self';
     
-    const activeIndex = getTaskIndex(activeId as string);
+    const activeIndex = getTaskIndex(String(activeId));
     const currentIndex = getTaskIndex(taskId);
     
     if (activeIndex === -1 || currentIndex === -1) return 'none';
@@ -118,6 +118,7 @@ export function DroppableColumn({
       data-status={id}
       data-is-column-target={isColumnTarget ? 'true' : 'false'}
       data-has-active-task={isColumnActive ? 'true' : 'false'}
+      aria-label={`Column ${title} - ${tasks.length} tasks`}
     >
       {/* Column Header */}
       <div className={`
@@ -170,6 +171,7 @@ export function DroppableColumn({
                   : 'border-slate-200 text-slate-400'
               }
             `}
+            aria-label="Empty column"
           >
             {isDraggingOver 
               ? 'Drop here'
@@ -197,6 +199,7 @@ export function DroppableColumn({
                     transition-all duration-300 ease-in-out transform-gpu
                     ${active ? 'scale-100 opacity-100' : 'scale-95 opacity-0'}
                   `}
+                  aria-hidden="true"
                 />
               )}
 
