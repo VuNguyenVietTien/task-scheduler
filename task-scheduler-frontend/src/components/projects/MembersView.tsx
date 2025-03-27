@@ -13,9 +13,11 @@ import {
   updateMultipleMemberRolesInStore, 
   updateMemberRoleInStore,
   addMemberByEmail,
-  removeMember 
+  removeMember,
+  updateMultipleProjectMemberRoles
 } from '@/redux/features/membersSlice';
 import { toBackendRole, toFrontendRole } from '@/lib/utils';
+import { RootState } from '@/redux/store';
 
 // Định nghĩa các type cần thiết
 type Member = {
@@ -77,37 +79,45 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
   
   // Sử dụng Redux
   const dispatch = useAppDispatch();
-  const storeMembers = useAppSelector(state => state.members.members);
+  // Đăng ký theo dõi thay đổi từ Redux store
+  const membersState = useAppSelector((state: RootState) => state.members);
+  const { members: storeMembers, loading, error: storeError } = membersState;
   
   // State để lưu giá trị members hiển thị trên UI
   const [displayMembers, setDisplayMembers] = useState<Member[]>(propMembers);
-  
-  // Theo dõi thay đổi từ cả props và redux store
+
+  // Khởi tạo displayMembers ban đầu từ propMembers
   useEffect(() => {
     if (propMembers && propMembers.length > 0) {
       setDisplayMembers(propMembers);
     }
-  }, [propMembers]);
+  }, []); // Chỉ chạy một lần khi component mount
   
-  // Theo dõi thay đổi từ Redux store
+  // Hook theo dõi thay đổi từ Redux store
   useEffect(() => {
     if (storeMembers && storeMembers.length > 0) {
-      // Cập nhật từ Redux store nếu có dữ liệu mới
-      const updatedMembers = propMembers.map(propMember => {
-        // Tìm thành viên tương ứng trong Redux store
-        const storeMember = storeMembers.find(m => m.user.userId === propMember.user.userId);
-        if (storeMember) {
-          // Nếu tìm thấy, cập nhật vai trò từ store
-          return {
-            ...propMember,
-            role: storeMember.role
-          };
+      console.log('Members state changed:', storeMembers);
+      setDisplayMembers(storeMembers.map(storeMember => ({
+        role: storeMember.role,
+        joinedAt: storeMember.joinedAt,
+        user: {
+          userId: storeMember.user.userId,
+          email: storeMember.user.email,
+          fullName: storeMember.user.fullName || '', // Đảm bảo không null
+          username: storeMember.user.username,
+          avatarUrl: storeMember.user.avatarUrl || '' // Đảm bảo không null
         }
-        return propMember;
-      });
-      setDisplayMembers(updatedMembers);
+      })));
+      console.log('Updated displayMembers with store data');
     }
-  }, [storeMembers, propMembers]);
+  }, [storeMembers]); // Chỉ theo dõi storeMembers thay vì toàn bộ membersState
+
+  // Hiển thị thông báo lỗi nếu có
+  useEffect(() => {
+    if (storeError) {
+      toast.error(storeError);
+    }
+  }, [storeError]);
 
   // Kiểm tra quyền dựa trên vai trò trong dự án
   const canManageMembers = String(currentUserRole).toLowerCase() === 'admin';
@@ -313,32 +323,54 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
   };
 
   const handleSaveChanges = async () => {
+    if (!canManageMembers || pendingChanges.size === 0) return;
+    
     try {
       setUpdating(true);
       
-      // Tạo mảng updates từ những thay đổi chưa lưu
-      const updates = Array.from(pendingChanges).map(([userId, role]) => {
-        // Chuyển đổi role từ chữ thường sang chữ hoa đầu tiên
-        const capitalizedRole = role.charAt(0).toUpperCase() + role.slice(1).toLowerCase();
+      // Chuyển đổi từ Map thành mảng updates
+      const updates = Array.from(pendingChanges.entries()).map(([userId, role]) => {
+        // Tìm thông tin member từ displayMembers
+        const member = displayMembers.find(m => m.user.userId === userId);
+        if (!member) {
+          throw new Error(`Không tìm thấy thông tin thành viên với userId: ${userId}`);
+        }
+        
         return {
           userId: userId,
-          role: capitalizedRole // Đảm bảo role có chữ cái đầu viết hoa
+          role: toBackendRole(role) // Chuyển đổi role thành lowercase
         };
       });
 
-      // Gọi API cập nhật vai trò
-      const { data } = await updateMultipleRoles({
-        variables: {
+      console.log('Updates being sent:', updates); // Debug log
+      
+      // Dispatch async thunk để cập nhật vai trò
+      const resultAction = await dispatch(
+        updateMultipleProjectMemberRoles({
           projectId,
           updates
-        }
-      });
+        })
+      );
       
-      // Cập nhật UI hiện tại. Không cần lấy lại dữ liệu từ server vì đã được cập nhật trong onCompleted
-      setUpdating(false);
-    } catch (error) {
-      console.error('Lỗi khi cập nhật vai trò:', error);
-      toast.error('Không thể cập nhật vai trò thành viên. Vui lòng thử lại sau!');
+      // Kiểm tra kết quả action
+      if (updateMultipleProjectMemberRoles.fulfilled.match(resultAction)) {
+        // Thông báo thành công
+        toast.success(`Đã cập nhật ${resultAction.payload.successCount} thành viên`);
+        
+        // Xóa tất cả pendingChanges vì đã cập nhật thành công
+        setPendingChanges(new Map());
+        
+        // Tắt chế độ edit
+        setEditMode(false);
+      } else {
+        // Xử lý lỗi nếu có
+        const errorMessage = resultAction.payload as string;
+        toast.error(errorMessage || 'Không thể cập nhật vai trò thành viên');
+      }
+    } catch (error: any) {
+      console.error('Failed to update roles:', error);
+      toast.error('Có lỗi xảy ra khi cập nhật vai trò');
+    } finally {
       setUpdating(false);
     }
   };

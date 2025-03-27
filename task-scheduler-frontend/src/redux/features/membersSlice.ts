@@ -267,6 +267,8 @@ export const updateMultipleProjectMemberRoles = createAsyncThunk(
     updates: { userId: string, role: string }[] 
   }, { rejectWithValue }) => {
     try {
+      console.log('Sending updates to API:', updates); // Debug log
+      
       const response = await client.mutate({
         mutation: UPDATE_MULTIPLE_MEMBER_ROLES,
         variables: { 
@@ -282,11 +284,17 @@ export const updateMultipleProjectMemberRoles = createAsyncThunk(
       // Lấy thông tin từ response
       const result = response.data.updateMultipleMembers;
       
-      // Chuyển đổi dữ liệu từ response
-      const updatedMembers = result.members.map((member: any) => ({
-        userId: member.user.userId,
-        role: toFrontendRole(member.role)
+      console.log('API Response:', result); // Debug log
+      
+      // Chuyển đổi dữ liệu từ response, giữ nguyên cấu trúc như updates gửi đi
+      const updatedMembers = updates.map(update => ({
+        userId: update.userId,
+        role: toFrontendRole(
+          result.members.find((m: any) => m.user.userId === update.userId)?.role || update.role
+        )
       }));
+      
+      console.log('Processed updates for store:', updatedMembers); // Debug log
       
       // Trả về kết quả để cập nhật store
       return {
@@ -386,15 +394,17 @@ export const membersSlice = createSlice({
         state.members = state.members.filter(member => !memberIds.includes(member.userId));
       })
       .addCase(updateMultipleMemberRoles.fulfilled, (state, action) => {
-        const updatedMembers = action.payload.members;
+        state.loading = false;
+        const { members: updatedMembers } = action.payload;
         
-        updatedMembers.forEach((updated: { user: { userId: string }, role: MemberRole }) => {
-          const memberIndex = state.members.findIndex(
-            member => member.userId === updated.user.userId
-          );
+        console.log('Updating store with:', updatedMembers); // Debug log
+        
+        updatedMembers.forEach((update: { userId: string, role: MemberRole }) => {
+          const memberIndex = state.members.findIndex(member => member.userId === update.userId);
           
           if (memberIndex !== -1) {
-            state.members[memberIndex].role = updated.role;
+            console.log(`Updating member ${update.userId} role to ${update.role}`); // Debug log
+            state.members[memberIndex].role = update.role;
           }
         });
       })
@@ -436,11 +446,16 @@ export const membersSlice = createSlice({
         state.loading = false;
         const { members } = action.payload;
         
+        console.log('Updating store with:', members); // Debug log
+        
         members.forEach((update: { userId: string, role: MemberRole }) => {
-          const memberIndex = state.members.findIndex(member => member.userId === update.userId);
+          const memberIndex = state.members.findIndex(member => member.user.userId === update.userId);
           
           if (memberIndex !== -1) {
+            console.log(`Updating member ${update.userId} role to ${update.role}`); // Debug log
             state.members[memberIndex].role = update.role;
+          } else {
+            console.log(`Member not found for userId: ${update.userId}`); // Debug log
           }
         });
       })
