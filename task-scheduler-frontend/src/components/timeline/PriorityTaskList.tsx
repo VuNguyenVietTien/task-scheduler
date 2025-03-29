@@ -87,7 +87,7 @@ function SortableTaskItem({ task, onClick }: {
         {task.title}
       </div>
       <div className="ml-2 text-xs text-slate-500 flex-shrink-0">
-        #{task.priority_order}
+        {task.priority}
       </div>
     </div>
   );
@@ -95,6 +95,7 @@ function SortableTaskItem({ task, onClick }: {
 
 export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: PriorityTaskListProps) {
   const [activeTasks, setActiveTasks] = useState<Task[]>([]);
+  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   
   // Sensors cho DnD
   const sensors = useSensors(
@@ -110,9 +111,24 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
 
   useEffect(() => {
     // Lọc và sắp xếp tasks
+    const priorityValue: Record<string, number> = {
+      'urgent': 1,  // Giữ giá trị 0 cho 'urgent' để đảm bảo nó luôn được ưu tiên cao nhất
+      'high': 2,
+      'medium': 3,
+      'low': 4
+    };
+    
     const filteredTasks = tasks
       .filter(task => task.status !== 'done')
-      .sort((a, b) => a.priority_order - b.priority_order);
+      .sort((a, b) => {
+        // Lấy priority của task, mặc định là 'medium' nếu không có
+        const priorityA = a.priority?.toLowerCase() || 'medium';
+        const priorityB = b.priority?.toLowerCase() || 'medium';
+        
+        // Sắp xếp theo priority
+        return (priorityValue[priorityA as keyof typeof priorityValue] || 2) - 
+               (priorityValue[priorityB as keyof typeof priorityValue] || 2);
+      });
     
     setActiveTasks(filteredTasks);
   }, [tasks]);
@@ -157,7 +173,7 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
               items={activeTasks.map(t => t.task_id)}
               strategy={verticalListSortingStrategy}
             >
-              {activeTasks.map((task) => (
+              {activeTasks.map((task, index) => (
                 <SortableTaskItem
                   key={task.task_id}
                   task={task}

@@ -5,15 +5,9 @@ import { usePathname } from "next/navigation";
 import Layout from "@/components/ui/navigation/Layout";
 import { Toaster } from "sonner";
 import "./globals.css";
-import dynamic from "next/dynamic";
+import { ClientProviders } from "@/providers/ClientProviders";
 
 const inter = Inter({ subsets: ["latin"] });
-
-// Sử dụng dynamic import cho các providers để tránh SSR
-const ClientProviders = dynamic(
-  () => import('@/providers/ClientProviders').then(mod => mod.ClientProviders),
-  { ssr: false }
-);
 
 export default function RootLayout({
   children,

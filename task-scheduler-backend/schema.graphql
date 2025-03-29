@@ -147,6 +147,21 @@ type Query {
   Get count of unread notifications
   """
   unreadNotificationCount: Int!
+  
+  """
+  Get plans for a project
+  """
+  getProjectPlans(project_id: String!): [Plan!]!
+  
+  """
+  Get the latest plan for a project
+  """
+  getLatestProjectPlan(project_id: String!): Plan
+  
+  """
+  Get a specific plan by ID
+  """
+  getPlan(id: String!): Plan
 }
 
 # Mutations
@@ -268,6 +283,26 @@ type Mutation {
   Reorder multiple tasks at once
   """
   reorderTasks(input: ReorderTasksInput!): [Task!]!
+  
+  """
+  Create a new plan
+  """
+  createPlan(input: CreatePlanInput!): Plan!
+  
+  """
+  Update an existing plan
+  """
+  updatePlan(input: UpdatePlanInput!): Plan!
+  
+  """
+  Delete a plan
+  """
+  deletePlan(id: String!): Boolean!
+  
+  """
+  Set a plan as active
+  """
+  setPlanActive(id: String!): Plan!
 }
 
 # Types
@@ -388,6 +423,48 @@ type AuthPayload {
   user: User!
 }
 
+"""
+Plan for Gantt chart task ordering
+"""
+type Plan {
+  id: String!
+  project_id: String!
+  name: String!
+  description: String
+  created_by: String!
+  created_at: DateTime!
+  updated_at: DateTime!
+  is_active: Boolean!
+  plan_data: PlanData!
+}
+
+"""
+Data structure for plan
+"""
+type PlanData {
+  tasks: [PlanTaskData!]!
+  metadata: PlanMetadata
+}
+
+"""
+Task data for plan
+"""
+type PlanTaskData {
+  task_id: String!
+  priority_order: Int!
+  original_priority: String
+  start_date: DateTime
+  end_date: DateTime
+}
+
+"""
+Metadata for plan
+"""
+type PlanMetadata {
+  last_sorted_date: DateTime
+  sort_criteria: String
+}
+
 # Input Types
 
 input RegisterInput {
@@ -472,6 +549,54 @@ Input for specifying task order
 input TaskOrderInput {
   taskId: ID!
   priorityOrder: Int!
+}
+
+"""
+Input for creating a plan
+"""
+input CreatePlanInput {
+  project_id: String!
+  name: String!
+  description: String
+  plan_data: CreatePlanDataInput!
+}
+
+"""
+Input for updating a plan
+"""
+input UpdatePlanInput {
+  id: String!
+  name: String
+  description: String
+  is_active: Boolean
+  plan_data: CreatePlanDataInput
+}
+
+"""
+Input for plan data
+"""
+input CreatePlanDataInput {
+  tasks: [CreatePlanTaskDataInput!]!
+  metadata: CreatePlanMetadataInput
+}
+
+"""
+Input for plan task data
+"""
+input CreatePlanTaskDataInput {
+  task_id: String!
+  priority_order: Int!
+  original_priority: String
+  start_date: DateTime
+  end_date: DateTime
+}
+
+"""
+Input for plan metadata
+"""
+input CreatePlanMetadataInput {
+  last_sorted_date: DateTime
+  sort_criteria: String
 }
 
 # Scalars
