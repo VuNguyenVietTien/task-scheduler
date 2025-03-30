@@ -175,7 +175,6 @@ const findNextAvailableStartDate = (
 export function Timeline({ tasks, isLoading = false, onTaskClick, users }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const ganttContentRef = useRef<HTMLDivElement>(null);
-  const dateHeadersRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [planName, setPlanName] = useState<string>('');
   const [showSavePlanDialog, setShowSavePlanDialog] = useState(false);
@@ -928,29 +927,6 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     setShowSavePlanDialog(true);
   };
 
-  // useEffect để đồng bộ scroll ngang giữa grid và header ngày
-  useEffect(() => {
-    const ganttContent = ganttContentRef.current;
-    const dateHeaders = dateHeadersRef.current;
-    
-    if (!ganttContent || !dateHeaders) return;
-    
-    const syncScrollFromGridToHeader = () => {
-      if (dateHeaders) {
-        dateHeaders.scrollLeft = ganttContent.scrollLeft;
-      }
-    };
-    
-    ganttContent.addEventListener('scroll', syncScrollFromGridToHeader);
-    
-    // Gọi hàm này một lần ngay sau khi component mount để đồng bộ ban đầu
-    syncScrollFromGridToHeader();
-    
-    return () => {
-      ganttContent.removeEventListener('scroll', syncScrollFromGridToHeader);
-    };
-  }, []);
-
   if (tasks.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 bg-white rounded-lg border border-slate-200">
@@ -1125,14 +1101,13 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
 
           {/* Gantt Chart - Cấu trúc mới với sticky headers */}
           <div className="flex-1 flex flex-col overflow-hidden" ref={containerRef}>
-            {/* Container chứa cả headers và grid - chỉ grid scroll được */}
-            <div className="relative flex-1">
-              {/* Header cố định phía trên */}
-              <div className="sticky top-0 z-20 bg-white border-b border-slate-200" style={{ width: '100%' }}>
-                <div className="overflow-hidden">
-                  <div className="flex date-headers" ref={dateHeadersRef} style={{ 
+            {/* Container chứa cả headers và grid - Sửa lại cấu trúc để header và nội dung scroll đồng bộ */}
+            <div className="relative flex-1 overflow-x-auto" ref={ganttContentRef}>
+              <div style={{ width: `${days.length * dayWidth}px`, minWidth: '100%' }}>
+                {/* Header phía trên */}
+                <div className="sticky top-0 z-20 bg-white border-b border-slate-200">
+                  <div className="flex date-headers" style={{ 
                     height: '40px',
-                    width: `${days.length * dayWidth}px` 
                   }}>
                     {days.map((day: Date, index: number) => {
                       const isToday = isSameDay(day, today);
@@ -1164,124 +1139,122 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                     })}
                   </div>
                 </div>
-              </div>
 
-              {/* Phần grid và task bars - có thể scroll ngang */}
-              <div 
-                className="overflow-x-auto"
-                ref={ganttContentRef}
-                style={{ 
-                  height: `${Math.max(10, orderedTasks.length) * rowHeight}px`, 
-                  minHeight: '480px'
-                }}
-              >
-                <div
+                {/* Phần grid và task bars */}
+                <div 
                   style={{ 
-                    width: `${days.length * dayWidth}px`,
-                    height: '100%'
+                    height: `${Math.max(10, orderedTasks.length) * rowHeight}px`, 
+                    minHeight: '480px'
                   }}
-                  className="relative bg-white"
                 >
-                  {/* Grid Container */}
-                  <div className="relative h-full">
-                    {/* Columns for days - highlight background first */}
-                    <div 
-                      className="absolute inset-0 grid"
-                      style={{
-                        gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
-                        height: '100%',
-                        zIndex: 5
-                      }}
-                    >
-                      {days.map((day: Date, index: number) => {
-                        const isToday = isSameDay(day, today);
-                        const isWeekendDay = isWeekend(day);
+                  <div
+                    style={{ 
+                      width: `${days.length * dayWidth}px`,
+                      height: '100%'
+                    }}
+                    className="relative bg-white"
+                  >
+                    {/* Grid Container */}
+                    <div className="relative h-full">
+                      {/* Columns for days - highlight background first */}
+                      <div 
+                        className="absolute inset-0 grid"
+                        style={{
+                          gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
+                          height: '100%',
+                          zIndex: 5
+                        }}
+                      >
+                        {days.map((day: Date, index: number) => {
+                          const isToday = isSameDay(day, today);
+                          const isWeekendDay = isWeekend(day);
+                          
+                          return (
+                            <div
+                              key={`column-${day.toISOString()}`}
+                              className={`
+                                ${isWeekendDay ? 'bg-slate-100' : ''}
+                                ${isToday ? 'bg-yellow-100' : ''}
+                              `}
+                            />
+                          );
+                        })}
+                      </div>
+                      
+                      {/* Grid lines on top of the background */}
+                      <div 
+                        className="grid relative"
+                        style={{
+                          gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
+                          gridTemplateRows: `repeat(${Math.max(10, orderedTasks.length)}, ${rowHeight}px)`,
+                          gridAutoFlow: 'row',
+                          height: '100%',
+                          zIndex: 10
+                        }}
+                      >
+                        {Array.from({ length: days.length * Math.max(10, orderedTasks.length) }).map((_, index) => (
+                          <div
+                            key={`grid-cell-${index}`}
+                            className="border-r border-b border-slate-200 relative"
+                          />
+                        ))}
+                      </div>
+                      
+                      {/* Task Bars */}
+                      {filteredTasks.map((task: Task, rowIndex: number) => {
+                        if (!task.start_date) {
+                          return null;
+                        }
+
+                        const taskStartDate = new Date(task.start_date);
+                        const taskEndDate = task.due_date 
+                          ? new Date(task.due_date)
+                          : calculateTaskSchedule(taskStartDate, task.effort || 0).endDate;
+
+                        // Tính tổng số ngày (kể cả ngày nghỉ) giữa start_date và end_date
+                        const startDayIndex = days.findIndex(day => isSameDay(day, taskStartDate));
+                        const endDayIndex = days.findIndex(day => isSameDay(day, taskEndDate));
                         
+                        // Nếu không tìm thấy ngày trong timeline, bỏ qua task này
+                        if (startDayIndex === -1) return null;
+                        
+                        // Tính số ngày hiển thị (bao gồm cả ngày cuối tuần)
+                        // Nếu không tìm thấy ngày kết thúc trong timeline, hiển thị đến hết ngày cuối cùng của timeline
+                        const totalDays = endDayIndex === -1
+                          ? days.length - startDayIndex
+                          : endDayIndex - startDayIndex + 1;
+                        
+                        // Đảm bảo task luôn có ít nhất 1 ngày hiển thị
+                        const displayDays = Math.max(1, totalDays);
+
                         return (
                           <div
-                            key={`column-${day.toISOString()}`}
-                            className={`
-                              ${isWeekendDay ? 'bg-slate-100' : ''}
-                              ${isToday ? 'bg-yellow-100' : ''}
-                            `}
-                          />
+                            key={task.task_id}
+                            style={{
+                              position: 'absolute',
+                              left: `${startDayIndex * dayWidth}px`,
+                              top: `${rowIndex * rowHeight}px`,
+                              width: `${displayDays * dayWidth}px`,
+                              height: `${rowHeight}px`,
+                              zIndex: 30,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'flex-start',
+                              padding: '0 4px'
+                            }}
+                          >
+                            <TaskBar
+                              task={task}
+                              width={displayDays * dayWidth - 8}
+                              x={0}
+                              y={0}
+                              height={36}
+                              onClick={onTaskClick}
+                            />
+                          </div>
                         );
                       })}
                     </div>
-                    
-                    {/* Grid lines on top of the background */}
-                    <div 
-                      className="grid relative"
-                      style={{
-                        gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
-                        gridTemplateRows: `repeat(${Math.max(10, orderedTasks.length)}, ${rowHeight}px)`,
-                        gridAutoFlow: 'row',
-                        height: '100%',
-                        zIndex: 10
-                      }}
-                    >
-                      {Array.from({ length: days.length * Math.max(10, orderedTasks.length) }).map((_, index) => (
-                        <div
-                          key={`grid-cell-${index}`}
-                          className="border-r border-b border-slate-200 relative"
-                        />
-                      ))}
-                    </div>
-                    
-                    {/* Task Bars */}
-                    {filteredTasks.map((task: Task, rowIndex: number) => {
-                      if (!task.start_date) {
-                        return null;
-                      }
-
-                      const taskStartDate = new Date(task.start_date);
-                      const taskEndDate = task.due_date 
-                        ? new Date(task.due_date)
-                        : calculateTaskSchedule(taskStartDate, task.effort || 0).endDate;
-
-                      // Tính tổng số ngày (kể cả ngày nghỉ) giữa start_date và end_date
-                      const startDayIndex = days.findIndex(day => isSameDay(day, taskStartDate));
-                      const endDayIndex = days.findIndex(day => isSameDay(day, taskEndDate));
-                      
-                      // Nếu không tìm thấy ngày trong timeline, bỏ qua task này
-                      if (startDayIndex === -1) return null;
-                      
-                      // Tính số ngày hiển thị (bao gồm cả ngày cuối tuần)
-                      // Nếu không tìm thấy ngày kết thúc trong timeline, hiển thị đến hết ngày cuối cùng của timeline
-                      const totalDays = endDayIndex === -1
-                        ? days.length - startDayIndex
-                        : endDayIndex - startDayIndex + 1;
-                      
-                      // Đảm bảo task luôn có ít nhất 1 ngày hiển thị
-                      const displayDays = Math.max(1, totalDays);
-
-                      return (
-                        <div
-                          key={task.task_id}
-                          style={{
-                            position: 'absolute',
-                            left: `${startDayIndex * dayWidth}px`,
-                            top: `${rowIndex * rowHeight}px`,
-                            width: `${displayDays * dayWidth}px`,
-                            height: `${rowHeight}px`,
-                            zIndex: 30,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'flex-start',
-                            padding: '0 4px'
-                          }}
-                        >
-                          <TaskBar
-                            task={task}
-                            width={displayDays * dayWidth - 8}
-                            x={0}
-                            y={0}
-                            height={36}
-                            onClick={onTaskClick}
-                          />
-                        </div>
-                      );
-                    })}
                   </div>
                 </div>
               </div>
