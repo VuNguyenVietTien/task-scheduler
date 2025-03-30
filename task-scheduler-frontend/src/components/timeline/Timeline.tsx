@@ -132,7 +132,7 @@ const calculateTaskSchedule = (
       continue;
     }
     
-    // Tính số giờ có thể làm trong ngày này
+    // Tính toán số giờ làm việc trong ngày này (tối đa 8h/ngày)
     const hoursForThisDay = Math.min(remainingEffort, remainingHoursInDay);
     
     // Lưu số giờ task chiếm trong ngày
@@ -399,213 +399,302 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     return <TimelineSkeleton rows={Math.min(tasks.length || 5, 10)} />;
   }
 
-  const processTasks = (inputTasks: Task[]): Task[] => {
-    // Lọc bỏ tasks đã hoàn thành (status = done)
-    const activeTasks = inputTasks.filter(task => task.status !== 'done');
-    
-    // Sắp xếp tasks theo priority khi không có active plan
-    // Thứ tự ưu tiên: urgent > high > medium > low
+  // Đưa hàm processTasks vào useCallback để tránh tạo instance mới mỗi khi render
+  const processTasks = useCallback((inputTasks: Task[], keepOrder: boolean = false): Task[] => {
+    console.log('Xử lý các task:', inputTasks);
+    const taskMap = new Map<string, number>(); // userId -> lastEndTime
+    let completedTasks: Task[] = [];
+    let activeTasks: Task[] = [];
+
+    // Lọc các task đã hoàn thành và chưa hoàn thành
+    inputTasks.forEach(task => {
+      if (task.status === 'done') {
+        completedTasks.push(task);
+      } else {
+        activeTasks.push(task);
+      }
+    });
+
     let sortedTasks: Task[] = [];
-    
-    if (activePlan) {
+
+    // Nếu keepOrder=true, giữ nguyên thứ tự do người dùng kéo thả 
+    if (keepOrder) {
+      sortedTasks = [...activeTasks];
+      console.log('Giữ nguyên thứ tự kéo thả của người dùng');
+    } else if (activePlan) {
       // Nếu có active plan, sắp xếp theo priority_order
       sortedTasks = [...activeTasks].sort((a, b) => a.priority_order - b.priority_order);
     } else {
-      // Nếu không có active plan, sắp xếp theo priority
-      const priorityOrder: Record<string, number> = {
-        urgent: 1,  // Giá trị nhỏ nhất - ưu tiên cao nhất
-        high: 2,
-        medium: 3,
-        low: 4
-      };
-      
+      // Sắp xếp các task chưa hoàn thành theo priority
       sortedTasks = [...activeTasks].sort((a, b) => {
-        const priorityA = priorityOrder[a.priority?.toLowerCase() || 'medium'] || 3;
-        const priorityB = priorityOrder[b.priority?.toLowerCase() || 'medium'] || 3;
-        return priorityA - priorityB;
+        // Sắp xếp theo priority
+        const priorityOrder: Record<string, number> = {
+          urgent: 1,  // Ưu tiên cao nhất
+          high: 2,
+          medium: 3,
+          low: 4
+        };
+
+        const aPriority = priorityOrder[a.priority?.toLowerCase() || 'medium'] || 3;
+        const bPriority = priorityOrder[b.priority?.toLowerCase() || 'medium'] || 3;
+
+        return aPriority - bPriority;
       });
     }
-    
-    const currentDate = getCurrentDateVN();
-    console.log('Ngày hiện tại (VN):', formatDateVN(currentDate), currentDate);
-    
-    // Theo dõi thời gian làm việc còn lại cho mỗi ngày và mỗi người dùng
-    const scheduleByUser: Record<string, WorkSchedule> = {};
-    
-    // Theo dõi thời gian kết thúc cho mỗi task
-    const taskSchedules: Record<string, { 
-      start: Date, 
-      end: Date, 
-      hoursPerDay: Record<string, number> 
-    }> = {};
-    
-    // Process tasks sequentially to handle dependencies correctly
-    const result = [];
-    
-    for (let i = 0; i < sortedTasks.length; i++) {
-      const task = sortedTasks[i];
-      const assigneeId = task.assignee?.userId || 'unassigned';
-      let updatedTask = { ...task };
       
-      // Khởi tạo lịch làm việc cho người dùng nếu chưa có
-      if (!scheduleByUser[assigneeId]) {
-        scheduleByUser[assigneeId] = {};
-      }
+      const currentDate = getCurrentDateVN();
+      console.log('Ngày hiện tại (VN):', formatDateVN(currentDate), currentDate);
       
-      // Cập nhật priority_order bắt đầu từ 1 (thay vì 0)
-      updatedTask.priority_order = i + 1;
+      // Theo dõi thời gian làm việc còn lại cho mỗi ngày và mỗi người dùng
+      const scheduleByUser: Record<string, WorkSchedule> = {};
       
-      // Nếu task đã có start_date, tính lại dựa trên effort và thời gian đã sử dụng
-      let startDate: Date;
+      // Theo dõi thời gian kết thúc cho mỗi task
+      const taskSchedules: Record<string, { 
+        start: Date, 
+        end: Date, 
+        hoursPerDay: Record<string, number> 
+      }> = {};
+    
+    // Theo dõi thời gian kết thúc mới nhất cho mỗi người được gán
+    const lastTaskEndTimeByUser: Record<string, Date> = {};
       
-      if (task.start_date) {
-        console.log(`Task ${task.title} có start_date: ${task.start_date}`);
-        startDate = new Date(task.start_date);
-      } else {
-        console.log(`Task ${task.title} không có start_date, đặt từ ngày hiện tại hoặc theo task trước`);
-        // Mặc định bắt đầu từ ngày hiện tại
-        startDate = new Date(currentDate);
+      // Process tasks sequentially to handle dependencies correctly
+      const result = [];
+      
+      for (let i = 0; i < sortedTasks.length; i++) {
+        const task = sortedTasks[i];
+        const assigneeId = task.assignee?.userId || 'unassigned';
+        let updatedTask = { ...task };
         
-        // Kiểm tra các task trước của cùng assignee
-        for (let j = 0; j < i; j++) {
-          const prevTask = sortedTasks[j];
-          // Kiểm tra chỉ khi cả hai task có cùng người được giao
-          if (prevTask.assignee?.userId && task.assignee?.userId && 
-              prevTask.assignee.userId === task.assignee.userId) {
-            // Tạo taskId an toàn cho prevTask
-            const prevTaskId = prevTask.task_id || prevTask.id || `task-${j}`;
-            if (taskSchedules[prevTaskId]) {
-              const prevSchedule = taskSchedules[prevTaskId];
-              if (prevSchedule.end > startDate) {
-                startDate = new Date(prevSchedule.end);
-                console.log(`- Dựa trên task trước (${prevTask.title}), bắt đầu từ: ${formatDateVN(startDate)}`);
-              }
-            }
+        // Khởi tạo lịch làm việc cho người dùng nếu chưa có
+        if (!scheduleByUser[assigneeId]) {
+          scheduleByUser[assigneeId] = {};
+        }
+        
+        // Cập nhật priority_order bắt đầu từ 1 (thay vì 0)
+        updatedTask.priority_order = i + 1;
+        
+      // Tìm thời gian bắt đầu khả dụng cho task này
+        let startDate: Date;
+        
+        if (task.start_date) {
+          console.log(`Task ${task.title} có start_date: ${task.start_date}`);
+          startDate = new Date(task.start_date);
+        } else {
+          console.log(`Task ${task.title} không có start_date, đặt từ ngày hiện tại hoặc theo task trước`);
+        // Sử dụng hàm findNextAvailableStartDate để tìm thời gian bắt đầu phù hợp
+        startDate = findNextAvailableStartDate(
+          assigneeId,
+          lastTaskEndTimeByUser,
+          currentDate
+        );
+          
+          // Bỏ qua ngày cuối tuần nếu cần
+          while (isWeekend(startDate)) {
+            startDate = getNextWorkDay(startDate);
+            console.log(`- Bỏ qua cuối tuần, bắt đầu từ: ${formatDateVN(startDate)}`);
           }
         }
         
-        // Bỏ qua ngày cuối tuần nếu cần
-        while (isWeekend(startDate)) {
-          startDate = getNextWorkDay(startDate);
-          console.log(`- Bỏ qua cuối tuần, bắt đầu từ: ${formatDateVN(startDate)}`);
-        }
-      }
-      
-      // Lấy effort thực tế, mặc định là 0 nếu không có
-      const taskEffort = task.effort !== undefined ? task.effort : 0;
-      
-      // Tính toán lịch trình làm việc
-      const { endDate, updatedSchedule, hoursPerDay } = calculateTaskSchedule(
-        startDate,
-        taskEffort,
-        scheduleByUser[assigneeId]
-      );
-      
-      // Cập nhật lịch làm việc cho người dùng
-      scheduleByUser[assigneeId] = updatedSchedule;
+        // Lấy effort thực tế, mặc định là 0 nếu không có
+        const taskEffort = task.effort !== undefined ? task.effort : 0;
+        
+        // Tính toán lịch trình làm việc
+        const { endDate, updatedSchedule, hoursPerDay } = calculateTaskSchedule(
+          startDate,
+          taskEffort,
+          scheduleByUser[assigneeId]
+        );
+        
+        // Cập nhật lịch làm việc cho người dùng
+        scheduleByUser[assigneeId] = updatedSchedule;
+        
+      // Cập nhật thời gian kết thúc mới nhất cho người được gán
+      lastTaskEndTimeByUser[assigneeId] = new Date(endDate);
       
       // Lưu lịch trình của task - đảm bảo taskId không bao giờ là undefined
       const taskId = task.task_id || task.id || `task-${i}`;
       taskSchedules[taskId] = {
-        start: startDate,
-        end: endDate,
-        hoursPerDay
-      };
-      
-      console.log(`Task ${task.title} (${taskEffort}h):`, {
-        startDate: formatDateVN(startDate),
-        endDate: formatDateVN(endDate),
-        hoursPerDay: Object.entries(hoursPerDay).map(([date, hours]) => `${date}: ${hours}h`).join(', ')
-      });
-      
-      updatedTask.start_date = formatDateVN(startDate);
-      updatedTask.due_date = formatDateVN(endDate);
-      
-      result.push(updatedTask);
-    }
+          start: startDate,
+          end: endDate,
+          hoursPerDay
+        };
+        
+        console.log(`Task ${task.title} (${taskEffort}h):`, {
+          startDate: formatDateVN(startDate),
+          endDate: formatDateVN(endDate),
+          hoursPerDay: Object.entries(hoursPerDay).map(([date, hours]) => `${date}: ${hours}h`).join(', ')
+        });
+        
+        updatedTask.start_date = formatDateVN(startDate);
+        updatedTask.due_date = formatDateVN(endDate);
+        
+        result.push(updatedTask);
+      }
 
-    return result;
-  };
+    return result.concat(completedTasks);
+  }, [getCurrentDateVN, activePlan]); // Thêm các dependencies thực sự cần thiết
 
-  // Thêm useEffect chạy khi component mount
+  // Thêm useEffect chạy khi component mount - Chỉ chạy một lần
   useEffect(() => {
     if (tasks.length > 0) {
       // Xử lý tasks ban đầu khi component mount
       setOrderedTasks(processTasks(tasks));
     }
+  }, [processTasks, tasks]); // Thêm processTasks vào dependency để useEffect biết khi nào cần chạy lại
+
+  // Sửa useEffect theo dõi thay đổi của orderedTasks
+  useEffect(() => {
+    // Chỉ log khi cần thiết, tránh log quá nhiều
+    if (viewMode === 'project' && orderedTasks.length > 0) {
+      // Bỏ log này để tránh spam console - đây có thể là nguyên nhân chính gây loop
+      // console.log('Cập nhật thứ tự hiển thị task bars sau khi drag & drop:', 
+      //  orderedTasks.filter(task => task.status !== 'done')
+      //    .map(t => `${t.task_id}: ${t.title} (${t.priority})`));
+    }
+  }, [orderedTasks, viewMode]);
+
+  // Thêm useRef để theo dõi thứ tự task trước đó
+  const prevTasksRef = useRef<string>('');
+  
+  // Tạo một state để theo dõi xem có đang trong quá trình drag & drop hay không
+  const [isDragging, setIsDragging] = useState(false);
+
+  // Điều chỉnh onDragStart để đánh dấu bắt đầu kéo thả
+  const onDragStart = useCallback(() => {
+    setIsDragging(true);
+    if (window.navigator.vibrate) {
+      window.navigator.vibrate(100);
+    }
   }, []);
 
+  // Điều chỉnh onDragEnd để đánh dấu kết thúc kéo thả và không gọi API updateTaskPriority không cần thiết
+  const onDragEnd = useCallback(async (event: DragEndEvent) => {
+    // Đánh dấu kết thúc kéo thả
+    setIsDragging(false);
+    
+    const { active, over } = event;
+    
+    if (!over) return;
+    
+    const activeTaskId = active.id as string;
+    const overTaskId = over.id as string;
+    
+    if (activeTaskId === overTaskId) return;
+    
+    // Tìm vị trí mới trong danh sách
+    const taskListIds = orderedTasks.map(task => task.task_id);
+    const oldIndex = taskListIds.indexOf(activeTaskId);
+    const newIndex = taskListIds.indexOf(overTaskId);
+    
+    if (oldIndex === -1 || newIndex === -1) return;
+    
+    // Tạo mảng mới theo thứ tự ưu tiên
+    const newTasksOrder = arrayMove(orderedTasks, oldIndex, newIndex);
+    
+    // Đảm bảo tất cả task đều được cập nhật priority_order dựa trên thứ tự mới
+    const tasksToRecalculate = newTasksOrder.map((task, index) => ({
+      ...task,
+      priority_order: index + 1,
+      // Giữ nguyên start_date và due_date
+    }));
+    
+    console.log('Thứ tự task mới sau khi kéo thả:', tasksToRecalculate.map(t => `${t.title} (${t.priority})`));
+    
+    // Tính toán lại task schedule dựa trên thứ tự mới
+    // Luôn sử dụng keepOrder=true để giữ nguyên thứ tự kéo thả
+    const processedTasks = processTasks(tasksToRecalculate, true);
+    
+    // Cập nhật UI ngay lập tức (optimistic update)
+    setOrderedTasks(processedTasks);
+    
+    // Không cần gọi API updateTaskPriority sau mỗi lần kéo thả
+  }, [orderedTasks, processTasks]);
+
+  // Hàm riêng cho PriorityTaskList để xử lý kéo thả
   const handleTaskReorder = useCallback((taskId: string, newIndex: number) => {
     const oldIndex = orderedTasks.findIndex((task) => task.task_id === taskId);
 
     if (oldIndex !== -1 && newIndex !== -1) {
+      // Tạo mảng tasks mới sau khi kéo thả
       const reorderedTasks = arrayMove(orderedTasks, oldIndex, newIndex);
       
-      // Đảm bảo tất cả task đều được tính toán lại ngày bắt đầu dựa trên thứ tự mới
-      const tasksToRecalculate = reorderedTasks.map((task, index) => {
-        // Lấy index cũ của task trong mảng ban đầu
-        const oldIndex = orderedTasks.findIndex(t => t.task_id === task.task_id);
-        
-        return {
-          ...task,
-          priority_order: index + 1,
-          // Reset start_date của task được đưa lên đầu để tính toán lại
-          // Nếu task ban đầu ở vị trí đầu tiên thì vẫn giữ start_date (nếu có)
-          start_date: index === 0 && oldIndex !== 0 ? undefined : task.start_date
-        };
-      });
-  
+      // Đảm bảo tất cả task đều được cập nhật priority_order dựa trên thứ tự mới
+      const tasksToRecalculate = reorderedTasks.map((task, index) => ({
+        ...task,
+        priority_order: index + 1,
+        // Giữ nguyên start_date và due_date
+      }));
+      
+      // Ghi lại các task order mới cho debug
       const taskOrders = tasksToRecalculate.map((task, index) => ({
         taskId: task.task_id,
         priorityOrder: index + 1
       }));
       
-      // Tính toán lại task schedule dựa trên thứ tự mới
-      const processedTasks = processTasks(tasksToRecalculate);
+      console.log('Thứ tự task mới sau khi kéo thả:', taskOrders);
       
-      // Cập nhật UI ngay lập tức
+      // Tính toán lại task schedule dựa trên thứ tự mới
+      // Luôn sử dụng keepOrder=true để giữ nguyên thứ tự kéo thả
+      const processedTasks = processTasks(tasksToRecalculate, true);
+      
+      // Cập nhật UI ngay lập tức với các task đã được tính toán lại
       setOrderedTasks(processedTasks);
       
-      // Cập nhật task priority trên server
-      if (processedTasks[newIndex] && processedTasks[newIndex].task_id === taskId) {
-        // Tìm task trước và sau trong thứ tự mới
-        const prevTask = processedTasks[newIndex - 1];
-        const nextTask = processedTasks[newIndex + 1];
-        
-        // Tính toán priority mới dựa trên các task xung quanh
-        let newPriority = 0;
-        if (prevTask && nextTask) {
-          newPriority = (prevTask.priority_order + nextTask.priority_order) / 2;
-        } else if (prevTask) {
-          newPriority = prevTask.priority_order + 1;
-        } else if (nextTask) {
-          newPriority = nextTask.priority_order / 2;
-        }
-        
-        const priorityToUse = processedTasks[newIndex].priority;
-        
-        // Gửi API request để cập nhật priority
-        dispatch(updateTaskPriority({
-          taskId: taskId,
-          priority: priorityToUse
-        }))
-          .unwrap()
-          .then(() => {
-            console.log(`Đã cập nhật thứ tự ưu tiên của task #${taskId} thành ${priorityToUse}`);
-          })
-          .catch(error => {
-            console.error('Lỗi cập nhật thứ tự ưu tiên:', error);
-            toast.error('Lỗi cập nhật thứ tự ưu tiên');
-          });
-      }
+      // Không cần gọi API updateTaskPriority sau mỗi lần kéo thả
     }
-  }, [orderedTasks, dispatch, getCurrentDateVN]);
-
+  }, [orderedTasks, processTasks]);
+  
+  // Sửa lại useEffect theo dõi tasks thay đổi để tránh reset thứ tự khi đang kéo thả
   useEffect(() => {
     if (!tasks || tasks.length === 0) return;
     
-    setOrderedTasks(processTasks(tasks));
-  }, [tasks, getCurrentDateVN]);
+    // Nếu đang trong quá trình kéo thả, không xử lý tasks mới
+    if (isDragging) return;
+    
+    // Thêm điều kiện để tránh xử lý quá nhiều lần - chỉ so sánh ID, status và title
+    const tasksJson = JSON.stringify(tasks.map(t => ({ 
+      id: t.task_id, 
+      status: t.status
+    })));
+    
+    // Nếu tasks chưa thay đổi, không cần xử lý lại
+    if (prevTasksRef.current === tasksJson) return;
+    
+    console.log('Xử lý tasks do nguồn dữ liệu thay đổi');
+    
+    // Kiểm tra nếu đã có tasks được sắp xếp trước đó
+    if (orderedTasks.length > 0) {
+      // Xây dựng map từ task ID đến index để duy trì thứ tự
+      const existingTaskIds = new Set(orderedTasks.map(task => task.task_id));
+      const taskOrderMap = new Map(
+        orderedTasks.map((task, index) => [task.task_id, index])
+      );
+      
+      // Tách tasks thành 2 nhóm: tasks hiện tại và tasks mới
+      const existingTasks = tasks.filter(task => existingTaskIds.has(task.task_id));
+      const newTasks = tasks.filter(task => !existingTaskIds.has(task.task_id));
+      
+      // Áp dụng thứ tự cũ lên tasks hiện tại
+      const sortedExistingTasks = [...existingTasks].sort((a, b) => {
+        const aOrder = taskOrderMap.get(a.task_id) ?? 999;
+        const bOrder = taskOrderMap.get(b.task_id) ?? 999;
+        return aOrder - bOrder;
+      });
+      
+      // Xử lý tasks mới (nếu có) và thêm vào cuối
+      const allTasks = [...sortedExistingTasks, ...newTasks];
+      
+      // Luôn sử dụng keepOrder=true để duy trì thứ tự hiện tại
+      setOrderedTasks(processTasks(allTasks, true));
+    } else {
+      // Nếu chưa có tasks được sắp xếp, xử lý bình thường
+      setOrderedTasks(processTasks(tasks));
+    }
+    
+    // Cập nhật giá trị tham chiếu
+    prevTasksRef.current = tasksJson;
+  }, [tasks, processTasks, orderedTasks, isDragging]);
 
   useEffect(() => {
     if (tasks.length === 0) return;
@@ -675,77 +764,12 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
   const dayWidth = Math.max(80, dimensions.width / days.length);
   const rowHeight = 48;
 
-  const onDragStart = useCallback(() => {
-    if (window.navigator.vibrate) {
-      window.navigator.vibrate(100);
-    }
-  }, []);
-
   const sensors = useSensors(
     useSensor(PointerSensor),
     useSensor(KeyboardSensor, {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
-
-  const onDragEnd = useCallback(async (event: DragEndEvent) => {
-    const { active, over } = event;
-    
-    if (!over) return;
-    
-    const activeTaskId = active.id as string;
-    const overTaskId = over.id as string;
-    
-    if (activeTaskId === overTaskId) return;
-    
-    // Tìm vị trí mới trong danh sách
-    const taskListIds = orderedTasks.map(task => task.task_id);
-    const oldIndex = taskListIds.indexOf(activeTaskId);
-    const newIndex = taskListIds.indexOf(overTaskId);
-    
-    if (oldIndex === -1 || newIndex === -1) return;
-    
-    // Tạo mảng mới theo thứ tự ưu tiên
-    const newTasksOrder = arrayMove(orderedTasks, oldIndex, newIndex);
-    
-    // Cập nhật UI trước (optimistic update)
-    setOrderedTasks(newTasksOrder);
-    
-    try {
-      // Lấy task trước và sau vị trí mới để tính toán priority_order
-      const prevTask = newIndex > 0 ? newTasksOrder[newIndex - 1] : null;
-      const nextTask = newIndex < newTasksOrder.length - 1 ? newTasksOrder[newIndex + 1] : null;
-      const activeTask = newTasksOrder[newIndex];
-      
-      let newPriority;
-      if (!prevTask) {
-        // Đầu danh sách, lấy priority của task sau và trừ đi 1000
-        newPriority = (nextTask?.priority_order || 1000) - 1000;
-      } else if (!nextTask) {
-        // Cuối danh sách, lấy priority của task trước và cộng 1000
-        newPriority = (prevTask?.priority_order || 0) + 1000;
-      } else {
-        // Giữa danh sách, lấy trung bình priority của task trước và sau
-        newPriority = Math.floor((prevTask.priority_order + nextTask.priority_order) / 2);
-      }
-      
-      // Sử dụng priority từ task gốc và giữ nguyên
-      const priorityToUse = activeTask.priority;
-      
-      // Sử dụng Redux để cập nhật
-      await dispatch(updateTaskPriority({
-        taskId: activeTask.task_id,
-        priority: priorityToUse
-      })).unwrap();
-      
-      console.log(`Đã cập nhật priority cho task ${activeTask.task_id} thành ${priorityToUse}`);
-    } catch (error) {
-      console.error('Lỗi khi cập nhật thứ tự ưu tiên:', error);
-      // Khôi phục lại danh sách cũ nếu có lỗi
-      setOrderedTasks(orderedTasks);
-      toast.error('Không thể cập nhật thứ tự ưu tiên. Vui lòng thử lại.');
-    }
-  }, [orderedTasks, dispatch]);
 
   // Xử lý khi thay đổi ngày bắt đầu
   const handleStartDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -777,16 +801,17 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
 
   // Cập nhật orderedTasks khi activePlan thay đổi
   useEffect(() => {
-    if (tasks.length > 0) {
-      // Sắp xếp tasks theo activePlan mới
-      const processed = processTasks(tasks);
+    if (tasks.length > 0 && activePlan) {
+      // Nếu có activePlan, sử dụng keepOrder=false để sắp xếp theo priority_order trong plan
+      const processed = processTasks(tasks, false);
       setOrderedTasks(processed);
+      console.log("Đã sắp xếp tasks theo activePlan.");
     }
-  }, [activePlan, tasks]);
+  }, [activePlan, tasks, processTasks]);
 
   // Hàm xử lý tạo mới plan
   const handleCreatePlan = () => {
-    setShowSavePlanDialog(true);
+      setShowSavePlanDialog(true);
     setPlanName('');
   };
 
@@ -902,78 +927,78 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
           {/* Toolbar */}
           <div className="flex justify-between mb-4 border-b pb-2">
             <div className="flex gap-2 items-center">
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setViewMode('project')}
-                  className={`px-3 py-1 rounded-l ${
-                    viewMode === 'project' 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  Project
-                </button>
-                <button
-                  onClick={() => setViewMode('user')}
-                  className={`px-3 py-1 rounded-r ${
-                    viewMode === 'user' 
-                      ? 'bg-blue-500 text-white' 
-                      : 'bg-gray-100 text-gray-600'
-                  }`}
-                >
-                  User
-                </button>
-              </div>
-              {viewMode === 'user' && (
-                <select
-                  value={selectedUserId}
-                  onChange={(e) => setSelectedUserId(e.target.value)}
-                  className="px-2 py-1 border rounded text-sm"
-                  aria-label="Chọn người dùng để lọc task"
-                  title="Chọn người dùng"
-                >
-                  <option value="">Chọn người dùng</option>
-                  {allMembers.map(member => (
-                    <option key={member.id} value={member.id}>
-                      {member.name}
-                    </option>
-                  ))}
-                </select>
-              )}
-              
-              <div className="h-6 w-px bg-slate-200 mx-2"></div>
-              
-              <div className="flex items-center gap-2">
-                <label htmlFor="start-date" className="text-sm text-slate-600">
-                  Bắt đầu:
-                </label>
-                <input
-                  id="start-date"
-                  type="date"
-                  value={dateRange.startDate.toISOString().split('T')[0]}
-                  onChange={handleStartDateChange}
-                  className="px-2 py-1 text-sm border rounded"
-                  aria-label="Ngày bắt đầu"
-                  title="Ngày bắt đầu hiển thị"
-                />
-              </div>
-              <div className="flex items-center gap-2">
-                <label htmlFor="end-date" className="text-sm text-slate-600">
-                  Kết thúc:
-                </label>
-                <input
-                  id="end-date"
-                  type="date"
-                  value={dateRange.endDate.toISOString().split('T')[0]}
-                  onChange={handleEndDateChange}
-                  className="px-2 py-1 text-sm border rounded"
-                  aria-label="Ngày kết thúc"
-                  title="Ngày kết thúc hiển thị"
-                />
-              </div>
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setViewMode('project')}
+                className={`px-3 py-1 rounded-l ${
+                  viewMode === 'project' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                Project
+              </button>
+              <button
+                onClick={() => setViewMode('user')}
+                className={`px-3 py-1 rounded-r ${
+                  viewMode === 'user' 
+                    ? 'bg-blue-500 text-white' 
+                    : 'bg-gray-100 text-gray-600'
+                }`}
+              >
+                User
+              </button>
             </div>
+            {viewMode === 'user' && (
+              <select
+                value={selectedUserId}
+                onChange={(e) => setSelectedUserId(e.target.value)}
+                className="px-2 py-1 border rounded text-sm"
+                aria-label="Chọn người dùng để lọc task"
+                title="Chọn người dùng"
+              >
+                <option value="">Chọn người dùng</option>
+                {allMembers.map(member => (
+                  <option key={member.id} value={member.id}>
+                    {member.name}
+                  </option>
+                ))}
+              </select>
+            )}
             
-            {/* Phần quản lý Plan */}
+            <div className="h-6 w-px bg-slate-200 mx-2"></div>
+            
+            <div className="flex items-center gap-2">
+              <label htmlFor="start-date" className="text-sm text-slate-600">
+                Bắt đầu:
+              </label>
+              <input
+                id="start-date"
+                type="date"
+                value={dateRange.startDate.toISOString().split('T')[0]}
+                onChange={handleStartDateChange}
+                className="px-2 py-1 text-sm border rounded"
+                aria-label="Ngày bắt đầu"
+                title="Ngày bắt đầu hiển thị"
+              />
+            </div>
+            <div className="flex items-center gap-2">
+              <label htmlFor="end-date" className="text-sm text-slate-600">
+                Kết thúc:
+              </label>
+              <input
+                id="end-date"
+                type="date"
+                value={dateRange.endDate.toISOString().split('T')[0]}
+                onChange={handleEndDateChange}
+                className="px-2 py-1 text-sm border rounded"
+                aria-label="Ngày kết thúc"
+                title="Ngày kết thúc hiển thị"
+              />
+            </div>
+          </div>
+          
+          {/* Phần quản lý Plan */}
             <div className="flex gap-2 items-center">
               {/* Dropdown chọn Plan - Sử dụng select thay cho DropdownMenu */}
               <select 
@@ -996,229 +1021,229 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
               </select>
               
               {/* Button tạo Plan mới */}
-              <button 
+            <button
                 onClick={handleNewPlan} 
                 className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-slate-100 hover:bg-slate-200"
-                title="Tạo kế hoạch mới"
-              >
+              title="Tạo kế hoạch mới"
+            >
                 <PlusIcon className="h-4 w-4" />
-                New Plan
-              </button>
+              New Plan
+            </button>
               
               {/* Button lưu Plan */}
-              <button
+            <button
                 onClick={handleSavePlan}
                 className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-blue-100 hover:bg-blue-200"
-                title="Lưu kế hoạch hiện tại"
-              >
+              title="Lưu kế hoạch hiện tại"
+            >
                 <span>Lưu kế hoạch</span>
-              </button>
+            </button>
               
               {/* Button xóa Plan */}
-              {activePlan && (
-                <button 
+            {activePlan && (
+              <button
                   onClick={() => setShowDeletePlanDialog(true)} 
                   className="flex items-center gap-1 px-2 py-1 rounded text-sm bg-red-100 hover:bg-red-200"
-                  title="Xóa kế hoạch hiện tại"
-                >
+                title="Xóa kế hoạch hiện tại"
+              >
                   <TrashIcon className="h-4 w-4" />
-                </button>
-              )}
-            </div>
+              </button>
+            )}
+          </div>
+        </div>
+
+        {/* Nội dung - Phần này sẽ có các phần scroll riêng biệt */}
+        <div className="flex gap-4 h-full overflow-hidden">
+          {/* Sidebar - tasks */}
+          <div className="w-80 flex-shrink-0 overflow-y-auto max-h-[calc(100vh-200px)] border-r border-slate-200">
+            {viewMode === 'project' ? (
+              <PriorityTaskList 
+                tasks={orderedTasks} 
+                onTaskClick={onTaskClick} 
+                onTaskReorder={handleTaskReorder}
+              />
+            ) : (
+              <>
+                {selectedUserId ? (
+                  <PriorityTaskList 
+                    tasks={filteredTasks} 
+                    onTaskClick={onTaskClick} 
+                    onTaskReorder={handleTaskReorder}
+                  />
+                ) : (
+                  <div className="p-3 text-slate-500 text-sm">
+                    Vui lòng chọn một người dùng để xem danh sách task
+                  </div>
+                )}
+              </>
+            )}
           </div>
 
-          {/* Nội dung - Phần này sẽ có các phần scroll riêng biệt */}
-          <div className="flex gap-4 h-full overflow-hidden">
-            {/* Sidebar - tasks */}
-            <div className="w-80 flex-shrink-0 overflow-y-auto max-h-[calc(100vh-200px)] border-r border-slate-200">
-              {viewMode === 'project' ? (
-                <PriorityTaskList 
-                  tasks={orderedTasks} 
-                  onTaskClick={onTaskClick} 
-                  onTaskReorder={handleTaskReorder}
-                />
-              ) : (
-                <>
-                  {selectedUserId ? (
-                    <PriorityTaskList 
-                      tasks={filteredTasks} 
-                      onTaskClick={onTaskClick} 
-                      onTaskReorder={handleTaskReorder}
-                    />
-                  ) : (
-                    <div className="p-3 text-slate-500 text-sm">
-                      Vui lòng chọn một người dùng để xem danh sách task
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
-
-            {/* Gantt Chart - Chỉ scroll phần này */}
-            <div className="flex-1 overflow-hidden" ref={containerRef}>
-              {/* Phần có thể scroll */}
-              <div 
-                className="overflow-auto"
-                ref={ganttContentRef}
-                style={{ 
-                  height: `calc(100vh - 260px)`,
-                  width: '100%'
-                }}
-              >
-                {/* Date Headers - Sẽ scroll theo khi scroll ngang */}
-                <div className="bg-white border-b border-slate-200 z-10">
-                  <div className="flex" style={{ height: '40px' }}>
-                    {days.map((day: Date, index: number) => {
-                      const isToday = isSameDay(day, today);
-                      const isWeekendDay = isWeekend(day);
-                      
-                      return (
-                        <div
-                          key={day.toISOString()}
-                          style={{ width: `${dayWidth}px` }}
-                          className={`
-                            flex-shrink-0 border-r border-slate-200 p-2
-                            ${isWeekendDay ? 'bg-slate-100/80' : ''}
-                            ${isToday ? 'bg-yellow-100/80 font-semibold' : ''}
-                          `}
-                        >
-                          <div className="flex flex-col justify-center items-center h-full">
-                            <div className="text-xs text-slate-700 font-medium text-center">
-                              {day.toLocaleDateString('vi-VN', {
-                                day: '2-digit',
-                                month: '2-digit'
-                              })}
-                            </div>
-                            <div className="text-[0.6rem] text-slate-500 text-center">
-                              {day.toLocaleDateString('vi-VN', { weekday: 'short' })}
-                            </div>
+          {/* Gantt Chart - Chỉ scroll phần này */}
+          <div className="flex-1 overflow-hidden" ref={containerRef}>
+            {/* Phần có thể scroll */}
+            <div 
+              className="overflow-auto"
+              ref={ganttContentRef}
+              style={{ 
+                height: `calc(100vh - 260px)`,
+                width: '100%'
+              }}
+            >
+              {/* Date Headers - Sẽ scroll theo khi scroll ngang */}
+              <div className="bg-white border-b border-slate-200 z-10">
+                <div className="flex" style={{ height: '40px' }}>
+                  {days.map((day: Date, index: number) => {
+                    const isToday = isSameDay(day, today);
+                    const isWeekendDay = isWeekend(day);
+                    
+                    return (
+                      <div
+                        key={day.toISOString()}
+                        style={{ width: `${dayWidth}px` }}
+                        className={`
+                          flex-shrink-0 border-r border-slate-200 p-2
+                          ${isWeekendDay ? 'bg-slate-100/80' : ''}
+                          ${isToday ? 'bg-yellow-100/80 font-semibold' : ''}
+                        `}
+                      >
+                        <div className="flex flex-col justify-center items-center h-full">
+                          <div className="text-xs text-slate-700 font-medium text-center">
+                            {day.toLocaleDateString('vi-VN', {
+                              day: '2-digit',
+                              month: '2-digit'
+                            })}
+                          </div>
+                          <div className="text-[0.6rem] text-slate-500 text-center">
+                            {day.toLocaleDateString('vi-VN', { weekday: 'short' })}
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
+                    );
+                  })}
                 </div>
+              </div>
 
-                <div
-                  style={{ 
-                    width: `${days.length * dayWidth}px`,
+              <div
+                style={{ 
+                  width: `${days.length * dayWidth}px`,
                     minHeight: `${Math.max(10, orderedTasks.length) * rowHeight + 40}px`
-                  }}
-                  className="relative bg-white"
-                >
-                  {/* Grid Container */}
-                  <div className="relative inset-0">
-                    {/* Grid Background */}
-                    <div className="relative">
-                      {/* Columns for days - highlight background first */}
-                      <div 
-                        className="absolute inset-0 grid"
-                        style={{
-                          gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
+                }}
+                className="relative bg-white"
+              >
+                {/* Grid Container */}
+                <div className="relative inset-0">
+                  {/* Grid Background */}
+                  <div className="relative">
+                    {/* Columns for days - highlight background first */}
+                    <div 
+                      className="absolute inset-0 grid"
+                      style={{
+                        gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
                           height: `${Math.max(10, orderedTasks.length) * rowHeight}px`,
                           minHeight: `${10 * rowHeight}px`,
-                          zIndex: 5
-                        }}
-                      >
-                        {days.map((day: Date, index: number) => {
-                          const isToday = isSameDay(day, today);
-                          const isWeekendDay = isWeekend(day);
-                          
-                          return (
-                            <div
-                              key={`column-${day.toISOString()}`}
-                              className={`
-                                ${isWeekendDay ? 'bg-slate-100' : ''}
-                                ${isToday ? 'bg-yellow-100' : ''}
-                              `}
-                            />
-                          );
-                        })}
-                      </div>
-                      
-                      {/* Grid lines on top of the background */}
-                      <div 
-                        className="grid relative"
-                        style={{
-                          gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
-                          gridTemplateRows: `repeat(${Math.max(10, orderedTasks.length)}, ${rowHeight}px)`,
-                          gridAutoFlow: 'row',
-                          height: `${Math.max(10, orderedTasks.length) * rowHeight}px`,
-                          minHeight: `${10 * rowHeight}px`,
-                          zIndex: 10
-                        }}
-                      >
-                        {Array.from({ length: days.length * Math.max(10, orderedTasks.length) }).map((_, index) => (
+                        zIndex: 5
+                      }}
+                    >
+                      {days.map((day: Date, index: number) => {
+                        const isToday = isSameDay(day, today);
+                        const isWeekendDay = isWeekend(day);
+                        
+                        return (
                           <div
-                            key={`grid-cell-${index}`}
-                            className="border-r border-b border-slate-200 relative"
+                            key={`column-${day.toISOString()}`}
+                            className={`
+                              ${isWeekendDay ? 'bg-slate-100' : ''}
+                              ${isToday ? 'bg-yellow-100' : ''}
+                            `}
                           />
-                        ))}
-                      </div>
+                        );
+                      })}
                     </div>
-
-                    {/* Task Bars */}
-                    {filteredTasks.map((task: Task, rowIndex: number) => {
-                      if (!task.start_date) {
-                        return null;
-                      }
-
-                      const taskStartDate = new Date(task.start_date);
-                      const taskEndDate = task.due_date 
-                        ? new Date(task.due_date)
-                        : calculateTaskSchedule(taskStartDate, task.effort || 0).endDate;
-
-                      // Tính tổng số ngày (kể cả ngày nghỉ) giữa start_date và end_date
-                      const startDayIndex = days.findIndex(day => isSameDay(day, taskStartDate));
-                      const endDayIndex = days.findIndex(day => isSameDay(day, taskEndDate));
-                      
-                      // Nếu không tìm thấy ngày trong timeline, bỏ qua task này
-                      if (startDayIndex === -1) return null;
-                      
-                      // Tính số ngày hiển thị (bao gồm cả ngày cuối tuần)
-                      // Nếu không tìm thấy ngày kết thúc trong timeline, hiển thị đến hết ngày cuối cùng của timeline
-                      const totalDays = endDayIndex === -1
-                        ? days.length - startDayIndex
-                        : endDayIndex - startDayIndex + 1;
-                      
-                      // Đảm bảo task luôn có ít nhất 1 ngày hiển thị
-                      const displayDays = Math.max(1, totalDays);
-
-                      return (
+                    
+                    {/* Grid lines on top of the background */}
+                    <div 
+                      className="grid relative"
+                      style={{
+                        gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
+                          gridTemplateRows: `repeat(${Math.max(10, orderedTasks.length)}, ${rowHeight}px)`,
+                        gridAutoFlow: 'row',
+                          height: `${Math.max(10, orderedTasks.length) * rowHeight}px`,
+                          minHeight: `${10 * rowHeight}px`,
+                        zIndex: 10
+                      }}
+                    >
+                        {Array.from({ length: days.length * Math.max(10, orderedTasks.length) }).map((_, index) => (
                         <div
-                          key={task.task_id}
-                          style={{
-                            position: 'absolute',
-                            left: `${startDayIndex * dayWidth}px`,
-                            top: `${rowIndex * rowHeight}px`,
-                            width: `${displayDays * dayWidth}px`,
-                            height: `${rowHeight}px`,
-                            zIndex: 30,
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'flex-start',
-                            padding: '0 4px'
-                          }}
-                        >
-                          <TaskBar
-                            task={task}
-                            width={displayDays * dayWidth - 8}
-                            x={0}
-                            y={0}
-                            height={36}
-                            onClick={onTaskClick}
-                          />
-                        </div>
-                      );
-                    })}
+                          key={`grid-cell-${index}`}
+                          className="border-r border-b border-slate-200 relative"
+                        />
+                      ))}
+                    </div>
                   </div>
+
+                  {/* Task Bars */}
+                  {filteredTasks.map((task: Task, rowIndex: number) => {
+                    if (!task.start_date) {
+                      return null;
+                    }
+
+                    const taskStartDate = new Date(task.start_date);
+                    const taskEndDate = task.due_date 
+                      ? new Date(task.due_date)
+                      : calculateTaskSchedule(taskStartDate, task.effort || 0).endDate;
+
+                    // Tính tổng số ngày (kể cả ngày nghỉ) giữa start_date và end_date
+                    const startDayIndex = days.findIndex(day => isSameDay(day, taskStartDate));
+                    const endDayIndex = days.findIndex(day => isSameDay(day, taskEndDate));
+                    
+                    // Nếu không tìm thấy ngày trong timeline, bỏ qua task này
+                    if (startDayIndex === -1) return null;
+                    
+                    // Tính số ngày hiển thị (bao gồm cả ngày cuối tuần)
+                    // Nếu không tìm thấy ngày kết thúc trong timeline, hiển thị đến hết ngày cuối cùng của timeline
+                    const totalDays = endDayIndex === -1
+                      ? days.length - startDayIndex
+                      : endDayIndex - startDayIndex + 1;
+                    
+                    // Đảm bảo task luôn có ít nhất 1 ngày hiển thị
+                    const displayDays = Math.max(1, totalDays);
+
+                    return (
+                      <div
+                        key={task.task_id}
+                        style={{
+                          position: 'absolute',
+                          left: `${startDayIndex * dayWidth}px`,
+                          top: `${rowIndex * rowHeight}px`,
+                          width: `${displayDays * dayWidth}px`,
+                          height: `${rowHeight}px`,
+                          zIndex: 30,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'flex-start',
+                          padding: '0 4px'
+                        }}
+                      >
+                        <TaskBar
+                          task={task}
+                          width={displayDays * dayWidth - 8}
+                          x={0}
+                          y={0}
+                          height={36}
+                          onClick={onTaskClick}
+                        />
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             </div>
           </div>
-          
+        </div>
+        
           {/* Dialog Tạo/Lưu Plan */}
-          {showSavePlanDialog && (
+        {showSavePlanDialog && (
             <Dialog
               open={showSavePlanDialog}
               onClose={() => setShowSavePlanDialog(false)}
@@ -1268,7 +1293,7 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                 <p className="text-sm text-gray-600">
                   Bạn có chắc chắn muốn xóa kế hoạch "{activePlan?.name}" không?
                 </p>
-              </div>
+                      </div>
               <div className="mt-6 flex justify-end gap-2">
                 <button
                   onClick={() => setShowDeletePlanDialog(false)}
@@ -1285,8 +1310,8 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
               </div>
             </Dialog>
           )}
-        </div>
-      )}
-    </div>
+          </div>
+        )}
+      </div>
   );
 }

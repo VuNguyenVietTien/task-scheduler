@@ -95,7 +95,7 @@ function SortableTaskItem({ task, onClick }: {
 
 export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: PriorityTaskListProps) {
   const [activeTasks, setActiveTasks] = useState<Task[]>([]);
-  const [selectedTask, setSelectedTask] = useState<Task | null>(null);
+  const [hasUserReordered, setHasUserReordered] = useState(false);
   
   // Sensors cho DnD
   const sensors = useSensors(
@@ -110,9 +110,17 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
   );
 
   useEffect(() => {
+    // Nếu người dùng đã kéo thả, không sắp xếp lại theo priority
+    if (hasUserReordered && tasks.length === activeTasks.length) {
+      return;
+    }
+    
+    // Reset trạng thái khi tasks thay đổi
+    setHasUserReordered(false);
+    
     // Lọc và sắp xếp tasks
     const priorityValue: Record<string, number> = {
-      'urgent': 1,  // Giữ giá trị 0 cho 'urgent' để đảm bảo nó luôn được ưu tiên cao nhất
+      'urgent': 1,  // Ưu tiên cao nhất
       'high': 2,
       'medium': 3,
       'low': 4
@@ -126,12 +134,12 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
         const priorityB = b.priority?.toLowerCase() || 'medium';
         
         // Sắp xếp theo priority
-        return (priorityValue[priorityA as keyof typeof priorityValue] || 2) - 
-               (priorityValue[priorityB as keyof typeof priorityValue] || 2);
+        return (priorityValue[priorityA as keyof typeof priorityValue] || 3) - 
+               (priorityValue[priorityB as keyof typeof priorityValue] || 3);
       });
     
     setActiveTasks(filteredTasks);
-  }, [tasks]);
+  }, [tasks, hasUserReordered, activeTasks.length]);
 
   // Xử lý khi kéo thả hoàn tất
   const handleDragEnd = (event: DragEndEvent) => {
@@ -145,6 +153,7 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
       if (oldIndex !== -1 && newIndex !== -1) {
         const newTasks = arrayMove(activeTasks, oldIndex, newIndex);
         setActiveTasks(newTasks);
+        setHasUserReordered(true);
         
         // Gọi callback để cập nhật thứ tự
         if (onTaskReorder) {
