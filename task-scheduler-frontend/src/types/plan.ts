@@ -2,14 +2,14 @@ import { Priority } from './task';
 
 export interface Plan {
   id: string;
-  project_id: string;
+  projectId: string;
   name: string;
   description?: string;
-  created_by: string;
-  created_at: string;
-  updated_at: string;
-  is_active: boolean;
-  plan_data: PlanData;
+  createdBy: string;
+  createdAt: string;
+  updatedAt: string;
+  isActive: boolean;
+  planData: PlanData;
 }
 
 export interface PlanData {
@@ -18,31 +18,31 @@ export interface PlanData {
 }
 
 export interface PlanTaskData {
-  task_id: string;
-  priority_order: number;
-  original_priority?: Priority;
-  start_date?: string;
-  end_date?: string;
+  taskId: string;
+  priorityOrder: number;
+  originalPriority?: Priority;
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface PlanMetadata {
-  last_sorted_date?: string;
-  sort_criteria?: string;
+  lastSortedDate?: string;
+  sortCriteria?: string;
 }
 
 export interface CreatePlanInput {
-  project_id: string;
+  projectId: string;
   name: string;
   description?: string;
-  plan_data: CreatePlanDataInput;
+  planData: CreatePlanDataInput;
 }
 
 export interface UpdatePlanInput {
   id: string;
   name?: string;
   description?: string;
-  is_active?: boolean;
-  plan_data?: CreatePlanDataInput;
+  isActive?: boolean;
+  planData?: CreatePlanDataInput;
 }
 
 export interface CreatePlanDataInput {
@@ -51,14 +51,14 @@ export interface CreatePlanDataInput {
 }
 
 export interface CreatePlanTaskDataInput {
-  task_id: string;
-  priority_order: number;
-  original_priority?: string;
-  start_date?: string;
-  end_date?: string;
+  taskId: string;
+  priorityOrder: number;
+  originalPriority?: string;
+  startDate?: string;
+  endDate?: string;
 }
 
 export interface CreatePlanMetadataInput {
-  last_sorted_date?: string;
-  sort_criteria?: string;
+  lastSortedDate?: string;
+  sortCriteria?: string;
 } 

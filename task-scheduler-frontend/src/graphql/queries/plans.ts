@@ -3,32 +3,20 @@ import { gql } from '@apollo/client';
 export const PLAN_FIELDS = gql`
   fragment PlanFields on Plan {
     id
-    project_id
+    projectId
     name
     description
-    created_by
-    created_at
-    updated_at
-    is_active
-    plan_data {
-      tasks {
-        task_id
-        priority_order
-        original_priority
-        start_date
-        end_date
-      }
-      metadata {
-        last_sorted_date
-        sort_criteria
-      }
-    }
+    createdBy
+    createdAt
+    updatedAt
+    isActive
+    planData
   }
 `;
 
 export const GET_PROJECT_PLANS = gql`
   query GetProjectPlans($projectId: String!) {
-    getProjectPlans(project_id: $projectId) {
+    getProjectPlans(projectId: $projectId) {
       ...PlanFields
     }
   }
@@ -37,7 +25,7 @@ export const GET_PROJECT_PLANS = gql`
 
 export const GET_LATEST_PROJECT_PLAN = gql`
   query GetLatestProjectPlan($projectId: String!) {
-    getLatestProjectPlan(project_id: $projectId) {
+    getLatestProjectPlan(projectId: $projectId) {
       ...PlanFields
     }
   }

@@ -3,7 +3,7 @@ import { setContext } from '@apollo/client/link/context';
 import { typeDefs } from '../graphql/schema';
 
 const httpLink = createHttpLink({
-  uri: process.env.REACT_APP_GRAPHQL_URL || 'http://localhost:8000/graphql',
+  uri: process.env.NEXT_PUBLIC_API_URL ? `${process.env.NEXT_PUBLIC_API_URL}/graphql` : 'http://localhost:8080/graphql',
 });
 
 const authLink = setContext((_, { headers }) => {

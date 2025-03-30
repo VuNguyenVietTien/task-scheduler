@@ -7,6 +7,7 @@ mod user;
 mod tasks;
 mod members;
 mod media_upload;
+mod plans;
 
 pub use auth::AuthMutation;
 pub use comment::{CommentMutation, CommentQuery};
@@ -16,3 +17,4 @@ pub use user::{UserMutation, UserQuery};
 pub use tasks::{TaskMutation, TaskQuery};
 pub use members::{MemberMutation, MemberQuery};
 pub use media_upload::MediaUploadMutation;
+pub use plans::{PlanMutation, PlanQuery};

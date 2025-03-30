@@ -1,5 +1,5 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
-import { client } from '@/apollo';
+import { client } from '@/lib/apollo-client';
 import { 
   GET_PROJECT_PLANS, 
   GET_LATEST_PROJECT_PLAN, 
@@ -28,6 +28,35 @@ const initialState: PlansState = {
   activePlan: null,
   loading: false,
   error: null
+};
+
+// Thêm hàm xử lý chuyển đổi planData từ kiểu JSON sang đối tượng có cấu trúc
+
+/**
+ * Chuyển đổi planData từ JSON sang đối tượng có cấu trúc
+ */
+const parsePlanData = (plan: any): Plan => {
+  // Clone plan để tránh thay đổi trực tiếp
+  const parsedPlan = { ...plan };
+  
+  // Nếu planData là chuỗi JSON, phân tích nó
+  if (typeof parsedPlan.planData === 'string') {
+    try {
+      parsedPlan.planData = JSON.parse(parsedPlan.planData);
+    } catch (e) {
+      console.error('Lỗi khi phân tích planData:', e);
+    }
+  }
+  
+  // Đảm bảo cấu trúc của planData
+  if (!parsedPlan.planData.tasks) {
+    parsedPlan.planData = {
+      tasks: [],
+      metadata: { lastSortedDate: null, sortCriteria: null }
+    };
+  }
+  
+  return parsedPlan as Plan;
 };
 
 // Async thunks
@@ -148,7 +177,7 @@ const plansSlice = createSlice({
       })
       .addCase(fetchProjectPlans.fulfilled, (state, action) => {
         state.loading = false;
-        state.plans = action.payload;
+        state.plans = action.payload ? action.payload.map(parsePlanData) : [];
       })
       .addCase(fetchProjectPlans.rejected, (state, action) => {
         state.loading = false;
@@ -163,13 +192,14 @@ const plansSlice = createSlice({
       .addCase(fetchLatestProjectPlan.fulfilled, (state, action) => {
         state.loading = false;
         if (action.payload) {
-          state.activePlan = action.payload;
+          const parsedPlan = parsePlanData(action.payload);
+          state.activePlan = parsedPlan;
           // Update plan in plans array if it exists
-          const index = state.plans.findIndex(p => p.id === action.payload.id);
+          const index = state.plans.findIndex(p => p.id === parsedPlan.id);
           if (index >= 0) {
-            state.plans[index] = action.payload;
-          } else if (action.payload) {
-            state.plans.push(action.payload);
+            state.plans[index] = parsedPlan;
+          } else {
+            state.plans.push(parsedPlan);
           }
         }
       })
@@ -185,8 +215,9 @@ const plansSlice = createSlice({
       })
       .addCase(createPlan.fulfilled, (state, action) => {
         state.loading = false;
-        state.plans.push(action.payload);
-        state.activePlan = action.payload;
+        const parsedPlan = parsePlanData(action.payload);
+        state.plans.push(parsedPlan);
+        state.activePlan = parsedPlan;
       })
       .addCase(createPlan.rejected, (state, action) => {
         state.loading = false;
@@ -200,12 +231,15 @@ const plansSlice = createSlice({
       })
       .addCase(updatePlan.fulfilled, (state, action) => {
         state.loading = false;
-        const index = state.plans.findIndex(p => p.id === action.payload.id);
-        if (index >= 0) {
-          state.plans[index] = action.payload;
-        }
-        if (state.activePlan && state.activePlan.id === action.payload.id) {
-          state.activePlan = action.payload;
+        if (action.payload) {
+          const parsedPlan = parsePlanData(action.payload);
+          const index = state.plans.findIndex(p => p.id === parsedPlan.id);
+          if (index >= 0) {
+            state.plans[index] = parsedPlan;
+          }
+          if (state.activePlan && state.activePlan.id === parsedPlan.id) {
+            state.activePlan = parsedPlan;
+          }
         }
       })
       .addCase(updatePlan.rejected, (state, action) => {

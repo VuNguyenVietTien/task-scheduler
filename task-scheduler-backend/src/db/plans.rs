@@ -2,8 +2,8 @@ use sqlx::{Error, PgPool, types::Json as SqlxJson};
 use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use crate::error::{AppError, Result};
-use crate::entity; // Assuming entity definitions are here
+// Sử dụng std::result::Result để tránh xung đột với sqlx::Result
+use std::result::Result;
 
 // Define the Plan struct based on the database schema
 #[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
@@ -132,7 +132,7 @@ pub async fn delete(pool: &PgPool, plan_id: Uuid) -> Result<u64, Error> {
 
 /// Set a specific plan as active for its project, deactivating others.
 /// Uses a transaction to ensure atomicity.
-pub async fn set_active(pool: &PgPool, plan_id: Uuid) -> Result<Plan> {
+pub async fn set_active(pool: &PgPool, plan_id: Uuid) -> Result<Plan, Error> {
     let mut tx = pool.begin().await?;
 
     // Find the project_id for the given plan_id
