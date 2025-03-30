@@ -63,9 +63,10 @@ export interface Task {
   
   // Dates
   start_date?: string;
+  original_start_date?: string;
+  db_start_date?: string;
+  force_recalculate?: boolean;
   due_date?: string;
-  actual_start_date?: string;
-  actual_end_date?: string;
   created_at?: string;
   updated_at?: string;
   
@@ -85,6 +86,11 @@ export interface Task {
   is_deleted?: boolean;
   tags?: TaskTag[];
   child_tasks?: Task[];
+  attachments?: any[];
+  comments?: any[];
+  checklist?: any[];
+  custom_fields?: Record<string, any>;
+  deadline?: string;
 }
 
 export interface TaskFilter {

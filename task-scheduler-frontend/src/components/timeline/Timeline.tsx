@@ -402,7 +402,6 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
   // Đưa hàm processTasks vào useCallback để tránh tạo instance mới mỗi khi render
   const processTasks = useCallback((inputTasks: Task[], keepOrder: boolean = false): Task[] => {
     console.log('Xử lý các task:', inputTasks);
-    const taskMap = new Map<string, number>(); // userId -> lastEndTime
     let completedTasks: Task[] = [];
     let activeTasks: Task[] = [];
 
@@ -442,46 +441,56 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
       });
     }
       
-      const currentDate = getCurrentDateVN();
-      console.log('Ngày hiện tại (VN):', formatDateVN(currentDate), currentDate);
-      
-      // Theo dõi thời gian làm việc còn lại cho mỗi ngày và mỗi người dùng
-      const scheduleByUser: Record<string, WorkSchedule> = {};
-      
-      // Theo dõi thời gian kết thúc cho mỗi task
-      const taskSchedules: Record<string, { 
-        start: Date, 
-        end: Date, 
-        hoursPerDay: Record<string, number> 
-      }> = {};
+    const currentDate = getCurrentDateVN();
+    console.log('Ngày hiện tại (VN):', formatDateVN(currentDate), currentDate);
+    
+    // Map để lưu trữ thông tin về start_date từ database (chỉ dùng khi cần)
+    const originalStartDates = new Map<string, string | undefined>();
+    
+    // Lưu lại start_date gốc từ database của mỗi task nếu cần
+    sortedTasks.forEach(task => {
+      // Chỉ lưu start_date từ database nếu được đánh dấu
+      if (task.db_start_date) {
+        originalStartDates.set(task.task_id, task.db_start_date);
+      }
+    });
+    
+    // Theo dõi thời gian làm việc còn lại cho mỗi ngày và mỗi người dùng
+    const scheduleByUser: Record<string, WorkSchedule> = {};
     
     // Theo dõi thời gian kết thúc mới nhất cho mỗi người được gán
     const lastTaskEndTimeByUser: Record<string, Date> = {};
       
-      // Process tasks sequentially to handle dependencies correctly
-      const result = [];
+    // Process tasks sequentially to handle dependencies correctly
+    const result = [];
       
-      for (let i = 0; i < sortedTasks.length; i++) {
-        const task = sortedTasks[i];
-        const assigneeId = task.assignee?.userId || 'unassigned';
-        let updatedTask = { ...task };
+    for (let i = 0; i < sortedTasks.length; i++) {
+      const task = sortedTasks[i];
+      const assigneeId = task.assignee?.userId || 'unassigned';
+      let updatedTask = { ...task };
         
-        // Khởi tạo lịch làm việc cho người dùng nếu chưa có
-        if (!scheduleByUser[assigneeId]) {
-          scheduleByUser[assigneeId] = {};
-        }
+      // Khởi tạo lịch làm việc cho người dùng nếu chưa có
+      if (!scheduleByUser[assigneeId]) {
+        scheduleByUser[assigneeId] = {};
+      }
         
-        // Cập nhật priority_order bắt đầu từ 1 (thay vì 0)
-        updatedTask.priority_order = i + 1;
+      // Cập nhật priority_order bắt đầu từ 1 (thay vì 0)
+      updatedTask.priority_order = i + 1;
         
       // Tìm thời gian bắt đầu khả dụng cho task này
-        let startDate: Date;
+      let startDate: Date;
+      
+      // Kiểm tra nếu task có start_date cố định từ database VÀ không cần tính toán lại
+      if (task.db_start_date && !task.force_recalculate) {
+        console.log(`Task ${task.title} giữ nguyên start_date cố định từ DB: ${task.db_start_date}`);
+        startDate = new Date(task.db_start_date);
         
-        if (task.start_date) {
-          console.log(`Task ${task.title} có start_date: ${task.start_date}`);
-          startDate = new Date(task.start_date);
-        } else {
-          console.log(`Task ${task.title} không có start_date, đặt từ ngày hiện tại hoặc theo task trước`);
+        // Ghi nhớ đây là start_date từ DB
+        updatedTask.db_start_date = task.db_start_date;
+      } else {
+        // Mọi trường hợp khác đều tính toán lại start_date dựa trên thứ tự ưu tiên
+        console.log(`Task ${task.title} tính toán lại start_date dựa trên thứ tự ưu tiên`);
+        
         // Sử dụng hàm findNextAvailableStartDate để tìm thời gian bắt đầu phù hợp
         startDate = findNextAvailableStartDate(
           assigneeId,
@@ -489,48 +498,48 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
           currentDate
         );
           
-          // Bỏ qua ngày cuối tuần nếu cần
-          while (isWeekend(startDate)) {
-            startDate = getNextWorkDay(startDate);
-            console.log(`- Bỏ qua cuối tuần, bắt đầu từ: ${formatDateVN(startDate)}`);
-          }
+        // Bỏ qua ngày cuối tuần nếu cần
+        while (isWeekend(startDate)) {
+          startDate = getNextWorkDay(startDate);
+          console.log(`- Bỏ qua cuối tuần, bắt đầu từ: ${formatDateVN(startDate)}`);
         }
+      }
         
-        // Lấy effort thực tế, mặc định là 0 nếu không có
-        const taskEffort = task.effort !== undefined ? task.effort : 0;
+      // Lấy effort thực tế, mặc định là 0 nếu không có
+      const taskEffort = task.effort !== undefined ? task.effort : 0;
         
-        // Tính toán lịch trình làm việc
-        const { endDate, updatedSchedule, hoursPerDay } = calculateTaskSchedule(
-          startDate,
-          taskEffort,
-          scheduleByUser[assigneeId]
-        );
+      // Tính toán lịch trình làm việc
+      const { endDate, updatedSchedule, hoursPerDay } = calculateTaskSchedule(
+        startDate,
+        taskEffort,
+        scheduleByUser[assigneeId]
+      );
         
-        // Cập nhật lịch làm việc cho người dùng
-        scheduleByUser[assigneeId] = updatedSchedule;
+      // Cập nhật lịch làm việc cho người dùng
+      scheduleByUser[assigneeId] = updatedSchedule;
         
       // Cập nhật thời gian kết thúc mới nhất cho người được gán
       lastTaskEndTimeByUser[assigneeId] = new Date(endDate);
       
       // Lưu lịch trình của task - đảm bảo taskId không bao giờ là undefined
       const taskId = task.task_id || task.id || `task-${i}`;
-      taskSchedules[taskId] = {
-          start: startDate,
-          end: endDate,
-          hoursPerDay
-        };
         
-        console.log(`Task ${task.title} (${taskEffort}h):`, {
-          startDate: formatDateVN(startDate),
-          endDate: formatDateVN(endDate),
-          hoursPerDay: Object.entries(hoursPerDay).map(([date, hours]) => `${date}: ${hours}h`).join(', ')
-        });
+      console.log(`Task ${task.title} (${taskEffort}h):`, {
+        startDate: formatDateVN(startDate),
+        endDate: formatDateVN(endDate),
+        hoursPerDay: Object.entries(hoursPerDay).map(([date, hours]) => `${date}: ${hours}h`).join(', ')
+      });
         
-        updatedTask.start_date = formatDateVN(startDate);
-        updatedTask.due_date = formatDateVN(endDate);
-        
-        result.push(updatedTask);
+      updatedTask.start_date = formatDateVN(startDate);
+      updatedTask.due_date = formatDateVN(endDate);
+      
+      // Đảm bảo xóa flag force_recalculate sau khi đã tính toán lại
+      if (updatedTask.force_recalculate) {
+        updatedTask.force_recalculate = false;
       }
+        
+      result.push(updatedTask);
+    }
 
     return result.concat(completedTasks);
   }, [getCurrentDateVN, activePlan]); // Thêm các dependencies thực sự cần thiết
@@ -592,17 +601,25 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     // Tạo mảng mới theo thứ tự ưu tiên
     const newTasksOrder = arrayMove(orderedTasks, oldIndex, newIndex);
     
-    // Đảm bảo tất cả task đều được cập nhật priority_order dựa trên thứ tự mới
-    const tasksToRecalculate = newTasksOrder.map((task, index) => ({
-      ...task,
-      priority_order: index + 1,
-      // Giữ nguyên start_date và due_date
-    }));
+    // Đánh dấu TẤT CẢ các task đều cần tính toán lại sau khi thay đổi thứ tự
+    const tasksToRecalculate = newTasksOrder.map((task, index) => {
+      return {
+        ...task,
+        priority_order: index + 1,
+        // Sau khi reorder, bỏ qua start_date cũ để tính toán lại từ đầu
+        start_date: undefined,
+        due_date: undefined,
+        // Đánh dấu TẤT CẢ các task đều cần tính toán lại
+        force_recalculate: true
+      };
+    });
     
-    console.log('Thứ tự task mới sau khi kéo thả:', tasksToRecalculate.map(t => `${t.title} (${t.priority})`));
+    console.log('Thứ tự task mới sau khi kéo thả:', tasksToRecalculate.map((task, idx) => 
+      `${task.title} (${task.priority}) - index: ${idx + 1}`
+    ));
     
     // Tính toán lại task schedule dựa trên thứ tự mới
-    // Luôn sử dụng keepOrder=true để giữ nguyên thứ tự kéo thả
+    // Sử dụng keepOrder=true để giữ nguyên thứ tự kéo thả, nhưng tính lại tất cả các ngày
     const processedTasks = processTasks(tasksToRecalculate, true);
     
     // Cập nhật UI ngay lập tức (optimistic update)
@@ -619,23 +636,26 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
       // Tạo mảng tasks mới sau khi kéo thả
       const reorderedTasks = arrayMove(orderedTasks, oldIndex, newIndex);
       
-      // Đảm bảo tất cả task đều được cập nhật priority_order dựa trên thứ tự mới
-      const tasksToRecalculate = reorderedTasks.map((task, index) => ({
-        ...task,
-        priority_order: index + 1,
-        // Giữ nguyên start_date và due_date
-      }));
+      // Đánh dấu TẤT CẢ các task đều cần tính toán lại sau khi thay đổi thứ tự
+      const tasksToRecalculate = reorderedTasks.map((task, index) => {
+        return {
+          ...task,
+          priority_order: index + 1,
+          // Sau khi reorder, bỏ qua start_date cũ để tính toán lại từ đầu
+          start_date: undefined,
+          due_date: undefined,
+          // Đánh dấu TẤT CẢ các task đều cần tính toán lại
+          force_recalculate: true
+        };
+      });
       
       // Ghi lại các task order mới cho debug
-      const taskOrders = tasksToRecalculate.map((task, index) => ({
-        taskId: task.task_id,
-        priorityOrder: index + 1
-      }));
-      
-      console.log('Thứ tự task mới sau khi kéo thả:', taskOrders);
+      console.log('Thứ tự task mới sau khi kéo thả:', tasksToRecalculate.map((task, idx) => 
+        `${task.title} (${task.priority}) - index: ${idx + 1}`
+      ));
       
       // Tính toán lại task schedule dựa trên thứ tự mới
-      // Luôn sử dụng keepOrder=true để giữ nguyên thứ tự kéo thả
+      // Sử dụng keepOrder=true để giữ nguyên thứ tự kéo thả, nhưng tính lại tất cả các ngày
       const processedTasks = processTasks(tasksToRecalculate, true);
       
       // Cập nhật UI ngay lập tức với các task đã được tính toán lại
