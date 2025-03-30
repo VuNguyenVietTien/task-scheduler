@@ -175,6 +175,7 @@ const findNextAvailableStartDate = (
 export function Timeline({ tasks, isLoading = false, onTaskClick, users }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const ganttContentRef = useRef<HTMLDivElement>(null);
+  const dateHeadersRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [planName, setPlanName] = useState<string>('');
   const [showSavePlanDialog, setShowSavePlanDialog] = useState(false);
@@ -927,6 +928,29 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
     setShowSavePlanDialog(true);
   };
 
+  // useEffect để đồng bộ scroll ngang giữa grid và header ngày
+  useEffect(() => {
+    const ganttContent = ganttContentRef.current;
+    const dateHeaders = dateHeadersRef.current;
+    
+    if (!ganttContent || !dateHeaders) return;
+    
+    const syncScrollFromGridToHeader = () => {
+      if (dateHeaders) {
+        dateHeaders.scrollLeft = ganttContent.scrollLeft;
+      }
+    };
+    
+    ganttContent.addEventListener('scroll', syncScrollFromGridToHeader);
+    
+    // Gọi hàm này một lần ngay sau khi component mount để đồng bộ ban đầu
+    syncScrollFromGridToHeader();
+    
+    return () => {
+      ganttContent.removeEventListener('scroll', syncScrollFromGridToHeader);
+    };
+  }, []);
+
   if (tasks.length === 0) {
     return (
       <div className="flex items-center justify-center h-64 bg-white rounded-lg border border-slate-200">
@@ -939,11 +963,11 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
   }
 
   return (
-    <div className="bg-white rounded-lg h-full p-2">
+    <div className="bg-white rounded-lg p-2">
       {isLoading ? (
         <TimelineSkeleton />
       ) : (
-        <div className="flex flex-col h-full">
+        <div className="flex flex-col">
           {/* Toolbar */}
           <div className="flex justify-between mb-4 border-b pb-2">
             <div className="flex gap-2 items-center">
@@ -1072,10 +1096,10 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
           </div>
         </div>
 
-        {/* Nội dung - Phần này sẽ có các phần scroll riêng biệt */}
-        <div className="flex gap-4 h-full overflow-hidden">
-          {/* Sidebar - tasks */}
-          <div className="w-80 flex-shrink-0 overflow-y-auto max-h-[calc(100vh-200px)] border-r border-slate-200">
+        {/* Nội dung - Phần này sẽ được mở rộng theo nội dung thay vì bị giới hạn chiều cao */}
+        <div className="flex gap-4">
+          {/* Sidebar - tasks - xóa giới hạn chiều cao và scroll */}
+          <div className="w-80 flex-shrink-0 border-r border-slate-200">
             {viewMode === 'project' ? (
               <PriorityTaskList 
                 tasks={orderedTasks} 
@@ -1099,69 +1123,73 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
             )}
           </div>
 
-          {/* Gantt Chart - Chỉ scroll phần này */}
-          <div className="flex-1 overflow-hidden" ref={containerRef}>
-            {/* Phần có thể scroll */}
-            <div 
-              className="overflow-auto"
-              ref={ganttContentRef}
-              style={{ 
-                height: `calc(100vh - 260px)`,
-                width: '100%'
-              }}
-            >
-              {/* Date Headers - Sẽ scroll theo khi scroll ngang */}
-              <div className="bg-white border-b border-slate-200 z-10">
-                <div className="flex" style={{ height: '40px' }}>
-                  {days.map((day: Date, index: number) => {
-                    const isToday = isSameDay(day, today);
-                    const isWeekendDay = isWeekend(day);
-                    
-                    return (
-                      <div
-                        key={day.toISOString()}
-                        style={{ width: `${dayWidth}px` }}
-                        className={`
-                          flex-shrink-0 border-r border-slate-200 p-2
-                          ${isWeekendDay ? 'bg-slate-100/80' : ''}
-                          ${isToday ? 'bg-yellow-100/80 font-semibold' : ''}
-                        `}
-                      >
-                        <div className="flex flex-col justify-center items-center h-full">
-                          <div className="text-xs text-slate-700 font-medium text-center">
-                            {day.toLocaleDateString('vi-VN', {
-                              day: '2-digit',
-                              month: '2-digit'
-                            })}
-                          </div>
-                          <div className="text-[0.6rem] text-slate-500 text-center">
-                            {day.toLocaleDateString('vi-VN', { weekday: 'short' })}
+          {/* Gantt Chart - Cấu trúc mới với sticky headers */}
+          <div className="flex-1 flex flex-col overflow-hidden" ref={containerRef}>
+            {/* Container chứa cả headers và grid - chỉ grid scroll được */}
+            <div className="relative flex-1">
+              {/* Header cố định phía trên */}
+              <div className="sticky top-0 z-20 bg-white border-b border-slate-200" style={{ width: '100%' }}>
+                <div className="overflow-hidden">
+                  <div className="flex date-headers" ref={dateHeadersRef} style={{ 
+                    height: '40px',
+                    width: `${days.length * dayWidth}px` 
+                  }}>
+                    {days.map((day: Date, index: number) => {
+                      const isToday = isSameDay(day, today);
+                      const isWeekendDay = isWeekend(day);
+                      
+                      return (
+                        <div
+                          key={day.toISOString()}
+                          style={{ width: `${dayWidth}px`, minWidth: `${dayWidth}px` }}
+                          className={`
+                            flex-shrink-0 border-r border-slate-200 p-2
+                            ${isWeekendDay ? 'bg-slate-100/80' : ''}
+                            ${isToday ? 'bg-yellow-100/80 font-semibold' : ''}
+                          `}
+                        >
+                          <div className="flex flex-col justify-center items-center h-full">
+                            <div className="text-xs text-slate-700 font-medium text-center">
+                              {day.toLocaleDateString('vi-VN', {
+                                day: '2-digit',
+                                month: '2-digit'
+                              })}
+                            </div>
+                            <div className="text-[0.6rem] text-slate-500 text-center">
+                              {day.toLocaleDateString('vi-VN', { weekday: 'short' })}
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
-              <div
+              {/* Phần grid và task bars - có thể scroll ngang */}
+              <div 
+                className="overflow-x-auto"
+                ref={ganttContentRef}
                 style={{ 
-                  width: `${days.length * dayWidth}px`,
-                    minHeight: `${Math.max(10, orderedTasks.length) * rowHeight + 40}px`
+                  height: `${Math.max(10, orderedTasks.length) * rowHeight}px`, 
+                  minHeight: '480px'
                 }}
-                className="relative bg-white"
               >
-                {/* Grid Container */}
-                <div className="relative inset-0">
-                  {/* Grid Background */}
-                  <div className="relative">
+                <div
+                  style={{ 
+                    width: `${days.length * dayWidth}px`,
+                    height: '100%'
+                  }}
+                  className="relative bg-white"
+                >
+                  {/* Grid Container */}
+                  <div className="relative h-full">
                     {/* Columns for days - highlight background first */}
                     <div 
                       className="absolute inset-0 grid"
                       style={{
                         gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
-                          height: `${Math.max(10, orderedTasks.length) * rowHeight}px`,
-                          minHeight: `${10 * rowHeight}px`,
+                        height: '100%',
                         zIndex: 5
                       }}
                     >
@@ -1186,76 +1214,75 @@ export function Timeline({ tasks, isLoading = false, onTaskClick, users }: Timel
                       className="grid relative"
                       style={{
                         gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
-                          gridTemplateRows: `repeat(${Math.max(10, orderedTasks.length)}, ${rowHeight}px)`,
+                        gridTemplateRows: `repeat(${Math.max(10, orderedTasks.length)}, ${rowHeight}px)`,
                         gridAutoFlow: 'row',
-                          height: `${Math.max(10, orderedTasks.length) * rowHeight}px`,
-                          minHeight: `${10 * rowHeight}px`,
+                        height: '100%',
                         zIndex: 10
                       }}
                     >
-                        {Array.from({ length: days.length * Math.max(10, orderedTasks.length) }).map((_, index) => (
+                      {Array.from({ length: days.length * Math.max(10, orderedTasks.length) }).map((_, index) => (
                         <div
                           key={`grid-cell-${index}`}
                           className="border-r border-b border-slate-200 relative"
                         />
                       ))}
                     </div>
+                    
+                    {/* Task Bars */}
+                    {filteredTasks.map((task: Task, rowIndex: number) => {
+                      if (!task.start_date) {
+                        return null;
+                      }
+
+                      const taskStartDate = new Date(task.start_date);
+                      const taskEndDate = task.due_date 
+                        ? new Date(task.due_date)
+                        : calculateTaskSchedule(taskStartDate, task.effort || 0).endDate;
+
+                      // Tính tổng số ngày (kể cả ngày nghỉ) giữa start_date và end_date
+                      const startDayIndex = days.findIndex(day => isSameDay(day, taskStartDate));
+                      const endDayIndex = days.findIndex(day => isSameDay(day, taskEndDate));
+                      
+                      // Nếu không tìm thấy ngày trong timeline, bỏ qua task này
+                      if (startDayIndex === -1) return null;
+                      
+                      // Tính số ngày hiển thị (bao gồm cả ngày cuối tuần)
+                      // Nếu không tìm thấy ngày kết thúc trong timeline, hiển thị đến hết ngày cuối cùng của timeline
+                      const totalDays = endDayIndex === -1
+                        ? days.length - startDayIndex
+                        : endDayIndex - startDayIndex + 1;
+                      
+                      // Đảm bảo task luôn có ít nhất 1 ngày hiển thị
+                      const displayDays = Math.max(1, totalDays);
+
+                      return (
+                        <div
+                          key={task.task_id}
+                          style={{
+                            position: 'absolute',
+                            left: `${startDayIndex * dayWidth}px`,
+                            top: `${rowIndex * rowHeight}px`,
+                            width: `${displayDays * dayWidth}px`,
+                            height: `${rowHeight}px`,
+                            zIndex: 30,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'flex-start',
+                            padding: '0 4px'
+                          }}
+                        >
+                          <TaskBar
+                            task={task}
+                            width={displayDays * dayWidth - 8}
+                            x={0}
+                            y={0}
+                            height={36}
+                            onClick={onTaskClick}
+                          />
+                        </div>
+                      );
+                    })}
                   </div>
-
-                  {/* Task Bars */}
-                  {filteredTasks.map((task: Task, rowIndex: number) => {
-                    if (!task.start_date) {
-                      return null;
-                    }
-
-                    const taskStartDate = new Date(task.start_date);
-                    const taskEndDate = task.due_date 
-                      ? new Date(task.due_date)
-                      : calculateTaskSchedule(taskStartDate, task.effort || 0).endDate;
-
-                    // Tính tổng số ngày (kể cả ngày nghỉ) giữa start_date và end_date
-                    const startDayIndex = days.findIndex(day => isSameDay(day, taskStartDate));
-                    const endDayIndex = days.findIndex(day => isSameDay(day, taskEndDate));
-                    
-                    // Nếu không tìm thấy ngày trong timeline, bỏ qua task này
-                    if (startDayIndex === -1) return null;
-                    
-                    // Tính số ngày hiển thị (bao gồm cả ngày cuối tuần)
-                    // Nếu không tìm thấy ngày kết thúc trong timeline, hiển thị đến hết ngày cuối cùng của timeline
-                    const totalDays = endDayIndex === -1
-                      ? days.length - startDayIndex
-                      : endDayIndex - startDayIndex + 1;
-                    
-                    // Đảm bảo task luôn có ít nhất 1 ngày hiển thị
-                    const displayDays = Math.max(1, totalDays);
-
-                    return (
-                      <div
-                        key={task.task_id}
-                        style={{
-                          position: 'absolute',
-                          left: `${startDayIndex * dayWidth}px`,
-                          top: `${rowIndex * rowHeight}px`,
-                          width: `${displayDays * dayWidth}px`,
-                          height: `${rowHeight}px`,
-                          zIndex: 30,
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'flex-start',
-                          padding: '0 4px'
-                        }}
-                      >
-                        <TaskBar
-                          task={task}
-                          width={displayDays * dayWidth - 8}
-                          x={0}
-                          y={0}
-                          height={36}
-                          onClick={onTaskClick}
-                        />
-                      </div>
-                    );
-                  })}
                 </div>
               </div>
             </div>

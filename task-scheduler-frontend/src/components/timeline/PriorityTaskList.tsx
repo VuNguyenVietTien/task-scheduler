@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useMemo, useEffect, useState } from 'react';
 import { Task } from '@/types/task';
 import {
   DndContext,
@@ -15,11 +16,11 @@ import {
   SortableContext,
   sortableKeyboardCoordinates,
   verticalListSortingStrategy,
-  useSortable
+  useSortable,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { ArrowUpDown } from 'lucide-react';
-import { useState, useEffect } from 'react';
+import { TaskStatus } from '@/types/task';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 
 interface PriorityTaskListProps {
@@ -28,8 +29,11 @@ interface PriorityTaskListProps {
   onTaskReorder?: (taskId: string, newIndex: number) => void;
 }
 
-// Component cho task có thể kéo thả
-function SortableTaskItem({ task, onClick }: { 
+// Component cho task có thể kéo thả trong PriorityTaskList
+function SortableTaskItem({ 
+  task, 
+  onClick 
+}: { 
   task: Task;
   onClick?: (taskId: string) => void;
 }) {
@@ -120,10 +124,10 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
     
     // Lọc và sắp xếp tasks
     const priorityValue: Record<string, number> = {
-      'urgent': 1,  // Ưu tiên cao nhất
-      'high': 2,
-      'medium': 3,
-      'low': 4
+        'urgent': 1,  // Ưu tiên cao nhất
+        'high': 2,
+        'medium': 3,
+        'low': 4
     };
     
     const filteredTasks = tasks
@@ -132,8 +136,8 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
         // Lấy priority của task, mặc định là 'medium' nếu không có
         const priorityA = a.priority?.toLowerCase() || 'medium';
         const priorityB = b.priority?.toLowerCase() || 'medium';
-        
-        // Sắp xếp theo priority
+      
+      // Sắp xếp theo priority
         return (priorityValue[priorityA as keyof typeof priorityValue] || 3) - 
                (priorityValue[priorityB as keyof typeof priorityValue] || 3);
       });
@@ -164,13 +168,13 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col">
       <div className="p-3 border-b border-slate-200 bg-slate-50">
         <h3 className="font-medium text-slate-800">Thứ tự ưu tiên công việc</h3>
         <p className="text-xs text-slate-500 mt-1">Kéo và thả để thay đổi thứ tự ưu tiên</p>
       </div>
       
-      <div className="overflow-y-auto flex-1">
+      <div>
         {activeTasks.length > 0 ? (
           <DndContext
             sensors={sensors}
