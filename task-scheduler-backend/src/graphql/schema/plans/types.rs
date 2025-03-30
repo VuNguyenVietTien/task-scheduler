@@ -30,6 +30,8 @@ pub struct PlanTaskData {
     pub original_priority: Option<String>,
     pub start_date: Option<DateTime<Utc>>,
     pub end_date: Option<DateTime<Utc>>,
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 #[derive(SimpleObject, Deserialize, Serialize)]
@@ -70,6 +72,7 @@ pub struct CreatePlanTaskDataInput {
     pub original_priority: Option<String>,
     pub start_date: Option<DateTime<Utc>>,
     pub end_date: Option<DateTime<Utc>>,
+    pub title: Option<String>,
 }
 
 #[derive(InputObject)]

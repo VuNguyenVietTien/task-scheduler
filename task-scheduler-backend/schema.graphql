@@ -589,6 +589,7 @@ input CreatePlanTaskDataInput {
   original_priority: String
   start_date: DateTime
   end_date: DateTime
+  title: String
 }
 
 """

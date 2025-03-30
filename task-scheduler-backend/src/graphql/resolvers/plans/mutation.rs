@@ -28,6 +28,7 @@ struct PlanTaskDataInput {
     priority_order: i32,
     start_date: Option<String>,
     end_date: Option<String>,
+    title: Option<String>,
 }
 
 #[derive(InputObject, Serialize)]

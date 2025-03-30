@@ -23,6 +23,7 @@ export interface PlanTaskData {
   originalPriority?: Priority;
   startDate?: string;
   endDate?: string;
+  title?: string;
 }
 
 export interface PlanMetadata {
@@ -47,15 +48,14 @@ export interface UpdatePlanInput {
 
 export interface CreatePlanDataInput {
   tasks: CreatePlanTaskDataInput[];
-  metadata?: CreatePlanMetadataInput;
 }
 
 export interface CreatePlanTaskDataInput {
   taskId: string;
   priorityOrder: number;
-  originalPriority?: string;
   startDate?: string;
   endDate?: string;
+  title?: string;
 }
 
 export interface CreatePlanMetadataInput {

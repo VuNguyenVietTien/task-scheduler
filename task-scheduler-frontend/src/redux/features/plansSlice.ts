@@ -43,9 +43,23 @@ const parsePlanData = (plan: any): Plan => {
   if (typeof parsedPlan.planData === 'string') {
     try {
       parsedPlan.planData = JSON.parse(parsedPlan.planData);
+      
+      // Thêm log để hiển thị title của các task trong plan
+      if (parsedPlan.planData.tasks) {
+        console.log(`Plan ${parsedPlan.name} có ${parsedPlan.planData.tasks.length} tasks:`);
+        parsedPlan.planData.tasks.forEach((task: any, index: number) => {
+          console.log(`  ${index + 1}. Task ID: ${task.taskId}, Title: ${task.title || 'Không có title'}, Priority: ${task.priorityOrder}, Start: ${task.startDate}, End: ${task.endDate}`);
+        });
+      }
     } catch (e) {
       console.error('Lỗi khi phân tích planData:', e);
     }
+  } else if (parsedPlan.planData && parsedPlan.planData.tasks) {
+    // Nếu planData đã là đối tượng, vẫn log để kiểm tra
+    console.log(`Plan ${parsedPlan.name} có ${parsedPlan.planData.tasks.length} tasks (đã là đối tượng):`);
+    parsedPlan.planData.tasks.forEach((task: any, index: number) => {
+      console.log(`  ${index + 1}. Task ID: ${task.taskId}, Title: ${task.title || 'Không có title'}, Priority: ${task.priorityOrder}, Start: ${task.startDate}, End: ${task.endDate}`);
+    });
   }
   
   // Đảm bảo cấu trúc của planData
