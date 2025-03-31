@@ -31,6 +31,8 @@ interface PriorityTaskListProps {
   tasks: Task[];
   onTaskClick?: (taskId: string) => void;
   onTaskReorder?: (taskId: string, newIndex: number) => void;
+  activePlanId?: string | null;
+  autoSort?: boolean;
 }
 
 // Component cho task có thể kéo thả trong PriorityTaskList
@@ -101,7 +103,13 @@ function SortableTaskItem({
   );
 }
 
-export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: PriorityTaskListProps) {
+export function PriorityTaskList({ 
+  tasks, 
+  onTaskClick, 
+  onTaskReorder, 
+  activePlanId, 
+  autoSort 
+}: PriorityTaskListProps) {
   const [activeTasks, setActiveTasks] = useState<Task[]>([]);
   const [hasUserReordered, setHasUserReordered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
@@ -125,36 +133,42 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
       return;
     }
     
-    // Nếu người dùng đã kéo thả, không sắp xếp lại theo priority
-    if (hasUserReordered && tasks.length === activeTasks.length) {
-      return;
+    // Reset trạng thái khi tasks, plan, hoặc autoSort thay đổi
+    // Luôn làm mới danh sách khi có plan mới hoặc trạng thái autoSort thay đổi
+    if (activePlanId || autoSort) {
+      setHasUserReordered(false);
+    } else if (hasUserReordered && tasks.length === activeTasks.length) {
+      return; // Chỉ giữ nguyên thứ tự nếu người dùng đã kéo thả và không có plan/autoSort
     }
-    
-    // Reset trạng thái khi tasks thay đổi
-    setHasUserReordered(false);
     
     // Lọc tasks đã hoàn thành
     const filteredTasks = tasks.filter(task => task.status !== 'done');
     
-    // Kiểm tra xem tasks.length > 0 và các tasks có priority_order không
-    // Nếu có priority_order, sử dụng thứ tự đó thay vì sắp xếp lại theo priority
+    console.log(`PriorityTaskList updating - activePlanId: ${activePlanId}, autoSort: ${autoSort}, tasks: ${filteredTasks.length}`);
+    
+    // Nếu có plan active hoặc tất cả tasks đều có priority_order, sắp xếp theo priority_order
     const allTasksHavePriorityOrder = filteredTasks.length > 0 && 
                                       filteredTasks.every(task => task.priority_order !== undefined);
     
-    if (allTasksHavePriorityOrder) {
-      // Sắp xếp theo priority_order nếu tất cả tasks đều có priority_order (thường là từ plan)
-      console.log('Sắp xếp tasks theo priority_order (từ plan)');
+    if (activePlanId || allTasksHavePriorityOrder) {
+      // Sắp xếp theo priority_order nếu có plan hoặc tất cả tasks đều có priority_order
+      console.log('Sắp xếp tasks theo priority_order (từ plan hoặc đã có thứ tự)');
       const sortedByPriorityOrder = [...filteredTasks].sort((a, b) => 
         (a.priority_order || 999) - (b.priority_order || 999)
       );
       setActiveTasks(sortedByPriorityOrder);
+    } else if (autoSort) {
+      // Nếu auto sort được bật, sắp xếp theo mức độ ưu tiên
+      console.log('Sắp xếp tasks theo priority (urgent > high > medium > low) do autoSort = true');
+      const sortedTasks = sortTasksByPriority(filteredTasks);
+      setActiveTasks(sortedTasks);
     } else {
-      // Nếu không có priority_order, sử dụng sortTasksByPriority
+      // Nếu không có plan, không auto sort, và không có priority_order, vẫn sắp xếp theo priority
       console.log('Sắp xếp tasks theo priority (urgent > high > medium > low)');
       const sortedTasks = sortTasksByPriority(filteredTasks);
       setActiveTasks(sortedTasks);
     }
-  }, [tasks, hasUserReordered, activeTasks.length, isDragging]);
+  }, [tasks, hasUserReordered, activeTasks.length, isDragging, activePlanId, autoSort]);
 
   // Xử lý khi bắt đầu kéo thả
   const handleDragStart = useCallback(() => {

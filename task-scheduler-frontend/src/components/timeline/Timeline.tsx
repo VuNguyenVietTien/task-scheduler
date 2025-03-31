@@ -1041,6 +1041,8 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                   // Xử lý sắp xếp lại task dựa trên kéo thả
                   handleTaskReorder(taskId, newIndex);
                 }}
+                activePlanId={activePlan?.id || null}
+                autoSort={autoSort}
               />
             ) : (
               <>
@@ -1052,6 +1054,8 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                       // Xử lý sắp xếp lại task dựa trên kéo thả
                       handleTaskReorder(taskId, newIndex);
                     }}
+                    activePlanId={activePlan?.id || null}
+                    autoSort={autoSort}
                   />
                 ) : (
                   <div className="p-3 text-slate-500 text-sm">
