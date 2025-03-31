@@ -665,11 +665,18 @@ export const processTasksAndUpdateStore = (
     console.log(`  ${idx + 1}. ${item.title} (${item.priority}), priorityOrder: ${item.priorityOrder}, startDate: ${item.startDate}, endDate: ${item.endDate}`);
   });
   
+  // Tìm component gọi hàm này bằng cách phân tích stack trace
+  const stackTrace = new Error().stack || '';
+  const callerInfo = stackTrace.split('\n')[2] || 'unknown'; // Dòng thứ 3 thường là caller
+  console.log('📢 processTasksAndUpdateStore được gọi từ:', callerInfo);
+  
   // Dispatch action kết hợp để cập nhật cả thứ tự và dates trong một lần
+  console.log('🔄 Đang dispatch updateTaskOrderAndDates...');
   dispatch(updateTaskOrderAndDates({
     tasks: orderItems,
     dateUpdates: dateUpdates
   }));
+  console.log('✅ Đã dispatch updateTaskOrderAndDates thành công');
   
   // Trả về các tasks đã xử lý
   return allProcessedTasks;

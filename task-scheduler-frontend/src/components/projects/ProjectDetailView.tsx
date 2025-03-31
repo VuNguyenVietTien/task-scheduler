@@ -16,6 +16,7 @@ import { fetchProjectMembers } from '@/redux/features/membersSlice';
 import { fetchProjectPlans, fetchLatestProjectPlan } from '@/redux/features/plansSlice';
 import { processTasksAndUpdateStore, processTasksBasedOnPlan } from '@/utils/taskScheduler';
 import { selectPlans } from '@/redux/features/plansSlice';
+import { updateAutoSort } from '@/redux/features/taskOrderStore';
 
 type ViewType = 'list' | 'kanban' | 'gantt' | 'members';
 
@@ -209,6 +210,17 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
           dispatch
         );
         console.log('Đã xử lý và cập nhật task order store');
+        
+        // Nếu không có plan đang active, đặt autoSort=true để Timeline tự động sắp xếp theo priority
+        if (!hasActivePlan) {
+          // Cập nhật autoSort trong Redux store 
+          dispatch(updateAutoSort(true));
+          console.log('Không có active plan, đã đặt autoSort=true trong Redux store');
+        } else {
+          // Nếu có active plan, tắt auto sort
+          dispatch(updateAutoSort(false));
+          console.log('Có active plan, đã đặt autoSort=false trong Redux store');
+        }
       }
     }
   };

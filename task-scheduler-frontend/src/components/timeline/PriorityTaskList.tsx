@@ -167,30 +167,19 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
         setActiveTasks(newTasks);
         setHasUserReordered(true);
         
-        // Chuyển đổi tasks thành định dạng phù hợp cho taskOrderStore
-        const updatedTaskItems = newTasks.map((task, index) => ({
-          taskId: task.task_id,
-          title: task.title,
-          priority: task.priority,
-          priorityOrder: index + 1,
-          startDate: task.start_date,
-          endDate: task.due_date,
-          assigneeName: task.assignee?.username
-        }));
-        
-        // Dispatch action để cập nhật thứ tự trong Redux store
-        dispatch(updateTaskOrder(updatedTaskItems));
-        
-        // Tạo danh sách tasks để tính toán lại ngày
-        const tasksToRecalculate = newTasks.map(task => ({
+        // Chuyển đổi tasks thành định dạng phù hợp để tính toán lại ngày
+        const tasksToRecalculate = newTasks.map((task, index) => ({
           ...task,
-          priority_order: updatedTaskItems.find(item => item.taskId === task.task_id)?.priorityOrder || 999,
+          priority_order: index + 1,
           force_recalculate: true,
           start_date: undefined,
           due_date: undefined
         }));
         
-        // Gọi processTasksAndUpdateStore để tính toán lại ngày
+        // QUAN TRỌNG: Chỉ gọi processTasksAndUpdateStore - KHÔNG gọi updateTaskOrder trước đó
+        // vì processTasksAndUpdateStore sẽ tự động dispatch updateTaskOrderAndDates
+        console.log('🔄 PriorityTaskList - handleDragEnd: Gọi processTasksAndUpdateStore để cập nhật thứ tự và ngày:', 
+          tasksToRecalculate.length, 'tasks');
         processTasksAndUpdateStore(tasksToRecalculate, true, dispatch);
         
         // Gọi callback để thông báo thay đổi

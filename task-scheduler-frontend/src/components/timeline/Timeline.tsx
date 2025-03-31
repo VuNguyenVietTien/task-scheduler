@@ -47,7 +47,9 @@ import {
   updateCalculatedDates,
   selectOrderedTasks,
   selectCalculatedTaskDates,
-  selectIsPlanLoaded
+  selectIsPlanLoaded,
+  updateAutoSort,
+  selectAutoSort
 } from '@/redux/features/taskOrderStore';
 import { convertTaskOrderToTask, isWeekend, getNextWorkDay, findNextAvailableStartDate, calculateTaskSchedule, WorkSchedule, processTasksAndUpdateStore, processTasksBasedOnPlan } from '@/utils/taskScheduler';
 import { useParams } from 'next/navigation';
@@ -366,8 +368,14 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     }
   }, [orderedTaskItems]);
 
-  // Thêm state để theo dõi việc sắp xếp tự động
-  const [autoSort, setAutoSort] = useState(true);
+  // Sử dụng trạng thái autoSort từ Redux
+  const isAutoSortFromRedux = useAppSelector(selectAutoSort);
+  const [autoSort, setAutoSort] = useState(isAutoSortFromRedux);
+  
+  // Luôn cập nhật autoSort từ Redux khi nó thay đổi
+  useEffect(() => {
+    setAutoSort(isAutoSortFromRedux);
+  }, [isAutoSortFromRedux]);
 
   // Tối ưu lại orderedTasks với memo chi tiết hơn
   const orderedTasks = useMemo(() => {
@@ -496,17 +504,16 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
       } as Task;
     });
     
-    // Sử dụng batch để gộp các actions
-    batch(() => {
-      // 1. Cập nhật thứ tự trong store
-      dispatch(updateTaskOrder(updatedDragItems));
-      
-      // 2. Tính toán lại ngày cho tasks
-      processTasksAndUpdateStore(tasksToRecalculate, true, dispatch);
-      
-      // 3. Tắt chế độ tự động sắp xếp
-      setAutoSort(false);
-    });
+    // QUAN TRỌNG: Chỉ sử dụng processTasksAndUpdateStore, không cần dispatch updateTaskOrder riêng
+    // vì processTasksAndUpdateStore sẽ tự đảm bảo cập nhật cả thứ tự và ngày tháng
+    console.log('🔄 Timeline - onDragEnd: Gọi processTasksAndUpdateStore để cập nhật thứ tự và ngày:', 
+      tasksToRecalculate.length, 'tasks');
+    processTasksAndUpdateStore(tasksToRecalculate, true, dispatch);
+    
+    // Tắt chế độ tự động sắp xếp
+    setAutoSort(false);
+    // Cập nhật vào Redux store
+    dispatch(updateAutoSort(false));
     
   }, [orderedTaskItems, dispatch, currentProjectId]);
 
@@ -716,6 +723,8 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     
     // Tắt chế độ tự động sắp xếp vì user đã thủ công sắp xếp
     setAutoSort(false);
+    // Cập nhật vào Redux store
+    dispatch(updateAutoSort(false));
     
     // Log thứ tự trước khi thay đổi
     console.log('📋 Thứ tự task trước khi kéo thả:');
@@ -739,10 +748,6 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
       item.priority?.toLowerCase() !== 'urgent'
     );
     
-    // Sắp xếp trong mỗi nhóm theo priority_order
-    urgentItems.sort((a, b) => a.priorityOrder - b.priorityOrder);
-    nonUrgentItems.sort((a, b) => a.priorityOrder - b.priorityOrder);
-    
     // Ghép lại, đảm bảo urgent tasks luôn đứng đầu
     const finalReorderedItems = [...urgentItems, ...nonUrgentItems];
     
@@ -757,9 +762,6 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     updatedReorderedItems.forEach((item, idx) => {
       console.log(`  ${idx + 1}. Task ${item.taskId}: ${item.title} (${item.priority}), Priority Order: ${item.priorityOrder}`);
     });
-    
-    // Cập nhật Redux store trước - QUAN TRỌNG: cập nhật store TRƯỚC để thứ tự được lưu lại
-    dispatch(updateTaskOrder(updatedReorderedItems));
     
     // Chuyển đổi thành Task[] với force_recalculate để tính toán lại ngày
     const tasksToRecalculate = updatedReorderedItems.map(item => {
@@ -778,14 +780,20 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
       console.log(`  ${idx + 1}. ${task.title} (${task.priority}) - Priority Order: ${task.priority_order}`);
     });
     
-    // ⚠️ QUAN TRỌNG: Tính toán lại TOÀN BỘ ngày start/end cho tất cả tasks
-    // keepOrder=true để giữ nguyên thứ tự trong mảng tasksToRecalculate
+    // QUAN TRỌNG: Chỉ gọi processTasksAndUpdateStore, KHÔNG cần dispatch updateTaskOrder riêng
+    // vì processTasksAndUpdateStore sẽ tự động dispatch updateTaskOrderAndDates
+    console.log('🔄 Timeline - handleTaskReorder: Gọi processTasksAndUpdateStore để cập nhật thứ tự và ngày:', 
+      tasksToRecalculate.length, 'tasks');
     processTasksAndUpdateStore(tasksToRecalculate, true, dispatch);
   }, [orderedTaskItems, dispatch, currentProjectId]);
 
   // Thêm hàm để kích hoạt sắp xếp tự động
   const handleAutoSort = useCallback(() => {
+    // Cập nhật state local
     setAutoSort(true);
+    
+    // Cập nhật vào Redux store
+    dispatch(updateAutoSort(true));
     
     // Chuyển đổi thành Task[] với force_recalculate để tính toán lại ngày
     const tasksToRecalculate = tasks.map(task => ({
@@ -798,7 +806,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     
     // Gọi processTasksAndUpdateStore với keepOrder=false để sắp xếp lại theo priority
     processTasksAndUpdateStore(tasksToRecalculate, false, dispatch);
-  }, [tasks, dispatch, processTasksAndUpdateStore]);
+  }, [tasks, dispatch]);
 
   // Debug re-render
   console.log('🔄 Timeline render', {

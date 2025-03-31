@@ -25,6 +25,7 @@ interface TaskOrderState {
   isPlanLoaded: boolean; // Cờ để biết dữ liệu được lấy từ plan hay không
   currentPlanId: string | null;
   calculatedTaskDates: Record<string, { startDate?: string; endDate?: string }>; // Đã tính toán ngày cho mỗi task
+  autoSort: boolean; // Biến mới để lưu trữ trạng thái sắp xếp tự động
 }
 
 const initialState: TaskOrderState = {
@@ -32,7 +33,8 @@ const initialState: TaskOrderState = {
   sourceTaskIds: [],
   isPlanLoaded: false,
   currentPlanId: null,
-  calculatedTaskDates: {}
+  calculatedTaskDates: {},
+  autoSort: true // Mặc định là true khi khởi tạo
 };
 
 const taskOrderSlice = createSlice({
@@ -162,7 +164,12 @@ const taskOrderSlice = createSlice({
           };
         }
       });
-    }
+    },
+    
+    // Thêm reducer mới để cập nhật trạng thái autoSort
+    updateAutoSort: (state, action: PayloadAction<boolean>) => {
+      state.autoSort = action.payload;
+    },
   },
   extraReducers: (builder) => {
     // Xử lý khi load plan từ server
@@ -262,14 +269,16 @@ export const {
   resetTaskOrder, 
   initializeFromTasks,
   updateCalculatedDates,
-  updateTaskOrderAndDates
+  updateTaskOrderAndDates,
+  updateAutoSort
 } = taskOrderSlice.actions;
 
 // Selectors
 export const selectOrderedTasks = (state: RootState) => state.taskOrder.orderedTasks;
 export const selectSourceTaskIds = (state: RootState) => state.taskOrder.sourceTaskIds;
+export const selectCalculatedTaskDates = (state: RootState) => state.taskOrder.calculatedTaskDates;
 export const selectIsPlanLoaded = (state: RootState) => state.taskOrder.isPlanLoaded;
 export const selectCurrentPlanId = (state: RootState) => state.taskOrder.currentPlanId;
-export const selectCalculatedTaskDates = (state: RootState) => state.taskOrder.calculatedTaskDates;
+export const selectAutoSort = (state: RootState) => state.taskOrder.autoSort;
 
 export default taskOrderSlice.reducer; 
