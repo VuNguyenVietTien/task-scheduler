@@ -285,18 +285,21 @@ const plansSlice = createSlice({
       })
       .addCase(setPlanActive.fulfilled, (state, action) => {
         state.loading = false;
-        // Update the plan in the plans array
-        const index = state.plans.findIndex(p => p.id === action.payload.id);
-        if (index >= 0) {
-          state.plans[index] = action.payload;
+        if (action.payload) {
+          const parsedPlan = parsePlanData(action.payload);
+          // Update the plan in the plans array
+          const index = state.plans.findIndex(p => p.id === parsedPlan.id);
+          if (index >= 0) {
+            state.plans[index] = parsedPlan;
+          }
+          // Set as active plan
+          state.activePlan = parsedPlan;
+          // Update is_active status for all plans
+          state.plans = state.plans.map(p => ({
+            ...p,
+            is_active: p.id === parsedPlan.id
+          }));
         }
-        // Set as active plan
-        state.activePlan = action.payload;
-        // Update is_active status for all plans
-        state.plans = state.plans.map(p => ({
-          ...p,
-          is_active: p.id === action.payload.id
-        }));
       })
       .addCase(setPlanActive.rejected, (state, action) => {
         state.loading = false;

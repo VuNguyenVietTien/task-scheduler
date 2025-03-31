@@ -35,7 +35,8 @@ import {
   setActivePlan,
   selectPlans,
   selectActivePlan,
-  selectPlansLoading
+  selectPlansLoading,
+  setPlanActive
 } from '@/redux/features/plansSlice';
 import { Dialog } from '@/components/ui/Dialog';
 import { Plan, PlanData, PlanTaskData, CreatePlanInput, CreatePlanDataInput, CreatePlanTaskDataInput } from '@/types/plan';
@@ -656,13 +657,21 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
 
   // Thêm hàm xử lý để chọn kế hoạch
   const handleSelectPlan = useCallback((plan: Plan) => {
-    // Dispatch action để đặt kế hoạch đã chọn làm active
-    dispatch(setActivePlan(plan));
-    
-    // Tắt chế độ tự động sắp xếp vì plan đã có thứ tự riêng
-    setAutoSort(false);
-    
-    toast.success(`Đã chọn kế hoạch: ${plan.name}`);
+    // Gọi API để đặt plan này là active trên server trước
+    dispatch(setPlanActive(plan.id))
+      .unwrap()
+      .then((updatedPlan) => {
+        // Dispatch action để đặt kế hoạch đã chọn làm active
+        dispatch(setActivePlan(updatedPlan));
+        
+        // Tắt chế độ tự động sắp xếp vì plan đã có thứ tự riêng
+        setAutoSort(false);
+        
+        toast.success(`Đã chọn kế hoạch: ${updatedPlan.name}`);
+      })
+      .catch((error) => {
+        toast.error(`Lỗi khi chọn kế hoạch: ${error.message || 'Lỗi không xác định'}`);
+      });
   }, [dispatch]);
 
   // Thêm hàm xử lý để lưu kế hoạch
