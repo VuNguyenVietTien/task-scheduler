@@ -401,6 +401,12 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
       console.log('Task order after priority sort:', result.map(t => 
         `${t.title} (${t.priority}) - Order: ${t.priority_order}`
       ));
+    } else {
+      // Khi autoSort=false, giữ nguyên thứ tự từ Redux store
+      console.log('GIỮ NGUYÊN thứ tự tasks từ Redux store vì autoSort=false hoặc có active plan');
+      console.log('Task order from store:', result.map(t => 
+        `${t.title} (${t.priority}) - Order: ${t.priority_order}`
+      ));
     }
 
     return result;
@@ -469,20 +475,9 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     // Tạo mảng mới theo thứ tự ưu tiên
     const newTasksOrder = arrayMove(orderedTaskItems, oldIndex, newIndex);
     
-    // Tách các task urgent và non-urgent
-    const urgentItemsAfterDrag = newTasksOrder.filter(item => 
-      item.priority?.toLowerCase() === 'urgent'
-    );
-    
-    const nonUrgentItemsAfterDrag = newTasksOrder.filter(item => 
-      item.priority?.toLowerCase() !== 'urgent'
-    );
-    
-    // Ghép lại, đảm bảo urgent tasks luôn đứng đầu
-    const finalDragItems = [...urgentItemsAfterDrag, ...nonUrgentItemsAfterDrag];
-    
+    // QUAN TRỌNG: Không tách riêng urgent task nữa, giữ nguyên thứ tự kéo thả của user
     // Cập nhật priorityOrder mới CHÍNH XÁC theo vị trí
-    const updatedDragItems = finalDragItems.map((item, index) => ({
+    const updatedDragItems = newTasksOrder.map((item, index) => ({
       ...item,
       priorityOrder: index + 1
     }));
@@ -739,20 +734,9 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     const [movedItem] = newOrderedItems.splice(currentIndex, 1);
     newOrderedItems.splice(newIndex, 0, movedItem);
     
-    // Tách các task urgent và non-urgent
-    const urgentItems = newOrderedItems.filter(item => 
-      item.priority?.toLowerCase() === 'urgent'
-    );
-    
-    const nonUrgentItems = newOrderedItems.filter(item => 
-      item.priority?.toLowerCase() !== 'urgent'
-    );
-    
-    // Ghép lại, đảm bảo urgent tasks luôn đứng đầu
-    const finalReorderedItems = [...urgentItems, ...nonUrgentItems];
-    
+    // QUAN TRỌNG: Không tách riêng urgent task nữa, giữ nguyên thứ tự kéo thả của user
     // Cập nhật priorityOrder mới CHÍNH XÁC theo vị trí
-    const updatedReorderedItems = finalReorderedItems.map((item, index) => ({
+    const updatedReorderedItems = newOrderedItems.map((item, index) => ({
       ...item,
       priorityOrder: index + 1
     }));

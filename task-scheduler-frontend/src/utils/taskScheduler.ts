@@ -143,25 +143,10 @@ export const findNextAvailableStartDate = (
   currentTime: Date,
   taskPriority?: string
 ): Date => {
-  const isUrgent = taskPriority?.toLowerCase() === 'urgent';
-  
   console.log(`Tìm ngày bắt đầu khả dụng cho assignee: ${assigneeId || 'unassigned'}, Priority: ${taskPriority || 'unknown'}`);
   console.log(`  - Ngày hiện tại: ${formatDateVN(currentTime)}`);
   
-  // Nếu là task urgent, luôn ưu tiên bắt đầu từ ngày hiện tại (nếu là ngày làm việc)
-  // hoặc ngày làm việc tiếp theo (nếu hiện tại là cuối tuần)
-  if (isUrgent) {
-    console.log('  - Task URGENT: ưu tiên bắt đầu từ ngày làm việc sớm nhất');
-    
-    let startDate = new Date(currentTime);
-    if (isWeekend(startDate)) {
-      startDate = getNextWorkDay(startDate);
-      console.log(`  - Ngày hiện tại là cuối tuần, chuyển sang ngày làm việc tiếp theo: ${formatDateVN(startDate)}`);
-    }
-    
-    console.log(`  - Ngày bắt đầu cho task URGENT: ${formatDateVN(startDate)}`);
-    return startDate;
-  }
+  // Không ưu tiên task urgent nữa - xử lý tất cả các task như nhau
   
   // Nếu không có assigneeId hoặc không có lịch sử kết thúc của người này, bắt đầu từ ngày hiện tại
   if (!assigneeId || !lastTaskEndTime[assigneeId]) {
