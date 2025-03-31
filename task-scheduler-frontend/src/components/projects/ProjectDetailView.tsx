@@ -13,6 +13,9 @@ import type { TaskFilter } from '@/types/task';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { fetchProjectTasks } from '@/redux/features/tasksSlice';
 import { fetchProjectMembers } from '@/redux/features/membersSlice';
+import { fetchProjectPlans, fetchLatestProjectPlan } from '@/redux/features/plansSlice';
+import { processTasksAndUpdateStore, processTasksBasedOnPlan } from '@/utils/taskScheduler';
+import { selectPlans } from '@/redux/features/plansSlice';
 
 type ViewType = 'list' | 'kanban' | 'gantt' | 'members';
 
@@ -146,17 +149,69 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
   const { tasks: reduxTasks, loading: loadingTasks } = useAppSelector(state => state.tasks);
   const { members: reduxMembers, loading: loadingMembers } = useAppSelector(state => state.members);
   
-  // Fetch data khi component mount hoặc project ID thay đổi
+  // Sửa lại useEffect để fetch tất cả dữ liệu cần thiết khi component mount
   useEffect(() => {
     // Đảm bảo chỉ fetch dữ liệu khi đang ở client side
     if (typeof window !== 'undefined' && project.id) {
-      // Fetch tasks using Redux
-      dispatch(fetchProjectTasks(project.id));
+      console.log('Bắt đầu fetch dữ liệu cho project:', project.id);
       
-      // Fetch members using Redux
-      dispatch(fetchProjectMembers(project.id));
+      // Lập kế hoạch fetch dữ liệu theo thứ tự
+      const fetchProjectData = async () => {
+        try {
+          // Bước 1: Fetch tasks và members trước
+          const [tasksResult, membersResult] = await Promise.all([
+            dispatch(fetchProjectTasks(project.id)),
+            dispatch(fetchProjectMembers(project.id))
+          ]);
+          console.log('Đã fetch tasks và members xong');
+          
+          // Bước 2: Sau khi có tasks, fetch plans
+          const plansResult = await dispatch(fetchProjectPlans(project.id));
+          console.log('Đã fetch plans xong');
+          
+          // Bước 3: Sau khi có plans, fetch latest plan
+          const latestPlanResult = await dispatch(fetchLatestProjectPlan(project.id));
+          console.log('Đã fetch latest plan xong');
+          
+          // Bước 4: Xử lý dữ liệu sau khi tất cả đã được load
+          handleDataProcessing(tasksResult, plansResult, latestPlanResult);
+          
+        } catch (error) {
+          console.error('Lỗi khi fetch dữ liệu project:', error);
+        }
+      };
+      
+      fetchProjectData();
     }
   }, [dispatch, project.id]);
+  
+  // Hàm xử lý dữ liệu sau khi tất cả API đã được fetch
+  const handleDataProcessing = (tasksResult: any, plansResult: any, latestPlanResult: any) => {
+    // Kiểm tra xem đã có dữ liệu tasks chưa
+    if (tasksResult && tasksResult.payload) {
+      console.log('Bắt đầu xử lý dữ liệu tasks và plans');
+      
+      const hasTasks = tasksResult.payload && tasksResult.payload.length > 0;
+      const hasPlans = plansResult.payload && plansResult.payload.length > 0;
+      const hasActivePlan = latestPlanResult.payload !== null;
+      
+      console.log('Trạng thái dữ liệu:', { 
+        hasTasks, 
+        hasPlans, 
+        hasActivePlan
+      });
+      
+      if (hasTasks) {
+        // Sử dụng hàm processTasksBasedOnPlan để xử lý và cập nhật store
+        processTasksBasedOnPlan(
+          tasksResult.payload, 
+          hasActivePlan, 
+          dispatch
+        );
+        console.log('Đã xử lý và cập nhật task order store');
+      }
+    }
+  };
   
   // Sử dụng state để quyết định nguồn dữ liệu (Redux hoặc React Query)
   const [useReduxData, setUseReduxData] = useState(true); // Chuyển sang sử dụng Redux
@@ -341,7 +396,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
             )}
             {activeView === 'gantt' && (
               <div className="card h-full overflow-auto">
-                <Timeline tasks={displayedTasks} users={users || []} />
+                <Timeline />
               </div>
             )}
           </>

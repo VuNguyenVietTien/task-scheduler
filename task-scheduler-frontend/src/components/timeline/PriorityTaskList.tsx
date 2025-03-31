@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useMemo, useEffect, useState } from 'react';
+import React, { useMemo, useEffect, useState, useCallback } from 'react';
 import { Task } from '@/types/task';
+import { sortTasksByPriority } from '@/utils/taskScheduler';
 import {
   DndContext,
   DragEndEvent,
@@ -22,12 +23,9 @@ import { CSS } from '@dnd-kit/utilities';
 import { ArrowUpDown } from 'lucide-react';
 import { TaskStatus } from '@/types/task';
 import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
-import { useAppDispatch, useAppSelector } from '@/redux/hooks';
-import { 
-  selectOrderedTasks, 
-  updateTaskOrder, 
-  TaskOrderItem
-} from '@/redux/features/taskOrderStore';
+import { useAppDispatch } from '@/redux/hooks';
+import { updateTaskOrder } from '@/redux/features/taskOrderStore';
+import { processTasksAndUpdateStore } from '@/utils/taskScheduler';
 
 interface PriorityTaskListProps {
   tasks: Task[];
@@ -104,10 +102,10 @@ function SortableTaskItem({
 }
 
 export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: PriorityTaskListProps) {
-  const dispatch = useAppDispatch();
-  const orderedTaskItems = useAppSelector(selectOrderedTasks);
   const [activeTasks, setActiveTasks] = useState<Task[]>([]);
   const [hasUserReordered, setHasUserReordered] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const dispatch = useAppDispatch();
   
   // Sensors cho DnD
   const sensors = useSensors(
@@ -121,63 +119,89 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
     })
   );
 
-  // Cập nhật danh sách activeTasks từ orderedTaskItems và tasks gốc
   useEffect(() => {
-    const tasksMap = new Map<string, Task>();
-    tasks.forEach(task => {
-      tasksMap.set(task.task_id, task);
-    });
+    // Nếu đang trong quá trình kéo thả, không cập nhật lại tasks từ props
+    if (isDragging) {
+      return;
+    }
     
-    // Lọc task đã hoàn thành và sắp xếp theo thứ tự trong orderedTaskItems
-    const updatedActiveTasks = orderedTaskItems
-      .map(orderItem => {
-        const task = tasksMap.get(orderItem.taskId);
-        if (!task) return null;
-        
-        // Chỉ hiển thị task chưa hoàn thành
-        if (task.status === 'done') return null;
-        
-        // Trả về task với priority_order từ orderedTaskItems
-        return {
-          ...task,
-          priority_order: orderItem.priorityOrder 
-        };
-      })
-      .filter((task): task is Task => task !== null);
+    // Nếu người dùng đã kéo thả, không sắp xếp lại theo priority
+    if (hasUserReordered && tasks.length === activeTasks.length) {
+      return;
+    }
     
-    setActiveTasks(updatedActiveTasks);
-  }, [orderedTaskItems, tasks]);
+    // Reset trạng thái khi tasks thay đổi
+    setHasUserReordered(false);
+    
+    // Lọc tasks đã hoàn thành
+    const filteredTasks = tasks.filter(task => task.status !== 'done');
+    
+    // Sử dụng hàm sortTasksByPriority từ taskScheduler
+    const sortedTasks = sortTasksByPriority(filteredTasks);
+    
+    setActiveTasks(sortedTasks);
+  }, [tasks, hasUserReordered, activeTasks.length, isDragging]);
+
+  // Xử lý khi bắt đầu kéo thả
+  const handleDragStart = useCallback(() => {
+    setIsDragging(true);
+  }, []);
 
   // Xử lý khi kéo thả hoàn tất
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     
+    // Đánh dấu đã kết thúc quá trình kéo thả
+    setIsDragging(false);
+    
     if (over && active.id !== over.id) {
-      // Tìm index trong mảng orderedTaskItems (từ Redux)
-      const oldIndex = orderedTaskItems.findIndex(item => item.taskId === active.id);
-      const newIndex = orderedTaskItems.findIndex(item => item.taskId === over.id);
+      const oldIndex = activeTasks.findIndex(task => task.task_id === active.id);
+      const newIndex = activeTasks.findIndex(task => task.task_id === over.id);
       
+      // Cập nhật thứ tự tasks
       if (oldIndex !== -1 && newIndex !== -1) {
-        // Tạo mảng mới theo thứ tự đã kéo thả
-        const newOrderedItems = arrayMove(orderedTaskItems, oldIndex, newIndex);
+        // Tạo mảng mới theo thứ tự sau khi kéo thả
+        const newTasks = arrayMove(activeTasks, oldIndex, newIndex);
         
-        // Cập nhật priorityOrder cho mỗi task
-        const updatedOrderedItems = newOrderedItems.map((item, idx) => ({
-          ...item,
-          priorityOrder: idx
-        }));
-        
-        // Cập nhật store
-        dispatch(updateTaskOrder(updatedOrderedItems));
+        // Cập nhật state local trước
+        setActiveTasks(newTasks);
         setHasUserReordered(true);
         
-        // Gọi callback nếu có
+        // Chuyển đổi tasks thành định dạng phù hợp cho taskOrderStore
+        const updatedTaskItems = newTasks.map((task, index) => ({
+          taskId: task.task_id,
+          title: task.title,
+          priority: task.priority,
+          priorityOrder: index + 1,
+          startDate: task.start_date,
+          endDate: task.due_date,
+          assigneeName: task.assignee?.username
+        }));
+        
+        // Dispatch action để cập nhật thứ tự trong Redux store
+        dispatch(updateTaskOrder(updatedTaskItems));
+        
+        // Tạo danh sách tasks để tính toán lại ngày
+        const tasksToRecalculate = newTasks.map(task => ({
+          ...task,
+          priority_order: updatedTaskItems.find(item => item.taskId === task.task_id)?.priorityOrder || 999,
+          force_recalculate: true,
+          start_date: undefined,
+          due_date: undefined
+        }));
+        
+        // Gọi processTasksAndUpdateStore để tính toán lại ngày
+        processTasksAndUpdateStore(tasksToRecalculate, true, dispatch);
+        
+        // Gọi callback để thông báo thay đổi
         if (onTaskReorder) {
-          onTaskReorder(String(active.id), newIndex);
+          setTimeout(() => {
+            onTaskReorder(String(active.id), newIndex);
+          }, 50);
         }
       }
     }
-  };
+  }, [activeTasks, onTaskReorder, dispatch]);
 
   return (
     <div className="flex flex-col">
@@ -191,6 +215,7 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
           <DndContext
             sensors={sensors}
             collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
             modifiers={[restrictToVerticalAxis]}
           >
@@ -198,7 +223,7 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
               items={activeTasks.map(t => t.task_id)}
               strategy={verticalListSortingStrategy}
             >
-              {activeTasks.map((task) => (
+              {activeTasks.map((task, index) => (
                 <SortableTaskItem
                   key={task.task_id}
                   task={task}

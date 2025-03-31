@@ -284,7 +284,6 @@ const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
     parent_task_id: apiTask.parentTaskId,
     title: apiTask.title,
     description: apiTask.description,
-    assignee_id: apiTask.assignee?.userId,
     assignee: apiTask.assignee ? {
       userId: apiTask.assignee.userId,
       username: apiTask.assignee.username,

@@ -24,6 +24,11 @@ export interface PlanTaskData {
   startDate?: string;
   endDate?: string;
   title?: string;
+  effort?: number;
+  assigneeId?: string;
+  assigneeName?: string;
+  priority?: Priority;
+  status?: string;
 }
 
 export interface PlanMetadata {
@@ -56,6 +61,11 @@ export interface CreatePlanTaskDataInput {
   startDate?: string;
   endDate?: string;
   title?: string;
+  effort?: number;
+  assigneeId?: string;
+  assigneeName?: string;
+  priority?: Priority;
+  status?: string;
 }
 
 export interface CreatePlanMetadataInput {

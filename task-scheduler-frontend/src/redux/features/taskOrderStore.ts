@@ -11,7 +11,12 @@ export interface TaskOrderItem {
   priorityOrder: number;
   startDate?: string;
   endDate?: string;
+  effort?: number;  // Thêm effort để tính toán lại nếu cần
+  assigneeId?: string; // Thêm assigneeId để tính toán lại nếu cần
+  assigneeName?: string; // Thêm tên người được gán
+  priority?: string; // Ưu tiên của task (urgent, high, medium, low)
   fromPlan?: boolean;
+  status?: string; // Trạng thái của task (todo, doing, done)
 }
 
 interface TaskOrderState {
@@ -19,13 +24,15 @@ interface TaskOrderState {
   sourceTaskIds: string[]; // Array of task IDs in the correct order
   isPlanLoaded: boolean; // Cờ để biết dữ liệu được lấy từ plan hay không
   currentPlanId: string | null;
+  calculatedTaskDates: Record<string, { startDate?: string; endDate?: string }>; // Đã tính toán ngày cho mỗi task
 }
 
 const initialState: TaskOrderState = {
   orderedTasks: [],
   sourceTaskIds: [],
   isPlanLoaded: false,
-  currentPlanId: null
+  currentPlanId: null,
+  calculatedTaskDates: {}
 };
 
 const taskOrderSlice = createSlice({
@@ -36,12 +43,23 @@ const taskOrderSlice = createSlice({
     updateTaskOrder: (state, action: PayloadAction<TaskOrderItem[]>) => {
       state.orderedTasks = action.payload;
       state.sourceTaskIds = action.payload.map(item => item.taskId);
+      // Không xóa calculatedTaskDates, chỉ đánh dấu là chưa cập nhật ngày cho các task mới
     },
     
     // Cập nhật thông tin tasks đầy đủ (sau khi tính toán ngày bắt đầu, kết thúc)
     updateTasksWithDates: (state, action: PayloadAction<TaskOrderItem[]>) => {
       state.orderedTasks = action.payload;
       state.sourceTaskIds = action.payload.map(item => item.taskId);
+      
+      // Cập nhật calculatedTaskDates đối với các task có ngày
+      action.payload.forEach(task => {
+        if (task.startDate && task.endDate) {
+          state.calculatedTaskDates[task.taskId] = {
+            startDate: task.startDate,
+            endDate: task.endDate
+          };
+        }
+      });
     },
     
     // Reset về trạng thái ban đầu
@@ -50,10 +68,25 @@ const taskOrderSlice = createSlice({
       state.sourceTaskIds = [];
       state.isPlanLoaded = false;
       state.currentPlanId = null;
+      state.calculatedTaskDates = {}; // Reset về object rỗng
     },
     
     // Lưu thông tin từ danh sách Task gốc (khi lần đầu load app)
     initializeFromTasks: (state, action: PayloadAction<Task[]>) => {
+      // Nếu đã có plan được load, không cần khởi tạo từ tasks
+      if (state.isPlanLoaded) {
+        console.log('Đã có plan được load, bỏ qua initializeFromTasks');
+        return;
+      }
+      
+      // Nếu không có tasks hoặc danh sách rỗng, không làm gì cả
+      if (!action.payload || action.payload.length === 0) {
+        console.log('Danh sách tasks rỗng, bỏ qua initializeFromTasks');
+        return;
+      }
+      
+      console.log('Khởi tạo taskOrderStore từ tasks:', action.payload.length);
+      
       // Chuyển đổi từ Task[] sang TaskOrderItem[]
       const orderItems = action.payload.map((task, index) => ({
         taskId: task.task_id,
@@ -61,12 +94,74 @@ const taskOrderSlice = createSlice({
         priorityOrder: task.priority_order || index,
         startDate: task.start_date,
         endDate: task.due_date,
+        effort: task.effort,
+        assigneeId: task.assignee?.userId,
+        assigneeName: task.assignee?.username,
+        priority: task.priority,
+        status: task.status,
         fromPlan: false
       }));
       
       state.orderedTasks = orderItems;
       state.sourceTaskIds = orderItems.map(item => item.taskId);
       state.isPlanLoaded = false;
+      
+      // Tạo calculatedTaskDates từ task data
+      const newCalculatedDates: Record<string, { startDate?: string; endDate?: string }> = {};
+      orderItems.forEach(item => {
+        if (item.startDate && item.endDate) {
+          newCalculatedDates[item.taskId] = {
+            startDate: item.startDate,
+            endDate: item.endDate
+          };
+        }
+      });
+      state.calculatedTaskDates = newCalculatedDates;
+    },
+    
+    // Tính toán lại ngày cho tất cả task và lưu vào store
+    updateCalculatedDates: (state, action: PayloadAction<{taskId: string, startDate: string, endDate: string}[]>) => {
+      const dateUpdates = action.payload;
+      
+      // Cập nhật ngày cho từng task
+      dateUpdates.forEach(update => {
+        const taskIndex = state.orderedTasks.findIndex(task => task.taskId === update.taskId);
+        if (taskIndex >= 0) {
+          state.orderedTasks[taskIndex].startDate = update.startDate;
+          state.orderedTasks[taskIndex].endDate = update.endDate;
+          
+          // Lưu thông tin các ngày đã tính toán vào object
+          state.calculatedTaskDates[update.taskId] = {
+            startDate: update.startDate,
+            endDate: update.endDate
+          };
+        }
+      });
+    },
+    
+    // Thêm action mới để cập nhật thứ tự và ngày tính toán trong một bước
+    updateTaskOrderAndDates: (state, action: PayloadAction<{
+      tasks: TaskOrderItem[], 
+      dateUpdates: {taskId: string, startDate: string, endDate: string}[]
+    }>) => {
+      // Cập nhật thứ tự tasks
+      state.orderedTasks = action.payload.tasks;
+      state.sourceTaskIds = action.payload.tasks.map(item => item.taskId);
+      
+      // Cập nhật ngày cho từng task
+      action.payload.dateUpdates.forEach(update => {
+        const taskIndex = state.orderedTasks.findIndex(task => task.taskId === update.taskId);
+        if (taskIndex >= 0) {
+          state.orderedTasks[taskIndex].startDate = update.startDate;
+          state.orderedTasks[taskIndex].endDate = update.endDate;
+          
+          // Lưu cập nhật vào calculatedTaskDates
+          state.calculatedTaskDates[update.taskId] = {
+            startDate: update.startDate,
+            endDate: update.endDate
+          };
+        }
+      });
     }
   },
   extraReducers: (builder) => {
@@ -132,6 +227,11 @@ function updateTaskOrderFromPlan(state: TaskOrderState, plan: Plan) {
       priorityOrder: task.priorityOrder,
       startDate: task.startDate,
       endDate: task.endDate,
+      effort: task.effort,
+      assigneeId: task.assigneeId,
+      assigneeName: task.assigneeName,
+      priority: task.priority,
+      status: task.status,
       fromPlan: true
     }));
     
@@ -140,16 +240,36 @@ function updateTaskOrderFromPlan(state: TaskOrderState, plan: Plan) {
     state.isPlanLoaded = true;
     state.currentPlanId = plan.id;
     
+    // Cập nhật calculatedTaskDates từ plan data
+    const newCalculatedDates: Record<string, { startDate?: string; endDate?: string }> = {};
+    orderItems.forEach(item => {
+      if (item.startDate && item.endDate) {
+        newCalculatedDates[item.taskId] = {
+          startDate: item.startDate,
+          endDate: item.endDate
+        };
+      }
+    });
+    state.calculatedTaskDates = newCalculatedDates;
+    
     console.log('Đã cập nhật task order từ plan:', plan.name);
   }
 }
 
-export const { updateTaskOrder, updateTasksWithDates, resetTaskOrder, initializeFromTasks } = taskOrderSlice.actions;
+export const { 
+  updateTaskOrder, 
+  updateTasksWithDates, 
+  resetTaskOrder, 
+  initializeFromTasks,
+  updateCalculatedDates,
+  updateTaskOrderAndDates
+} = taskOrderSlice.actions;
 
 // Selectors
 export const selectOrderedTasks = (state: RootState) => state.taskOrder.orderedTasks;
 export const selectSourceTaskIds = (state: RootState) => state.taskOrder.sourceTaskIds;
 export const selectIsPlanLoaded = (state: RootState) => state.taskOrder.isPlanLoaded;
 export const selectCurrentPlanId = (state: RootState) => state.taskOrder.currentPlanId;
+export const selectCalculatedTaskDates = (state: RootState) => state.taskOrder.calculatedTaskDates;
 
 export default taskOrderSlice.reducer; 

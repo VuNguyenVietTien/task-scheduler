@@ -48,7 +48,7 @@ const parsePlanData = (plan: any): Plan => {
       if (parsedPlan.planData.tasks) {
         console.log(`Plan ${parsedPlan.name} có ${parsedPlan.planData.tasks.length} tasks:`);
         parsedPlan.planData.tasks.forEach((task: any, index: number) => {
-          console.log(`  ${index + 1}. Task ID: ${task.taskId}, Title: ${task.title || 'Không có title'}, Priority: ${task.priorityOrder}, Start: ${task.startDate}, End: ${task.endDate}`);
+          console.log(`  ${index + 1}. Task ID: ${task.taskId}, Title: ${task.title || 'Không có title'}, Priority: ${task.priorityOrder}, Start: ${task.startDate}, End: ${task.endDate}, Assignee: ${task.assigneeName || 'Chưa gán'}, Priority: ${task.priority || 'N/A'}, Status: ${task.status || 'N/A'}`);
         });
       }
     } catch (e) {
@@ -58,7 +58,7 @@ const parsePlanData = (plan: any): Plan => {
     // Nếu planData đã là đối tượng, vẫn log để kiểm tra
     console.log(`Plan ${parsedPlan.name} có ${parsedPlan.planData.tasks.length} tasks (đã là đối tượng):`);
     parsedPlan.planData.tasks.forEach((task: any, index: number) => {
-      console.log(`  ${index + 1}. Task ID: ${task.taskId}, Title: ${task.title || 'Không có title'}, Priority: ${task.priorityOrder}, Start: ${task.startDate}, End: ${task.endDate}`);
+      console.log(`  ${index + 1}. Task ID: ${task.taskId}, Title: ${task.title || 'Không có title'}, Priority: ${task.priorityOrder}, Start: ${task.startDate}, End: ${task.endDate}, Assignee: ${task.assigneeName || 'Chưa gán'}, Priority: ${task.priority || 'N/A'}, Status: ${task.status || 'N/A'}`);
     });
   }
   
