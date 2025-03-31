@@ -362,7 +362,7 @@ export const processTasksAndUpdateStore = (
   // Log thứ tự input trước khi xử lý
   console.log('Thứ tự tasks trước khi xử lý:');
   inputTasks.forEach((task, idx) => {
-    console.log(`  ${idx + 1}. ${task.title} (${task.priority}), priorityOrder: ${task.priority_order}`);
+    console.log(`  ${idx + 1}. ${task.title} (${task.priority})`);
   });
   
   // Sử dụng trực tiếp inputTasks mà không sắp xếp lại
@@ -380,7 +380,7 @@ export const processTasksAndUpdateStore = (
   // Log thứ tự sau khi chuẩn bị xử lý
   console.log('Thứ tự tasks để xử lý (giữ nguyên thứ tự đầu vào):');
   tasksToProcess.forEach((task, idx) => {
-    console.log(`  ${idx + 1}. ${task.title} (${task.priority}), priorityOrder: ${task.priority_order}`);
+    console.log(`  ${idx + 1}. ${task.title} (${task.priority})`);
   });
   
   // XỬ LÝ TASK - Thay thế phần này thay vì gọi processTasks
@@ -487,7 +487,7 @@ export const processTasksAndUpdateStore = (
     const assigneeId = task.assignee?.userId || 'unassigned';
     let updatedTask = { ...task };
     
-    console.log(`Xử lý task thứ ${i + 1}: ${task.title} (${task.priority}), Priority Order: ${task.priority_order}`);
+    console.log(`Xử lý task thứ ${i + 1}: ${task.title} (${task.priority})`);
     
     // Tìm thời gian bắt đầu khả dụng cho task này
     let startDate: Date;
@@ -625,7 +625,7 @@ export const processTasksAndUpdateStore = (
   dateUpdates.forEach((update, index) => {
     const task = allProcessedTasks.find(t => t.task_id === update.taskId);
     if (task) {
-      console.log(`  ${index + 1}. ${task.title} (${task.priority}, priorityOrder: ${task.priority_order}): ${update.startDate} đến ${update.endDate}`);
+      console.log(`  ${index + 1}. ${task.title} (${task.priority}): ${update.startDate} đến ${update.endDate}`);
     }
   });
   

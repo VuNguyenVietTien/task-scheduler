@@ -168,7 +168,7 @@ impl TaskQuery {
                 WHERE NOT t.is_deleted
             )
             SELECT * FROM task_tree
-            ORDER BY priority_order ASC
+            ORDER BY created_at DESC
             "#
         )
         .bind(project_id)

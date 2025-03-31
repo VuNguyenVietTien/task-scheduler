@@ -33,7 +33,7 @@ pub async fn list_project_tasks(
         WHERE project_id = $1
         AND ($2::uuid IS NULL OR parent_task_id = $2)
         AND NOT is_deleted
-        ORDER BY priority_order ASC, created_at ASC
+        ORDER BY created_at DESC
         "#
     )
     .bind(project_id)

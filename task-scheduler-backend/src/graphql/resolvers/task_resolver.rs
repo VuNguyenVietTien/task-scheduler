@@ -123,7 +123,7 @@ impl TaskQuery {
             AND ($2::task_status IS NULL OR status = $2)
             AND ($3::uuid IS NULL OR assignee_id = $3)
             AND is_deleted = false
-            ORDER BY priority_order ASC
+            ORDER BY created_at DESC
             "#,
             project_id,
             status as Option<TaskStatus>,

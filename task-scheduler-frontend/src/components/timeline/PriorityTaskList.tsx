@@ -115,7 +115,7 @@ export function PriorityTaskList({
   const [isDragging, setIsDragging] = useState(false);
   const dispatch = useAppDispatch();
   
-  // Sensors cho DnD
+  // Sensors cho DnD - Luôn định nghĩa ở cấp cao nhất của component
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: {
@@ -127,55 +127,12 @@ export function PriorityTaskList({
     })
   );
 
-  useEffect(() => {
-    // Nếu đang trong quá trình kéo thả, không cập nhật lại tasks từ props
-    if (isDragging) {
-      return;
-    }
-    
-    // Reset trạng thái khi tasks, plan, hoặc autoSort thay đổi
-    // Luôn làm mới danh sách khi có plan mới hoặc trạng thái autoSort thay đổi
-    if (activePlanId || autoSort) {
-      setHasUserReordered(false);
-    } else if (hasUserReordered && tasks.length === activeTasks.length) {
-      return; // Chỉ giữ nguyên thứ tự nếu người dùng đã kéo thả và không có plan/autoSort
-    }
-    
-    // Lọc tasks đã hoàn thành
-    const filteredTasks = tasks.filter(task => task.status !== 'done');
-    
-    console.log(`PriorityTaskList updating - activePlanId: ${activePlanId}, autoSort: ${autoSort}, tasks: ${filteredTasks.length}`);
-    
-    // Nếu có plan active hoặc tất cả tasks đều có priority_order, sắp xếp theo priority_order
-    const allTasksHavePriorityOrder = filteredTasks.length > 0 && 
-                                      filteredTasks.every(task => task.priority_order !== undefined);
-    
-    if (activePlanId || allTasksHavePriorityOrder) {
-      // Sắp xếp theo priority_order nếu có plan hoặc tất cả tasks đều có priority_order
-      console.log('Sắp xếp tasks theo priority_order (từ plan hoặc đã có thứ tự)');
-      const sortedByPriorityOrder = [...filteredTasks].sort((a, b) => 
-        (a.priority_order || 999) - (b.priority_order || 999)
-      );
-      setActiveTasks(sortedByPriorityOrder);
-    } else if (autoSort) {
-      // Nếu auto sort được bật, sắp xếp theo mức độ ưu tiên
-      console.log('Sắp xếp tasks theo priority (urgent > high > medium > low) do autoSort = true');
-      const sortedTasks = sortTasksByPriority(filteredTasks);
-      setActiveTasks(sortedTasks);
-    } else {
-      // Nếu không có plan, không auto sort, và không có priority_order, vẫn sắp xếp theo priority
-      console.log('Sắp xếp tasks theo priority (urgent > high > medium > low)');
-      const sortedTasks = sortTasksByPriority(filteredTasks);
-      setActiveTasks(sortedTasks);
-    }
-  }, [tasks, hasUserReordered, activeTasks.length, isDragging, activePlanId, autoSort]);
-
-  // Xử lý khi bắt đầu kéo thả
+  // Xử lý khi bắt đầu kéo thả - Định nghĩa callback trước useEffect
   const handleDragStart = useCallback(() => {
     setIsDragging(true);
   }, []);
 
-  // Xử lý khi kéo thả hoàn tất
+  // Xử lý khi kéo thả hoàn tất - Định nghĩa callback trước useEffect
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     
@@ -220,6 +177,57 @@ export function PriorityTaskList({
     }
   }, [activeTasks, onTaskReorder, dispatch]);
 
+  // useEffect luôn chạy dù có điều kiện gì bên trong
+  useEffect(() => {
+    // Logic sắp xếp tasks
+    const updateTasksOrder = () => {
+      // Nếu đang trong quá trình kéo thả, không cập nhật lại tasks từ props
+      if (isDragging) {
+        return;
+      }
+      
+      // Reset trạng thái khi tasks, plan, hoặc autoSort thay đổi
+      if (activePlanId || autoSort) {
+        setHasUserReordered(false);
+      } else if (hasUserReordered && tasks.length === activeTasks.length) {
+        return; // Chỉ giữ nguyên thứ tự nếu người dùng đã kéo thả và không có plan/autoSort
+      }
+      
+      // Lọc tasks đã hoàn thành
+      const filteredTasks = tasks.filter(task => task.status !== 'done');
+      
+      console.log(`PriorityTaskList updating - activePlanId: ${activePlanId}, autoSort: ${autoSort}, tasks: ${filteredTasks.length}`);
+      
+      // Nếu có plan active hoặc tất cả tasks đều có priority_order, sắp xếp theo priority_order
+      const allTasksHavePriorityOrder = filteredTasks.length > 0 && 
+                                        filteredTasks.every(task => task.priority_order !== undefined);
+      
+      let sortedTasks: Task[] = [];
+      if (activePlanId || allTasksHavePriorityOrder) {
+        // Sắp xếp theo priority_order nếu có plan hoặc tất cả tasks đều có priority_order
+        console.log('Sắp xếp tasks theo priority_order (từ plan hoặc đã có thứ tự)');
+        sortedTasks = [...filteredTasks].sort((a, b) => 
+          (a.priority_order || 999) - (b.priority_order || 999)
+        );
+      } else {
+        // Sắp xếp theo priority nếu không có plan/priority_order hoặc autoSort=true
+        console.log('Sắp xếp tasks theo priority (urgent > high > medium > low)');
+        sortedTasks = sortTasksByPriority(filteredTasks);
+      }
+      
+      setActiveTasks(sortedTasks);
+    };
+    
+    updateTasksOrder();
+  }, [tasks, hasUserReordered, activeTasks.length, isDragging, activePlanId, autoSort]);
+
+  // Chuẩn bị empty item để hiển thị khi không có task
+  const emptyContent = (
+    <div className="p-4 text-center text-slate-500">
+      <p>Không có công việc nào để hiển thị</p>
+    </div>
+  );
+
   return (
     <div className="flex flex-col">
       <div className="p-3 border-b border-slate-200 bg-slate-50">
@@ -240,7 +248,7 @@ export function PriorityTaskList({
               items={activeTasks.map(t => t.task_id)}
               strategy={verticalListSortingStrategy}
             >
-              {activeTasks.map((task, index) => (
+              {activeTasks.map((task) => (
                 <SortableTaskItem
                   key={task.task_id}
                   task={task}
@@ -249,11 +257,7 @@ export function PriorityTaskList({
               ))}
             </SortableContext>
           </DndContext>
-        ) : (
-          <div className="p-4 text-center text-slate-500">
-            <p>Không có công việc nào để hiển thị</p>
-          </div>
-        )}
+        ) : emptyContent}
       </div>
     </div>
   );

@@ -8,14 +8,12 @@ export const GET_PROJECT_TASKS = gql`
       projectId
       parentTaskId
       title
-      description
       assignee {
         userId
         username
         avatarUrl
         role
       }
-      priorityOrder
       startDate
       dueDate
       actualStartDate
@@ -37,14 +35,12 @@ export const GET_PROJECT_TASKS = gql`
         projectId
         parentTaskId
         title
-        description
         assignee {
           userId
           username
           avatarUrl
           role
         }
-        priorityOrder
         startDate
         dueDate
         effort
@@ -125,14 +121,12 @@ export const GET_PROJECT_TASKS_PAGINATED = gql`
         projectId
         parentTaskId
         title
-        description
         assignee {
           userId
           username
           avatarUrl
           role
         }
-        priorityOrder
         startDate
         dueDate
         actualStartDate
@@ -154,14 +148,12 @@ export const GET_PROJECT_TASKS_PAGINATED = gql`
           projectId
           parentTaskId
           title
-          description
           assignee {
             userId
             username
             avatarUrl
             role
           }
-          priorityOrder
           startDate
           dueDate
           effort
