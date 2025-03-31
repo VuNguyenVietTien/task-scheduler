@@ -684,24 +684,22 @@ export const processTasksBasedOnPlan = (
     // Nếu có active plan, hệ thống đã load dữ liệu vào TaskOrderStore qua extraReducers
     console.log('Đã có active plan, dữ liệu sẽ được tự động cập nhật thông qua reducer');
     
-    // Mặc dù plan data đã được xử lý qua extraReducers, nhưng vẫn cần đảm bảo
-    // tất cả các task mới (có thể chưa nằm trong plan) đều được init
-    dispatch(initializeFromTasks(tasks));
+    // KHÔNG GỌI THÊM initializeFromTasks khi đã có active plan vì sẽ gây duplicate
+    // Chỉ log thông báo
+    console.log('Đã có active plan, bỏ qua việc gọi initializeFromTasks để tránh duplicate');
     
-    // Kiểm tra xem có task nào được đánh dấu force_recalculate không
-    const needsRecalculation = tasks.some(task => task.force_recalculate);
-    
-    if (needsRecalculation) {
-      console.log('Có task được đánh dấu force_recalculate, tính toán lại toàn bộ');
-      // Sử dụng keepOrder=true để giữ nguyên thứ tự từ plan
-      processTasksAndUpdateStore(tasks, true, dispatch);
-    }
+    // KHÔNG ĐƯỢC gọi processTasksAndUpdateStore khi đã có active plan
+    // vì sẽ gây ra duplicate tasks trong store
+    console.log('Đã có active plan, chỉ bổ sung task mới, không tính toán lại để tránh duplicate');
   } else {
     // Nếu không có active plan, sử dụng processTasksAndUpdateStore và sắp xếp theo priority
     console.log('Không có active plan, tính toán ngày dựa trên thứ tự priority');
     
     // Nếu không cần tính toán lại, vẫn cần cập nhật store với định dạng của TaskOrderItem
-    dispatch(initializeFromTasks(tasks));
+    dispatch(initializeFromTasks({
+      tasks,
+      autoSort: true
+    }));
     
     // Kiểm tra xem có task nào được đánh dấu force_recalculate không
     const needsRecalculation = tasks.some(task => task.force_recalculate);

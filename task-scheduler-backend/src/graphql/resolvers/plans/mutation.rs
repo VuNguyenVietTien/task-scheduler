@@ -29,6 +29,12 @@ struct PlanTaskDataInput {
     start_date: Option<String>,
     end_date: Option<String>,
     title: Option<String>,
+    effort: Option<f64>,
+    assignee_id: Option<String>,
+    assignee_name: Option<String>,
+    priority: Option<String>,
+    status: Option<String>,
+    original_priority: Option<String>,
 }
 
 #[derive(InputObject, Serialize)]

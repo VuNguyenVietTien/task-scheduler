@@ -455,6 +455,12 @@ type PlanTaskData {
   original_priority: String
   start_date: DateTime
   end_date: DateTime
+  title: String
+  effort: Float
+  assignee_id: String
+  assignee_name: String
+  priority: String
+  status: String
 }
 
 """
@@ -590,6 +596,11 @@ input CreatePlanTaskDataInput {
   start_date: DateTime
   end_date: DateTime
   title: String
+  effort: Float
+  assignee_id: String
+  assignee_name: String
+  priority: String
+  status: String
 }
 
 """

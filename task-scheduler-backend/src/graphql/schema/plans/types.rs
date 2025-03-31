@@ -32,6 +32,16 @@ pub struct PlanTaskData {
     pub end_date: Option<DateTime<Utc>>,
     #[serde(default)]
     pub title: Option<String>,
+    #[serde(default)]
+    pub effort: Option<f64>,
+    #[serde(default)]
+    pub assignee_id: Option<String>,
+    #[serde(default)]
+    pub assignee_name: Option<String>,
+    #[serde(default)]
+    pub priority: Option<String>,
+    #[serde(default)]
+    pub status: Option<String>,
 }
 
 #[derive(SimpleObject, Deserialize, Serialize)]
@@ -73,6 +83,11 @@ pub struct CreatePlanTaskDataInput {
     pub start_date: Option<DateTime<Utc>>,
     pub end_date: Option<DateTime<Utc>>,
     pub title: Option<String>,
+    pub effort: Option<f64>,
+    pub assignee_id: Option<String>,
+    pub assignee_name: Option<String>,
+    pub priority: Option<String>,
+    pub status: Option<String>,
 }
 
 #[derive(InputObject)]

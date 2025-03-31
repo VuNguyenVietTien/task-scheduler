@@ -232,32 +232,45 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
       .sort((a, b) => a.name.localeCompare(b.name));
   }, [tasks, users]);
 
-  // Thêm useEffect chạy khi component mount - Chỉ chạy một lần
+  // useEffect để xử lý fetch và process tasks
   useEffect(() => {
-    if (currentProjectId) {
-      console.log('Timeline mounted with project ID:', currentProjectId);
+    console.log('Bắt đầu xử lý dữ liệu tasks và plans');
+    
+    const hasTasks = tasks && tasks.length > 0;
+    const hasPlans = plans && plans.length > 0;
+    const hasActivePlan = activePlan !== undefined;
+    
+    console.log('Trạng thái dữ liệu:', { hasTasks, hasPlans, hasActivePlan });
+    
+    if (hasTasks) {
+      // Xem xét tạo chuỗi JSON của tasks để kiểm tra thay đổi thực sự
+      const tasksJson = JSON.stringify(tasks.map(task => task.task_id));
+      const prevTasksJson = prevTasksRef.current;
       
-      // KHÔNG fetch dữ liệu plans và tasks ở đây nữa, đã được fetch từ ProjectDetailView
-      // dispatch(fetchProjectPlans(currentProjectId));
-      // dispatch(fetchLatestProjectPlan(currentProjectId));
+      // Nếu danh sách tasks không thay đổi, không làm gì cả
+      if (prevTasksJson === tasksJson) {
+        console.log('Danh sách tasks không thay đổi, bỏ qua xử lý');
+        return;
+      }
       
-      // Cập nhật redux cho orderedTasks nếu đã có tasks nhưng chưa có trong orderedTasks
-      // Chỉ khởi tạo khi:
-      // 1. Có tasks
-      // 2. orderedTaskItems rỗng
-      // 3. Chưa có plan được load
-      if (tasks.length > 0 && orderedTaskItems.length === 0 && !isPlanLoaded) {
-        console.log('Khởi tạo từ tasks vì chưa có orderedTasks và không có plan');
-        dispatch(initializeFromTasks(tasks));
+      // Cập nhật prevTasksRef.current để tránh xử lý lặp
+      console.log('Cập nhật prevTasksRef.current để tránh xử lý lặp');
+      prevTasksRef.current = tasksJson;
+      
+      if (hasActivePlan) {
+        console.log('Xử lý', tasks.length, 'tasks dựa trên plan: Có active plan');
+        console.log('Đã có active plan, dữ liệu sẽ được tự động cập nhật thông qua reducer');
         
-        // Đặt autoSort=true khi không có plan
-        setAutoSort(true);
-        
-        // Đánh dấu đã khởi tạo để các useEffect khác không cần xử lý lại
-        tasksInitialized.current = true;
+        // QUAN TRỌNG: Khi có active plan, KHÔNG gọi initializeFromTasks hay processTasksAndUpdateStore
+        // vì dữ liệu đã được cập nhật thông qua extraReducers
+        // Và để tránh duplicate tasks
+      } else {
+        console.log('Xử lý', tasks.length, 'tasks không có plan');
+        // Chỉ gọi processTasksAndUpdateStore khi không có active plan
+        processTasksAndUpdateStore(tasks, false, dispatch);
       }
     }
-  }, [currentProjectId, dispatch, tasks, orderedTaskItems.length, isPlanLoaded]);
+  }, [tasks, dispatch, activePlan, plans]);
 
   // Sửa useEffect theo dõi thay đổi của tasks
   useEffect(() => {
@@ -345,13 +358,13 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     // Chỉ xử lý khi có activePlan và có tasks
     if (!activePlan || tasks.length === 0) return;
     
-    console.log('Active plan changed, processing tasks with keepOrder=true');
+    console.log('Active plan changed, KHÔNG cần gọi processTasksAndUpdateStore vì đã được extraReducers xử lý');
     
     // Đánh dấu đã khởi tạo để useEffect khác không xử lý lại
     tasksInitialized.current = true;
     
-    // Sử dụng processTasksAndUpdateStore với keepOrder=true để giữ thứ tự từ plan
-    processTasksAndUpdateStore(tasks, true, dispatch);
+    // QUAN TRỌNG: KHÔNG gọi processTasksAndUpdateStore ở đây vì extraReducers đã tự xử lý rồi
+    // Gọi thêm lần nữa sẽ gây duplicate tasks!
   }, [activePlan?.id, tasks, dispatch]);
 
   // Thêm useEffect để debug re-render
@@ -382,8 +395,17 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     console.log('🔄 Recalculating orderedTasks');
     let result = orderedTaskItems.map(item => convertTaskOrderToTask(item, currentProjectId || ''));
 
-    // Chỉ sort nếu autoSort=true và không có plan
-    if (autoSort && !activePlan) {
+    // Có plan: luôn ưu tiên giữ nguyên thứ tự từ orderedTaskItems (từ plan)
+    if (activePlan) {
+      console.log('Có active plan, giữ nguyên thứ tự tasks từ plan');
+      console.log('Task order from plan:', result.map(t => 
+        `${t.title} (${t.priority}) - Order: ${t.priority_order}`
+      ));
+      return result;
+    }
+    
+    // Không có plan: sort theo priority nếu autoSort = true
+    if (autoSort) {
       console.log('Sắp xếp tasks theo priority vì autoSort=true và không có plan');
       const priorityOrder: Record<string, number> = {
         urgent: 1,
@@ -402,8 +424,8 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
         `${t.title} (${t.priority}) - Order: ${t.priority_order}`
       ));
     } else {
-      // Khi autoSort=false, giữ nguyên thứ tự từ Redux store
-      console.log('GIỮ NGUYÊN thứ tự tasks từ Redux store vì autoSort=false hoặc có active plan');
+      // autoSort=false: giữ nguyên thứ tự từ Redux store
+      console.log('GIỮ NGUYÊN thứ tự tasks từ Redux store vì autoSort=false');
       console.log('Task order from store:', result.map(t => 
         `${t.title} (${t.priority}) - Order: ${t.priority_order}`
       ));
@@ -655,22 +677,46 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
       return;
     }
     
-    // Tạo dữ liệu cho kế hoạch mới
+    // Tạo dữ liệu cho kế hoạch mới với định dạng đúng theo API và lưu đầy đủ thông tin
     const planTasks: CreatePlanTaskDataInput[] = orderedTaskItems.map((item, index) => {
       // Kiểm tra nếu calculatedTaskDates là object và có thuộc tính cho taskId này
       const calculatedDates = typeof calculatedTaskDates === 'object' && calculatedTaskDates !== null 
         ? calculatedTaskDates[item.taskId] 
         : undefined;
       
+      // Lấy ngày bắt đầu/kết thúc từ nhiều nguồn theo thứ tự ưu tiên
+      const startDate = item.startDate || 
+                         (calculatedDates && calculatedDates.startDate) || 
+                         '';
+      const endDate = item.endDate || 
+                       (calculatedDates && calculatedDates.endDate) || 
+                       '';
+      
+      // Chuyển đổi priority thành đúng kiểu Priority nếu cần
+      let taskPriority = item.priority as Priority | undefined;
+      // Đảm bảo priority hợp lệ (low, medium, high, urgent, critical)
+      if (taskPriority && !['low', 'medium', 'high', 'urgent', 'critical'].includes(taskPriority)) {
+        taskPriority = 'medium'; // Giá trị mặc định nếu không hợp lệ
+      }
+      
+      // Tạo dữ liệu theo kiểu yêu cầu của API (CreatePlanTaskDataInput)
       return {
         taskId: item.taskId,
+        title: item.title || 'Không có tiêu đề',
         priorityOrder: index + 1,
-        startDate: item.startDate || (calculatedDates && calculatedDates.startDate ? calculatedDates.startDate : ''),
-        endDate: item.endDate || (calculatedDates && calculatedDates.endDate ? calculatedDates.endDate : ''),
+        startDate: startDate,
+        endDate: endDate,
+        effort: item.effort,
+        assigneeId: item.assigneeId,
+        assigneeName: item.assigneeName,
+        priority: taskPriority,
+        status: item.status
       };
     });
 
-    // Tạo input cho mutation
+    console.log('Dữ liệu plan tasks đã chuẩn bị:', planTasks);
+
+    // Tạo input cho mutation với định dạng phù hợp
     const input: CreatePlanInput = {
       projectId: currentProjectId,
       name: planName,
@@ -679,14 +725,18 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
       }
     };
     
+    console.log('Đang tạo plan mới với input:', input);
+    
     // Dispatch action để tạo kế hoạch mới
     dispatch(createPlan(input))
       .unwrap()
       .then((result) => {
+        console.log('Kết quả tạo plan:', result);
         toast.success('Đã lưu kế hoạch thành công');
         setShowSavePlanDialog(false);
       })
       .catch((error) => {
+        console.error('Lỗi khi tạo plan:', error);
         toast.error(`Lỗi khi lưu kế hoạch: ${error.message || 'Lỗi không xác định'}`);
       });
   }, [planName, currentProjectId, orderedTaskItems, calculatedTaskDates, dispatch]);
@@ -967,10 +1017,10 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
               <PriorityTaskList 
                 tasks={orderedTasks} 
                 onTaskClick={onTaskClick} 
-              onTaskReorder={(taskId, newIndex) => {
-                // Xử lý sắp xếp lại task dựa trên kéo thả
-                handleTaskReorder(taskId, newIndex);
-              }}
+                onTaskReorder={(taskId, newIndex) => {
+                  // Xử lý sắp xếp lại task dựa trên kéo thả
+                  handleTaskReorder(taskId, newIndex);
+                }}
               />
             ) : (
               <>
@@ -978,10 +1028,10 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                   <PriorityTaskList 
                     tasks={filteredTasks} 
                     onTaskClick={onTaskClick} 
-                  onTaskReorder={(taskId, newIndex) => {
-                    // Xử lý sắp xếp lại task dựa trên kéo thả
-                    handleTaskReorder(taskId, newIndex);
-                  }}
+                    onTaskReorder={(taskId, newIndex) => {
+                      // Xử lý sắp xếp lại task dựa trên kéo thả
+                      handleTaskReorder(taskId, newIndex);
+                    }}
                   />
                 ) : (
                   <div className="p-3 text-slate-500 text-sm">

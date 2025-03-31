@@ -37,6 +37,14 @@ const initialState: TaskOrderState = {
   autoSort: true // Mặc định là true khi khởi tạo
 };
 
+// Định nghĩa interface cho tham số của initializeFromTasks
+interface InitializeFromTasksPayload {
+  tasks: Task[];
+  autoSort?: boolean;
+  skipIfPlanLoaded?: boolean;
+  onlyAddNewTasks?: boolean;
+}
+
 const taskOrderSlice = createSlice({
   name: 'taskOrder',
   initialState,
@@ -74,23 +82,94 @@ const taskOrderSlice = createSlice({
     },
     
     // Lưu thông tin từ danh sách Task gốc (khi lần đầu load app)
-    initializeFromTasks: (state, action: PayloadAction<Task[]>) => {
-      // Nếu đã có plan được load, không cần khởi tạo từ tasks
-      if (state.isPlanLoaded) {
-        console.log('Đã có plan được load, bỏ qua initializeFromTasks');
+    initializeFromTasks: (state, action: PayloadAction<Task[] | InitializeFromTasksPayload>) => {
+      // Xử lý input để hỗ trợ cả 2 kiểu dữ liệu đầu vào
+      let tasks: Task[];
+      let skipIfPlanLoaded = false;
+      let onlyAddNewTasks = false;
+      let autoSort = state.autoSort; // Giữ nguyên giá trị autoSort hiện tại
+      
+      // Kiểm tra xem action.payload có phải là mảng không
+      if (Array.isArray(action.payload)) {
+        tasks = action.payload;
+      } else {
+        // Nếu không phải mảng, lấy từ đối tượng payload
+        tasks = action.payload.tasks;
+        skipIfPlanLoaded = action.payload.skipIfPlanLoaded || false;
+        onlyAddNewTasks = action.payload.onlyAddNewTasks || false;
+        
+        // Chỉ cập nhật autoSort nếu được chỉ định rõ trong payload
+        if (action.payload.autoSort !== undefined) {
+          autoSort = action.payload.autoSort;
+        }
+      }
+      
+      // Nếu cờ skipIfPlanLoaded = true và đã có plan được load, bỏ qua quá trình xử lý
+      if (skipIfPlanLoaded && state.isPlanLoaded && !onlyAddNewTasks) {
+        console.log('Bỏ qua initializeFromTasks vì đã có plan được load và skipIfPlanLoaded=true');
         return;
       }
       
       // Nếu không có tasks hoặc danh sách rỗng, không làm gì cả
-      if (!action.payload || action.payload.length === 0) {
+      if (!tasks || tasks.length === 0) {
         console.log('Danh sách tasks rỗng, bỏ qua initializeFromTasks');
         return;
       }
       
-      console.log('Khởi tạo taskOrderStore từ tasks:', action.payload.length);
+      // Nếu đã có plan được load hoặc đang yêu cầu chỉ thêm task mới
+      if (state.isPlanLoaded || onlyAddNewTasks) {
+        console.log('Đã có plan được load, chỉ bổ sung thông tin task mới');
+        
+        // Tạo một Set chứa tất cả các taskId đã có trong state
+        const existingTaskIds = new Set(state.orderedTasks.map(task => task.taskId));
+        
+        // Lọc ra những task chưa có trong state
+        const newTasks = tasks.filter(task => !existingTaskIds.has(task.task_id));
+        
+        if (newTasks.length === 0) {
+          console.log('Không có task mới cần bổ sung vào state');
+          return;
+        }
+        
+        console.log(`Bổ sung ${newTasks.length} task mới vào state (từ plan)`);
+        
+        // Chuyển đổi và thêm task mới vào cuối danh sách
+        const newOrderItems = newTasks.map(task => ({
+          taskId: task.task_id,
+          title: task.title,
+          priorityOrder: state.orderedTasks.length + 1, // Thêm vào cuối
+          startDate: task.start_date,
+          endDate: task.due_date,
+          effort: task.effort,
+          assigneeId: task.assignee?.userId,
+          assigneeName: task.assignee?.username,
+          priority: task.priority,
+          status: task.status,
+          fromPlan: false
+        }));
+        
+        // Cập nhật state với task mới
+        state.orderedTasks = [...state.orderedTasks, ...newOrderItems];
+        state.sourceTaskIds = state.orderedTasks.map(item => item.taskId);
+        
+        // Cập nhật calculatedTaskDates với task mới
+        newOrderItems.forEach(item => {
+          if (item.startDate && item.endDate) {
+            state.calculatedTaskDates[item.taskId] = {
+              startDate: item.startDate,
+              endDate: item.endDate
+            };
+          }
+        });
+        
+        return;
+      }
+      
+      // Nếu không có plan hoặc state chưa được khởi tạo từ plan, thực hiện khởi tạo mới
+      console.log('Khởi tạo taskOrderStore từ tasks:', tasks.length);
       
       // Chuyển đổi từ Task[] sang TaskOrderItem[]
-      const orderItems = action.payload.map((task, index) => ({
+      const orderItems = tasks.map((task, index) => ({
         taskId: task.task_id,
         title: task.title,
         priorityOrder: task.priority_order || index,
@@ -107,6 +186,7 @@ const taskOrderSlice = createSlice({
       state.orderedTasks = orderItems;
       state.sourceTaskIds = orderItems.map(item => item.taskId);
       state.isPlanLoaded = false;
+      state.autoSort = autoSort; // Cập nhật autoSort từ tham số
       
       // Tạo calculatedTaskDates từ task data
       const newCalculatedDates: Record<string, { startDate?: string; endDate?: string }> = {};
@@ -213,39 +293,140 @@ const taskOrderSlice = createSlice({
 
 // Hàm helper để cập nhật state từ plan data
 function updateTaskOrderFromPlan(state: TaskOrderState, plan: Plan) {
-  let planData = plan.planData;
+  console.log('⭐ Bắt đầu updateTaskOrderFromPlan với plan:', plan.name);
   
-  // Kiểm tra nếu planData là string thì parse thành object
-  if (typeof planData === 'string') {
-    try {
-      planData = JSON.parse(planData);
-    } catch (e) {
-      console.error('Lỗi khi parse planData:', e);
-      return;
-    }
+  // Validate plan và plan_data
+  if (!plan || !plan.planData) {
+    console.warn('⚠️ Không thể cập nhật task order: Plan không hợp lệ hoặc thiếu plan_data');
+    return;
   }
   
-  // Kiểm tra nếu có tasks trong planData
-  if (planData && planData.tasks && planData.tasks.length > 0) {
-    // Chuyển đổi từ plan tasks sang TaskOrderItem[]
-    const orderItems = planData.tasks.map((task: any) => ({
-      taskId: task.taskId,
-      title: task.title,
-      priorityOrder: task.priorityOrder,
-      startDate: task.startDate,
-      endDate: task.endDate,
-      effort: task.effort,
-      assigneeId: task.assigneeId,
-      assigneeName: task.assigneeName,
-      priority: task.priority,
-      status: task.status,
-      fromPlan: true
-    }));
+  try {
+    // Chuyển đổi planData sang đúng format từ JSON nếu cần
+    const planData = plan.planData;
+
+    // Đảm bảo planData.tasks là mảng
+    if (!Array.isArray(planData.tasks)) {
+      console.warn('⚠️ Không thể cập nhật task order: planData.tasks không phải là mảng');
+      return;
+    }
     
+    // Lấy thông tin task hiện tại để không mất dữ liệu
+    const currentTasksMap = new Map(
+      state.orderedTasks.map(task => [task.taskId, task])
+    );
+    
+    // Tạo mảng chứa các task đã được sắp xếp từ plan
+    let orderItems: TaskOrderItem[] = [];
+    
+    // Sử dụng Set để theo dõi các ID đã xử lý
+    const processedIds = new Set<string>();
+    
+    // Kiểm tra và loại bỏ các ID trùng lặp trước trong planData.tasks
+    const uniqueTaskIds = new Set<string>();
+    const uniquePlanTasks = planData.tasks.filter((planTask: any) => {
+      const taskId = planTask.task_id || planTask.taskId;
+      if (uniqueTaskIds.has(taskId)) {
+        console.warn(`⚠️ Phát hiện task trùng lặp trong planData.tasks: ${taskId}. Chỉ sử dụng lần xuất hiện đầu tiên.`);
+        return false;
+      }
+      uniqueTaskIds.add(taskId);
+      return true;
+    });
+    
+    console.log(`Đã lọc ${planData.tasks.length - uniquePlanTasks.length} task trùng lặp trong planData.tasks.`);
+    
+    uniquePlanTasks.forEach((planTask: any) => {
+      // Lấy task_id từ planTask, hỗ trợ cả task_id và taskId
+      const taskId = planTask.task_id || planTask.taskId;
+      
+      // Bỏ qua nếu đã xử lý ID này
+      if (processedIds.has(taskId)) {
+        return;
+      }
+      
+      // Đánh dấu ID đã xử lý
+      processedIds.add(taskId);
+      
+      // Tìm task hiện tại trong store để lấy thông tin bổ sung
+      const currentTask = currentTasksMap.get(taskId);
+      
+      // Xử lý priority để đảm bảo đúng kiểu
+      let taskPriority: string | undefined = planTask.priority;
+      
+      // Nếu không có priority từ plan hoặc priority không hợp lệ, lấy từ currentTask hoặc dùng giá trị mặc định
+      if (!taskPriority || !['low', 'medium', 'high', 'urgent', 'critical'].includes(taskPriority)) {
+        taskPriority = currentTask?.priority || 'medium';
+      }
+      
+      // Xử lý status tương tự như priority
+      let taskStatus: string | undefined = planTask.status;
+      
+      // Nếu không có status từ plan, lấy từ currentTask hoặc dùng giá trị mặc định
+      if (!taskStatus) {
+        taskStatus = currentTask?.status || 'todo';
+      }
+      
+      // Thêm vào danh sách với đầy đủ thông tin
+      orderItems.push({
+        taskId: taskId,
+        // Ưu tiên dùng title từ Redux store nếu title trong plan là null
+        title: currentTask?.title || planTask.title || 'Không có tiêu đề',
+        priorityOrder: planTask.priority_order || planTask.priorityOrder || 0,
+        startDate: planTask.start_date || planTask.startDate,
+        endDate: planTask.end_date || planTask.endDate,
+        // Thông tin bổ sung
+        effort: planTask.effort !== undefined ? planTask.effort : (currentTask?.effort),
+        assigneeId: planTask.assignee_id || planTask.assigneeId || currentTask?.assigneeId,
+        assigneeName: planTask.assignee_name || planTask.assigneeName || currentTask?.assigneeName,
+        priority: taskPriority,
+        status: taskStatus,
+        fromPlan: true
+      });
+    });
+    
+    // Kiểm tra ID trùng lặp một lần nữa trước khi cập nhật state
+    const finalUniqueIds = new Set<string>();
+    const duplicateIds = new Set<string>();
+    
+    // Phát hiện và thu thập các ID trùng lặp
+    orderItems.forEach(item => {
+      if (finalUniqueIds.has(item.taskId)) {
+        duplicateIds.add(item.taskId);
+      }
+      finalUniqueIds.add(item.taskId);
+    });
+    
+    // Nếu có ID trùng lặp, lọc để chỉ giữ lại lần xuất hiện đầu tiên
+    if (duplicateIds.size > 0) {
+      console.warn(`⚠️ Phát hiện ${duplicateIds.size} task trùng lặp sau khi xử lý. Loại bỏ các bản trùng lặp.`);
+      
+      // Set để theo dõi các ID đã thêm vào danh sách kết quả
+      const addedIds = new Set<string>();
+      
+      // Lọc để chỉ giữ lại phần tử xuất hiện đầu tiên cho mỗi taskId
+      orderItems = orderItems.filter(item => {
+        if (addedIds.has(item.taskId)) {
+          console.warn(`⚠️ Loại bỏ bản trùng lặp của: ${item.taskId}`);
+          return false;
+        }
+        addedIds.add(item.taskId);
+        return true;
+      });
+    }
+    
+    // Log để debug
+    console.log('Đã chuyển đổi sang orderItems:', orderItems.length, 'tasks');
+    orderItems.slice(0, 5).forEach((item, i) => {
+      console.log(`  ${i+1}. Task ${item.taskId} - ${item.title} (${item.priority}), Order: ${item.priorityOrder}`);
+    });
+    
+    // Cập nhật state với các task đã lọc trùng lặp
     state.orderedTasks = orderItems;
     state.sourceTaskIds = orderItems.map(item => item.taskId);
     state.isPlanLoaded = true;
     state.currentPlanId = plan.id;
+    state.autoSort = false; // Khi có plan, tắt auto sort
     
     // Cập nhật calculatedTaskDates từ plan data
     const newCalculatedDates: Record<string, { startDate?: string; endDate?: string }> = {};
@@ -257,9 +438,12 @@ function updateTaskOrderFromPlan(state: TaskOrderState, plan: Plan) {
         };
       }
     });
-    state.calculatedTaskDates = newCalculatedDates;
     
-    console.log('Đã cập nhật task order từ plan:', plan.name);
+    state.calculatedTaskDates = newCalculatedDates;
+    console.log('⭐ Hoàn thành cập nhật task order từ plan', plan.id);
+    
+  } catch (error) {
+    console.error('❌ Lỗi khi cập nhật task order từ plan:', error);
   }
 }
 

@@ -136,10 +136,24 @@ export function PriorityTaskList({ tasks, onTaskClick, onTaskReorder }: Priority
     // Lọc tasks đã hoàn thành
     const filteredTasks = tasks.filter(task => task.status !== 'done');
     
-    // Sử dụng hàm sortTasksByPriority từ taskScheduler
-    const sortedTasks = sortTasksByPriority(filteredTasks);
+    // Kiểm tra xem tasks.length > 0 và các tasks có priority_order không
+    // Nếu có priority_order, sử dụng thứ tự đó thay vì sắp xếp lại theo priority
+    const allTasksHavePriorityOrder = filteredTasks.length > 0 && 
+                                      filteredTasks.every(task => task.priority_order !== undefined);
     
-    setActiveTasks(sortedTasks);
+    if (allTasksHavePriorityOrder) {
+      // Sắp xếp theo priority_order nếu tất cả tasks đều có priority_order (thường là từ plan)
+      console.log('Sắp xếp tasks theo priority_order (từ plan)');
+      const sortedByPriorityOrder = [...filteredTasks].sort((a, b) => 
+        (a.priority_order || 999) - (b.priority_order || 999)
+      );
+      setActiveTasks(sortedByPriorityOrder);
+    } else {
+      // Nếu không có priority_order, sử dụng sortTasksByPriority
+      console.log('Sắp xếp tasks theo priority (urgent > high > medium > low)');
+      const sortedTasks = sortTasksByPriority(filteredTasks);
+      setActiveTasks(sortedTasks);
+    }
   }, [tasks, hasUserReordered, activeTasks.length, isDragging]);
 
   // Xử lý khi bắt đầu kéo thả
