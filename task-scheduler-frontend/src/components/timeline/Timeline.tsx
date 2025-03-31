@@ -56,6 +56,7 @@ import { convertTaskOrderToTask, isWeekend, getNextWorkDay, findNextAvailableSta
 import { useParams } from 'next/navigation';
 import { ArrowUpDown } from 'lucide-react';
 import { batch } from 'react-redux';
+import { sortTasksByPriority } from '@/utils/taskScheduler';
 
 interface TimelineProps {
   isLoading?: boolean;
@@ -832,14 +833,21 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
 
   // Thêm hàm để kích hoạt sắp xếp tự động
   const handleAutoSort = useCallback(() => {
-    // Cập nhật state local
+    // 1. Cập nhật state local và Redux store
     setAutoSort(true);
-    
-    // Cập nhật vào Redux store
     dispatch(updateAutoSort(true));
     
-    // Chuyển đổi thành Task[] với force_recalculate để tính toán lại ngày
-    const tasksToRecalculate = tasks.map(task => ({
+    // 2. Sắp xếp tasks theo priority
+    console.log('Bắt đầu sắp xếp tự động cho', tasks.length, 'tasks');
+    const sortedTasks = sortTasksByPriority(tasks);
+    
+    console.log('Thứ tự tasks sau khi sắp xếp theo priority:');
+    sortedTasks.slice(0, 5).forEach((task, idx) => {
+      console.log(`  ${idx + 1}. ${task.title} (${task.priority}), Priority Order: ${task.priority_order}`);
+    });
+    
+    // 3. Chuẩn bị tasks cho tính toán ngày - đánh dấu force_recalculate
+    const tasksToProcess = sortedTasks.map(task => ({
       ...task,
       force_recalculate: true,
       // Xóa start_date và due_date để buộc tính toán lại từ đầu
@@ -847,8 +855,11 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
       due_date: undefined
     }));
     
-    // Gọi processTasksAndUpdateStore với keepOrder=false để sắp xếp lại theo priority
-    processTasksAndUpdateStore(tasksToRecalculate, false, dispatch);
+    // 4. Gọi processTasksAndUpdateStore để tính toán lại ngày và cập nhật vào store
+    // Dùng keepOrder=true để duy trì thứ tự đã sắp xếp ở bước 2
+    processTasksAndUpdateStore(tasksToProcess, true, dispatch);
+    
+    toast.success('Đã sắp xếp lại tasks theo mức độ ưu tiên');
   }, [tasks, dispatch]);
 
   // Debug re-render
