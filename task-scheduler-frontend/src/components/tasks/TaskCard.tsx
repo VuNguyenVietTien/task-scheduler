@@ -1,140 +1,121 @@
 import React from 'react';
+import Link from 'next/link';
 import { Task, TaskStatus } from '@/types/task';
-import { formatDate } from '@/lib/utils';
 import clsx from 'clsx';
 
-export interface TaskCardProps {
+interface TaskCardProps {
   task: Task;
   onClick: (taskId: string) => void;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task, onClick, onStatusChange }) => {
+export const TaskCard = ({ task, onClick, onStatusChange }: TaskCardProps) => {
+  const taskId = task.id || task.task_id || '';
+  const projectId = task.project_id;
+  
+  // Sử dụng dynamic routing NextJS để tạo đường dẫn
+  const taskDetailUrl = `/projects/${projectId}/tasks/${taskId}`;
+
+  const handleClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    onClick(taskId);
+  };
+
   const isOverdue = task.deadline && new Date(task.deadline) < new Date();
   const isNearDeadline = task.deadline && 
     new Date(task.deadline).getTime() - Date.now() < 24 * 60 * 60 * 1000;
 
-  const statusColors = {
-    [TaskStatus.BACKLOG]: 'bg-gray-100 text-gray-800',
-    [TaskStatus.PLANNED]: 'bg-blue-100 text-blue-800',
-    [TaskStatus.IN_PROGRESS]: 'bg-yellow-100 text-yellow-800',
-    [TaskStatus.IN_REVIEW]: 'bg-purple-100 text-purple-800',
-    [TaskStatus.DONE]: 'bg-green-100 text-green-800',
-    [TaskStatus.CANCELLED]: 'bg-red-100 text-red-800',
+  const statusColors: Record<string, string> = {
+    'todo': 'bg-gray-100 text-gray-800',
+    'doing': 'bg-blue-100 text-blue-800',
+    'done': 'bg-green-100 text-green-800',
+    'close': 'bg-green-100 text-green-800',
+    'pending': 'bg-yellow-100 text-yellow-800',
+    'review': 'bg-purple-100 text-purple-800',
+    'blocked': 'bg-red-100 text-red-800',
+    'rejected': 'bg-red-100 text-red-800'
   };
 
-  const priorityColors = {
-    HIGH: 'bg-red-100 text-red-800',
-    MEDIUM: 'bg-yellow-100 text-yellow-800',
-    LOW: 'bg-green-100 text-green-800',
-    URGENT: 'bg-red-500 text-white',
+  const priorityColors: Record<string, string> = {
+    'low': 'bg-green-100 text-green-800',
+    'medium': 'bg-yellow-100 text-yellow-800',
+    'high': 'bg-orange-100 text-orange-800',
+    'urgent': 'bg-red-100 text-red-800',
+    'critical': 'bg-red-100 text-red-800 font-bold'
   };
 
   return (
-    <div
-      className="bg-white rounded-lg shadow p-4 hover:shadow-md transition-shadow"
-      onClick={() => onClick(task.id)}
-      role="button"
-      tabIndex={0}
+    <Link 
+      href={taskDetailUrl}
+      className="block"
+      prefetch={false} // Không prefetch để tối ưu hiệu suất
+      shallow={true} // Sử dụng shallow routing để không tải lại layout
     >
-      <div className="flex justify-between items-start mb-2">
-        <h3 className="font-semibold text-lg">{task.title}</h3>
-        <div className="flex gap-2">
-          <span
-            className={clsx(
-              'px-2 py-1 rounded-full text-xs font-medium',
-              statusColors[task.status]
-            )}
-          >
-            {task.status}
+      <div 
+        className="bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 h-full cursor-pointer"
+        onClick={handleClick}
+        aria-label={`Task: ${task.title}`}
+      >
+        <h3 className="text-lg font-medium mb-2 text-gray-900 line-clamp-2" title={task.title}>
+          {task.title}
+        </h3>
+        
+        <div className="flex flex-wrap gap-2 mb-2">
+          <span className={clsx(
+            'text-xs px-2 py-0.5 rounded-full',
+            statusColors[task.status] || 'bg-gray-100'
+          )}>
+            {task.status === 'todo' ? 'Chưa làm' : 
+             task.status === 'doing' ? 'Đang làm' : 
+             task.status === 'done' ? 'Hoàn thành' : 
+             task.status === 'pending' ? 'Chờ xử lý' : 
+             task.status === 'review' ? 'Đang xem xét' : 
+             task.status === 'blocked' ? 'Bị chặn' : 
+             task.status === 'rejected' ? 'Từ chối' : 
+             task.status === 'close' ? 'Đã đóng' : 
+             task.status}
           </span>
-          <span
-            className={clsx(
-              'px-2 py-1 rounded-full text-xs font-medium',
-              priorityColors[task.priority]
-            )}
-          >
-            {task.priority}
+          
+          <span className={clsx(
+            'text-xs px-2 py-0.5 rounded-full',
+            priorityColors[task.priority] || 'bg-gray-100'
+          )}>
+            {task.priority === 'low' ? 'Thấp' : 
+             task.priority === 'medium' ? 'Trung bình' : 
+             task.priority === 'high' ? 'Cao' : 
+             task.priority === 'urgent' ? 'Khẩn cấp' : 
+             task.priority === 'critical' ? 'Nghiêm trọng' : 
+             task.priority}
           </span>
         </div>
-      </div>
-
-      {task.description && (
-        <p className="text-gray-600 text-sm mb-2">{task.description}</p>
-      )}
-
-      {task.effortHours && (
-        <div className="text-sm text-gray-500 mb-2" data-testid="effort-hours">
-          Effort: {task.effortHours}h
-        </div>
-      )}
-
-      <div className="flex justify-between items-center">
-        <div className="flex -space-x-2">
-          {(task.assignees || []).map((assignee) => (
-            <div
-              key={assignee.id}
-              className="w-8 h-8 rounded-full bg-gray-200 border-2 border-white flex items-center justify-center"
-              title={assignee.name}
-            >
-              {assignee.avatarUrl ? (
-                <img
-                  src={assignee.avatarUrl}
-                  alt={assignee.name}
-                  className="w-full h-full rounded-full"
-                />
-              ) : (
-                <span className="text-sm font-medium">
-                  {assignee.name.charAt(0)}
-                </span>
-              )}
+        
+        {/* Hiển thị ngày hết hạn nếu có */}
+        {task.due_date && (
+          <div className="text-xs text-gray-500 mb-2">
+            Hết hạn: {new Date(task.due_date).toLocaleDateString('vi-VN')}
+          </div>
+        )}
+        
+        {/* Hiển thị người được giao nếu có */}
+        {task.assignee && task.assignee.userId && (
+          <div className="flex items-center mt-2">
+            <div className="flex -space-x-1 overflow-hidden">
+              <div className="inline-block h-6 w-6 rounded-full ring-2 ring-white overflow-hidden bg-gray-200 flex items-center justify-center">
+                {task.assignee.avatarUrl ? (
+                  <img src={task.assignee.avatarUrl} alt={task.assignee.username || ''} className="h-full w-full object-cover" />
+                ) : (
+                  <span className="text-xs font-medium">
+                    {task.assignee.username ? task.assignee.username.charAt(0).toUpperCase() : '?'}
+                  </span>
+                )}
+              </div>
             </div>
-          ))}
-        </div>
-
-        {task.deadline && (
-          <div 
-            className={clsx(
-              'text-sm',
-              isOverdue ? 'text-red-600' : isNearDeadline ? 'text-yellow-600' : 'text-gray-500'
-            )}
-            data-testid={isOverdue ? 'overdue-indicator' : isNearDeadline ? 'deadline-warning' : 'deadline-indicator'}
-          >
-            {formatDate(task.deadline)}
+            <span className="text-xs ml-2 text-gray-600 truncate">
+              {task.assignee.username || 'Không xác định'}
+            </span>
           </div>
         )}
       </div>
-
-      {/* Progress bar */}
-      <div className="mt-4">
-        <div
-          role="progressbar"
-          aria-valuenow={task.status === TaskStatus.DONE ? 100 : 0}
-          aria-valuemin={0}
-          aria-valuemax={100}
-          className="h-1.5 w-full bg-gray-200 rounded-full overflow-hidden"
-        >
-          <div
-            className={clsx(
-              'h-full transition-all duration-300',
-              task.status === TaskStatus.DONE ? 'bg-green-500 w-full' : 'w-0'
-            )}
-          />
-        </div>
-      </div>
-
-      {/* Status change button */}
-      <button
-        aria-label="Change status"
-        onClick={(e) => {
-          e.stopPropagation();
-          const nextStatus = task.status === TaskStatus.DONE ? TaskStatus.IN_PROGRESS : TaskStatus.DONE;
-          onStatusChange(task.id, nextStatus);
-        }}
-        className="mt-2 text-sm text-blue-600 hover:text-blue-800"
-      >
-        {task.status === TaskStatus.DONE ? 'Reopen' : 'Mark as Done'}
-      </button>
-    </div>
+    </Link>
   );
 };

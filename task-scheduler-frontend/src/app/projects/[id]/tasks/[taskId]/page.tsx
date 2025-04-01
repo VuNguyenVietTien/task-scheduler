@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { TaskDetailPage } from '@/components/tasks/TaskDetailPage';
 import { Task } from '@/types/task';
 import { useAuth } from '@/contexts/AuthContext';
@@ -12,13 +12,11 @@ import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { fetchProjectMembers } from '@/redux/features/membersSlice';
 
 // Import Apollo Client và GET_TASK_BY_ID query
-import { ApolloClient, InMemoryCache, createHttpLink, ApolloProvider, useLazyQuery, useQuery } from '@apollo/client';
-import { setContext } from '@apollo/client/link/context';
-import { GET_PROJECT_MEMBERS } from '@/graphql/queries/member';
+import { useLazyQuery } from '@apollo/client';
 import { GET_TASK_BY_ID } from '@/graphql/queries/tasks';
 import { client } from '@/lib/apollo-client';
 
-// Định nghĩa interface cho project member
+// Định nghĩa interface cho project member - phù hợp với kiểu yêu cầu bởi TaskDetailPage
 interface ProjectMember {
   role: string;
   joinedAt: string;
@@ -33,6 +31,7 @@ interface ProjectMember {
 
 export default function TaskDetailsPage() {
   const params = useParams();
+  const router = useRouter();
   const projectId = params?.id as string;
   const taskId = params?.taskId as string;
   const { user } = useAuth();
@@ -40,13 +39,13 @@ export default function TaskDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [projectName, setProjectName] = useState<string>('Dự án');
-  // Thêm state cho project members
-  const [projectMembers, setProjectMembers] = useState<ProjectMember[]>([]);
+  const [hideTitleHeader, setHideTitleHeader] = useState(false);
+  const [previousTaskId, setPreviousTaskId] = useState<string | null>(null);
   const updateTaskHook = useUpdateTask();
   const dispatch = useAppDispatch();
   
   // Lấy members từ Redux store
-  const { members: reduxMembers } = useAppSelector(state => state.members);
+  const { members: reduxMembers, loading: membersLoading } = useAppSelector(state => state.members);
 
   // Setup Apollo Client lazy query cho task detail
   const [getTask, { loading: taskLoading, error: taskError, data: taskData }] = useLazyQuery(GET_TASK_BY_ID, {
@@ -75,8 +74,6 @@ export default function TaskDetailsPage() {
           priority_order: data.task.priorityOrder || 0,
           start_date: data.task.startDate || null,
           due_date: data.task.dueDate || null,
-          actual_start_date: data.task.actualStartDate || null,
-          actual_end_date: data.task.actualEndDate || null,
           created_at: data.task.createdAt || new Date().toISOString(),
           updated_at: data.task.updatedAt || new Date().toISOString(),
           effort: data.task.effort || 0,
@@ -131,46 +128,23 @@ export default function TaskDetailsPage() {
     }
   });
 
-  // Hàm để lấy danh sách thành viên dự án
-  const fetchProjectMembersData = async () => {
-    try {
-      // Sử dụng Apollo Client để gọi trực tiếp GraphQL query
-      const { data } = await client.query({
-        query: GET_PROJECT_MEMBERS,
-        variables: { projectId },
-        fetchPolicy: 'network-only'
-      });
-      
-      console.log('Project members từ GraphQL:', data);
-      
-      if (data && data.projectMembers) {
-        setProjectMembers(data.projectMembers);
-      }
-    } catch (err) {
-      console.error('Lỗi khi fetch project members:', err);
-    }
-  };
-
   useEffect(() => {
     if (projectId && taskId) {
-      // Fetch task details sử dụng Apollo Client
-      getTask({ variables: { taskId } });
+      // Kiểm tra nếu taskId thay đổi thì reset trạng thái và tải dữ liệu mới
+      if (taskId !== previousTaskId) {
+        setLoading(true);
+        setTask(null);
+        setPreviousTaskId(taskId);
+        // Fetch task details sử dụng Apollo Client
+        getTask({ variables: { taskId } });
+      }
       
-      // Fetch project members bằng hàm local
-      fetchProjectMembersData();
-      
-      // Dispatch action để load project members vào Redux store
-      dispatch(fetchProjectMembers(projectId));
+      // Chỉ dispatch fetchProjectMembers khi chưa có members trong Redux store
+      if (!reduxMembers || reduxMembers.length === 0) {
+        dispatch(fetchProjectMembers(projectId));
+      }
     }
-  }, [projectId, taskId, getTask, dispatch]);
-  
-  // Theo dõi thay đổi members từ Redux và cập nhật UI
-  useEffect(() => {
-    if (reduxMembers && reduxMembers.length > 0) {
-      // Cập nhật state local từ data Redux, với chuyển đổi type
-      fetchProjectMembersData(); // Gọi lại API thay vì cố gắng chuyển đổi kiểu dữ liệu
-    }
-  }, [reduxMembers]);
+  }, [projectId, taskId, getTask, dispatch, reduxMembers, previousTaskId]);
 
   const handleTaskUpdate = async (updates: Partial<Task>) => {
     try {
@@ -195,10 +169,16 @@ export default function TaskDetailsPage() {
     }
   };
 
+  // Hàm navigate đến task khác mà không tải lại trang
+  const navigateToTask = (newTaskId: string) => {
+    router.push(`/projects/${projectId}/tasks/${newTaskId}`);
+  };
+
   if (loading && !task) {
     return (
       <div className="flex items-center justify-center h-[calc(100vh-200px)]">
         <Spinner size="lg" />
+        <p className="ml-3 text-gray-600">Đang tải thông tin công việc...</p>
       </div>
     );
   }
@@ -215,13 +195,20 @@ export default function TaskDetailsPage() {
             </div>
             <div className="ml-3">
               <p className="text-sm text-red-700">{error}</p>
+              <p className="text-sm text-red-600 mt-2">Mã công việc: {taskId}</p>
             </div>
           </div>
         </div>
-        <div className="mt-4">
+        <div className="mt-4 flex space-x-3">
           <a href={`/projects/${projectId}`} className="text-blue-600 hover:underline">
             Quay lại danh sách công việc
           </a>
+          <button 
+            onClick={() => getTask({ variables: { taskId } })}
+            className="text-blue-600 hover:underline"
+          >
+            Thử lại
+          </button>
         </div>
       </div>
     );
@@ -238,36 +225,57 @@ export default function TaskDetailsPage() {
               </svg>
             </div>
             <div className="ml-3">
-              <p className="text-sm text-yellow-700">Không tìm thấy thông tin công việc</p>
+              <p className="text-sm text-yellow-700">Không tìm thấy thông tin công việc với mã {taskId}</p>
             </div>
           </div>
         </div>
-        <div className="mt-4">
+        <div className="mt-4 flex space-x-3">
           <a href={`/projects/${projectId}`} className="text-blue-600 hover:underline">
             Quay lại danh sách công việc
           </a>
+          <button 
+            onClick={() => getTask({ variables: { taskId } })}
+            className="text-blue-600 hover:underline"
+          >
+            Tải lại
+          </button>
         </div>
       </div>
     );
   }
 
+  // Chuyển đổi dữ liệu Member[] từ Redux thành định dạng yêu cầu bởi TaskDetailPage
+  const formattedMembers: ProjectMember[] = reduxMembers?.map(member => ({
+    role: member.role,
+    joinedAt: member.joinedAt,
+    user: {
+      userId: member.user.userId,
+      email: member.user.email,
+      fullName: member.user.fullName || '',
+      username: member.user.username,
+      avatarUrl: member.user.avatarUrl || ''
+    }
+  })) || [];
+
   return (
-    <div className="container-fluid py-6 px-4">
-      <PageHeader 
-        title=""
-        backLink={`/projects/${projectId}`}
-        backLabel="Quay lại dự án"
-      />
-      
-      <TaskDetailPage 
-        task={task} 
-        onTaskUpdate={handleTaskUpdate}
+    <>
+      {!task.parent_task_id && !hideTitleHeader && (
+        <PageHeader
+          title={task.title}
+          backLink={`/projects/${projectId}`}
+          backLabel="Quay lại dự án"
+        />
+      )}
+
+      <TaskDetailPage
+        task={task}
         projectId={projectId}
         currentUser={user || undefined}
+        onTaskUpdate={handleTaskUpdate}
         isLoadingProp={loading}
-        projectMembers={projectMembers}
-        refetchMembers={fetchProjectMembersData}
+        projectMembers={formattedMembers}
+        hideTitleHeader={hideTitleHeader}
       />
-    </div>
+    </>
   );
 } 

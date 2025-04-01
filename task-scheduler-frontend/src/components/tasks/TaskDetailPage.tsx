@@ -15,7 +15,6 @@ import { PencilIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, BookOpenIcon, Do
 import { useMutation, useQuery } from '@apollo/client';
 import { GET_TASK_COMMENTS } from '@/graphql/queries/tasks';
 import { CREATE_TASK_COMMENT, DELETE_TASK_COMMENT } from '@/graphql/mutations/tasks';
-import { GET_PROJECT_TASKS } from '@/graphql/queries/tasks';
 import TaskDescriptionPanel from './description/TaskDescriptionPanel';
 import { AdvancedEditor } from '@/components/common/AdvancedEditor';
 import { imageService } from "@/services/imageService";
@@ -91,13 +90,15 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const [activeTab, setActiveTab] = useState('description');
   const [userId, setUserId] = useState<string | null>(null);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
+  
+  // State cho parent task search
   const [availableParentTasks, setAvailableParentTasks] = useState<Task[]>([]);
-  const [parentSearchQuery, setParentSearchQuery] = useState('');
-  const [isSearchingParent, setIsSearchingParent] = useState(false);
+  const [parentSearchQuery, setParentSearchQuery] = useState<string>('');
+  const [parentTaskIdInput, setParentTaskIdInput] = useState<string>('');
   const [parentSearchTimeout, setParentSearchTimeout] = useState<NodeJS.Timeout | null>(null);
-  const [parentTaskIdInput, setParentTaskIdInput] = useState('');
-  const [showParentResults, setShowParentResults] = useState(false);
-  const [parentTaskDetails, setParentTaskDetails] = useState<Task | null>(null);
+  const [isSearchingParent, setIsSearchingParent] = useState<boolean>(false);
+  const [showParentResults, setShowParentResults] = useState<boolean>(false);
+  const [tasksData, setTasksData] = useState<{tasks: any[]} | null>(null);
   
   // Sử dụng useRef để theo dõi các editor
   const descriptionEditorRef = useRef<any>(null);
@@ -119,13 +120,6 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     
   const [deleteComment] = useMutation(DELETE_TASK_COMMENT);
 
-  // Query để lấy danh sách các task có thể là parent
-  const { loading: tasksLoading, data: tasksData } = 
-    useQuery(GET_PROJECT_TASKS, {
-      variables: { projectId },
-      skip: !projectId
-    });
-
   // Khởi tạo tất cả modules Quill khi component mount
   useEffect(() => {
     // Chúng ta đã chuyển phần này vào dynamic import của ReactQuill
@@ -140,6 +134,18 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       day: 'numeric',
     });
   };
+
+  // Cập nhật hàm handleDescriptionChange
+  const handleDescriptionChange = useCallback((content: string) => {
+    console.log('Description changed:', content?.substring(0, 50));
+    setEditedTask((prev) => {
+      if (prev.description === content) return prev;
+      return {
+        ...prev,
+        description: content || ''
+      };
+    });
+  }, []);
 
   // Tính số ngày còn lại
   const calculateDaysRemaining = () => {
@@ -1015,17 +1021,10 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     return null;
   };
 
-  // Cập nhật hàm handleDescriptionChange
-  const handleDescriptionChange = useCallback((content: string) => {
-    console.log('Description changed:', content?.substring(0, 50));
-    setEditedTask((prev) => {
-      if (prev.description === content) return prev;
-      return {
-        ...prev,
-        description: content || ''
-      };
-    });
-  }, []);
+  // Xóa định nghĩa trùng lặp và sử dụng hàm để lấy task con
+  const getChildTasks = () => {
+    return task.child_tasks || [];
+  };
 
   // Xử lý danh sách các task có thể là parent
   useEffect(() => {
@@ -1033,7 +1032,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       // Lọc ra những task có thể là parent (không phải chính nó và không phải child của nó)
       const filteredTasks = tasksData.tasks.filter((t: any) => {
         // Không chọn chính nó làm parent
-        if (t.taskId === taskId) return false;
+        const currentTaskId = task.task_id || task.id;
+        if (t.taskId === currentTaskId) return false;
         
         // Kiểm tra nếu task hiện tại đã là parent của t, thì t không thể là parent của task hiện tại (tránh vòng lặp)
         return !isChildTask(t.taskId, task);
@@ -1043,14 +1043,19 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       const formattedTasks = filteredTasks.map((t: any) => ({
         task_id: t.taskId,
         id: t.taskId,
-        title: t.title,
-        parent_task_id: t.parentTaskId,
-        // Các trường khác nếu cần
-      }));
+        title: t.title || '',
+        description: t.description || '',
+        project_id: t.projectId || projectId,
+        status: (t.status?.toLowerCase() || 'todo') as TaskStatus,
+        priority: (t.priority?.toLowerCase() || 'medium') as Priority,
+        priority_order: t.priorityOrder || 0,
+        created_by: t.createdBy || 'system',
+        parent_task_id: t.parentTaskId
+      } as Task));
       
       setAvailableParentTasks(formattedTasks);
     }
-  }, [tasksData, taskId, task]);
+  }, [tasksData, task, projectId]);
   
   // Hàm kiểm tra nếu potentialChildId là child hoặc descendant của potentialParent
   const isChildTask = (potentialChildId: string, potentialParent: Task): boolean => {
@@ -1070,19 +1075,19 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   // Hàm debounce cho tìm kiếm parent task
   const handleParentTaskSearch = (query: string) => {
     setParentSearchQuery(query);
+    setShowParentResults(true);
     
     // Xóa timeout cũ nếu có
     if (parentSearchTimeout) {
       clearTimeout(parentSearchTimeout);
     }
     
-    // Tạo timeout mới để delay 2s trước khi thực hiện tìm kiếm
+    // Tạo timeout mới để delay trước khi thực hiện tìm kiếm
     const timeout = setTimeout(() => {
       setIsSearchingParent(true);
-      // Ở đây có thể gọi API riêng để tìm kiếm task, nhưng chúng ta đã có sẵn API lấy tất cả task
-      // nên chỉ cần áp dụng filter với query
+      // Ở đây có thể gọi API riêng để tìm kiếm task nếu cần
       setIsSearchingParent(false);
-    }, 2000);
+    }, 1000);
     
     setParentSearchTimeout(timeout);
   };
@@ -1095,13 +1100,14 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       )
     : availableParentTasks.slice(0, 5); // Chỉ hiển thị 5 task gần nhất nếu không có query
 
-  // Thêm hàm để lấy task con
-  const childTasks = task.child_tasks || [];
+  // Sử dụng hàm getChildTasks thay vì khai báo trùng lặp
+  const childTasks = getChildTasks();
 
   // Thêm hàm để xử lý khi chọn task cha
   const handleSelectParentTask = (parentTask: Task) => {
-              setEditedTask(prev => ({
-                ...prev,
+    // Cập nhật parent_task_id trong task
+    setEditedTask(prev => ({
+      ...prev,
       parent_task_id: parentTask.task_id
     }));
     setParentSearchQuery('');
@@ -1110,12 +1116,15 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
 
   // Thêm hàm để xử lý khi nhấn tìm kiếm task cha
   const handleSearchClick = () => {
-    handleSearchParentTasks(parentTaskIdInput);
+    if (parentTaskIdInput) {
+      handleParentTaskSearch(parentTaskIdInput);
+    }
   };
 
-  // Thêm hàm để xử lý khi tìm kiếm task cha
-  const handleSearchParentTasks = (query: string) => {
-    handleParentTaskSearch(query);
+  // Xử lý khi input task search thay đổi
+  const handleTaskSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setParentTaskIdInput(e.target.value);
+    handleParentTaskSearch(e.target.value);
   };
 
   // Thêm đoạn JavaScript để tính toán vị trí sticky dựa trên chiều cao header
@@ -1165,6 +1174,14 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       refetchMembers();
     }
   }, [reduxMembers, refetchMembers]);
+
+  // Render phần liên quan đến members
+  const handleMembersUpdate = () => {
+    // Gọi callback nếu có
+    if (refetchMembers) {
+      refetchMembers();
+    }
+  };
 
   return (
     <div className="w-full space-y-8">
@@ -1511,57 +1528,52 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
             )}
 
             {/* Ô tìm kiếm parent task */}
-            <div className="relative">
-              <div className="flex space-x-2">
-                <input
-                  type="text"
-                  placeholder="Tìm parent task..."
-                  value={parentTaskIdInput}
-                  onChange={(e) => {
-                    setParentTaskIdInput(e.target.value);
-                    handleSearchParentTasks(e.target.value);
-                  }}
-                  className="text-sm pl-2 py-1 h-9 w-full max-w-md border rounded-md"
-                />
-                <Button
-                  className="px-2 h-9 w-9 flex items-center justify-center"
-                  onClick={handleSearchClick}
-                  title="Tìm kiếm parent task"
-                >
-                  <MagnifyingGlassIcon className="h-4 w-4" />
-                </Button>
-              </div>
-              
-              {/* Dropdown results */}
-              {showParentResults && filteredParentTasks.length > 0 && (
-                <div className="absolute z-10 w-full max-w-md mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
-                  {filteredParentTasks.map((parentTask) => (
-                    <div 
-                      key={parentTask.task_id} 
-                      className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                      onClick={() => handleSelectParentTask(parentTask)}
-                    >
-                      <div className="font-medium truncate">{parentTask.title}</div>
-                      <div className="text-xs text-gray-500 truncate">ID: {parentTask.task_id}</div>
-                    </div>
-                  ))}
-                </div>
-              )}
-              
-              {task.parent_task_id && (
-                <div className="mt-2 text-sm">
-                  <div className="flex items-center">
-                    <span className="text-gray-600">Parent:</span>
-                    <Link 
-                      href={`/projects/${projectId}/tasks/${task.parent_task_id}`}
-                      className="ml-1 text-blue-600 hover:text-blue-800 truncate"
-                    >
-                      {parentTaskDetails?.title || task.parent_task_id}
-                    </Link>
-                  </div>
-                </div>
-              )}
+            <div className="relative mt-4">
+              <input
+                type="text"
+                placeholder="Tìm parent task..."
+                value={parentTaskIdInput}
+                onChange={handleTaskSearchInputChange}
+                className="text-sm pl-2 py-1 h-9 w-full max-w-md border rounded-md"
+              />
+              <button 
+                onClick={handleSearchClick}
+                className="absolute right-2 top-1.5 text-gray-500"
+                title="Tìm kiếm task"
+              >
+                <MagnifyingGlassIcon className="h-4 w-4" />
+              </button>
             </div>
+            
+            {/* Dropdown results */}
+            {showParentResults && filteredParentTasks.length > 0 && (
+              <div className="absolute z-10 w-full max-w-md mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
+                {filteredParentTasks.map((parentTask) => (
+                  <div 
+                    key={parentTask.task_id} 
+                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                    onClick={() => handleSelectParentTask(parentTask)}
+                  >
+                    <div className="font-medium">{parentTask.title}</div>
+                    <div className="text-xs text-gray-500">ID: {parentTask.task_id}</div>
+                  </div>
+                ))}
+              </div>
+            )}
+            
+            {task.parent_task_id && (
+              <div className="mt-2 text-sm">
+                <div className="flex items-center">
+                  <span className="text-gray-600">Parent task:</span>
+                  <Link 
+                    href={`/projects/${projectId}/tasks/${task.parent_task_id}`}
+                    className="ml-1 text-blue-600 hover:text-blue-800 truncate"
+                  >
+                    {task.parent_task_id}
+                  </Link>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
