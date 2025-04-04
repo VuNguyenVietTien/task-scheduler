@@ -16,6 +16,7 @@ import {
   TaskFilter,
   PaginationData
 } from '@/types/task';
+import { gql } from '@apollo/client';
 
 interface TasksState {
   tasks: Task[];
@@ -37,6 +38,16 @@ const initialState: TasksState = {
   },
   filters: {}
 };
+
+// Thêm query để lấy thông tin tối thiểu của task
+export const GET_TASK_MINIMAL = gql`
+  query GetTaskMinimal($taskId: ID!) {
+    task(taskId: $taskId) {
+      taskId
+      parentTaskId
+    }
+  }
+`;
 
 // Async thunk để fetch tasks
 export const fetchProjectTasks = createAsyncThunk(
@@ -65,14 +76,24 @@ export const updateTaskStatus = createAsyncThunk(
   'tasks/updateTaskStatus',
   async ({ taskId, status }: { taskId: string, status: TaskStatus }, { getState, rejectWithValue }) => {
     try {
+      // Lấy thông tin hiện tại của task từ API để lấy parentTaskId
+      const { data: taskData } = await client.query({
+        query: GET_TASK_MINIMAL,
+        variables: { taskId },
+        fetchPolicy: 'network-only'
+      });
+      
+      // Duy trì parentTaskId từ dữ liệu hiện tại
+      const parentTaskId = taskData?.task?.parentTaskId || null;
+      
       // Sửa lại định dạng input đúng với API backend mong đợi
-      // Không cần lấy data từ store nữa
       const input = {
         taskId: taskId,
-        status: String(status).toLowerCase()
+        status: String(status).toLowerCase(),
+        parentTaskId: parentTaskId  // Giữ nguyên parentTaskId
       };
       
-      console.log('Gửi request cập nhật trạng thái:', input);
+      console.log('Gửi request cập nhật trạng thái với parentTaskId:', parentTaskId);
       
       // Cập nhật cách gọi API
       const response = await client.mutate({
@@ -114,27 +135,30 @@ export const updateTaskAssignee = createAsyncThunk(
   'tasks/updateTaskAssignee',
   async ({ taskId, assigneeId }: { taskId: string, assigneeId: string | null }, { getState, rejectWithValue }) => {
     try {
-      // Tìm task hiện tại trong store để lấy assignee_id
-      const state = getState() as { tasks: TasksState };
-      const currentTask = state.tasks.tasks.find(t => t.task_id === taskId || t.id === taskId);
+      // Lấy thông tin hiện tại của task từ API để lấy parentTaskId
+      const { data: taskData } = await client.query({
+        query: GET_TASK_MINIMAL,
+        variables: { taskId },
+        fetchPolicy: 'network-only'
+      });
       
-      if (!currentTask) {
-        return rejectWithValue('Không tìm thấy task trong state');
-      }
-
+      // Duy trì parentTaskId từ dữ liệu hiện tại
+      const parentTaskId = taskData?.task?.parentTaskId || null;
+      
       // Sửa lại định dạng input đúng với API backend mong đợi
-      // Thêm assignee_id vào input để tránh bị ghi đè thành null
       const input = {
         taskId: taskId,
-        assigneeId: assigneeId
+        assigneeId: assigneeId,
+        parentTaskId: parentTaskId  // Giữ nguyên parentTaskId
       };
       
-      console.log('Gửi request cập nhật người được giao:', input);
+      console.log('Gửi request cập nhật người được giao với parentTaskId:', parentTaskId);
       
       const response = await client.mutate({
         mutation: UPDATE_TASK,
         variables: { input },
-        errorPolicy: 'all'
+        errorPolicy: 'all',
+        fetchPolicy: 'no-cache' // Đảm bảo không sử dụng cache
       });
       
       if (response.errors) {
@@ -149,11 +173,14 @@ export const updateTaskAssignee = createAsyncThunk(
 
       console.log('Response từ server:', response.data.updateTask);
       
+      // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
+      const transformedTask = transformTaskFromAPI(response.data.updateTask);
+      
       return {
         taskId,
         assigneeId,
         assignee: response.data.updateTask.assignee,
-        task: response.data.updateTask // Thêm toàn bộ task vào response
+        task: transformedTask
       };
     } catch (error) {
       console.error('Lỗi khi gọi API cập nhật người được giao:', error);
@@ -167,14 +194,24 @@ export const updateTaskPriority = createAsyncThunk(
   'tasks/updateTaskPriority',
   async ({ taskId, priority }: { taskId: string, priority: Priority }, { getState, rejectWithValue }) => {
     try {
+      // Lấy thông tin hiện tại của task từ API để lấy parentTaskId
+      const { data: taskData } = await client.query({
+        query: GET_TASK_MINIMAL,
+        variables: { taskId },
+        fetchPolicy: 'network-only'
+      });
+      
+      // Duy trì parentTaskId từ dữ liệu hiện tại
+      const parentTaskId = taskData?.task?.parentTaskId || null;
+      
       // Sửa lại định dạng input đúng với API backend mong đợi
-      // Không cần lấy data từ store nữa
       const input = {
         taskId: taskId,
-        priority: String(priority).toLowerCase()
+        priority: String(priority).toLowerCase(),
+        parentTaskId: parentTaskId  // Giữ nguyên parentTaskId
       };
       
-      console.log('Gửi request cập nhật ưu tiên:', input);
+      console.log('Gửi request cập nhật ưu tiên với parentTaskId:', parentTaskId);
       
       // Cập nhật cách gọi API
       const response = await client.mutate({
@@ -216,14 +253,24 @@ export const updateTaskEffort = createAsyncThunk(
   'tasks/updateTaskEffort',
   async ({ taskId, effort }: { taskId: string, effort: number }, { getState, rejectWithValue }) => {
     try {
+      // Lấy thông tin hiện tại của task từ API để lấy parentTaskId
+      const { data: taskData } = await client.query({
+        query: GET_TASK_MINIMAL,
+        variables: { taskId },
+        fetchPolicy: 'network-only'
+      });
+      
+      // Duy trì parentTaskId từ dữ liệu hiện tại
+      const parentTaskId = taskData?.task?.parentTaskId || null;
+      
       // Sửa lại định dạng input đúng với API backend mong đợi
-      // Không cần lấy data từ store nữa
       const input = {
         taskId: taskId,
-        effort: Number(effort)
+        effort: Number(effort),
+        parentTaskId: parentTaskId  // Giữ nguyên parentTaskId
       };
       
-      console.log('Gửi request cập nhật công sức:', input);
+      console.log('Gửi request cập nhật công sức với parentTaskId:', parentTaskId);
       
       // Cập nhật cách gọi API
       const response = await client.mutate({
