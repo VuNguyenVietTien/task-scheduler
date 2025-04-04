@@ -385,15 +385,12 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 value={typeof value === 'object' ? (value?.userId || value?.id || '') : (value || '')}
                   onChange={(e) => {
                     if (fieldName === 'assignee') {
-                    // Đặc biệt xử lý cho trường assignee để tránh lưu trữ object
                       if (e.target.value) {
-                      // Tìm dữ liệu người dùng từ projectMembers
                         const selectedMember = projectMembers?.find(member => 
                           member.user.userId === e.target.value
                         );
 
                         if (selectedMember) {
-                        // Tạo đối tượng UserBasic hợp lệ
                         const userBasic: UserBasic = {
                             userId: selectedMember.user.userId,
                             username: selectedMember.user.username || selectedMember.user.fullName || selectedMember.user.email,
@@ -406,14 +403,12 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                           assignee: userBasic
                         });
                       } else {
-                        // Nếu không tìm thấy, xoá assignee
                         setEditedTask({
                           ...editedTask,
                           assignee: undefined
                         });
                         }
                       } else {
-                      // Nếu không chọn người dùng nào, xoá assignee
                       setEditedTask({
                         ...editedTask,
                         assignee: undefined
@@ -423,7 +418,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                     setEditedTask({...editedTask, [fieldName]: e.target.value});
                   }
                 }}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                className="block w-full max-w-md rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2.5 bg-white"
+                style={{ height: "42px", fontSize: "15px" }}
               >
                 {options.map(option => (
                   <option key={option.value} value={option.value}>{option.label}</option>
@@ -437,7 +433,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                   placeholder={`Nhập ${label.toLowerCase()}`}
                 value={value || ''}
                 onChange={(e) => setEditedTask({...editedTask, [fieldName]: e.target.value})}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                className="block w-full max-w-md rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2.5"
+                style={{ height: "42px", fontSize: "15px" }}
                 />
               ) : type === 'number' ? (
                 <input
@@ -449,7 +446,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 onChange={(e) => setEditedTask({...editedTask, [fieldName]: parseInt(e.target.value) || 0})}
                   min={0}
                   max={fieldName === 'progress' ? 100 : undefined}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                className="block w-full max-w-md rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2.5"
+                style={{ height: "42px", fontSize: "15px" }}
                 />
               ) : (
                 <input
@@ -459,21 +457,22 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                   placeholder={`Nhập ${label.toLowerCase()}`}
                 value={typeof value === 'object' ? JSON.stringify(value) : (value || '')}
                 onChange={(e) => setEditedTask({...editedTask, [fieldName]: e.target.value})}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                className="block w-full max-w-md rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2.5"
+                style={{ height: "42px", fontSize: "15px" }}
               />
             )}
             
-            <div className="flex justify-end space-x-2">
+            <div className="flex mt-3 space-x-3">
               <button
                 onClick={() => saveField(fieldName)}
-                className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700"
+                className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
                 disabled={isSaving}
               >
                 {isSaving ? 'Đang lưu...' : 'Lưu'}
               </button>
               <button
                 onClick={cancelEditing}
-                className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300"
+                className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-300 transition-colors"
               >
                 Hủy
               </button>
