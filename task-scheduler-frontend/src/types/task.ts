@@ -131,3 +131,15 @@ export interface TasksPaginatedResponse {
 export interface ProjectTasksResponse {
   projectTasks: Task[];
 }
+
+export interface TaskComment {
+  id: string;
+  content: string;
+  user_id: string;
+  username: string;
+  avatar_url?: string;
+  created_at: string;
+  updated_at?: string;
+  status?: 'pending' | 'failed' | 'saved' | 'local';
+  task_id?: string;
+}

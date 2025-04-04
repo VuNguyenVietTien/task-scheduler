@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, forwardRef } from 'react';
-import { Task, TaskStatus, Priority, TaskStatuses, Priorities, UserBasic } from '@/types/task';
+import { Task, TaskStatus, Priority, TaskStatuses, Priorities, UserBasic, TaskComment } from '@/types/task';
 import { User } from '@/contexts/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { Card } from '@/components/ui/Card';
@@ -12,8 +12,8 @@ import { formatDistance } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import Link from 'next/link';
 import { PencilIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, BookOpenIcon, DocumentTextIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline';
-import { useMutation, useQuery } from '@apollo/client';
-import { GET_TASK_COMMENTS, GET_TASK_SUBTASKS, GET_TASK_BY_ID } from '@/graphql/queries/tasks';
+import { useMutation, useQuery, useApolloClient } from '@apollo/client';
+import { GET_TASK_COMMENTS, GET_TASK_SUBTASKS, GET_TASK_BY_ID, GET_TASK_BASIC_INFO } from '@/graphql/queries/tasks';
 import { CREATE_TASK_COMMENT, DELETE_TASK_COMMENT } from '@/graphql/mutations/tasks';
 import TaskDescriptionPanel from './description/TaskDescriptionPanel';
 import { AdvancedEditor } from '@/components/common/AdvancedEditor';
@@ -25,6 +25,15 @@ import {
   updateTaskEffort, 
   updateTaskAssignee
 } from '@/redux/features/tasksSlice';
+import { 
+  fetchTaskDetail, 
+  fetchSubtasks, 
+  fetchComments, 
+  updateTaskParent,
+  searchParentTaskById,
+  clearParentTaskSearch
+} from '@/redux/features/taskDetailSlice';
+import TaskDetailSubtasks from './TaskDetailSubtasks';
 
 interface TaskDetailPageProps {
   task: Task;
@@ -57,8 +66,8 @@ interface Comment {
   status?: 'pending' | 'failed' | 'saved' | 'local';
 }
 
-// Định nghĩa kiểu dữ liệu cho API GraphQL
-interface TaskComment {
+// Đổi tên từ TaskComment thành LocalTaskComment để tránh xung đột
+interface LocalTaskComment {
   id: string;
   content: string;
   authorId: string;
@@ -68,7 +77,7 @@ interface TaskComment {
 }
 
 interface TaskCommentsData {
-  taskComments: TaskComment[];
+  taskComments: LocalTaskComment[];
 }
 
 interface CreateCommentInput {
@@ -79,11 +88,11 @@ interface CreateCommentInput {
 }
 
 interface CreateCommentData {
-  createComment: TaskComment;
+  createComment: LocalTaskComment;
 }
 
 export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isLoadingProp = false, projectMembers, hideTitleHeader = false, refetchMembers }: TaskDetailPageProps) {
-  const [comments, setComments] = useState<Comment[]>([]);
+  const [comments, setComments] = useState<TaskComment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isEditing, setIsEditing] = useState(false);
   const [isDescriptionEditing, setIsDescriptionEditing] = useState(false);
@@ -98,11 +107,12 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [isLoadingSubtasks, setIsLoadingSubtasks] = useState(false);
-  const [editingCell, setEditingCell] = useState<{taskId: string, field: string} | null>(null);
-  const [editValue, setEditValue] = useState<string>('');
   
   // Redux Dispatch
   const dispatch = useAppDispatch();
+  
+  // Lấy dữ liệu từ Redux store
+  const taskDetailState = useAppSelector(state => state.taskDetail);
   
   // State cho parent task search
   const [availableParentTasks, setAvailableParentTasks] = useState<Task[]>([]);
@@ -123,6 +133,27 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
 
   // GraphQL Queries và Mutations
   const taskId = task.task_id || task.id || '';
+  
+  // Sử dụng useEffect để fetch dữ liệu từ Redux
+  useEffect(() => {
+    if (taskId) {
+      dispatch(fetchTaskDetail(taskId));
+      dispatch(fetchSubtasks(taskId));
+      dispatch(fetchComments(taskId));
+    }
+  }, [dispatch, taskId]);
+  
+  // Đồng bộ dữ liệu từ Redux store vào state
+  useEffect(() => {
+    if (taskDetailState.subtasks.length > 0) {
+      setSubtasks(taskDetailState.subtasks);
+    }
+    
+    if (taskDetailState.comments.length > 0) {
+      setComments(taskDetailState.comments);
+    }
+  }, [taskDetailState]);
+  
   const { loading: commentsLoading, data: commentsData, refetch: refetchComments } = 
     useQuery<TaskCommentsData>(GET_TASK_COMMENTS, {
       variables: { taskId },
@@ -582,12 +613,12 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       const tempId = `temp-${Date.now()}`;
       
       // Thêm comment tạm thời vào danh sách ngay lập tức
-      const tempComment: Comment = {
+      const tempComment: TaskComment = {
         id: tempId,
         content: processedContent,
-        user_id: currentUser.id,
-        username: currentUser.name, // Tạm thời dùng currentUser.name cho UI
-        avatar_url: currentUser.providerData?.[0]?.photoURL || undefined,
+        user_id: currentUser?.id || 'unknown', // Sửa từ uid thành id
+        username: currentUser?.name || 'Người dùng',
+        avatar_url: currentUser?.providerData?.[0]?.photoURL || undefined,
         created_at: new Date().toISOString(),
         status: 'pending'
       };
@@ -613,19 +644,19 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         
         if (data && data.createComment) {
           // Nếu API thành công, cập nhật comment tạm thời với dữ liệu thực
+          const updatedComment: TaskComment = {
+            id: data.createComment.id,
+            content: data.createComment.content,
+            user_id: data.createComment.authorId,
+            username: data.createComment.username,
+            avatar_url: currentUser?.providerData?.[0]?.photoURL || undefined,
+            created_at: data.createComment.createdAt,
+            status: 'saved'
+          };
+          
           setComments(prevComments => 
             prevComments.map(comment => 
-              comment.id === tempId 
-                ? {
-                    id: data.createComment.id,
-                    content: data.createComment.content,
-                    user_id: data.createComment.authorId,
-                    username: data.createComment.username, // Sử dụng username từ backend
-                    avatar_url: currentUser.providerData?.[0]?.photoURL || undefined,
-                    created_at: data.createComment.createdAt,
-                    status: 'saved'
-                  }
-                : comment
+              comment.id === tempId ? updatedComment : comment
             )
           );
           
@@ -637,9 +668,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         // Đánh dấu comment là thất bại, nhưng vẫn giữ lại
         setComments(prevComments => 
           prevComments.map(comment => 
-            comment.id === tempId 
-              ? { ...comment, status: 'failed' }
-              : comment
+            comment.id === tempId ? { ...comment, status: 'failed' } : comment
           )
         );
       }
@@ -722,19 +751,19 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         
         if (data && data.createComment) {
           // Nếu API thành công, cập nhật comment với dữ liệu thực
+          const updatedComment: TaskComment = {
+            id: data.createComment.id,
+            content: data.createComment.content,
+            user_id: data.createComment.authorId,
+            username: currentUser?.name || 'Người dùng',
+            avatar_url: currentUser?.providerData?.[0]?.photoURL || undefined,
+            created_at: data.createComment.createdAt,
+            status: 'saved'
+          };
+          
           setComments(prevComments => 
             prevComments.map(comment => 
-              comment.id === commentId 
-                ? {
-                    id: data.createComment.id,
-                    content: data.createComment.content,
-                    user_id: data.createComment.authorId,
-                    username: currentUser?.name || 'Người dùng',
-                    avatar_url: currentUser?.providerData?.[0]?.photoURL || undefined,
-                    created_at: data.createComment.createdAt,
-                    status: 'saved'
-                  }
-                : comment
+              comment.id === commentId ? updatedComment : comment
             )
           );
           
@@ -746,9 +775,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         // Đánh dấu comment là thất bại
         setComments(prevComments => 
           prevComments.map(comment => 
-            comment.id === commentId 
-              ? { ...comment, status: 'failed' }
-              : comment
+            comment.id === commentId ? { ...comment, status: 'failed' } : comment
           )
         );
       }
@@ -795,14 +822,15 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   // Chuyển đổi dữ liệu comment từ GraphQL sang định dạng cần thiết
   useEffect(() => {
     if (commentsData && commentsData.taskComments) {
-      const formattedComments = commentsData.taskComments.map(comment => {
+      const formattedComments: TaskComment[] = commentsData.taskComments.map(comment => {
+        // Chuyển đổi từ LocalTaskComment sang TaskComment
         return {
           id: comment.id,
           content: comment.content,
           user_id: comment.authorId,
-          username: comment.username || 'Người dùng',
-          avatar_url: undefined,
+          username: comment.username,
           created_at: comment.createdAt,
+          updated_at: comment.updatedAt
         };
       });
       
@@ -942,7 +970,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   };
 
   // Sửa lại renderComment để xử lý URL trước khi hiển thị
-  const renderComment = (comment: Comment) => {
+  const renderComment = (comment: TaskComment) => {
     // Xử lý nội dung comment để thay đổi URL
     const processedContent = processCommentContent(comment.content);
     
@@ -1167,17 +1195,30 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     setShowParentResults(false);
   };
 
-  // Thêm hàm để xử lý khi nhấn tìm kiếm task cha
+  // Hàm xử lý khi nhấn tìm kiếm task cha
   const handleSearchClick = () => {
     if (parentTaskIdInput) {
-      handleParentTaskSearch(parentTaskIdInput);
+      setShowParentResults(true);
+      dispatch(searchParentTaskById(parentTaskIdInput));
     }
   };
 
-  // Xử lý khi input task search thay đổi
+  // Sửa lại handleTaskSearchInputChange để chỉ cập nhật input, không gọi tìm kiếm tự động
   const handleTaskSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setParentTaskIdInput(e.target.value);
-    handleParentTaskSearch(e.target.value);
+    // Xóa hành vi tìm kiếm tự động khi gõ để tăng hiệu năng
+    if (showParentResults) {
+      setShowParentResults(false);
+      dispatch(clearParentTaskSearch());
+    }
+  };
+
+  // Xử lý khi nhấn Enter trong input tìm kiếm
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter' && parentTaskIdInput) {
+      e.preventDefault();
+      handleSearchClick();
+    }
   };
 
   // Thêm đoạn JavaScript để tính toán vị trí sticky dựa trên chiều cao header
@@ -1236,20 +1277,31 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     }
   };
 
-  // Query để lấy thông tin parent task nếu có
-  const { loading: parentTaskLoading } = 
-    useQuery(GET_TASK_BY_ID, {
-      variables: { taskId: task.parent_task_id },
-      skip: !task.parent_task_id,
-      onCompleted: (data) => {
-        if (data && data.task) {
-          setParentTaskTitle(data.task.title || '');
+  // Thêm Apollo Client
+  const apolloClient = useApolloClient();
+  
+  // Theo dõi khi task.parent_task_id thay đổi để cập nhật UI
+  useEffect(() => {
+    if (task.parent_task_id) {
+      // Nếu có task cha, fetch thông tin task đó để hiển thị title
+      apolloClient.query({
+        query: GET_TASK_BASIC_INFO,
+        variables: { taskId: task.parent_task_id },
+        fetchPolicy: 'network-only'
+      })
+      .then(response => {
+        if (response.data?.task) {
+          setParentTaskTitle(response.data.task.title || '');
         }
-      },
-      onError: (error) => {
-        console.error('Error fetching parent task:', error);
-      }
-    });
+      })
+      .catch(error => {
+        console.error('Lỗi khi lấy thông tin task cha:', error);
+      });
+    } else {
+      // Nếu không có task cha, reset UI
+      setParentTaskTitle('');
+    }
+  }, [task.parent_task_id, apolloClient]);
 
   // Tính tổng effort của task dựa trên subtasks
   const calculateTotalEffort = useCallback((subtasksList: Task[]) => {
@@ -1337,10 +1389,12 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     return task.progress ? `${task.progress}%` : '0%';
   };
 
+  // Các phương thức xử lý subtasks đã được chuyển sang component TaskDetailSubtasks
+  /*
   // Handler cho việc edit subtask
-  const handleStartEditing = (taskId: string, field: string, value: any) => {
+  const handleStartEditing = (taskId: string, field: string, currentValue: string | number | null) => {
     setEditingCell({ taskId, field });
-    setEditValue(String(value || ''));
+    setEditValue(currentValue !== null ? String(currentValue) : '');
   };
 
   const handleCancelEditing = () => {
@@ -1350,6 +1404,10 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
 
   const handleTaskStatusChange = async (taskId: string, newStatus: TaskStatus) => {
     try {
+      // Sử dụng preventDefault và stopPropagation để tránh request media không cần thiết
+      event?.preventDefault();
+      event?.stopPropagation();
+      
       await dispatch(updateTaskStatus({ taskId, status: newStatus })).unwrap();
       
       // Cập nhật UI cục bộ
@@ -1370,6 +1428,10 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
 
   const handleTaskPriorityChange = async (taskId: string, newPriority: Priority) => {
     try {
+      // Sử dụng preventDefault và stopPropagation để tránh request media không cần thiết
+      event?.preventDefault();
+      event?.stopPropagation();
+      
       await dispatch(updateTaskPriority({ taskId, priority: newPriority })).unwrap();
       
       // Cập nhật UI cục bộ
@@ -1390,6 +1452,10 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
 
   const handleTaskEffortChange = async (taskId: string, newEffort: number) => {
     try {
+      // Sử dụng preventDefault và stopPropagation để tránh request media không cần thiết
+      event?.preventDefault();
+      event?.stopPropagation();
+      
       await dispatch(updateTaskEffort({ taskId, effort: newEffort })).unwrap();
       
       // Cập nhật UI cục bộ
@@ -1441,18 +1507,14 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
               </td>
               <td className="px-4 py-2">
                 {editingCell?.taskId === subtask.task_id && editingCell?.field === 'status' ? (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex flex-col space-y-2">
                     <select
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2"
                       autoFocus
                       title="Chọn trạng thái task"
                       aria-label="Trạng thái task"
-                      onBlur={() => {
-                        handleTaskStatusChange(subtask.task_id || subtask.id || '', editValue as TaskStatus);
-                        handleCancelEditing();
-                      }}
                     >
                       {Object.values(TaskStatuses).map((status) => (
                         <option key={status} value={status}>
@@ -1460,6 +1522,25 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                         </option>
                       ))}
                     </select>
+                    <div className="flex space-x-2">
+                      <button
+                        className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleTaskStatusChange(subtask.task_id || subtask.id || '', editValue as TaskStatus);
+                          handleCancelEditing();
+                        }}
+                      >
+                        Lưu
+                      </button>
+                      <button
+                        className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition-colors"
+                        onClick={handleCancelEditing}
+                      >
+                        Hủy
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div
@@ -1481,18 +1562,14 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
               </td>
               <td className="px-4 py-2">
                 {editingCell?.taskId === subtask.task_id && editingCell?.field === 'priority' ? (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex flex-col space-y-2">
                     <select
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2"
                       autoFocus
                       title="Chọn mức độ ưu tiên"
                       aria-label="Mức độ ưu tiên"
-                      onBlur={() => {
-                        handleTaskPriorityChange(subtask.task_id || subtask.id || '', editValue as Priority);
-                        handleCancelEditing();
-                      }}
                     >
                       {Object.values(Priorities).map((priority) => (
                         <option key={priority} value={priority}>
@@ -1500,6 +1577,25 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                         </option>
                       ))}
                     </select>
+                    <div className="flex space-x-2">
+                      <button
+                        className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleTaskPriorityChange(subtask.task_id || subtask.id || '', editValue as Priority);
+                          handleCancelEditing();
+                        }}
+                      >
+                        Lưu
+                      </button>
+                      <button
+                        className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition-colors"
+                        onClick={handleCancelEditing}
+                      >
+                        Hủy
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div
@@ -1521,22 +1617,18 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
               </td>
               <td className="px-4 py-2">
                 {editingCell?.taskId === subtask.task_id && editingCell?.field === 'effort' ? (
-                  <div className="flex items-center space-x-2">
+                  <div className="flex flex-col space-y-2">
                     <input
                       type="number"
                       value={editValue}
                       onChange={(e) => setEditValue(e.target.value)}
-                      className="block w-20 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2"
                       min="0"
                       step="0.5"
                       autoFocus
                       title="Nhập số giờ effort"
                       aria-label="Số giờ effort"
                       placeholder="Giờ"
-                      onBlur={() => {
-                        handleTaskEffortChange(subtask.task_id || subtask.id || '', Number(editValue) || 0);
-                        handleCancelEditing();
-                      }}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') {
                           handleTaskEffortChange(subtask.task_id || subtask.id || '', Number(editValue) || 0);
@@ -1546,11 +1638,30 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                         }
                       }}
                     />
+                    <div className="flex space-x-2">
+                      <button
+                        className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          handleTaskEffortChange(subtask.task_id || subtask.id || '', Number(editValue) || 0);
+                          handleCancelEditing();
+                        }}
+                      >
+                        Lưu
+                      </button>
+                      <button
+                        className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition-colors"
+                        onClick={handleCancelEditing}
+                      >
+                        Hủy
+                      </button>
+                    </div>
                   </div>
                 ) : (
                   <div
                     className="flex items-center cursor-pointer"
-                    onClick={() => handleStartEditing(subtask.task_id || subtask.id || '', 'effort', subtask.effort)}
+                    onClick={() => handleStartEditing(subtask.task_id || subtask.id || '', 'effort', subtask.effort !== undefined ? subtask.effort : null)}
                   >
                     <span>{subtask.effort || 0}</span>
                     <button 
@@ -1585,6 +1696,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       </table>
     </div>
   );
+  */
 
   return (
     <div className="w-full space-y-8">
@@ -1931,19 +2043,105 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
             )}
 
             {/* Hiển thị parent task nếu có */}
-            {task.parent_task_id && (
-              <div className="mt-2 text-sm">
+            <div className="mt-2 mb-3">
+              <div className="text-sm font-medium text-gray-700 mb-1">Parent task:</div>
+              {task.parent_task_id ? (
                 <div className="flex items-center">
-                  <span className="text-gray-600">Parent task:</span>
                   <Link 
                     href={`/projects/${projectId}/tasks/${task.parent_task_id}`}
-                    className="ml-1 text-blue-600 hover:text-blue-800 truncate"
+                    className="text-blue-600 hover:text-blue-800 truncate"
                   >
                     {parentTaskTitle || task.parent_task_id}
                   </Link>
+                  <button 
+                    onClick={() => {
+                      // Cập nhật parent_task_id thành undefined
+                      dispatch(updateTaskParent({ 
+                        taskId: task.task_id, 
+                        parentTaskId: "" // Gửi string rỗng để xóa parent
+                      }));
+                    }}
+                    className="ml-2 p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100"
+                    title="Xóa liên kết với parent task"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
                 </div>
-              </div>
-            )}
+              ) : (
+                <div className="p-2 border border-gray-200 rounded-md bg-gray-50">
+                  <div className="relative mb-2">
+                    <input 
+                      type="text"
+                      value={parentTaskIdInput}
+                      onChange={handleTaskSearchInputChange}
+                      onKeyDown={handleSearchKeyDown}
+                      placeholder="Nhập ID task cha"
+                      className="w-full border border-gray-300 rounded-md p-2 pr-10 text-sm"
+                    />
+                    <button
+                      onClick={handleSearchClick}
+                      className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-blue-600"
+                      title="Tìm kiếm"
+                    >
+                      <MagnifyingGlassIcon className="h-5 w-5" />
+                    </button>
+                  </div>
+                  
+                  {taskDetailState.searchingParent && (
+                    <div className="flex justify-center py-2">
+                      <Spinner size="sm" />
+                    </div>
+                  )}
+                  
+                  {/* Hiển thị kết quả tìm kiếm */}
+                  {showParentResults && taskDetailState.potentialParentTask && (
+                    <div className="mt-2 border border-gray-200 rounded-md bg-white shadow-sm">
+                      <div className="p-2 hover:bg-blue-50 cursor-pointer flex justify-between items-center">
+                        <div className="truncate">
+                          <span className="font-medium">{taskDetailState.potentialParentTask.title}</span>
+                          <span className="text-xs text-gray-500 ml-2">({taskDetailState.potentialParentTask.taskId})</span>
+                        </div>
+                        <button 
+                          className="ml-2 text-blue-600 text-sm hover:text-blue-800 whitespace-nowrap"
+                          onClick={() => {
+                            dispatch(updateTaskParent({ 
+                              taskId: task.task_id, 
+                              parentTaskId: taskDetailState.potentialParentTask!.taskId 
+                            }));
+                            setParentTaskIdInput('');
+                            setShowParentResults(false);
+                          }}
+                        >
+                          Thêm làm task cha
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Thông báo không tìm thấy */}
+                  {showParentResults && !taskDetailState.potentialParentTask && !taskDetailState.searchingParent && taskDetailState.error && (
+                    <div className="text-sm text-red-500 py-2 text-center">
+                      {taskDetailState.error}
+                    </div>
+                  )}
+                  
+                  {/* Nút đóng kết quả tìm kiếm */}
+                  {showParentResults && (
+                    <div className="flex justify-end mt-2">
+                      <button
+                        onClick={() => {
+                          setShowParentResults(false);
+                          dispatch(clearParentTaskSearch());
+                        }}
+                        className="text-xs text-gray-500 hover:text-gray-700"
+                      >
+                        Đóng
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -2264,7 +2462,11 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 ) : subtasks.length === 0 ? (
                   <p className="text-center text-gray-500 py-8">Chưa có task con nào</p>
                 ) : (
-                  <SubtasksTable />
+                  // Sử dụng component mới cho task con thay vì SubtasksTable
+                  <TaskDetailSubtasks 
+                    taskId={taskId}
+                    projectId={projectId}
+                  />
                 )}
               </div>
             </div>

@@ -15,6 +15,12 @@ pub async fn update_task(ctx: &Context<'_>, input: UpdateTaskInput) -> Result<Ta
     
     let mut tx = pool.begin().await.map_err(|e| AuthError::Database(e))?;
 
+    let parent_task_id = match &input.parent_task_id {
+        Some(id) if id.to_string().is_empty() => None,
+        Some(id) => Some(Uuid::parse_str(&id.to_string())?),
+        None => None
+    };
+
     let result = sqlx::query(
         r#"
         WITH updated_task AS (
@@ -23,18 +29,19 @@ pub async fn update_task(ctx: &Context<'_>, input: UpdateTaskInput) -> Result<Ta
                 title = COALESCE($2, title),
                 description = COALESCE($3, description),
                 assignee_id = COALESCE($4, assignee_id),
-                start_date = COALESCE($5, start_date),
-                due_date = COALESCE($6, due_date),
-                actual_start_date = COALESCE($7, actual_start_date),
-                actual_end_date = COALESCE($8, actual_end_date),
-                effort = COALESCE($9, effort),
-                progress = COALESCE($10, progress),
-                status = COALESCE($11::task_status, status),
-                priority = COALESCE($12::task_priority, priority),
-                type = COALESCE($13, type),
-                category = COALESCE($14, category),
-                progress_type = COALESCE($15::task_progress_type, progress_type),
-                tags = COALESCE($16, tags),
+                parent_task_id = $5,
+                start_date = COALESCE($6, start_date),
+                due_date = COALESCE($7, due_date),
+                actual_start_date = COALESCE($8, actual_start_date),
+                actual_end_date = COALESCE($9, actual_end_date),
+                effort = COALESCE($10, effort),
+                progress = COALESCE($11, progress),
+                status = COALESCE($12::task_status, status),
+                priority = COALESCE($13::task_priority, priority),
+                type = COALESCE($14, type),
+                category = COALESCE($15, category),
+                progress_type = COALESCE($16::task_progress_type, progress_type),
+                tags = COALESCE($17, tags),
                 updated_at = NOW()
             WHERE task_id = $1
             RETURNING *
@@ -58,6 +65,7 @@ pub async fn update_task(ctx: &Context<'_>, input: UpdateTaskInput) -> Result<Ta
     .bind(input.title)
     .bind(input.description)
     .bind(input.assignee_id.map(|id| Uuid::parse_str(&id.to_string())).transpose()?)
+    .bind(parent_task_id)
     .bind(input.start_date)
     .bind(input.due_date)
     .bind(input.actual_start_date)

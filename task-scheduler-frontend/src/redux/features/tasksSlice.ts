@@ -74,7 +74,6 @@ export const updateTaskStatus = createAsyncThunk(
       }
       
       // Sửa lại định dạng input đúng với API backend mong đợi
-      // Thêm assignee_id vào input để tránh bị ghi đè thành null
       const input = {
         taskId: taskId,
         status: String(status).toLowerCase(),
@@ -83,10 +82,12 @@ export const updateTaskStatus = createAsyncThunk(
       
       console.log('Gửi request cập nhật trạng thái:', input);
       
+      // Cập nhật cách gọi API
       const response = await client.mutate({
         mutation: UPDATE_TASK,
         variables: { input },
-        errorPolicy: 'all'
+        errorPolicy: 'all',
+        fetchPolicy: 'no-cache' // Đảm bảo không sử dụng cache
       });
       
       if (response.errors) {
@@ -101,10 +102,13 @@ export const updateTaskStatus = createAsyncThunk(
       
       console.log('Response từ server:', response.data.updateTask);
       
+      // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
+      const transformedTask = transformTaskFromAPI(response.data.updateTask);
+      
       return {
         taskId,
         status,
-        task: response.data.updateTask
+        task: transformedTask
       };
     } catch (error) {
       console.error('Lỗi khi gọi API cập nhật trạng thái:', error);
@@ -180,7 +184,6 @@ export const updateTaskPriority = createAsyncThunk(
       }
 
       // Sửa lại định dạng input đúng với API backend mong đợi
-      // Thêm assignee_id vào input để tránh bị ghi đè thành null
       const input = {
         taskId: taskId,
         priority: String(priority).toLowerCase(),
@@ -189,10 +192,12 @@ export const updateTaskPriority = createAsyncThunk(
       
       console.log('Gửi request cập nhật ưu tiên:', input);
       
+      // Cập nhật cách gọi API
       const response = await client.mutate({
         mutation: UPDATE_TASK,
         variables: { input },
-        errorPolicy: 'all'
+        errorPolicy: 'all',
+        fetchPolicy: 'no-cache' // Đảm bảo không sử dụng cache
       });
       
       if (response.errors) {
@@ -207,10 +212,13 @@ export const updateTaskPriority = createAsyncThunk(
 
       console.log('Response từ server:', response.data.updateTask);
       
+      // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
+      const transformedTask = transformTaskFromAPI(response.data.updateTask);
+      
       return {
         taskId,
         priority,
-        task: response.data.updateTask
+        task: transformedTask
       };
     } catch (error) {
       console.error('Lỗi khi gọi API cập nhật ưu tiên:', error);
@@ -233,7 +241,6 @@ export const updateTaskEffort = createAsyncThunk(
       }
 
       // Sửa lại định dạng input đúng với API backend mong đợi
-      // Thêm assignee_id vào input để tránh bị ghi đè thành null
       const input = {
         taskId: taskId,
         effort: Number(effort),
@@ -242,10 +249,12 @@ export const updateTaskEffort = createAsyncThunk(
       
       console.log('Gửi request cập nhật công sức:', input);
       
+      // Cập nhật cách gọi API
       const response = await client.mutate({
         mutation: UPDATE_TASK,
         variables: { input },
-        errorPolicy: 'all'
+        errorPolicy: 'all',
+        fetchPolicy: 'no-cache' // Đảm bảo không sử dụng cache
       });
       
       if (response.errors) {
@@ -260,10 +269,13 @@ export const updateTaskEffort = createAsyncThunk(
 
       console.log('Response từ server:', response.data.updateTask);
       
+      // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
+      const transformedTask = transformTaskFromAPI(response.data.updateTask);
+      
       return {
         taskId,
         effort,
-        task: response.data.updateTask
+        task: transformedTask
       };
     } catch (error) {
       console.error('Lỗi khi gọi API cập nhật công sức:', error);

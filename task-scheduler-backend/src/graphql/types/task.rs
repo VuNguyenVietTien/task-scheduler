@@ -243,6 +243,7 @@ pub struct UpdateTaskInput {
     pub effort: Option<f64>,
     pub progress: Option<f64>,
     pub assignee_id: Option<ID>,
+    pub parent_task_id: Option<ID>,
     pub type_: Option<String>,
     pub category: Option<String>,
     pub tags: Option<Vec<String>>,

@@ -463,6 +463,18 @@ impl TaskMutation {
         let tags_json = input.tags.as_ref().map(|tags| json!(tags));
         let now = Utc::now();
 
+        // Parse parent_task_id from input if provided
+        let parent_task_id = input.parent_task_id
+            .as_ref()
+            .map(|id| {
+                if id.to_string().is_empty() {
+                    Ok(None) // Nếu là string rỗng, đặt parent_task_id thành NULL
+                } else {
+                    Uuid::parse_str(&id.to_string()).map(Some)
+                }
+            })
+            .transpose()?;
+
         let updated = sqlx::query(
             r#"
             WITH updated_task AS (
@@ -480,13 +492,14 @@ impl TaskMutation {
                     effort = COALESCE($10, effort),
                     progress = COALESCE($11, progress),
                     assignee_id = $12,
-                    type = COALESCE($13, type),
-                    category = COALESCE($14, category),
-                    progress_type = COALESCE($15, progress_type),
-                    tags = COALESCE($16, tags),
-                    is_deleted = COALESCE($17, is_deleted),
-                    updated_at = $18
-                WHERE task_id = $19
+                    parent_task_id = $13,
+                    type = COALESCE($14, type),
+                    category = COALESCE($15, category),
+                    progress_type = COALESCE($16, progress_type),
+                    tags = COALESCE($17, tags),
+                    is_deleted = COALESCE($18, is_deleted),
+                    updated_at = $19
+                WHERE task_id = $20
                 RETURNING *
             )
             SELECT t.*, 
@@ -510,6 +523,7 @@ impl TaskMutation {
         .bind(input.effort)
         .bind(input.progress)
         .bind(input.assignee_id.map(|id| Uuid::parse_str(&id.to_string())).transpose()?)
+        .bind(parent_task_id)
         .bind(input.type_)
         .bind(input.category)
         .bind(input.progress_type)

@@ -204,3 +204,14 @@ export const GET_TASK_SUBTASKS = gql`
     }
   }
 `;
+
+// Query để lấy thông tin cơ bản của task (chỉ ID và title)
+export const GET_TASK_BASIC_INFO = gql`
+  query GetTaskBasicInfo($taskId: ID!) {
+    task(taskId: $taskId) {
+      taskId
+      title
+      projectId
+    }
+  }
+`;

@@ -246,4 +246,5 @@ export interface UpdateTaskInput {
   priorityOrder?: number;
   startDate?: string;
   dueDate?: string;
+  parentTaskId?: string;
 }
