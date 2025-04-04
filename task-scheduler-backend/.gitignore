@@ -54,3 +54,6 @@ junit.xml
 *.pdb
 config/firebase-service-account.json
 config/projectmanager-e13cb-firebase-adminsdk-fbsvc-d4930d4085.json
+
+# Media files
+media/images/
