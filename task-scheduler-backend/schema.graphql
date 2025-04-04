@@ -130,6 +130,11 @@ type Query {
   task(taskId: ID!): Task
 
   """
+  Get subtasks of a specific task
+  """
+  taskSubtasks(taskId: ID!): [Task!]!
+
+  """
   Get tasks with optional filters
   """
   tasks(

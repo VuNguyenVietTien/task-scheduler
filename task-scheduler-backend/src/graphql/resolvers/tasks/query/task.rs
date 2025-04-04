@@ -93,8 +93,7 @@ pub async fn task(ctx: &Context<'_>, task_id: ID) -> Result<Option<Task>> {
         priority: row.get("priority"),
         type_: row.get("type"),
         category: row.get("category"),
-        progress_type: row.get::<Option<String>, _>("progress_type")
-            .map(|s| s.into()),
+        progress_type: row.get("progress_type"),
         tags: row.get::<Option<JsonValue>, _>("tags"),
         child_tasks: None
     }).collect::<Vec<_>>();

@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rich Text Editor</title>
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <div class="container">
+        <div class="toolbar">
+            <div class="toolbar-group">
+                <button id="bold-btn" title="Đậm"><i class="fas fa-bold"></i></button>
+                <button id="italic-btn" title="Nghiêng"><i class="fas fa-italic"></i></button>
+                <button id="underline-btn" title="Gạch chân"><i class="fas fa-underline"></i></button>
+            </div>
+            <div class="toolbar-group">
+                <button id="align-left-btn" title="Căn trái"><i class="fas fa-align-left"></i></button>
+                <button id="align-center-btn" title="Căn giữa"><i class="fas fa-align-center"></i></button>
+                <button id="align-right-btn" title="Căn phải"><i class="fas fa-align-right"></i></button>
+                <button id="align-justify-btn" title="Căn đều"><i class="fas fa-align-justify"></i></button>
+            </div>
+            <div class="toolbar-group">
+                <button id="insert-table-btn" title="Chèn bảng"><i class="fas fa-table"></i></button>
+                <button id="insert-image-btn" title="Chèn hình ảnh"><i class="fas fa-image"></i></button>
+            </div>
+        </div>
+
+        <div id="table-dialog" class="dialog">
+            <div class="dialog-content">
+                <h3>Chèn bảng</h3>
+                <div class="form-group">
+                    <label for="table-rows">Số hàng:</label>
+                    <input type="number" id="table-rows" min="1" max="20" value="3">
+                </div>
+                <div class="form-group">
+                    <label for="table-cols">Số cột:</label>
+                    <input type="number" id="table-cols" min="1" max="10" value="3">
+                </div>
+                <div class="form-group">
+                    <label>Kiểu bảng:</label>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="header-row" checked>
+                        <label for="header-row">Hàng tiêu đề</label>
+                    </div>
+                    <div class="checkbox-group">
+                        <input type="checkbox" id="header-column">
+                        <label for="header-column">Cột tiêu đề</label>
+                    </div>
+                </div>
+                <div class="dialog-buttons">
+                    <button id="insert-table-confirm">Chèn</button>
+                    <button id="insert-table-cancel">Hủy</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="table-menu" class="context-menu">
+            <button id="insert-row-above">Chèn hàng phía trên</button>
+            <button id="insert-row-below">Chèn hàng phía dưới</button>
+            <button id="insert-column-left">Chèn cột bên trái</button>
+            <button id="insert-column-right">Chèn cột bên phải</button>
+            <hr>
+            <button id="toggle-header-row">Chuyển đổi hàng tiêu đề</button>
+            <button id="toggle-header-column">Chuyển đổi cột tiêu đề</button>
+            <hr>
+            <button id="freeze-row">Cố định hàng này</button>
+            <button id="freeze-column">Cố định cột này</button>
+            <button id="unfreeze-all">Bỏ cố định tất cả</button>
+            <hr>
+            <button id="merge-cells">Gộp các ô đã chọn</button>
+            <button id="unmerge-cells">Tách ô đã gộp</button>
+            <hr>
+            <button id="delete-row">Xóa hàng</button>
+            <button id="delete-column">Xóa cột</button>
+            <button id="delete-table">Xóa bảng</button>
+        </div>
+
+        <div id="image-menu" class="context-menu">
+            <button id="align-image-left">Căn trái</button>
+            <button id="align-image-center">Căn giữa</button>
+            <button id="align-image-right">Căn phải</button>
+            <hr>
+            <button id="delete-image">Xóa hình ảnh</button>
+        </div>
+
+        <div class="editor-container">
+            <div id="editor" contenteditable="true"></div>
+        </div>
+    </div>
+
+    <input type="file" id="image-upload" accept="image/*" style="display: none;">
+    
+    <script src="tableResizeHandler.js"></script>
+    <script src="tableMenuHandler.js"></script>
+    <script src="tableHandler.js"></script>
+    <script src="imageHandler.js"></script>
+    <script src="script.js"></script>
+</body>
+</html> 

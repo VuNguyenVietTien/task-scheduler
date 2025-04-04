@@ -13,7 +13,7 @@ import { vi } from 'date-fns/locale';
 import Link from 'next/link';
 import { PencilIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, BookOpenIcon, DocumentTextIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQuery } from '@apollo/client';
-import { GET_TASK_COMMENTS } from '@/graphql/queries/tasks';
+import { GET_TASK_COMMENTS, GET_TASK_SUBTASKS } from '@/graphql/queries/tasks';
 import { CREATE_TASK_COMMENT, DELETE_TASK_COMMENT } from '@/graphql/mutations/tasks';
 import TaskDescriptionPanel from './description/TaskDescriptionPanel';
 import { AdvancedEditor } from '@/components/common/AdvancedEditor';
@@ -90,6 +90,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const [activeTab, setActiveTab] = useState('description');
   const [userId, setUserId] = useState<string | null>(null);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
+  const [subtasks, setSubtasks] = useState<Task[]>([]);
+  const [isLoadingSubtasks, setIsLoadingSubtasks] = useState(false);
   
   // State cho parent task search
   const [availableParentTasks, setAvailableParentTasks] = useState<Task[]>([]);
@@ -113,6 +115,46 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     useQuery<TaskCommentsData>(GET_TASK_COMMENTS, {
       variables: { taskId },
       skip: !taskId,
+    });
+    
+  // Query để lấy subtasks
+  const { loading: subtasksLoading, data: subtasksData, refetch: refetchSubtasks } = 
+    useQuery(GET_TASK_SUBTASKS, {
+      variables: { taskId },
+      skip: !taskId,
+      onCompleted: (data) => {
+        if (data && data.taskSubtasks) {
+          // Chuyển đổi dữ liệu từ camelCase sang snake_case
+          const formattedSubtasks = data.taskSubtasks.map((subtask: any) => ({
+            task_id: subtask.taskId,
+            id: subtask.taskId,
+            title: subtask.title || '',
+            description: subtask.description || '',
+            status: (subtask.status?.toLowerCase() || 'todo') as TaskStatus,
+            priority: (subtask.priority?.toLowerCase() || 'medium') as Priority,
+            effort: subtask.effort || 0,
+            progress: subtask.progress || 0,
+            start_date: subtask.startDate || null,
+            due_date: subtask.dueDate || null,
+            assignee: subtask.assignee ? {
+              userId: subtask.assignee.userId,
+              username: subtask.assignee.username,
+              avatarUrl: subtask.assignee.avatarUrl || '',
+              role: subtask.assignee.role || ''
+            } : undefined,
+            priority_order: subtask.priorityOrder || 0,
+            type: subtask.type || null,
+            category: subtask.category || null
+          }));
+          
+          setSubtasks(formattedSubtasks);
+          setIsLoadingSubtasks(false);
+        }
+      },
+      onError: (error) => {
+        console.error('Error fetching subtasks:', error);
+        setIsLoadingSubtasks(false);
+      }
     });
 
   const [createComment, { loading: createCommentLoading }] = 
@@ -1022,8 +1064,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   };
 
   // Xóa định nghĩa trùng lặp và sử dụng hàm để lấy task con
-  const getChildTasks = () => {
-    return task.child_tasks || [];
+  const getSubtasks = () => {
+    return subtasks;
   };
 
   // Xử lý danh sách các task có thể là parent
@@ -1036,7 +1078,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         if (t.taskId === currentTaskId) return false;
         
         // Kiểm tra nếu task hiện tại đã là parent của t, thì t không thể là parent của task hiện tại (tránh vòng lặp)
-        return !isChildTask(t.taskId, task);
+        return true;
       });
       
       // Chuyển đổi từ camelCase sang snake_case để phù hợp với định nghĩa Task
@@ -1099,9 +1141,6 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         t.task_id.toLowerCase().includes(parentSearchQuery.toLowerCase())
       )
     : availableParentTasks.slice(0, 5); // Chỉ hiển thị 5 task gần nhất nếu không có query
-
-  // Sử dụng hàm getChildTasks thay vì khai báo trùng lặp
-  const childTasks = getChildTasks();
 
   // Thêm hàm để xử lý khi chọn task cha
   const handleSelectParentTask = (parentTask: Task) => {
@@ -1610,7 +1649,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
-                Task con ({childTasks.length})
+                Task con ({subtasks.length})
               </button>
             </div>
           </div>
@@ -1754,17 +1793,23 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
             <div className={`tab-content ${activeTab === 'subtasks' ? 'active' : ''}`}>
               <div className="bg-white rounded-lg">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-medium text-gray-900">Task con ({childTasks.length})</h2>
-                  <Button size="sm" variant="outline">
-                    <span className="mr-1">+</span> Thêm task con
-                  </Button>
+                  <h2 className="text-lg font-medium text-gray-900">Task con ({subtasks.length})</h2>
+                  <Link href={`/projects/${projectId}/tasks/${taskIdString}/create-subtask`}>
+                    <Button size="sm" variant="outline">
+                      <span className="mr-1">+</span> Thêm task con
+                    </Button>
+                  </Link>
                 </div>
                 
-                {childTasks.length === 0 ? (
+                {subtasksLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Spinner size="lg" />
+                  </div>
+                ) : subtasks.length === 0 ? (
                   <p className="text-center text-gray-500 py-8">Chưa có task con nào</p>
                 ) : (
                   <div className="space-y-4">
-                    {childTasks.map((childTask) => (
+                    {subtasks.map((childTask) => (
                       <div key={childTask.task_id || childTask.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
                         <div className="flex justify-between items-start">
                           <div>

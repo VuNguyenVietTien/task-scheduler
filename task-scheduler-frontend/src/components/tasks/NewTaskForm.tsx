@@ -20,6 +20,7 @@ import "react-quill/dist/quill.snow.css";
 
 interface NewTaskFormProps {
   projectId: string;
+  parentTaskId?: string;
 }
 
 export interface TaskFormInputs {
@@ -153,7 +154,7 @@ function ComboboxField({
   );
 }
 
-export default function NewTaskForm({ projectId }: NewTaskFormProps) {
+export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProps) {
   const router = useRouter();
   const { user } = useAuth();
   const { data: projectData } = useProject(projectId);
@@ -307,39 +308,49 @@ export default function NewTaskForm({ projectId }: NewTaskFormProps) {
 
   const onSubmit = async (data: TaskFormInputs) => {
     try {
-      // Đảm bảo status và priority là lowercase
-      const statusValue = data.status?.toLowerCase() || "todo";
-      const priorityValue = data.priority?.toLowerCase() || "medium";
-      
+      // Hiển thị trạng thái loading
+      console.log('Submitting task with data:', data);
+
+      // Chuẩn bị input cho GraphQL mutation
+      const createTaskInput = {
+        title: data.title,
+        description: data.description || '',
+        projectId: projectId,
+        parentTaskId: parentTaskId || data.parentTaskId || null,
+        status: data.status,
+        priority: data.priority,
+        priorityOrder: data.priorityOrder || 0,
+        startDate: data.deadline ? new Date().toISOString() : null,
+        deadline: data.deadline ? new Date(data.deadline).toISOString() : null,
+        assigneeId: data.assignee || null,
+        effort: data.effort || 0,
+        type: data.type || null,
+        category: data.category || null,
+        progressType: data.progressType || null,
+        tags: data.tags || [],
+      };
+
+      // Gọi mutation để tạo task
       const result = await createTask({
         variables: {
-          input: {
-            projectId,
-            title: data.title,
-            description: data.description,
-            assigneeId: data.assignee || null,
-            dueDate: data.deadline
-              ? new Date(data.deadline).toISOString()
-              : null,
-            startDate: null,
-            effort: data.effort,
-            type: data.type || null,
-            category: data.category || null,
-            progressType: data.progressType,
-            tags: data.tags?.length > 0 ? data.tags : null,
-            parentTaskId: selectedParentTask?.id || null,
-            status: statusValue,
-            priority: priorityValue,
-            priorityOrder: data.priorityOrder || 0,
-          },
-        },
+          input: createTaskInput
+        }
       });
 
-      console.log("Task created:", result.data.createTask);
-      router.push(`/projects/${projectId}`);
-      router.refresh();
+      if (result.data?.createTask) {
+        console.log('Task created successfully:', result.data.createTask);
+        
+        // Hiển thị thông báo thành công
+        alert('Tạo công việc thành công!');
+        
+        // Navigate back to project
+        router.push(`/projects/${projectId}`);
+      }
     } catch (error) {
-      console.error("Error creating task:", error);
+      console.error('Error creating task:', error);
+      
+      // Hiển thị thông báo lỗi
+      alert('Có lỗi xảy ra khi tạo công việc. Vui lòng thử lại.');
     }
   };
 

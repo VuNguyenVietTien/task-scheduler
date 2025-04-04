@@ -1,7 +1,5 @@
-pub mod query;
-pub mod mutation;
-
 use async_graphql::{Context, Object, Result, ID};
+
 use crate::graphql::types::{Task, UpdateTaskStatusInput, UpdateTaskInput, CreateTaskInput, ReorderTasksInput};
 
 #[derive(Default)]
@@ -11,6 +9,10 @@ pub struct TaskQuery;
 impl TaskQuery {
     async fn task(&self, ctx: &Context<'_>, task_id: ID) -> Result<Option<Task>> {
         query::task(ctx, task_id).await
+    }
+
+    async fn task_subtasks(&self, ctx: &Context<'_>, task_id: ID) -> Result<Vec<Task>> {
+        query::task_subtasks(ctx, task_id).await
     }
 
     async fn tasks(
@@ -29,47 +31,26 @@ pub struct TaskMutation;
 
 #[Object]
 impl TaskMutation {
-    async fn create_task(
-        &self,
-        ctx: &Context<'_>,
-        input: CreateTaskInput
-    ) -> Result<Task> {
-        mutation::create_task(ctx, input).await
+    async fn create_task(&self, ctx: &Context<'_>, input: CreateTaskInput) -> Result<Task> {
+        mutation::create::create_task(ctx, input).await
     }
 
-    async fn update_task(
-        &self,
-        ctx: &Context<'_>,
-        input: UpdateTaskInput
-    ) -> Result<Task> {
-        mutation::update_task(ctx, input).await
+    async fn update_task(&self, ctx: &Context<'_>, input: UpdateTaskInput) -> Result<Task> {
+        mutation::update::update_task(ctx, input).await
     }
 
-    async fn update_task_effort(
-        &self,
-        ctx: &Context<'_>,
-        input: mutation::update_effort::UpdateTaskEffortInput
-    ) -> Result<Task> {
-        mutation::update_task_effort(ctx, input).await
-    }
-
-    async fn update_task_status(
-        &self,
-        ctx: &Context<'_>,
-        input: UpdateTaskStatusInput
-    ) -> Result<Task> {
-        mutation::update_task_status(ctx, input).await
+    async fn update_task_status(&self, ctx: &Context<'_>, input: UpdateTaskStatusInput) -> Result<Task> {
+        mutation::update_status::update_task_status(ctx, input).await
     }
 
     async fn delete_task(&self, ctx: &Context<'_>, task_id: ID) -> Result<bool> {
-        mutation::delete_task(ctx, task_id).await
+        mutation::delete::delete_task(ctx, task_id).await
     }
 
-    async fn reorder_tasks(
-        &self,
-        ctx: &Context<'_>,
-        input: ReorderTasksInput
-    ) -> Result<Vec<Task>> {
-        mutation::reorder_tasks(ctx, input).await
+    async fn reorder_tasks(&self, ctx: &Context<'_>, input: ReorderTasksInput) -> Result<Vec<Task>> {
+        mutation::reorder::reorder_tasks(ctx, input).await
     }
 }
+
+mod query;
+mod mutation;

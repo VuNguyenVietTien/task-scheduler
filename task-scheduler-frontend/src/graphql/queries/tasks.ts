@@ -90,14 +90,6 @@ export const GET_TASK_BY_ID = gql`
       category
       progressType
       tags
-      childTasks {
-        taskId
-        title
-        status
-        priority
-        effort
-        progress
-      }
     }
   }
 `;
@@ -183,6 +175,32 @@ export const GET_TASK_COMMENTS = gql`
       username
       createdAt
       updatedAt
+    }
+  }
+`;
+
+// Query lấy danh sách subtasks của một task
+export const GET_TASK_SUBTASKS = gql`
+  query GetTaskSubtasks($taskId: ID!) {
+    taskSubtasks(taskId: $taskId) {
+      taskId
+      title
+      description
+      status
+      priority
+      effort
+      progress
+      startDate
+      dueDate
+      assignee {
+        userId
+        username
+        avatarUrl
+        role
+      }
+      priorityOrder
+      type
+      category
     }
   }
 `;
