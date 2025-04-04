@@ -113,34 +113,6 @@ export function TaskListView({
 
   // Memoize assignees and projects
   const { assignees, projects } = useMemo(() => {
-    // Lưu code cũ như một tham khảo
-    /* 
-    const uniqueAssignees = new Map<string, TaskAssignee>();
-    const uniqueProjects = new Map<string, ProjectData>();
-    
-    tasks.forEach(task => {
-      if (task.assignee) {
-        uniqueAssignees.set(task.assignee.userId, task.assignee);
-      }
-      
-      if (task.project_id) {
-        const project: ProjectData = {
-          id: task.project_id,
-          name: `Project ${task.project_id}`,
-          description: '',
-          dueDate: '',
-          members: 0,
-          status: 'active'
-        };
-        uniqueProjects.set(task.project_id, project);
-      }
-    });
-    
-    return {
-      assignees: Array.from(uniqueAssignees.values()),
-      projects: Array.from(uniqueProjects.values())
-    };
-    */
 
     // Sử dụng members từ Redux store
     const uniqueAssignees = new Map<string, TaskAssignee>();

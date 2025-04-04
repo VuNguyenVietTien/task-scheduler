@@ -19,6 +19,12 @@ import TaskDescriptionPanel from './description/TaskDescriptionPanel';
 import { AdvancedEditor } from '@/components/common/AdvancedEditor';
 import { imageService } from "@/services/imageService";
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
+import { 
+  updateTaskStatus, 
+  updateTaskPriority, 
+  updateTaskEffort, 
+  updateTaskAssignee
+} from '@/redux/features/tasksSlice';
 
 interface TaskDetailPageProps {
   task: Task;
@@ -92,6 +98,11 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [isLoadingSubtasks, setIsLoadingSubtasks] = useState(false);
+  const [editingCell, setEditingCell] = useState<{taskId: string, field: string} | null>(null);
+  const [editValue, setEditValue] = useState<string>('');
+  
+  // Redux Dispatch
+  const dispatch = useAppDispatch();
   
   // State cho parent task search
   const [availableParentTasks, setAvailableParentTasks] = useState<Task[]>([]);
@@ -251,16 +262,13 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   
   // Hiển thị các trường editable
   const renderEditableField = (label: string, fieldName: string, type: 'text' | 'number' | 'date' | 'select' = 'text', options?: {value: string, label: string}[]) => {
-    // Lấy giá trị hiện tại từ trạng thái editedTask
+    // Lấy giá trị hiển thị cho từng trường
+    let displayValue: string | React.ReactNode = '';
     const value = (editedTask as any)[fieldName];
     
     // Xác định giá trị hiển thị dựa trên loại trường
-    let displayValue: string | React.ReactNode = '';
-    
     if (type === 'date') {
       displayValue = value ? formatDate(value) : 'Chưa thiết lập';
-    } else if (fieldName === 'effort') {
-      displayValue = formatEffort(value);
     } else if (fieldName === 'assignee') {
       // Xử lý đặc biệt cho assignee vì có thể là object hoặc id
       if (typeof value === 'object' && value !== null) {
@@ -351,15 +359,23 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       }
     } else if (fieldName === 'progress') {
       displayValue = value ? `${value}%` : '0%';
+    } else if (fieldName === 'effort') {
+      displayValue = formatEffort(value);
+    } else if (fieldName === 'progress_type') {
+      displayValue = value ? (
+        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+          {value}
+        </span>
+      ) : 'Chưa thiết lập';
     } else {
       // Đảm bảo displayValue luôn là string hoặc ReactNode, không phải object
       displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value || '');
     }
 
     return (
-      <div className="mb-3">
+      <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50 mb-2">
         {editingField === fieldName ? (
-          <div className="space-y-2">
+          <div className="w-full space-y-2">
             <label className="block text-sm font-medium text-gray-700" htmlFor={`field-${fieldName}`}>{label}</label>
             
             {type === 'select' && options ? (
@@ -464,10 +480,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
             </div>
           </div>
         ) : (
-          <div 
-            className="flex items-center p-1.5 rounded-md group hover:bg-gray-50 cursor-pointer transition-colors"
-            onClick={() => startEditing(fieldName)}
-          >
+          <>
             <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">{label}:</div>
             <div className="flex-1 text-sm text-gray-900 flex items-center">
               {fieldName === 'status' && (
@@ -482,15 +495,16 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
               )}
               {fieldName !== 'status' && fieldName !== 'priority' && displayValue}
               
-            <button
-              type="button"
-                className="ml-1.5 p-1 text-gray-400 hover:text-gray-700 bg-gray-100 opacity-0 group-hover:opacity-100 rounded-full transition-opacity"
-              title={`Chỉnh sửa ${label.toLowerCase()}`}
-            >
+              <button
+                type="button"
+                className="ml-1.5 p-1 text-gray-400 hover:text-gray-700 bg-gray-100 opacity-0 hover:opacity-100 rounded-full transition-opacity"
+                title={`Chỉnh sửa ${label.toLowerCase()}`}
+                onClick={() => startEditing(fieldName)}
+              >
                 <PencilIcon className="h-3 w-3" />
-            </button>
+              </button>
             </div>
-          </div>
+          </>
         )}
       </div>
     );
@@ -1238,6 +1252,341 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       }
     });
 
+  // Tính tổng effort của task dựa trên subtasks
+  const calculateTotalEffort = useCallback((subtasksList: Task[]) => {
+    if (!subtasksList || subtasksList.length === 0) {
+      return task.effort || 0;
+    }
+    
+    return subtasksList.reduce((total, subtask) => {
+      return total + (subtask.effort || 0);
+    }, 0);
+  }, [task.effort]);
+
+  // Tính progress của task dựa trên subtasks đã hoàn thành
+  const calculateProgress = useCallback((subtasksList: Task[]) => {
+    if (!subtasksList || subtasksList.length === 0) {
+      return task.progress || 0;
+    }
+    
+    const completedTasks = subtasksList.filter(subtask => 
+      subtask.status === 'done' || subtask.status === 'close'
+    ).length;
+    
+    return Math.round((completedTasks / subtasksList.length) * 100);
+  }, [task.progress]);
+
+  // Tính số giờ effort còn lại
+  const calculateRemainingEffort = useCallback((subtasksList: Task[]) => {
+    if (!subtasksList || subtasksList.length === 0) {
+      return task.effort || 0;
+    }
+    
+    const totalEffort = calculateTotalEffort(subtasksList);
+    const completedEffort = subtasksList
+      .filter(subtask => subtask.status === 'done' || subtask.status === 'close')
+      .reduce((total, subtask) => total + (subtask.effort || 0), 0);
+    
+    return totalEffort - completedEffort;
+  }, [calculateTotalEffort, task.effort]);
+
+  // Định dạng effort với phần còn lại
+  const formatEffortWithRemaining = useCallback((subtasksList: Task[]) => {
+    const totalEffort = calculateTotalEffort(subtasksList);
+    
+    if (subtasksList && subtasksList.length > 0) {
+      const remainingEffort = calculateRemainingEffort(subtasksList);
+      
+      if (remainingEffort < totalEffort) {
+        return `${remainingEffort}/${totalEffort} giờ`;
+      }
+    }
+    
+    return formatEffort(totalEffort);
+  }, [calculateTotalEffort, calculateRemainingEffort, formatEffort]);
+
+  // Cập nhật task effort và progress dựa trên subtasks
+  useEffect(() => {
+    if (subtasks && subtasks.length > 0) {
+      const totalEffort = calculateTotalEffort(subtasks);
+      const progress = calculateProgress(subtasks);
+      
+      // Nếu tổng effort từ subtasks khác với effort hiện tại, cập nhật
+      if (totalEffort !== task.effort || progress !== task.progress) {
+        onTaskUpdate({
+          effort: totalEffort,
+          progress: progress
+        }).catch(error => {
+          console.error('Không thể cập nhật effort và progress từ subtasks:', error);
+        });
+      }
+    }
+  }, [subtasks, calculateTotalEffort, calculateProgress, task.effort, task.progress, onTaskUpdate]);
+
+  // Lấy thông tin effort và progress động
+  const getDynamicEffort = () => {
+    if (subtasks && subtasks.length > 0) {
+      return formatEffortWithRemaining(subtasks);
+    }
+    return formatEffort(task.effort);
+  };
+  
+  const getDynamicProgress = () => {
+    if (subtasks && subtasks.length > 0) {
+      return `${calculateProgress(subtasks)}%`;
+    }
+    return task.progress ? `${task.progress}%` : '0%';
+  };
+
+  // Handler cho việc edit subtask
+  const handleStartEditing = (taskId: string, field: string, value: any) => {
+    setEditingCell({ taskId, field });
+    setEditValue(String(value || ''));
+  };
+
+  const handleCancelEditing = () => {
+    setEditingCell(null);
+    setEditValue('');
+  };
+
+  const handleTaskStatusChange = async (taskId: string, newStatus: TaskStatus) => {
+    try {
+      await dispatch(updateTaskStatus({ taskId, status: newStatus })).unwrap();
+      
+      // Cập nhật UI cục bộ
+      setSubtasks(currentSubtasks => 
+        currentSubtasks.map(subtask => 
+          subtask.task_id === taskId || subtask.id === taskId
+            ? { ...subtask, status: newStatus }
+            : subtask
+        )
+      );
+      
+      // Refetch để đảm bảo đồng bộ
+      refetchSubtasks();
+    } catch (error) {
+      console.error('Lỗi khi cập nhật trạng thái:', error);
+    }
+  };
+
+  const handleTaskPriorityChange = async (taskId: string, newPriority: Priority) => {
+    try {
+      await dispatch(updateTaskPriority({ taskId, priority: newPriority })).unwrap();
+      
+      // Cập nhật UI cục bộ
+      setSubtasks(currentSubtasks => 
+        currentSubtasks.map(subtask => 
+          subtask.task_id === taskId || subtask.id === taskId
+            ? { ...subtask, priority: newPriority }
+            : subtask
+        )
+      );
+      
+      // Refetch để đảm bảo đồng bộ
+      refetchSubtasks();
+    } catch (error) {
+      console.error('Lỗi khi cập nhật mức ưu tiên:', error);
+    }
+  };
+
+  const handleTaskEffortChange = async (taskId: string, newEffort: number) => {
+    try {
+      await dispatch(updateTaskEffort({ taskId, effort: newEffort })).unwrap();
+      
+      // Cập nhật UI cục bộ
+      setSubtasks(currentSubtasks => 
+        currentSubtasks.map(subtask => 
+          subtask.task_id === taskId || subtask.id === taskId
+            ? { ...subtask, effort: newEffort }
+            : subtask
+        )
+      );
+      
+      // Refetch để đảm bảo đồng bộ
+      refetchSubtasks();
+    } catch (error) {
+      console.error('Lỗi khi cập nhật effort:', error);
+    }
+  };
+
+  // Thêm Component SubtasksTable
+  const SubtasksTable = () => (
+    <div className="overflow-x-auto">
+      <table className="min-w-full divide-y divide-gray-200">
+        <thead className="bg-gray-50">
+          <tr>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Tiêu đề
+            </th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Trạng thái
+            </th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Ưu tiên
+            </th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Effort (giờ)
+            </th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+              Người thực hiện
+            </th>
+          </tr>
+        </thead>
+        <tbody className="bg-white divide-y divide-gray-200">
+          {subtasks.map((subtask) => (
+            <tr key={subtask.task_id || subtask.id} className="hover:bg-gray-50">
+              <td className="px-4 py-2">
+                <Link href={`/projects/${projectId}/tasks/${subtask.task_id || subtask.id}`} className="text-blue-600 hover:text-blue-800 font-medium">
+                  {subtask.title}
+                </Link>
+              </td>
+              <td className="px-4 py-2">
+                {editingCell?.taskId === subtask.task_id && editingCell?.field === 'status' ? (
+                  <div className="flex items-center space-x-2">
+                    <select
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                      autoFocus
+                      title="Chọn trạng thái task"
+                      aria-label="Trạng thái task"
+                      onBlur={() => {
+                        handleTaskStatusChange(subtask.task_id || subtask.id || '', editValue as TaskStatus);
+                        handleCancelEditing();
+                      }}
+                    >
+                      {Object.values(TaskStatuses).map((status) => (
+                        <option key={status} value={status}>
+                          {status.charAt(0).toUpperCase() + status.slice(1)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div
+                    className="flex items-center cursor-pointer"
+                    onClick={() => handleStartEditing(subtask.task_id || subtask.id || '', 'status', subtask.status)}
+                  >
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(subtask.status)}`}>
+                      {subtask.status}
+                    </span>
+                    <button 
+                      className="ml-2 text-gray-400 hover:text-gray-600"
+                      title="Chỉnh sửa trạng thái"
+                      aria-label="Chỉnh sửa trạng thái"
+                    >
+                      <PencilIcon className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </td>
+              <td className="px-4 py-2">
+                {editingCell?.taskId === subtask.task_id && editingCell?.field === 'priority' ? (
+                  <div className="flex items-center space-x-2">
+                    <select
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                      autoFocus
+                      title="Chọn mức độ ưu tiên"
+                      aria-label="Mức độ ưu tiên"
+                      onBlur={() => {
+                        handleTaskPriorityChange(subtask.task_id || subtask.id || '', editValue as Priority);
+                        handleCancelEditing();
+                      }}
+                    >
+                      {Object.values(Priorities).map((priority) => (
+                        <option key={priority} value={priority}>
+                          {priority.charAt(0).toUpperCase() + priority.slice(1)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                ) : (
+                  <div
+                    className="flex items-center cursor-pointer"
+                    onClick={() => handleStartEditing(subtask.task_id || subtask.id || '', 'priority', subtask.priority)}
+                  >
+                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(subtask.priority)}`}>
+                      {subtask.priority}
+                    </span>
+                    <button 
+                      className="ml-2 text-gray-400 hover:text-gray-600"
+                      title="Chỉnh sửa mức độ ưu tiên"
+                      aria-label="Chỉnh sửa mức độ ưu tiên"
+                    >
+                      <PencilIcon className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </td>
+              <td className="px-4 py-2">
+                {editingCell?.taskId === subtask.task_id && editingCell?.field === 'effort' ? (
+                  <div className="flex items-center space-x-2">
+                    <input
+                      type="number"
+                      value={editValue}
+                      onChange={(e) => setEditValue(e.target.value)}
+                      className="block w-20 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm"
+                      min="0"
+                      step="0.5"
+                      autoFocus
+                      title="Nhập số giờ effort"
+                      aria-label="Số giờ effort"
+                      placeholder="Giờ"
+                      onBlur={() => {
+                        handleTaskEffortChange(subtask.task_id || subtask.id || '', Number(editValue) || 0);
+                        handleCancelEditing();
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          handleTaskEffortChange(subtask.task_id || subtask.id || '', Number(editValue) || 0);
+                          handleCancelEditing();
+                        } else if (e.key === 'Escape') {
+                          handleCancelEditing();
+                        }
+                      }}
+                    />
+                  </div>
+                ) : (
+                  <div
+                    className="flex items-center cursor-pointer"
+                    onClick={() => handleStartEditing(subtask.task_id || subtask.id || '', 'effort', subtask.effort)}
+                  >
+                    <span>{subtask.effort || 0}</span>
+                    <button 
+                      className="ml-2 text-gray-400 hover:text-gray-600"
+                      title="Chỉnh sửa effort"
+                      aria-label="Chỉnh sửa effort"
+                    >
+                      <PencilIcon className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+              </td>
+              <td className="px-4 py-2">
+                {subtask.assignee ? (
+                  <div className="flex items-center">
+                    {subtask.assignee.avatarUrl ? (
+                      <img src={subtask.assignee.avatarUrl} alt={subtask.assignee.username} className="h-6 w-6 rounded-full mr-2" />
+                    ) : (
+                      <div className="h-6 w-6 rounded-full bg-gray-300 flex items-center justify-center mr-2">
+                        <span className="text-gray-600 text-xs">{subtask.assignee.username?.charAt(0).toUpperCase() || '?'}</span>
+                      </div>
+                    )}
+                    <span className="text-sm">{subtask.assignee.username}</span>
+                  </div>
+                ) : (
+                  <span className="text-gray-500 text-sm">Chưa gán</span>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+
   return (
     <div className="w-full space-y-8">
       {/* CSS cho rich text content và tabs */}
@@ -1582,42 +1931,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
               </div>
             )}
 
-            {/* Ô tìm kiếm parent task - chỉ hiển thị khi không có parent task */}
-            {!task.parent_task_id && (
-              <div className="relative mt-4">
-                <input
-                  type="text"
-                  placeholder="Tìm parent task..."
-                  value={parentTaskIdInput}
-                  onChange={handleTaskSearchInputChange}
-                  className="text-sm pl-2 py-1 h-9 w-full max-w-md border rounded-md"
-                />
-                <button 
-                  onClick={handleSearchClick}
-                  className="absolute right-2 top-1.5 text-gray-500"
-                  title="Tìm kiếm task"
-                >
-                  <MagnifyingGlassIcon className="h-4 w-4" />
-                </button>
-              </div>
-            )}
-            
-            {/* Dropdown results */}
-            {showParentResults && filteredParentTasks.length > 0 && (
-              <div className="absolute z-10 w-full max-w-md mt-1 bg-white border border-gray-200 rounded-md shadow-lg max-h-60 overflow-auto">
-                {filteredParentTasks.map((parentTask) => (
-                  <div 
-                    key={parentTask.task_id} 
-                    className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
-                    onClick={() => handleSelectParentTask(parentTask)}
-                  >
-                    <div className="font-medium">{parentTask.title}</div>
-                    <div className="text-xs text-gray-500">ID: {parentTask.task_id}</div>
-                  </div>
-                ))}
-              </div>
-            )}
-            
+            {/* Hiển thị parent task nếu có */}
             {task.parent_task_id && (
               <div className="mt-2 text-sm">
                 <div className="flex items-center">
@@ -1691,66 +2005,251 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
             
             <div className={`tab-content ${activeTab === 'details' ? 'active' : ''}`}>
               <div className="bg-white rounded-lg">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Thông tin chi tiết</h2>
-          
+                <h2 className="text-lg font-medium text-gray-900 mb-4">Thông tin chi tiết</h2>
+                
                 <div className="grid grid-cols-1 gap-2">
-              {renderEditableField('Trạng thái', 'status', 'select', 
-                Object.entries(TaskStatuses).map(([_, value]) => ({ 
-                  value, 
-                  label: value.charAt(0).toUpperCase() + value.slice(1) 
-                })))}
-              
-              {renderEditableField('Mức độ ưu tiên', 'priority', 'select', 
-                Object.entries(Priorities).map(([_, value]) => ({ 
-                  value, 
-                  label: value.charAt(0).toUpperCase() + value.slice(1) 
-                })))}
-              
-              {renderEditableField('Ngày bắt đầu', 'start_date', 'date')}
-              {renderEditableField('Ngày đến hạn', 'due_date', 'date')}
-              
-                  {calculateDaysRemaining() && (
+                  {/* Trạng thái */}
+                  {renderEditableField('Trạng thái', 'status', 'select', 
+                    Object.entries(TaskStatuses).map(([_, value]) => ({ 
+                      value, 
+                      label: value.charAt(0).toUpperCase() + value.slice(1) 
+                    })))}
+                  
+                  {/* Mức độ ưu tiên */}
+                  {renderEditableField('Mức độ ưu tiên', 'priority', 'select', 
+                    Object.entries(Priorities).map(([_, value]) => ({ 
+                      value, 
+                      label: value.charAt(0).toUpperCase() + value.slice(1) 
+                    })))}
+                  
+                  {/* Thời gian */}
+                  <div className="mt-6 border-t border-gray-200 pt-4">
+                    <h3 className="text-base font-medium text-gray-900 mb-3">Thời gian</h3>
+                    {renderEditableField('Ngày bắt đầu', 'start_date', 'date')}
+                    {renderEditableField('Ngày đến hạn', 'due_date', 'date')}
+                    
+                    {/* Thêm ngày thực tế */}
                     <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Thời gian còn lại:</div>
-                      <div className="flex-1">
-                        <span className={`inline-block px-2 py-1 text-sm rounded ${calculateDaysRemaining()?.includes('Quá hạn') ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
-                          {calculateDaysRemaining()}
-                        </span>
+                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Ngày bắt đầu thực tế:</div>
+                      <div className="flex-1 text-sm text-gray-900">
+                        {task.actual_start_date ? formatDate(task.actual_start_date) : 'Chưa bắt đầu'}
                       </div>
                     </div>
-                  )}
                     
-              {renderEditableField('Người được giao', 'assignee', 'select',
-                projectMembers && projectMembers.length > 0 ? 
-                  [{ value: '', label: 'Chưa gán' }, ...projectMembers.map(member => ({ 
-                    value: member.user.userId, 
-                    label: member.user.username || member.user.fullName || member.user.email 
-                  }))] : 
-                  [{ value: '', label: 'Chưa gán' }]
-              )}
-                  
-                  {renderEditableField('Nỗ lực (giờ)', 'effort', 'number')}
-                  {renderEditableField('Tiến độ (%)', 'progress', 'number')}
-              
-              {renderEditableField('Người tạo', 'created_by')}
-                  
-                  <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                    <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Thời gian tạo:</div>
-                    <div className="flex-1 text-sm text-gray-900">
-                      {formatDate(task.created_at)}
+                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Ngày kết thúc thực tế:</div>
+                      <div className="flex-1 text-sm text-gray-900">
+                        {task.actual_end_date ? formatDate(task.actual_end_date) : 'Chưa hoàn thành'}
+                      </div>
                     </div>
+                    
+                    {calculateDaysRemaining() && (
+                      <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                        <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Thời gian còn lại:</div>
+                        <div className="flex-1">
+                          <span className={`inline-block px-2 py-1 text-sm rounded ${calculateDaysRemaining()?.includes('Quá hạn') ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
+                            {calculateDaysRemaining()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Phân loại */}
+                  <div className="mt-6 border-t border-gray-200 pt-4">
+                    <h3 className="text-base font-medium text-gray-900 mb-3">Phân loại</h3>
+                    
+                    {/* Loại task */}
+                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Loại task:</div>
+                      <div className="flex-1 text-sm text-gray-900">
+                        {task.type || 'Chưa phân loại'}
+                      </div>
+                    </div>
+                    
+                    {/* Danh mục */}
+                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Danh mục:</div>
+                      <div className="flex-1 text-sm text-gray-900">
+                        {task.category || 'Chưa phân loại'}
+                      </div>
+                    </div>
+                    
+                    {/* Tags */}
+                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Tags:</div>
+                      <div className="flex-1 flex flex-wrap gap-1">
+                        {task.tags && typeof task.tags === 'object' && Object.keys(task.tags).length > 0 ? (
+                          Object.entries(task.tags).map(([key, value], idx) => (
+                            <span key={idx} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              {typeof value === 'string' ? value : key}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-sm text-gray-500">Không có tags</span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Loại tiến độ */}
+                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Loại tiến độ:</div>
+                      <div className="flex-1 text-sm text-gray-900">
+                        {task.progress_type ? (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                            {task.progress_type}
+                          </span>
+                        ) : (
+                          'Chưa thiết lập'
+                        )}
+                      </div>
+                    </div>
+                    
                   </div>
                   
-                  <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                    <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Cập nhật cuối:</div>
-                    <div className="flex-1 text-sm text-gray-900">
-                      {formatDate(task.updated_at)}
-                    </div>
+                  {/* Người phụ trách */}
+                  <div className="mt-6 border-t border-gray-200 pt-4">
+                    <h3 className="text-base font-medium text-gray-900 mb-3">Người phụ trách</h3>
+                    {renderEditableField('Người được giao', 'assignee', 'select',
+                      projectMembers && projectMembers.length > 0 ? 
+                        [{ value: '', label: 'Chưa gán' }, ...projectMembers.map(member => ({ 
+                          value: member.user.userId, 
+                          label: member.user.username || member.user.fullName || member.user.email 
+                        }))] : 
+                        [{ value: '', label: 'Chưa gán' }]
+                    )}
+                    
+                    {renderEditableField('Người tạo', 'created_by')}
                   </div>
+                  
+                  {/* Nỗ lực và tiến độ */}
+                  <div className="mt-6 border-t border-gray-200 pt-4">
+                    <h3 className="text-base font-medium text-gray-900 mb-3">Nỗ lực và tiến độ</h3>
+                    {subtasks.length === 0 ? (
+                      <>
+                        {renderEditableField('Nỗ lực (giờ)', 'effort', 'number')}
+                        {renderEditableField('Tiến độ (%)', 'progress', 'number')}
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                          <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Nỗ lực:</div>
+                          <div className="flex-1 text-sm text-gray-900">
+                            {formatEffortWithRemaining(subtasks)}
+                          </div>
+                        </div>
+                        <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                          <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Tiến độ:</div>
+                          <div className="flex-1 text-sm text-gray-900">
+                            {calculateProgress(subtasks)}%
+                          </div>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                  
+                  {/* Phân loại */}
+                  <div className="mt-6 border-t border-gray-200 pt-4">
+                    <h3 className="text-base font-medium text-gray-900 mb-3">Phân loại</h3>
+                    
+                    {/* Loại task */}
+                    {renderEditableField('Loại task', 'type', 'select', 
+                      [
+                        { value: '', label: 'Không xác định' },
+                        { value: 'Feature', label: 'Feature' },
+                        { value: 'Bug', label: 'Bug' },
+                        { value: 'Enhancement', label: 'Enhancement' },
+                        { value: 'Documentation', label: 'Documentation' }
+                      ]
+                    )}
+                    
+                    {/* Danh mục */}
+                    {renderEditableField('Danh mục', 'category', 'select', 
+                      [
+                        { value: '', label: 'Không xác định' },
+                        { value: 'Frontend', label: 'Frontend' },
+                        { value: 'Backend', label: 'Backend' },
+                        { value: 'Design', label: 'Design' },
+                        { value: 'Testing', label: 'Testing' },
+                        { value: 'DevOps', label: 'DevOps' }
+                      ]
+                    )}
+                    
+                    {/* Mức độ ưu tiên */}
+                    {/* {renderEditableField('Mức độ ưu tiên', 'priority', 'select', 
+                      Object.entries(Priorities).map(([_, value]) => ({ 
+                        value, 
+                        label: value.charAt(0).toUpperCase() + value.slice(1) 
+                      }))
+                    )} */}
+                    
+                    {/* Tags */}
+                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Tags:</div>
+                      <div className="flex-1 flex flex-wrap gap-1">
+                        {task.tags && Array.isArray(task.tags) && task.tags.length > 0 ? (
+                          task.tags.map((tag, idx) => (
+                            <span key={idx} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              {tag}
+                            </span>
+                          ))
+                        ) : task.tags && typeof task.tags === 'object' && Object.keys(task.tags).length > 0 ? (
+                          Object.entries(task.tags).map(([key, value], idx) => (
+                            <span key={idx} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              {typeof value === 'string' ? value : key}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="text-sm text-gray-500">Không có tags</span>
+                        )}
+                      </div>
+                    </div>
+                    
+                    {/* Loại tiến độ */}
+                    {renderEditableField('Loại tiến độ', 'progress_type', 'select', 
+                      [
+                        { value: '', label: 'Chưa thiết lập' },
+                        { value: 'study', label: 'Nghiên cứu' },
+                        { value: 'investigate', label: 'Điều tra' },
+                        { value: 'code', label: 'Lập trình' },
+                        { value: 'test', label: 'Kiểm thử' },
+                        { value: 'review_code', label: 'Review code' },
+                        { value: 'review_test_report', label: 'Review báo cáo test' },
+                        { value: 'release', label: 'Phát hành' }
+                      ]
+                    )}
+                  </div>
+                  
+                  {/* Thông tin khác */}
+                  <div className="mt-6 border-t border-gray-200 pt-4">
+                    <h3 className="text-base font-medium text-gray-900 mb-3">Thông tin khác</h3>
+                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Thời gian tạo:</div>
+                      <div className="flex-1 text-sm text-gray-900">
+                        {formatDate(task.created_at)}
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Cập nhật cuối:</div>
+                      <div className="flex-1 text-sm text-gray-900">
+                        {formatDate(task.updated_at)}
+                      </div>
+                    </div>
+                    
+                    {task.task_id && (
+                      <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
+                        <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">ID Task:</div>
+                        <div className="flex-1 text-sm text-gray-900 font-mono">
+                          {task.task_id}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
-        </div>
-        
+            
             <div className={`tab-content ${activeTab === 'comments' ? 'active' : ''}`}>
               <div className="bg-white rounded-lg">
           <h2 className="text-lg font-medium text-gray-900 mb-4">Bình luận và hoạt động</h2>
@@ -1826,43 +2325,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 ) : subtasks.length === 0 ? (
                   <p className="text-center text-gray-500 py-8">Chưa có task con nào</p>
                 ) : (
-                  <div className="space-y-4">
-                    {subtasks.map((childTask) => (
-                      <div key={childTask.task_id || childTask.id} className="border border-gray-200 rounded-lg p-4 hover:shadow-sm transition-shadow">
-                        <div className="flex justify-between items-start">
-                          <div>
-                            <Link href={`/projects/${projectId}/tasks/${childTask.task_id || childTask.id}`} className="text-lg font-medium text-blue-600 hover:text-blue-800">
-                              {childTask.title}
-                            </Link>
-                            <div className="flex items-center mt-1 space-x-2">
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(childTask.status)}`}>
-                                {childTask.status}
-                              </span>
-                              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(childTask.priority)}`}>
-                                {childTask.priority}
-                              </span>
-                            </div>
-                          </div>
-                          {childTask.assignee && (
-                            <div className="flex items-center">
-                              {childTask.assignee.avatarUrl ? (
-                                <img 
-                                  src={childTask.assignee.avatarUrl} 
-                                  alt={childTask.assignee.username} 
-                                  title={childTask.assignee.username}
-                                  className="h-6 w-6 rounded-full" 
-                                />
-                              ) : (
-                                <div className="h-6 w-6 rounded-full bg-gray-300 flex items-center justify-center">
-                                  <span className="text-gray-600 text-xs">{childTask.assignee.username?.charAt(0).toUpperCase() || '?'}</span>
-                                </div>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <SubtasksTable />
                 )}
               </div>
             </div>

@@ -67,6 +67,8 @@ export interface Task {
   db_start_date?: string;
   force_recalculate?: boolean;
   due_date?: string;
+  actual_start_date?: string;
+  actual_end_date?: string;
   created_at?: string;
   updated_at?: string;
   
