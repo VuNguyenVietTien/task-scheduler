@@ -2053,59 +2053,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                         </div>
                       </div>
                     )}
-                  </div>
-
-                  {/* Phân loại */}
-                  <div className="mt-6 border-t border-gray-200 pt-4">
-                    <h3 className="text-base font-medium text-gray-900 mb-3">Phân loại</h3>
-                    
-                    {/* Loại task */}
-                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Loại task:</div>
-                      <div className="flex-1 text-sm text-gray-900">
-                        {task.type || 'Chưa phân loại'}
-                      </div>
-                    </div>
-                    
-                    {/* Danh mục */}
-                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Danh mục:</div>
-                      <div className="flex-1 text-sm text-gray-900">
-                        {task.category || 'Chưa phân loại'}
-                      </div>
-                    </div>
-                    
-                    {/* Tags */}
-                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Tags:</div>
-                      <div className="flex-1 flex flex-wrap gap-1">
-                        {task.tags && typeof task.tags === 'object' && Object.keys(task.tags).length > 0 ? (
-                          Object.entries(task.tags).map(([key, value], idx) => (
-                            <span key={idx} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              {typeof value === 'string' ? value : key}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-sm text-gray-500">Không có tags</span>
-                        )}
-                      </div>
-                    </div>
-                    
-                    {/* Loại tiến độ */}
-                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Loại tiến độ:</div>
-                      <div className="flex-1 text-sm text-gray-900">
-                        {task.progress_type ? (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
-                            {task.progress_type}
-                          </span>
-                        ) : (
-                          'Chưa thiết lập'
-                        )}
-                      </div>
-                    </div>
-                    
-                  </div>
+                  </div>               
                   
                   {/* Người phụ trách */}
                   <div className="mt-6 border-t border-gray-200 pt-4">
@@ -2174,14 +2122,6 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                         { value: 'DevOps', label: 'DevOps' }
                       ]
                     )}
-                    
-                    {/* Mức độ ưu tiên */}
-                    {/* {renderEditableField('Mức độ ưu tiên', 'priority', 'select', 
-                      Object.entries(Priorities).map(([_, value]) => ({ 
-                        value, 
-                        label: value.charAt(0).toUpperCase() + value.slice(1) 
-                      }))
-                    )} */}
                     
                     {/* Tags */}
                     <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
