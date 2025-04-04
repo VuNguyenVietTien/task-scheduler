@@ -10,6 +10,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useUpdateTask } from '@/hooks/useTasks';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { fetchProjectMembers } from '@/redux/features/membersSlice';
+import { fetchTaskDetail } from '@/redux/features/taskDetailSlice';
 
 // Import Apollo Client và GET_TASK_BY_ID query
 import { useLazyQuery } from '@apollo/client';
@@ -44,8 +45,9 @@ export default function TaskDetailsPage() {
   const updateTaskHook = useUpdateTask();
   const dispatch = useAppDispatch();
   
-  // Lấy members từ Redux store
+  // Lấy members và task từ Redux store
   const { members: reduxMembers, loading: membersLoading } = useAppSelector(state => state.members);
+  const { task: reduxTask, loadingTask: reduxTaskLoading } = useAppSelector(state => state.taskDetail);
 
   // Setup Apollo Client lazy query cho task detail
   const [getTask, { loading: taskLoading, error: taskError, data: taskData }] = useLazyQuery(GET_TASK_BY_ID, {
@@ -135,7 +137,11 @@ export default function TaskDetailsPage() {
         setLoading(true);
         setTask(null);
         setPreviousTaskId(taskId);
-        // Fetch task details sử dụng Apollo Client
+        
+        // Fetch task details từ Redux store
+        dispatch(fetchTaskDetail(taskId));
+        
+        // Vẫn giữ lại gọi GraphQL trực tiếp như một fallback
         getTask({ variables: { taskId } });
       }
       
@@ -145,6 +151,15 @@ export default function TaskDetailsPage() {
       }
     }
   }, [projectId, taskId, getTask, dispatch, reduxMembers, previousTaskId]);
+
+  // Thêm useEffect để cập nhật task từ Redux store
+  useEffect(() => {
+    if (reduxTask) {
+      console.log('Đã nhận task từ Redux store:', reduxTask);
+      setTask(reduxTask);
+      setLoading(false);
+    }
+  }, [reduxTask]);
 
   const handleTaskUpdate = async (updates: Partial<Task>) => {
     try {
@@ -158,6 +173,9 @@ export default function TaskDetailsPage() {
       // Cập nhật state với dữ liệu mới - sử dụng spread để đảm bảo giữ lại tất cả thuộc tính khác
       setTask(prev => prev ? { ...prev, ...updatedTask } : updatedTask);
       console.log('Cập nhật task thành công:', updatedTask);
+      
+      // Sau khi cập nhật thành công, fetch lại task từ Redux store
+      dispatch(fetchTaskDetail(taskId));
       
       return true;
     } catch (err) {

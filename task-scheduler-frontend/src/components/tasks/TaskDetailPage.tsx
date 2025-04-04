@@ -108,6 +108,9 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [isLoadingSubtasks, setIsLoadingSubtasks] = useState(false);
   
+  // Khởi tạo Apollo Client
+  const apolloClient = useApolloClient();
+  
   // Redux Dispatch
   const dispatch = useAppDispatch();
   
@@ -152,7 +155,38 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     if (taskDetailState.comments.length > 0) {
       setComments(taskDetailState.comments);
     }
-  }, [taskDetailState]);
+    
+    // Cập nhật task từ Redux store
+    if (taskDetailState.task) {
+      const reduxTask = taskDetailState.task;
+      // Cập nhật task từ Redux (điều này rất quan trọng cho việc cập nhật parent_task_id)
+      setEditedTask(prev => ({
+        ...prev,
+        parent_task_id: reduxTask.parent_task_id
+      }));
+      
+      // Nếu có parent_task_id, fetch thông tin parent task
+      if (reduxTask.parent_task_id) {
+        // Fetch title của parent task
+        apolloClient.query({
+          query: GET_TASK_BASIC_INFO,
+          variables: { taskId: reduxTask.parent_task_id },
+          fetchPolicy: 'network-only'
+        })
+        .then(response => {
+          if (response.data?.task) {
+            setParentTaskTitle(response.data.task.title || '');
+          }
+        })
+        .catch(error => {
+          console.error('Lỗi khi lấy thông tin task cha:', error);
+        });
+      } else {
+        // Nếu không có parent task, xóa title
+        setParentTaskTitle('');
+      }
+    }
+  }, [taskDetailState, apolloClient]);
   
   const { loading: commentsLoading, data: commentsData, refetch: refetchComments } = 
     useQuery<TaskCommentsData>(GET_TASK_COMMENTS, {
@@ -1276,32 +1310,6 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       refetchMembers();
     }
   };
-
-  // Thêm Apollo Client
-  const apolloClient = useApolloClient();
-  
-  // Theo dõi khi task.parent_task_id thay đổi để cập nhật UI
-  useEffect(() => {
-    if (task.parent_task_id) {
-      // Nếu có task cha, fetch thông tin task đó để hiển thị title
-      apolloClient.query({
-        query: GET_TASK_BASIC_INFO,
-        variables: { taskId: task.parent_task_id },
-        fetchPolicy: 'network-only'
-      })
-      .then(response => {
-        if (response.data?.task) {
-          setParentTaskTitle(response.data.task.title || '');
-        }
-      })
-      .catch(error => {
-        console.error('Lỗi khi lấy thông tin task cha:', error);
-      });
-    } else {
-      // Nếu không có task cha, reset UI
-      setParentTaskTitle('');
-    }
-  }, [task.parent_task_id, apolloClient]);
 
   // Tính tổng effort của task dựa trên subtasks
   const calculateTotalEffort = useCallback((subtasksList: Task[]) => {

@@ -283,18 +283,29 @@ const taskDetailSlice = createSlice({
     // updateTaskParent
     builder.addCase(updateTaskParent.pending, (state) => {
       state.updatingParent = true;
+      state.error = null;
     });
     builder.addCase(updateTaskParent.fulfilled, (state, action) => {
       state.updatingParent = false;
+      
+      console.log('UPDATE_TASK_PARENT THÀNH CÔNG!');
+      console.log('Payload từ action:', action.payload);
+      console.log('parentTaskId mới:', action.payload?.parentTaskId);
+      
       if (state.task) {
-        state.task.parent_task_id = action.payload.parentTaskId;
+        state.task.parent_task_id = action.payload?.parentTaskId || null;
+        console.log('Đã cập nhật state.task.parent_task_id thành:', state.task.parent_task_id);
+      } else {
+        console.log('Không thể cập nhật parent_task_id vì state.task là null');
       }
-      // Xóa kết quả tìm kiếm sau khi cập nhật thành công
+      
+      // Clear potential parent task
       state.potentialParentTask = null;
     });
     builder.addCase(updateTaskParent.rejected, (state, action) => {
       state.updatingParent = false;
-      state.error = action.payload as string;
+      state.error = action.payload as string || 'Lỗi khi cập nhật task cha';
+      console.error('UPDATE_TASK_PARENT THẤT BẠI:', state.error);
     });
     
     // searchParentTaskById
