@@ -261,7 +261,6 @@ export default function TaskDetailsPage() {
     <>
       {!task.parent_task_id && !hideTitleHeader && (
         <PageHeader
-          title={task.title}
           backLink={`/projects/${projectId}`}
           backLabel="Quay lại dự án"
         />

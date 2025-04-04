@@ -13,7 +13,7 @@ import { vi } from 'date-fns/locale';
 import Link from 'next/link';
 import { PencilIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, BookOpenIcon, DocumentTextIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQuery } from '@apollo/client';
-import { GET_TASK_COMMENTS, GET_TASK_SUBTASKS } from '@/graphql/queries/tasks';
+import { GET_TASK_COMMENTS, GET_TASK_SUBTASKS, GET_TASK_BY_ID } from '@/graphql/queries/tasks';
 import { CREATE_TASK_COMMENT, DELETE_TASK_COMMENT } from '@/graphql/mutations/tasks';
 import TaskDescriptionPanel from './description/TaskDescriptionPanel';
 import { AdvancedEditor } from '@/components/common/AdvancedEditor';
@@ -101,6 +101,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const [isSearchingParent, setIsSearchingParent] = useState<boolean>(false);
   const [showParentResults, setShowParentResults] = useState<boolean>(false);
   const [tasksData, setTasksData] = useState<{tasks: any[]} | null>(null);
+  const [parentTaskTitle, setParentTaskTitle] = useState<string>('');
   
   // Sử dụng useRef để theo dõi các editor
   const descriptionEditorRef = useRef<any>(null);
@@ -1222,6 +1223,21 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     }
   };
 
+  // Query để lấy thông tin parent task nếu có
+  const { loading: parentTaskLoading } = 
+    useQuery(GET_TASK_BY_ID, {
+      variables: { taskId: task.parent_task_id },
+      skip: !task.parent_task_id,
+      onCompleted: (data) => {
+        if (data && data.task) {
+          setParentTaskTitle(data.task.title || '');
+        }
+      },
+      onError: (error) => {
+        console.error('Error fetching parent task:', error);
+      }
+    });
+
   return (
     <div className="w-full space-y-8">
       {/* CSS cho rich text content và tabs */}
@@ -1554,7 +1570,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                   onClick={() => startEditing('title')}
                   title="Nhấp để chỉnh sửa tiêu đề"
                 >
-                  {task.title}
+                  {editedTask.title}
                 </h1>
                 <button 
                   onClick={() => startEditing('title')} 
@@ -1566,23 +1582,25 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
               </div>
             )}
 
-            {/* Ô tìm kiếm parent task */}
-            <div className="relative mt-4">
-              <input
-                type="text"
-                placeholder="Tìm parent task..."
-                value={parentTaskIdInput}
-                onChange={handleTaskSearchInputChange}
-                className="text-sm pl-2 py-1 h-9 w-full max-w-md border rounded-md"
-              />
-              <button 
-                onClick={handleSearchClick}
-                className="absolute right-2 top-1.5 text-gray-500"
-                title="Tìm kiếm task"
-              >
-                <MagnifyingGlassIcon className="h-4 w-4" />
-              </button>
-            </div>
+            {/* Ô tìm kiếm parent task - chỉ hiển thị khi không có parent task */}
+            {!task.parent_task_id && (
+              <div className="relative mt-4">
+                <input
+                  type="text"
+                  placeholder="Tìm parent task..."
+                  value={parentTaskIdInput}
+                  onChange={handleTaskSearchInputChange}
+                  className="text-sm pl-2 py-1 h-9 w-full max-w-md border rounded-md"
+                />
+                <button 
+                  onClick={handleSearchClick}
+                  className="absolute right-2 top-1.5 text-gray-500"
+                  title="Tìm kiếm task"
+                >
+                  <MagnifyingGlassIcon className="h-4 w-4" />
+                </button>
+              </div>
+            )}
             
             {/* Dropdown results */}
             {showParentResults && filteredParentTasks.length > 0 && (
@@ -1608,7 +1626,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                     href={`/projects/${projectId}/tasks/${task.parent_task_id}`}
                     className="ml-1 text-blue-600 hover:text-blue-800 truncate"
                   >
-                    {task.parent_task_id}
+                    {parentTaskTitle || task.parent_task_id}
                   </Link>
                 </div>
               </div>

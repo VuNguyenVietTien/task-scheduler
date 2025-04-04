@@ -4,14 +4,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 
 interface PageHeaderProps {
-  title: string;
   backLink?: string;
   backLabel?: string;
   projectName?: string;
   actionButton?: React.ReactNode;
 }
 
-export function PageHeader({ title, backLink, backLabel, projectName, actionButton }: PageHeaderProps) {
+export function PageHeader({ backLink, backLabel, projectName, actionButton }: PageHeaderProps) {
   const router = useRouter();
 
   return (
@@ -49,7 +48,6 @@ export function PageHeader({ title, backLink, backLabel, projectName, actionButt
               {projectName}
             </div>
           )}
-          <h1 className="text-2xl font-bold">{title}</h1>
         </div>
         
         {actionButton && (
