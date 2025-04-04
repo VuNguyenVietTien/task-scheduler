@@ -1,11 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-// Comment out hook cũ nhưng vẫn giữ lại để tham khảo
-// import { useProject } from '@/hooks/useProject';
 import { ProjectDetailView } from '@/components/projects/ProjectDetailView';
 import type { ProjectData } from '@/types/project';
-// Thêm imports cần thiết cho Redux
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { fetchProject, resetProject } from '@/redux/features/projectSlice';
 
@@ -69,27 +66,6 @@ export default function ProjectPage({ id }: ProjectPageProps) {
       setProjectData(mapped);
     }
   }, [project, id]);
-
-  /* 
-  // Code cũ - Comment out để tham khảo
-  useEffect(() => {
-    if (data?.project) {
-      // Map dữ liệu từ GraphQL sang ProjectData
-      const mapped: ProjectData = {
-        id: id,
-        name: data.project.name,
-        description: data.project.description || '',
-        dueDate: data.project.endDate,
-        members: data.project.memberCount,
-        status: data.project.status.toLowerCase() === 'completed' ? 'completed' :
-               data.project.status.toLowerCase() === 'on_hold' ? 'on-hold' :
-               'active'
-      };
-      
-      setProjectData(mapped);
-    }
-  }, [data, id]);
-  */
 
   // Xử lý trạng thái loading
   if (loading) {

@@ -65,19 +65,11 @@ export const updateTaskStatus = createAsyncThunk(
   'tasks/updateTaskStatus',
   async ({ taskId, status }: { taskId: string, status: TaskStatus }, { getState, rejectWithValue }) => {
     try {
-      // Tìm task hiện tại trong store để lấy assignee_id
-      const state = getState() as { tasks: TasksState };
-      const currentTask = state.tasks.tasks.find(t => t.task_id === taskId || t.id === taskId);
-      
-      if (!currentTask) {
-        return rejectWithValue('Không tìm thấy task trong state');
-      }
-      
       // Sửa lại định dạng input đúng với API backend mong đợi
+      // Không cần lấy data từ store nữa
       const input = {
         taskId: taskId,
-        status: String(status).toLowerCase(),
-        assigneeId: currentTask.assignee_id // Giữ nguyên assignee_id hiện tại
+        status: String(status).toLowerCase()
       };
       
       console.log('Gửi request cập nhật trạng thái:', input);
@@ -175,19 +167,11 @@ export const updateTaskPriority = createAsyncThunk(
   'tasks/updateTaskPriority',
   async ({ taskId, priority }: { taskId: string, priority: Priority }, { getState, rejectWithValue }) => {
     try {
-      // Tìm task hiện tại trong store để lấy assignee_id
-      const state = getState() as { tasks: TasksState };
-      const currentTask = state.tasks.tasks.find(t => t.task_id === taskId || t.id === taskId);
-      
-      if (!currentTask) {
-        return rejectWithValue('Không tìm thấy task trong state');
-      }
-
       // Sửa lại định dạng input đúng với API backend mong đợi
+      // Không cần lấy data từ store nữa
       const input = {
         taskId: taskId,
-        priority: String(priority).toLowerCase(),
-        assigneeId: currentTask.assignee_id // Giữ nguyên assignee_id hiện tại
+        priority: String(priority).toLowerCase()
       };
       
       console.log('Gửi request cập nhật ưu tiên:', input);
@@ -232,19 +216,11 @@ export const updateTaskEffort = createAsyncThunk(
   'tasks/updateTaskEffort',
   async ({ taskId, effort }: { taskId: string, effort: number }, { getState, rejectWithValue }) => {
     try {
-      // Tìm task hiện tại trong store để lấy assignee_id
-      const state = getState() as { tasks: TasksState };
-      const currentTask = state.tasks.tasks.find(t => t.task_id === taskId || t.id === taskId);
-      
-      if (!currentTask) {
-        return rejectWithValue('Không tìm thấy task trong state');
-      }
-
       // Sửa lại định dạng input đúng với API backend mong đợi
+      // Không cần lấy data từ store nữa
       const input = {
         taskId: taskId,
-        effort: Number(effort),
-        assigneeId: currentTask.assignee_id // Giữ nguyên assignee_id hiện tại
+        effort: Number(effort)
       };
       
       console.log('Gửi request cập nhật công sức:', input);
@@ -373,106 +349,81 @@ const tasksSlice = createSlice({
     // updateTaskStatus
     builder.addCase(updateTaskStatus.fulfilled, (state, action) => {
       const { taskId, status, task } = action.payload;
-      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
       
-      if (taskIndex !== -1) {
-        // Cập nhật status
+      // Cập nhật task trong state
+      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
+      if (taskIndex >= 0) {
+        console.log('Cập nhật task status trong store, index =', taskIndex);
         state.tasks[taskIndex].status = status;
         
-        // Cập nhật toàn bộ task nếu có response đầy đủ từ API
+        // Nếu có thêm data từ API, cập nhật luôn
         if (task) {
-          // Chuyển đổi từ camelCase (API) sang snake_case (UI)
-          const transformedTask = transformTaskFromAPI(task);
-          // Cập nhật các thuộc tính từ response API
-          state.tasks[taskIndex] = {
-            ...state.tasks[taskIndex],
-            ...transformedTask
-          };
+          state.tasks[taskIndex] = { ...state.tasks[taskIndex], ...task };
         }
-        
-        console.log('Đã cập nhật task trong Redux store:', state.tasks[taskIndex]);
+      } else {
+        console.log('Không tìm thấy task để cập nhật status trong store, taskId =', taskId);
       }
     });
     
     // updateTaskAssignee
     builder.addCase(updateTaskAssignee.fulfilled, (state, action) => {
-      const { taskId, assigneeId, assignee } = action.payload;
-      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
+      const { taskId, assigneeId, assignee, task } = action.payload;
       
-      if (taskIndex !== -1) {
-        // Cập nhật assignee_id
-        state.tasks[taskIndex].assignee_id = assigneeId || undefined;
-        
-        // Cập nhật assignee object nếu có
+      // Cập nhật task trong state
+      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
+      if (taskIndex >= 0) {
+        console.log('Cập nhật task assignee trong store, index =', taskIndex);
+        // Sử dụng assignee.userId thay vì assignee_id
         if (assignee) {
-          state.tasks[taskIndex].assignee = {
-            userId: assignee.userId,
-            username: assignee.username,
-            avatarUrl: assignee.avatarUrl || "",
-            role: assignee.role || ""
-          };
+          state.tasks[taskIndex].assignee = assignee;
         } else {
           state.tasks[taskIndex].assignee = undefined;
         }
         
-        // Nếu có task đầy đủ từ API, cập nhật toàn bộ
-        if (action.payload.task) {
-          const transformedTask = transformTaskFromAPI(action.payload.task);
-          state.tasks[taskIndex] = {
-            ...state.tasks[taskIndex],
-            ...transformedTask
-          };
+        // Nếu có thêm data từ API, cập nhật luôn
+        if (task) {
+          state.tasks[taskIndex] = { ...state.tasks[taskIndex], ...task };
         }
-        
-        console.log('Đã cập nhật task trong Redux store:', state.tasks[taskIndex]);
+      } else {
+        console.log('Không tìm thấy task để cập nhật assignee trong store, taskId =', taskId);
       }
     });
     
     // updateTaskPriority
     builder.addCase(updateTaskPriority.fulfilled, (state, action) => {
       const { taskId, priority, task } = action.payload;
-      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
       
-      if (taskIndex !== -1) {
-        // Cập nhật priority
+      // Cập nhật task trong state
+      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
+      if (taskIndex >= 0) {
+        console.log('Cập nhật task priority trong store, index =', taskIndex);
         state.tasks[taskIndex].priority = priority;
         
-        // Cập nhật toàn bộ task nếu có response đầy đủ từ API
+        // Nếu có thêm data từ API, cập nhật luôn
         if (task) {
-          // Chuyển đổi từ camelCase (API) sang snake_case (UI)
-          const transformedTask = transformTaskFromAPI(task);
-          // Cập nhật các thuộc tính từ response API
-          state.tasks[taskIndex] = {
-            ...state.tasks[taskIndex],
-            ...transformedTask
-          };
+          state.tasks[taskIndex] = { ...state.tasks[taskIndex], ...task };
         }
-        
-        console.log('Đã cập nhật task trong Redux store:', state.tasks[taskIndex]);
+      } else {
+        console.log('Không tìm thấy task để cập nhật priority trong store, taskId =', taskId);
       }
     });
     
     // updateTaskEffort
     builder.addCase(updateTaskEffort.fulfilled, (state, action) => {
       const { taskId, effort, task } = action.payload;
-      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
       
-      if (taskIndex !== -1) {
-        // Cập nhật effort
+      // Cập nhật task trong state
+      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
+      if (taskIndex >= 0) {
+        console.log('Cập nhật task effort trong store, index =', taskIndex);
         state.tasks[taskIndex].effort = effort;
         
-        // Cập nhật toàn bộ task nếu có response đầy đủ từ API
+        // Nếu có thêm data từ API, cập nhật luôn
         if (task) {
-          // Chuyển đổi từ camelCase (API) sang snake_case (UI)
-          const transformedTask = transformTaskFromAPI(task);
-          // Cập nhật các thuộc tính từ response API
-          state.tasks[taskIndex] = {
-            ...state.tasks[taskIndex],
-            ...transformedTask
-          };
+          state.tasks[taskIndex] = { ...state.tasks[taskIndex], ...task };
         }
-        
-        console.log('Đã cập nhật task trong Redux store:', state.tasks[taskIndex]);
+      } else {
+        console.log('Không tìm thấy task để cập nhật effort trong store, taskId =', taskId);
       }
     });
   }
