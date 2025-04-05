@@ -23,19 +23,70 @@ function safeStringify(obj: any): string {
   }
 }
 
-// Helper function to get token from server
+// Caching system for token
+let cachedToken: string | null = null;
+let tokenExpiryTime: number | null = null;
+let tokenRequestInProgress: Promise<string | null> | null = null;
+let tokenFetchCount = 0;
+const TOKEN_EXPIRY_TIME = 5 * 60 * 1000; // 5 phút
+
+// Helper function to get token from server with improved caching
 async function getTokenFromServer(): Promise<string | null> {
   try {
     if (!isBrowser) return null;
     
-    const response = await fetch('/api/auth/get-token');
-    if (!response.ok) {
-      console.log('[Token Helper] Failed to get token, status:', response.status);
-      return null;
+    const now = Date.now();
+    
+    // Kiểm tra xem token có còn hiệu lực không
+    if (cachedToken && tokenExpiryTime && now < tokenExpiryTime) {
+      return cachedToken;
     }
-    const data = await response.json();
-    console.log('[Token Helper] Got token from server:', data.token ? 'Yes' : 'No');
-    return data.token;
+
+    // Nếu đang có request đang lấy token, sử dụng promise hiện tại
+    if (tokenRequestInProgress) {
+      return tokenRequestInProgress;
+    }
+    
+    // Tăng biến đếm
+    tokenFetchCount++;
+    
+    // Log số lần gọi token trong session
+    if (tokenFetchCount > 1) {
+      console.log(`[Token Helper] Token request count: ${tokenFetchCount}`);
+    }
+    
+    // Nếu có quá nhiều requests trong thời gian ngắn, có thể có vấn đề
+    if (tokenFetchCount > 20 && (tokenExpiryTime && (now - tokenExpiryTime) < 10000)) {
+      console.warn('[Token Helper] Too many token requests in short time. Possible infinite loop detected.');
+      // Delay request để tránh làm quá tải server
+      await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    // Tạo promise mới
+    tokenRequestInProgress = (async () => {
+      try {
+        const response = await fetch('/api/auth/get-token');
+        if (!response.ok) {
+          console.log('[Token Helper] Failed to get token, status:', response.status);
+          return null;
+        }
+        const data = await response.json();
+        
+        // Cập nhật cache
+        cachedToken = data.token;
+        tokenExpiryTime = Date.now() + TOKEN_EXPIRY_TIME;
+        
+        return data.token;
+      } catch (error) {
+        console.error('[Token Helper] Failed to get token:', error);
+        return null;
+      } finally {
+        // Xóa promise sau khi hoàn thành
+        tokenRequestInProgress = null;
+      }
+    })();
+    
+    return tokenRequestInProgress;
   } catch (error) {
     console.error('[Token Helper] Failed to get token:', error);
     return null;
@@ -122,6 +173,9 @@ const errorMiddleware = new ApolloLink((operation, forward) => {
       error.message.toLowerCase().includes('unauthenticated')
     )) {
       console.log('[Error Middleware] Authentication error:', response.errors);
+      // Xóa token cache khi có lỗi xác thực
+      cachedToken = null;
+      tokenExpiryTime = null;
     }
     return response;
   });

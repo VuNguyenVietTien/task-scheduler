@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
-import { Task, TaskStatus, Priority, TaskFilter, TaskAssignee, TaskStatuses, Priorities } from '@/types/task';
+import { Task, TaskStatus, Priority, TaskFilter, TaskStatuses, Priorities, UserBasic } from '@/types/task';
 import { ProjectData } from '@/types/project';
 import { TaskFilterBar } from './TaskFilterBar';
 import { TaskBulkActions } from './TaskBulkActions';
@@ -48,6 +48,43 @@ interface SortConfig {
   direction: 'asc' | 'desc';
 }
 
+// Tạo interface TaskAssignee từ UserBasic
+interface TaskAssignee extends UserBasic {
+  // Không cần thêm gì vì UserBasic đã đủ
+}
+
+// Thêm CSS bên ngoài component
+const taskNestedStyles = `
+  .child-task-row {
+    background-color: #f8fafc;
+  }
+  
+  .child-task-row td:first-child {
+    border-left: 4px solid #e2e8f0;
+  }
+  
+  .child-task-row.child-level-2 td:first-child {
+    border-left: 4px solid #cbd5e1;
+  }
+  
+  .child-task-row.child-level-3 td:first-child {
+    border-left: 4px solid #94a3b8;
+  }
+  
+  .parent-task-row {
+    font-weight: 500;
+  }
+  
+  .task-child-connector {
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background-color: #e2e8f0;
+  }
+`;
+
 export function TaskListView({ 
   tasks: initialTasks, 
   onTaskClick,
@@ -80,6 +117,9 @@ export function TaskListView({
   
   // Lấy danh sách members từ Redux store
   const reduxMembers = useAppSelector(state => state.members.members);
+  
+  // Khởi tạo router ở cấp độ component
+  const router = useRouter();
   
   // Function cập nhật một task cụ thể, giữ nguyên các task khác
   const updateSingleTaskInState = useCallback((taskId: string, updates: Partial<Task>) => {
@@ -327,7 +367,8 @@ export function TaskListView({
     return displayedTasks;
   }, [displayedTasks, incompleteTasks, completedTasks, tasks]);
 
-  const toggleTaskExpansion = (taskId: string) => {
+  const toggleTaskExpansion = (taskId: string, e: React.MouseEvent) => {
+    e.stopPropagation(); // Ngăn sự kiện click lan ra và kích hoạt handleTaskClick
     setExpandedTasks(prev => {
       const newSet = new Set(prev);
       if (newSet.has(taskId)) {
@@ -339,22 +380,366 @@ export function TaskListView({
     });
   };
 
-  const handleTaskClick = (taskId: string) => {
-    // Chuyển hướng đến trang chi tiết task thay vì mở modal
-    const task = tasks.find(t => t.task_id === taskId || t.id === taskId);
-    if (task) {
+  const hasChildTasks = (task: Task) => {
+    return task.child_tasks && task.child_tasks.length > 0;
+  };
+
+  const renderChildTasks = (parentTask: Task, level: number = 1) => {
+    if (!hasChildTasks(parentTask) || !expandedTasks.has(parentTask.task_id)) {
+      return null;
+    }
+
+    return parentTask.child_tasks?.map(childTask => (
+      <React.Fragment key={childTask.task_id}>
+        <tr className={`hover:bg-slate-50 child-task-row ${level > 0 ? 'child-level-' + level : ''}`}>
+          <td className="w-8 py-4 pl-4 pr-3">
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                checked={selectedTasks.has(childTask.task_id)}
+                onChange={(e) => toggleTaskSelection(childTask.task_id, e)}
+                title="Select task"
+              />
+            </div>
+          </td>
+          <td className="py-4 pl-4 pr-3 text-sm sm:pl-6 relative">
+            <div className="flex items-center">
+              <div style={{ paddingLeft: `${level * 20}px` }} className="flex items-center relative">
+                <div className="absolute left-0 top-0 h-full w-0.5 bg-slate-200" style={{ left: `${level * 10}px` }}></div>
+                
+                {hasChildTasks(childTask) && (
+                  <button
+                    onClick={(e) => toggleTaskExpansion(childTask.task_id, e)}
+                    className="mr-2 text-slate-400 hover:text-slate-700 focus:outline-none"
+                    aria-label={expandedTasks.has(childTask.task_id) ? "Thu gọn task con" : "Mở rộng task con"}
+                  >
+                    <svg 
+                      xmlns="http://www.w3.org/2000/svg" 
+                      className={`h-4 w-4 transition-transform ${expandedTasks.has(childTask.task_id) ? 'transform rotate-90' : ''}`} 
+                      fill="none" 
+                      viewBox="0 0 24 24" 
+                      stroke="currentColor"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </button>
+                )}
+                
+                <div>
+                  <div 
+                    className="font-medium text-slate-900 cursor-pointer hover:text-blue-600"
+                    onClick={() => handleTaskClick(childTask.task_id)}
+                  >
+                    {childTask.title}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </td>
+          <td className="px-3 py-4 text-sm">
+            {editingCell?.taskId === childTask.task_id && editingCell?.field === 'status' ? (
+              <div className="relative flex items-center">
+                <div className="w-24 min-w-24 max-w-24">
+                  <select
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
+                    autoFocus
+                    aria-label="Trạng thái"
+                    title="Chọn trạng thái"
+                  >
+                    {Object.values(TaskStatuses).map((status) => (
+                      <option key={status} value={status}>
+                        {status.replace(/_/g, ' ')}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex ml-2">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleSaveEditing(childTask.task_id, 'status'); }}
+                    className="text-green-600 hover:text-green-800 mr-1" 
+                    title="Lưu"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
+                    className="text-red-600 hover:text-red-800" 
+                    title="Hủy"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <span 
+                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(childTask.status)} cursor-pointer hover:opacity-75`}
+                onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'status', childTask.status); }}
+              >
+                {childTask.status.replace(/_/g, ' ')}
+              </span>
+            )}
+          </td>
+          <td className="px-3 py-4 text-sm">
+            {editingCell?.taskId === childTask.task_id && editingCell?.field === 'priority' ? (
+              <div className="relative flex items-center">
+                <div className="w-24 min-w-24 max-w-24">
+                  <select
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
+                    autoFocus
+                    aria-label="Mức độ ưu tiên"
+                    title="Chọn mức độ ưu tiên"
+                  >
+                    {Object.values(Priorities).map((priority) => (
+                      <option key={priority} value={priority}>
+                        {priority}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex ml-2">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleSaveEditing(childTask.task_id, 'priority'); }}
+                    className="text-green-600 hover:text-green-800 mr-1" 
+                    title="Lưu"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
+                    className="text-red-600 hover:text-red-800" 
+                    title="Hủy"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <span 
+                className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(childTask.priority)} cursor-pointer hover:opacity-75`}
+                onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'priority', childTask.priority); }}
+              >
+                {childTask.priority}
+              </span>
+            )}
+          </td>
+          <td className="px-3 py-4 text-sm">
+            {editingCell?.taskId === childTask.task_id && editingCell?.field === 'assignee_id' ? (
+              <div className="relative flex items-center">
+                <div className="w-36 min-w-36 max-w-36">
+                  <select
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
+                    autoFocus
+                    aria-label="Người được giao"
+                    title="Chọn người được giao"
+                  >
+                    <option value="">Chưa gán</option>
+                    {assignees.map((assignee) => (
+                      <option key={assignee.userId} value={assignee.userId}>
+                        {assignee.username}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex ml-2">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleSaveEditing(childTask.task_id, 'assignee_id'); }}
+                    className="text-green-600 hover:text-green-800 mr-1" 
+                    title="Lưu"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
+                    className="text-red-600 hover:text-red-800" 
+                    title="Hủy"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div 
+                className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1 rounded"
+                onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'assignee_id', childTask.assignee?.userId || ''); }}
+              >
+                {childTask.assignee ? (
+                  <>
+                    <UserAvatar 
+                      username={childTask.assignee.username} 
+                      avatarUrl={childTask.assignee.avatarUrl} 
+                      size="md" 
+                    />
+                    <span>{childTask.assignee.username}</span>
+                  </>
+                ) : (
+                  <span className="text-slate-400">Chưa gán</span>
+                )}
+              </div>
+            )}
+          </td>
+          <td className="px-3 py-4 text-sm text-slate-500">
+            {editingCell?.taskId === childTask.task_id && editingCell?.field === 'due_date' ? (
+              <div className="relative flex items-center">
+                <div className="w-36 min-w-36 max-w-36">
+                  <input
+                    type="date"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
+                    autoFocus
+                    aria-label="Ngày hết hạn"
+                    title="Chọn ngày hết hạn"
+                    placeholder="Nhập ngày hết hạn"
+                  />
+                </div>
+                <div className="flex ml-2">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleSaveEditing(childTask.task_id, 'due_date'); }}
+                    className="text-green-600 hover:text-green-800 mr-1" 
+                    title="Lưu"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
+                    className="text-red-600 hover:text-red-800" 
+                    title="Hủy"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <span 
+                className="cursor-pointer hover:text-blue-600 hover:underline"
+                onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'due_date', childTask.due_date ? new Date(childTask.due_date).toISOString().split('T')[0] : ''); }}
+              >
+                {childTask.due_date ? new Date(childTask.due_date).toLocaleDateString() : '-'}
+              </span>
+            )}
+          </td>
+          <td className="px-3 py-4 text-sm text-slate-500">
+            {editingCell?.taskId === childTask.task_id && editingCell?.field === 'effort' ? (
+              <div className="relative flex items-center">
+                <div className="w-20 min-w-20 max-w-20">
+                  <input
+                    type="number"
+                    min="0"
+                    step="0.5"
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
+                    autoFocus
+                    aria-label="Công sức"
+                    title="Nhập số giờ công sức"
+                    placeholder="Nhập số giờ"
+                  />
+                </div>
+                <div className="flex ml-2">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleSaveEditing(childTask.task_id, 'effort'); }}
+                    className="text-green-600 hover:text-green-800 mr-1" 
+                    title="Lưu"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                  </button>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
+                    className="text-red-600 hover:text-red-800" 
+                    title="Hủy"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <span 
+                className="cursor-pointer hover:text-blue-600 hover:underline"
+                onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'effort', childTask.effort || ''); }}
+              >
+                {childTask.effort ? `${childTask.effort}h` : '-'}
+              </span>
+            )}
+          </td>
+          <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+            <button 
+              className="text-blue-600 hover:text-blue-900"
+              title="Thao tác khác"
+              aria-label="Thao tác khác"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z" />
+              </svg>
+            </button>
+          </td>
+        </tr>
+        {renderChildTasks(childTask, level + 1)}
+      </React.Fragment>
+    ));
+  };
+
+  // Sửa lại hàm handleTaskClick
+  const handleTaskClick = useCallback((taskId: string) => {
+    // Tìm task trong tất cả các task (cả cha và con)
+    let foundTask: Task | undefined = tasks.find(t => t.task_id === taskId || t.id === taskId);
+    
+    // Nếu không tìm thấy trong danh sách tasks chính, tìm trong các task con
+    if (!foundTask) {
+      for (const parentTask of tasks) {
+        if (parentTask.child_tasks && parentTask.child_tasks.length > 0) {
+          foundTask = parentTask.child_tasks.find(child => child.task_id === taskId || child.id === taskId);
+          if (foundTask) break;
+        }
+      }
+    }
+    
+    if (foundTask) {
       // Lấy project_id từ task
-      const projectId = task.project_id;
+      const projectId = foundTask.project_id;
       
-      // Chuyển hướng đến trang chi tiết task
-      window.location.href = `/projects/${projectId}/tasks/${taskId}`;
+      // Tạo URL đích
+      const url = `/projects/${projectId}/tasks/${taskId}`;
+      
+      // Kiểm tra xem URL hiện tại đã là URL đích hay chưa để tránh vòng lặp
+      if (typeof window !== 'undefined' && window.location.pathname !== url) {
+        router.push(url);
+      }
+    } else {
+      console.warn(`Không tìm thấy task với ID: ${taskId}`);
     }
     
     // Nếu có callback onTaskClick từ props, gọi nó
     if (onTaskClick) {
       onTaskClick(taskId);
     }
-  };
+  }, [tasks, router, onTaskClick]);
 
   const handleTaskUpdate = (taskId: string, updates: Partial<Task>) => {
     // Cập nhật task trong state nếu cần
@@ -601,22 +986,19 @@ export function TaskListView({
         const originalTasks = [...tasks];
         
         // Optimistic update cho UI - Chỉ cập nhật task được chọn
-        updateSingleTaskInState(taskId, { assignee_id: assigneeId as string || undefined });
+        // Sửa assignee_id thành assignee và cập nhật cấu trúc đúng
+        const assigneeObj = assigneeId ? 
+          assignees.find(a => a.userId === assigneeId) || undefined : 
+          undefined;
+        
+        updateSingleTaskInState(taskId, { 
+          assignee: assigneeObj 
+        });
         
         try {
           // CÁCH MỚI: Sử dụng Redux dispatch
           await dispatch(updateTaskAssignee({ taskId, assigneeId: assigneeId as string | null })).unwrap();
           console.log(`Đã cập nhật người được giao thành: ${assigneeId} (qua Redux)`);
-          
-          /* CÁCH CŨ: Sử dụng hook mutation
-          const result = await updateAssignee(taskId, assigneeId as string | null);
-          console.log(`Đã cập nhật người được giao thành: ${assigneeId}`, result);
-          
-          // Cập nhật thông tin assignee đầy đủ nếu có
-          if (result && result.assignee) {
-            updateSingleTaskInState(taskId, { assignee: result.assignee });
-          }
-          */
         } catch (error) {
           console.error('Lỗi khi gọi API cập nhật người được giao:', error);
           // Khôi phục trạng thái cũ nếu API call thất bại
@@ -747,6 +1129,8 @@ export function TaskListView({
                   className="rounded border-slate-300 text-blue-600 focus:ring-blue-500"
                   title="Chọn tất cả"
                   aria-label="Chọn tất cả công việc"
+                  onChange={toggleAllTasks}
+                  checked={selectedTasks.size > 0 && selectedTasks.size === displayedTasks.length}
                 />
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
@@ -776,7 +1160,7 @@ export function TaskListView({
             {displayedTasks.length > 0 ? (
               displayedTasks.map(task => (
                 <React.Fragment key={task.task_id}>
-                  <tr className={`hover:bg-slate-50`}>
+                  <tr className={`hover:bg-slate-50 ${hasChildTasks(task) ? 'parent-task-row' : ''}`}>
                     <td className="w-8 py-4 pl-4 pr-3">
                       <div className="flex items-center">
                         <input
@@ -790,6 +1174,24 @@ export function TaskListView({
                     </td>
                     <td className="py-4 pl-4 pr-3 text-sm sm:pl-6">
                       <div className="flex items-center">
+                        {hasChildTasks(task) && (
+                          <button
+                            onClick={(e) => toggleTaskExpansion(task.task_id, e)}
+                            className="mr-2 text-slate-400 hover:text-slate-700 focus:outline-none"
+                            aria-label={expandedTasks.has(task.task_id) ? "Thu gọn task con" : "Mở rộng task con"}
+                          >
+                            <svg 
+                              xmlns="http://www.w3.org/2000/svg" 
+                              className={`h-4 w-4 transition-transform ${expandedTasks.has(task.task_id) ? 'transform rotate-90' : ''}`} 
+                              fill="none" 
+                              viewBox="0 0 24 24" 
+                              stroke="currentColor"
+                            >
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                          </button>
+                        )}
+                        
                         <div>
                           <div 
                             className="font-medium text-slate-900 cursor-pointer hover:text-blue-600"
@@ -1063,17 +1465,7 @@ export function TaskListView({
                       </button>
                     </td>
                   </tr>
-                  {task.child_tasks && task.child_tasks.length > 0 && (
-                    <tr className={`hover:bg-slate-50`}>
-                      <td colSpan={8} className="px-6 py-4 text-sm text-slate-500">
-                        {task.child_tasks.map((childTask) => (
-                          <div key={childTask.task_id} className="ml-4">
-                            {childTask.title}
-                          </div>
-                        ))}
-                      </td>
-                    </tr>
-                  )}
+                  {renderChildTasks(task)}
                 </React.Fragment>
               ))
             ) : (
@@ -1134,6 +1526,9 @@ export function TaskListView({
           currentUser={user || undefined}
         />
       )}
+
+      {/* Thêm CSS cho task con */}
+      <style jsx>{taskNestedStyles}</style>
     </div>
   );
 }

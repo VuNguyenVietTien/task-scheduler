@@ -139,6 +139,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   
   // Sử dụng useEffect để fetch dữ liệu từ Redux
   useEffect(() => {
+    console.log('[TaskDetailPage] useEffect fetch data trigger, taskId:', taskId);
     if (taskId) {
       dispatch(fetchTaskDetail(taskId));
       dispatch(fetchSubtasks(taskId));
@@ -148,6 +149,13 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   
   // Đồng bộ dữ liệu từ Redux store vào state
   useEffect(() => {
+    console.log('[TaskDetailPage] useEffect taskDetailState sync triggered', {
+      hasSubtasks: taskDetailState.subtasks.length > 0,
+      hasComments: taskDetailState.comments.length > 0,
+      hasTask: !!taskDetailState.task,
+      parentTaskId: taskDetailState.task?.parent_task_id
+    });
+    
     if (taskDetailState.subtasks.length > 0) {
       setSubtasks(taskDetailState.subtasks);
     }
@@ -160,13 +168,21 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     if (taskDetailState.task) {
       const reduxTask = taskDetailState.task;
       // Cập nhật task từ Redux (điều này rất quan trọng cho việc cập nhật parent_task_id)
-      setEditedTask(prev => ({
-        ...prev,
-        parent_task_id: reduxTask.parent_task_id
-      }));
+      setEditedTask(prev => {
+        const newState = {
+          ...prev,
+          parent_task_id: reduxTask.parent_task_id
+        };
+        console.log('[TaskDetailPage] Updating editedTask:', {
+          oldParentId: prev.parent_task_id,
+          newParentId: reduxTask.parent_task_id
+        });
+        return newState;
+      });
       
       // Nếu có parent_task_id, fetch thông tin parent task
       if (reduxTask.parent_task_id) {
+        console.log('[TaskDetailPage] Fetching parent task info for ID:', reduxTask.parent_task_id);
         // Fetch title của parent task
         apolloClient.query({
           query: GET_TASK_BASIC_INFO,
@@ -175,7 +191,9 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         })
         .then(response => {
           if (response.data?.task) {
-            setParentTaskTitle(response.data.task.title || '');
+            const title = response.data.task.title || '';
+            console.log('[TaskDetailPage] Parent task title fetched:', title);
+            setParentTaskTitle(title);
           }
         })
         .catch(error => {
@@ -183,6 +201,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         });
       } else {
         // Nếu không có parent task, xóa title
+        console.log('[TaskDetailPage] No parent task, clearing parent task title');
         setParentTaskTitle('');
       }
     }

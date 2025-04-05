@@ -17,6 +17,9 @@ import { useLazyQuery } from '@apollo/client';
 import { GET_TASK_BY_ID } from '@/graphql/queries/tasks';
 import { client } from '@/lib/apollo-client';
 
+// Thêm biến đếm để theo dõi số lần render
+let renderCount = 0;
+
 // Định nghĩa interface cho project member - phù hợp với kiểu yêu cầu bởi TaskDetailPage
 interface ProjectMember {
   role: string;
@@ -31,6 +34,9 @@ interface ProjectMember {
 }
 
 export default function TaskDetailsPage() {
+  const renderNumber = ++renderCount;
+  console.log(`[TaskDetailsPage] Rendering #${renderNumber}`);
+  
   const params = useParams();
   const router = useRouter();
   const projectId = params?.id as string;
@@ -45,6 +51,12 @@ export default function TaskDetailsPage() {
   const updateTaskHook = useUpdateTask();
   const dispatch = useAppDispatch();
   
+  console.log(`[TaskDetailsPage] Current params:`, { 
+    projectId, 
+    taskId, 
+    previousTaskId 
+  });
+  
   // Lấy members và task từ Redux store
   const { members: reduxMembers, loading: membersLoading } = useAppSelector(state => state.members);
   const { task: reduxTask, loadingTask: reduxTaskLoading } = useAppSelector(state => state.taskDetail);
@@ -55,7 +67,7 @@ export default function TaskDetailsPage() {
     fetchPolicy: 'network-only',
     onCompleted: (data) => {
       if (data && data.task) {
-        console.log('Task data từ GraphQL:', data.task);
+        console.log('[TaskDetailsPage] Task data từ GraphQL:', data.task.taskId);
         
         // Chuyển đổi dữ liệu từ camelCase sang snake_case
         const formattedTask: Task = {
@@ -93,18 +105,22 @@ export default function TaskDetailsPage() {
           is_deleted: data.task.isDeleted || false
         };
         
+        console.log('[TaskDetailsPage] Setting task from GraphQL:', {
+          id: formattedTask.task_id,
+          parent_id: formattedTask.parent_task_id
+        });
         setTask(formattedTask);
         setLoading(false);
       }
     },
     onError: (error) => {
-      console.error('Error fetching task from GraphQL:', error);
+      console.error('[TaskDetailsPage] Error fetching task from GraphQL:', error);
       setError('Không thể tải thông tin công việc. Vui lòng thử lại sau.');
       setLoading(false);
       
       // Sử dụng fallback data trong môi trường development để testing
       if (process.env.NODE_ENV === 'development') {
-        console.log('Sử dụng dữ liệu fallback cho môi trường development');
+        console.log('[TaskDetailsPage] Sử dụng dữ liệu fallback cho môi trường development');
         const fallbackTask: Task = {
           task_id: taskId,
           id: taskId,
@@ -130,10 +146,23 @@ export default function TaskDetailsPage() {
     }
   });
 
+  // useEffect để xử lý fetch dữ liệu khi taskId hoặc projectId thay đổi
   useEffect(() => {
+    console.log('[TaskDetailsPage] useEffect for data fetching triggered', {
+      projectId,
+      taskId,
+      previousTaskId,
+      hasReduxMembers: reduxMembers?.length > 0,
+      reduxTaskId: reduxTask?.task_id
+    });
+    
     if (projectId && taskId) {
       // Kiểm tra nếu taskId thay đổi thì reset trạng thái và tải dữ liệu mới
       if (taskId !== previousTaskId) {
+        console.log('[TaskDetailsPage] TaskId changed, resetting state', {
+          from: previousTaskId,
+          to: taskId
+        });
         setLoading(true);
         setTask(null);
         setPreviousTaskId(taskId);
@@ -147,39 +176,62 @@ export default function TaskDetailsPage() {
       
       // Chỉ dispatch fetchProjectMembers khi chưa có members trong Redux store
       if (!reduxMembers || reduxMembers.length === 0) {
+        console.log('[TaskDetailsPage] Fetching project members');
         dispatch(fetchProjectMembers(projectId));
       }
     }
-  }, [projectId, taskId, getTask, dispatch, reduxMembers, previousTaskId]);
+  }, [projectId, taskId, previousTaskId, getTask, dispatch, reduxMembers]);
 
   // Thêm useEffect để cập nhật task từ Redux store
   useEffect(() => {
+    console.log('[TaskDetailsPage] useEffect for redux task sync triggered', {
+      hasReduxTask: !!reduxTask,
+      reduxTaskId: reduxTask?.task_id,
+      reduxParentId: reduxTask?.parent_task_id,
+      currentTaskId: task?.task_id
+    });
+    
     if (reduxTask) {
-      console.log('Đã nhận task từ Redux store:', reduxTask);
-      setTask(reduxTask);
-      setLoading(false);
+      if (!task || task.task_id !== reduxTask.task_id || task.parent_task_id !== reduxTask.parent_task_id) {
+        console.log('[TaskDetailsPage] Setting task from Redux store:', {
+          id: reduxTask.task_id,
+          parent_id: reduxTask.parent_task_id
+        });
+        setTask(reduxTask);
+        setLoading(false);
+      }
     }
-  }, [reduxTask]);
+  }, [reduxTask, task]);
 
   const handleTaskUpdate = async (updates: Partial<Task>) => {
     try {
+      console.log('[TaskDetailsPage] handleTaskUpdate called with:', updates);
       setLoading(true);
-      
-      console.log('Cập nhật task với dữ liệu:', updates);
       
       // Sử dụng updateTask từ hook, nhưng làm rõ cách gọi
       const updatedTask = await updateTaskHook.updateTask(taskId, updates);
       
+      console.log('[TaskDetailsPage] Task updated successfully:', {
+        id: updatedTask.task_id,
+        parent_id: updatedTask.parent_task_id
+      });
+      
       // Cập nhật state với dữ liệu mới - sử dụng spread để đảm bảo giữ lại tất cả thuộc tính khác
-      setTask(prev => prev ? { ...prev, ...updatedTask } : updatedTask);
-      console.log('Cập nhật task thành công:', updatedTask);
+      setTask(prev => {
+        const newTask = prev ? { ...prev, ...updatedTask } : updatedTask;
+        console.log('[TaskDetailsPage] Updated local task state:', {
+          prevParentId: prev?.parent_task_id,
+          newParentId: newTask.parent_task_id
+        });
+        return newTask;
+      });
       
       // Sau khi cập nhật thành công, fetch lại task từ Redux store
       dispatch(fetchTaskDetail(taskId));
       
       return true;
     } catch (err) {
-      console.error('Error updating task:', err);
+      console.error('[TaskDetailsPage] Error updating task:', err);
       setError('Không thể cập nhật công việc. Vui lòng thử lại sau.');
       return false;
     } finally {
@@ -189,8 +241,16 @@ export default function TaskDetailsPage() {
 
   // Hàm navigate đến task khác mà không tải lại trang
   const navigateToTask = (newTaskId: string) => {
+    console.log('[TaskDetailsPage] Navigating to task:', newTaskId);
     router.push(`/projects/${projectId}/tasks/${newTaskId}`);
   };
+
+  // Return JSX với task details
+  console.log(`[TaskDetailsPage] Rendering completed #${renderNumber}`, {
+    hasTask: !!task,
+    loading,
+    error
+  });
 
   if (loading && !task) {
     return (
@@ -232,67 +292,26 @@ export default function TaskDetailsPage() {
     );
   }
 
-  if (!task) {
-    return (
-      <div className="max-w-4xl mx-auto p-4">
-        <div className="bg-yellow-50 border-l-4 border-yellow-500 p-4">
-          <div className="flex">
-            <div className="flex-shrink-0">
-              <svg className="h-5 w-5 text-yellow-500" viewBox="0 0 20 20" fill="currentColor">
-                <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-yellow-700">Không tìm thấy thông tin công việc với mã {taskId}</p>
-            </div>
-          </div>
-        </div>
-        <div className="mt-4 flex space-x-3">
-          <a href={`/projects/${projectId}`} className="text-blue-600 hover:underline">
-            Quay lại danh sách công việc
-          </a>
-          <button 
-            onClick={() => getTask({ variables: { taskId } })}
-            className="text-blue-600 hover:underline"
-          >
-            Tải lại
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  // Chuyển đổi dữ liệu Member[] từ Redux thành định dạng yêu cầu bởi TaskDetailPage
-  const formattedMembers: ProjectMember[] = reduxMembers?.map(member => ({
-    role: member.role,
-    joinedAt: member.joinedAt,
-    user: {
-      userId: member.user.userId,
-      email: member.user.email,
-      fullName: member.user.fullName || '',
-      username: member.user.username,
-      avatarUrl: member.user.avatarUrl || ''
-    }
-  })) || [];
-
   return (
-    <>
-      {!task.parent_task_id && !hideTitleHeader && (
+    <div className="container mx-auto px-4 py-6">
+      {!hideTitleHeader && task && (
         <PageHeader
           backLink={`/projects/${projectId}`}
           backLabel="Quay lại dự án"
         />
       )}
 
-      <TaskDetailPage
-        task={task}
-        projectId={projectId}
-        currentUser={user || undefined}
-        onTaskUpdate={handleTaskUpdate}
-        isLoadingProp={loading}
-        projectMembers={formattedMembers}
-        hideTitleHeader={hideTitleHeader}
-      />
-    </>
+      {task && (
+        <TaskDetailPage
+          task={task}
+          projectId={projectId}
+          currentUser={user || undefined}
+          onTaskUpdate={handleTaskUpdate}
+          isLoadingProp={loading}
+          projectMembers={reduxMembers as ProjectMember[]}
+          hideTitleHeader={hideTitleHeader}
+        />
+      )}
+    </div>
   );
 } 
