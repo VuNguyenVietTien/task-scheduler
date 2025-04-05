@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useCallback, useRef, forwardRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, forwardRef, useMemo } from 'react';
 import { Task, TaskStatus, Priority, TaskStatuses, Priorities, UserBasic, TaskComment } from '@/types/task';
 import { User } from '@/contexts/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
@@ -92,6 +92,10 @@ interface CreateCommentData {
 }
 
 export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isLoadingProp = false, projectMembers, hideTitleHeader = false, refetchMembers }: TaskDetailPageProps) {
+  // Khai báo các biến cần dùng chung
+  const taskId = task.task_id || task.id || '';
+  const taskIdString = taskId.toString();
+  
   const [comments, setComments] = useState<TaskComment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -108,13 +112,18 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [isLoadingSubtasks, setIsLoadingSubtasks] = useState(false);
   
-  // Khởi tạo Apollo Client
+  // Thêm refs để theo dõi trạng thái API call và tránh gọi trùng lặp
+  const apiCallsInProgressRef = useRef<{[key: string]: boolean}>({});
+  const prevTaskIdRef = useRef<string | null>(null);
+  const lastFetchTimeRef = useRef<{[key: string]: number}>({});
+  
+  // Apollo Client
   const apolloClient = useApolloClient();
   
   // Redux Dispatch
   const dispatch = useAppDispatch();
   
-  // Lấy dữ liệu từ Redux store
+  // Dữ liệu từ Redux store
   const taskDetailState = useAppSelector(state => state.taskDetail);
   
   // State cho parent task search
@@ -135,78 +144,257 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const [editingField, setEditingField] = useState<string | null>(null);
 
   // GraphQL Queries và Mutations
-  const taskId = task.task_id || task.id || '';
+  // Xóa dòng khai báo taskId và taskIdString ở đây vì đã được khai báo ở đầu component
   
-  // Sử dụng useEffect để fetch dữ liệu từ Redux
-  useEffect(() => {
-    console.log('[TaskDetailPage] useEffect fetch data trigger, taskId:', taskId);
-    if (taskId) {
-      dispatch(fetchTaskDetail(taskId));
-      dispatch(fetchSubtasks(taskId));
-      dispatch(fetchComments(taskId));
-    }
-  }, [dispatch, taskId]);
-  
-  // Đồng bộ dữ liệu từ Redux store vào state
-  useEffect(() => {
-    console.log('[TaskDetailPage] useEffect taskDetailState sync triggered', {
-      hasSubtasks: taskDetailState.subtasks.length > 0,
-      hasComments: taskDetailState.comments.length > 0,
-      hasTask: !!taskDetailState.task,
-      parentTaskId: taskDetailState.task?.parent_task_id
-    });
+  // Thêm state để lưu dữ liệu đã xử lý trước đó
+  const [processedTaskIds, setProcessedTaskIds] = useState<Set<string>>(new Set());
+  const isNavigatingRef = useRef<boolean>(false);
+  const CACHE_TTL = 60000; // 1 phút cache
+
+  // Hàm kiểm tra xem có nên gọi API không dựa trên thời gian gọi trước đó
+  const shouldFetchData = useCallback((key: string, minInterval: number = 10000) => {
+    const now = Date.now();
+    const lastFetchTime = lastFetchTimeRef.current[key] || 0;
+    const timeSinceLastFetch = now - lastFetchTime;
+    const shouldFetch = timeSinceLastFetch >= minInterval;
     
-    if (taskDetailState.subtasks.length > 0) {
+    console.log(`[TaskDetailPage] Check if should fetch ${key}: time since last fetch = ${timeSinceLastFetch}ms, threshold = ${minInterval}ms, result = ${shouldFetch}`);
+    return shouldFetch;
+  }, []);
+
+  // Hàm đánh dấu bắt đầu và kết thúc API call
+  const markApiCallStatus = useCallback((key: string, inProgress: boolean) => {
+    apiCallsInProgressRef.current[key] = inProgress;
+    if (!inProgress) {
+      lastFetchTimeRef.current[key] = Date.now();
+    }
+  }, []);
+
+  // Fetch dữ liệu dựa trên taskId và kiểm tra các điều kiện
+  useEffect(() => {
+    if (!taskId) return;
+    
+    // Kiểm tra xem taskId có thay đổi không
+    const isNewTask = prevTaskIdRef.current !== taskId;
+    
+    if (isNewTask) {
+      console.log(`[TaskDetailPage] Task ID changed from ${prevTaskIdRef.current} to ${taskId}`);
+      prevTaskIdRef.current = taskId;
+      
+      // Đánh dấu đang trong quá trình navigation
+      isNavigatingRef.current = true;
+      
+      // Kiểm tra xem task này đã được xử lý gần đây chưa
+      const isRecentlyProcessed = processedTaskIds.has(taskId);
+      console.log(`[TaskDetailPage] Task ${taskId} recently processed: ${isRecentlyProcessed}`);
+      
+      // Reset API tracking nếu là task mới và chưa được xử lý gần đây
+      if (!isRecentlyProcessed) {
+        apiCallsInProgressRef.current = {};
+        // Giữ lại lastFetchTimeRef để duy trì cache
+      }
+      
+      // Thêm taskId vào danh sách đã xử lý
+      setProcessedTaskIds(prev => {
+        const newSet = new Set(prev);
+        newSet.add(taskId);
+        return newSet;
+      });
+      
+      // Đặt lại trạng thái navigation sau một khoảng thời gian ngắn
+      setTimeout(() => {
+        isNavigatingRef.current = false;
+      }, 500);
+    }
+    
+    // Tạo ID key duy nhất cho mỗi call API dựa trên taskId hiện tại
+    const currentTaskDetailKey = `task_detail_${taskId}`;
+    const currentSubtasksKey = `subtasks_${taskId}`;
+    const currentCommentsKey = `comments_${taskId}`;
+    
+    // Kiểm tra xem có đang trong quá trình navigation không
+    if (isNavigatingRef.current) {
+      console.log(`[TaskDetailPage] In navigation process, waiting to settle before new API calls`);
+      return;
+    }
+    
+    // Chỉ fetch task detail nếu chưa có hoặc taskId thay đổi
+    const hasValidTaskDetail = taskDetailState.task && taskDetailState.task.task_id === taskId;
+    const shouldFetchTaskDetail = (isNewTask || !hasValidTaskDetail) && 
+                                 !apiCallsInProgressRef.current[currentTaskDetailKey] && 
+                                 shouldFetchData(currentTaskDetailKey, CACHE_TTL);
+    
+    if (shouldFetchTaskDetail) {
+      console.log(`[TaskDetailPage] Fetching task detail for task ID: ${taskId}`);
+      markApiCallStatus(currentTaskDetailKey, true);
+      
+      dispatch(fetchTaskDetail(taskId))
+        .then(() => markApiCallStatus(currentTaskDetailKey, false))
+        .catch(err => {
+          console.error(`[TaskDetailPage] Error fetching task detail:`, err);
+          markApiCallStatus(currentTaskDetailKey, false);
+        });
+    } else if (!shouldFetchTaskDetail) {
+      console.log(`[TaskDetailPage] Skipping task detail fetch for ${taskId} - already fetched or in progress`);
+    }
+    
+    // Chỉ fetch subtasks nếu chưa có hoặc taskId thay đổi
+    const hasValidSubtasks = taskDetailState.subtasks.length > 0;
+    const shouldFetchSubtasks = (isNewTask || !hasValidSubtasks) && 
+                               !apiCallsInProgressRef.current[currentSubtasksKey] && 
+                               shouldFetchData(currentSubtasksKey, CACHE_TTL);
+    
+    if (shouldFetchSubtasks) {
+      console.log(`[TaskDetailPage] Fetching subtasks for task ID: ${taskId}`);
+      markApiCallStatus(currentSubtasksKey, true);
+      
+      dispatch(fetchSubtasks(taskId))
+        .then(() => markApiCallStatus(currentSubtasksKey, false))
+        .catch(err => {
+          console.error(`[TaskDetailPage] Error fetching subtasks:`, err);
+          markApiCallStatus(currentSubtasksKey, false);
+        });
+    } else if (!shouldFetchSubtasks) {
+      console.log(`[TaskDetailPage] Skipping subtasks fetch for ${taskId} - already fetched or in progress`);
+    }
+    
+    // Chỉ fetch comments nếu chưa có hoặc taskId thay đổi
+    const hasValidComments = taskDetailState.comments.length > 0;
+    const shouldFetchComments = (isNewTask || !hasValidComments) && 
+                               !apiCallsInProgressRef.current[currentCommentsKey] && 
+                               shouldFetchData(currentCommentsKey, CACHE_TTL);
+    
+    if (shouldFetchComments) {
+      console.log(`[TaskDetailPage] Fetching comments for task ID: ${taskId}`);
+      markApiCallStatus(currentCommentsKey, true);
+      
+      dispatch(fetchComments(taskId))
+        .then(() => markApiCallStatus(currentCommentsKey, false))
+        .catch(err => {
+          console.error(`[TaskDetailPage] Error fetching comments:`, err);
+          markApiCallStatus(currentCommentsKey, false);
+        });
+    } else if (!shouldFetchComments) {
+      console.log(`[TaskDetailPage] Skipping comments fetch for ${taskId} - already fetched or in progress`);
+    }
+    
+    // Xóa các taskId quá cũ từ danh sách đã xử lý
+    const now = Date.now();
+    if (now % 10 === 0) { // Chỉ thực hiện định kỳ để giảm tải
+      console.log('[TaskDetailPage] Cleaning up processed tasks cache');
+      setProcessedTaskIds(prev => {
+        const newSet = new Set(prev);
+        if (newSet.size > 20) { // Giới hạn số lượng taskId lưu trữ
+          // Giữ lại 10 taskId gần nhất
+          const toKeep = Array.from(newSet).slice(-10);
+          return new Set(toKeep);
+        }
+        return newSet;
+      });
+    }
+  }, [dispatch, taskId, taskDetailState.task?.task_id, shouldFetchData, markApiCallStatus, processedTaskIds, taskDetailState.subtasks.length, taskDetailState.comments.length]);
+  
+  // Di chuyển useMemo ra khỏi useEffect và đặt nó trực tiếp trong component
+  // Tạo hàm utility để so sánh dữ liệu thay vì dùng useMemo trong useEffect
+  const compareSubtasks = (currentSubtasks: Task[], newSubtasks: Task[]) => {
+    if (!currentSubtasks || !newSubtasks) return false;
+    if (currentSubtasks.length !== newSubtasks.length) return true;
+    
+    // So sánh ID để kiểm tra xem danh sách có thay đổi không
+    const currentIds = currentSubtasks.map(task => task.task_id).sort().join(',');
+    const newIds = newSubtasks.map(task => task.task_id).sort().join(',');
+    return currentIds !== newIds;
+  };
+
+  const compareComments = (currentComments: TaskComment[], newComments: TaskComment[]) => {
+    if (!currentComments || !newComments) return false;
+    if (currentComments.length !== newComments.length) return true;
+    
+    // So sánh ID để kiểm tra xem danh sách có thay đổi không
+    const currentIds = currentComments.map(comment => comment.id).sort().join(',');
+    const newIds = newComments.map(comment => comment.id).sort().join(',');
+    return currentIds !== newIds;
+  };
+
+  // Đồng bộ dữ liệu từ Redux store vào local state
+  useEffect(() => {
+    // Kiểm tra sự thay đổi của subtasks và comments bằng cách gọi hàm so sánh
+    const hasSubtasksChanged = compareSubtasks(subtasks, taskDetailState.subtasks);
+    const hasCommentsChanged = compareComments(comments, taskDetailState.comments);
+
+    // Cập nhật subtasks từ Redux nếu có sự thay đổi
+    if (hasSubtasksChanged && taskDetailState.subtasks.length > 0) {
+      console.log('[TaskDetailPage] Updating subtasks from Redux store');
       setSubtasks(taskDetailState.subtasks);
     }
     
-    if (taskDetailState.comments.length > 0) {
+    // Cập nhật comments từ Redux nếu có sự thay đổi
+    if (hasCommentsChanged && taskDetailState.comments.length > 0) {
+      console.log('[TaskDetailPage] Updating comments from Redux store');
       setComments(taskDetailState.comments);
     }
     
-    // Cập nhật task từ Redux store
-    if (taskDetailState.task) {
+    // Cập nhật task từ Redux store và xử lý parent task
+    if (taskDetailState.task && taskDetailState.task.task_id === taskId) {
       const reduxTask = taskDetailState.task;
-      // Cập nhật task từ Redux (điều này rất quan trọng cho việc cập nhật parent_task_id)
-      setEditedTask(prev => {
-        const newState = {
+      
+      // Chỉ cập nhật parent_task_id nếu đã thay đổi
+      if (reduxTask.parent_task_id !== editedTask.parent_task_id) {
+        console.log('[TaskDetailPage] Updating parent_task_id in editedTask', {
+          old: editedTask.parent_task_id,
+          new: reduxTask.parent_task_id
+        });
+        
+        setEditedTask(prev => ({
           ...prev,
           parent_task_id: reduxTask.parent_task_id
-        };
-        console.log('[TaskDetailPage] Updating editedTask:', {
-          oldParentId: prev.parent_task_id,
-          newParentId: reduxTask.parent_task_id
-        });
-        return newState;
-      });
-      
-      // Nếu có parent_task_id, fetch thông tin parent task
-      if (reduxTask.parent_task_id) {
-        console.log('[TaskDetailPage] Fetching parent task info for ID:', reduxTask.parent_task_id);
-        // Fetch title của parent task
-        apolloClient.query({
-          query: GET_TASK_BASIC_INFO,
-          variables: { taskId: reduxTask.parent_task_id },
-          fetchPolicy: 'network-only'
-        })
-        .then(response => {
-          if (response.data?.task) {
-            const title = response.data.task.title || '';
-            console.log('[TaskDetailPage] Parent task title fetched:', title);
-            setParentTaskTitle(title);
+        }));
+        
+        // Fetch parent task info nếu cần
+        if (reduxTask.parent_task_id && 
+            (!parentTaskTitle || parentTaskTitle.trim() === '')) {
+          const PARENT_INFO_KEY = `parent_info_${reduxTask.parent_task_id}`;
+          
+          if (!apiCallsInProgressRef.current[PARENT_INFO_KEY]) {
+            console.log('[TaskDetailPage] Fetching parent task info:', reduxTask.parent_task_id);
+            markApiCallStatus(PARENT_INFO_KEY, true);
+            
+            apolloClient.query({
+              query: GET_TASK_BASIC_INFO,
+              variables: { taskId: reduxTask.parent_task_id },
+              fetchPolicy: 'network-only'
+            })
+            .then(response => {
+              if (response.data?.task) {
+                const title = response.data.task.title || '';
+                console.log('[TaskDetailPage] Parent task title fetched:', title);
+                setParentTaskTitle(title);
+              }
+              markApiCallStatus(PARENT_INFO_KEY, false);
+            })
+            .catch(error => {
+              console.error('Lỗi khi lấy thông tin task cha:', error);
+              markApiCallStatus(PARENT_INFO_KEY, false);
+            });
           }
-        })
-        .catch(error => {
-          console.error('Lỗi khi lấy thông tin task cha:', error);
-        });
-      } else {
-        // Nếu không có parent task, xóa title
-        console.log('[TaskDetailPage] No parent task, clearing parent task title');
-        setParentTaskTitle('');
+        } else if (!reduxTask.parent_task_id) {
+          // Xóa title nếu không có parent task
+          console.log('[TaskDetailPage] No parent task, clearing parent task title');
+          setParentTaskTitle('');
+        }
       }
     }
-  }, [taskDetailState, apolloClient]);
-  
+  }, [
+    taskDetailState, 
+    apolloClient, 
+    editedTask.parent_task_id, 
+    parentTaskTitle, 
+    taskId, 
+    subtasks, 
+    comments, 
+    markApiCallStatus
+  ]);
+
   const { loading: commentsLoading, data: commentsData, refetch: refetchComments } = 
     useQuery<TaskCommentsData>(GET_TASK_COMMENTS, {
       variables: { taskId },
@@ -698,13 +886,13 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         if (data && data.createComment) {
           // Nếu API thành công, cập nhật comment tạm thời với dữ liệu thực
           const updatedComment: TaskComment = {
-            id: data.createComment.id,
-            content: data.createComment.content,
-            user_id: data.createComment.authorId,
+                    id: data.createComment.id,
+                    content: data.createComment.content,
+                    user_id: data.createComment.authorId,
             username: data.createComment.username,
             avatar_url: currentUser?.providerData?.[0]?.photoURL || undefined,
-            created_at: data.createComment.createdAt,
-            status: 'saved'
+                    created_at: data.createComment.createdAt,
+                    status: 'saved'
           };
           
           setComments(prevComments => 
@@ -805,13 +993,13 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         if (data && data.createComment) {
           // Nếu API thành công, cập nhật comment với dữ liệu thực
           const updatedComment: TaskComment = {
-            id: data.createComment.id,
-            content: data.createComment.content,
-            user_id: data.createComment.authorId,
-            username: currentUser?.name || 'Người dùng',
-            avatar_url: currentUser?.providerData?.[0]?.photoURL || undefined,
-            created_at: data.createComment.createdAt,
-            status: 'saved'
+                    id: data.createComment.id,
+                    content: data.createComment.content,
+                    user_id: data.createComment.authorId,
+                    username: currentUser?.name || 'Người dùng',
+                    avatar_url: currentUser?.providerData?.[0]?.photoURL || undefined,
+                    created_at: data.createComment.createdAt,
+                    status: 'saved'
           };
           
           setComments(prevComments => 
@@ -1006,9 +1194,6 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     handleSaveTask(field);
     setEditingField(null);
   };
-
-  // Thêm biến taskIdString
-  const taskIdString: string = task.task_id || task.id || 'unknown-task';
 
   // Thêm hàm xử lý bình luận với url localhost:3000 thành localhost:8080
   const processCommentContent = (content: string): string => {
@@ -2117,8 +2302,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                   {taskDetailState.searchingParent && (
                     <div className="flex justify-center py-2">
                       <Spinner size="sm" />
-                    </div>
-                  )}
+              </div>
+            )}
                   
                   {/* Hiển thị kết quả tìm kiếm */}
                   {showParentResults && taskDetailState.potentialParentTask && (
@@ -2127,7 +2312,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                         <div className="truncate">
                           <span className="font-medium">{taskDetailState.potentialParentTask.title}</span>
                           <span className="text-xs text-gray-500 ml-2">({taskDetailState.potentialParentTask.taskId})</span>
-                        </div>
+          </div>
                         <button 
                           className="ml-2 text-blue-600 text-sm hover:text-blue-800 whitespace-nowrap"
                           onClick={() => {
@@ -2475,7 +2660,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
               <div className="bg-white rounded-lg">
                 <div className="flex justify-between items-center mb-4">
                   <h2 className="text-lg font-medium text-gray-900">Task con ({subtasks.length})</h2>
-                  <Link href={`/projects/${projectId}/tasks/${taskIdString}/create-subtask`}>
+                  <Link href={`/projects/${projectId}/tasks/${taskId}/create-subtask`}>
                     <Button size="sm" variant="outline">
                       <span className="mr-1">+</span> Thêm task con
                     </Button>
