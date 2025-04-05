@@ -1910,6 +1910,37 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   );
   */
 
+  // Thêm useEffect mới để đảm bảo luôn fetch parent task title khi component mount
+  useEffect(() => {
+    // Kiểm tra xem task có parent_task_id không và parentTaskTitle chưa được thiết lập
+    if (task?.parent_task_id && (!parentTaskTitle || parentTaskTitle.trim() === '')) {
+      const PARENT_INFO_KEY = `parent_info_${task.parent_task_id}`;
+      
+      if (!apiCallsInProgressRef.current[PARENT_INFO_KEY]) {
+        console.log('[TaskDetailPage] Fetching parent task title on mount:', task.parent_task_id);
+        markApiCallStatus(PARENT_INFO_KEY, true);
+        
+        apolloClient.query({
+          query: GET_TASK_BASIC_INFO,
+          variables: { taskId: task.parent_task_id },
+          fetchPolicy: 'cache-first' // Sử dụng cache nếu có, nếu không thì gọi network
+        })
+        .then(response => {
+          if (response.data?.task) {
+            const title = response.data.task.title || '';
+            console.log('[TaskDetailPage] Parent task title fetched on mount:', title);
+            setParentTaskTitle(title);
+          }
+          markApiCallStatus(PARENT_INFO_KEY, false);
+        })
+        .catch(error => {
+          console.error('[TaskDetailPage] Error fetching parent task info on mount:', error);
+          markApiCallStatus(PARENT_INFO_KEY, false);
+        });
+      }
+    }
+  }, [task?.parent_task_id, apolloClient, parentTaskTitle, markApiCallStatus]);
+
   return (
     <div className="w-full space-y-8">
       {/* CSS cho rich text content và tabs */}
@@ -2261,13 +2292,21 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                 <div className="flex items-center">
                   <Link 
                     href={`/projects/${projectId}/tasks/${task.parent_task_id}`}
-                    className="text-blue-600 hover:text-blue-800 truncate"
+                    className="text-blue-600 hover:text-blue-800 truncate flex items-center"
                   >
-                    {parentTaskTitle || task.parent_task_id}
+                    {parentTaskTitle ? (
+                      <span>{parentTaskTitle}</span>
+                    ) : (
+                      <>
+                        <span className="mr-2">
+                          <Spinner size="sm" />
+                        </span>
+                        <span className="text-gray-500">Đang tải thông tin...</span>
+                      </>
+                    )}
                   </Link>
                   <button 
                     onClick={() => {
-                      // Cập nhật parent_task_id thành undefined
                       dispatch(updateTaskParent({ 
                         taskId: task.task_id, 
                         parentTaskId: "" // Gửi string rỗng để xóa parent
@@ -2280,6 +2319,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                   </button>
                 </div>
               ) : (
+                // Phần còn lại của form tìm kiếm và thêm parent task (giữ nguyên)
                 <div className="p-2 border border-gray-200 rounded-md bg-gray-50">
                   <div className="relative mb-2">
                     <input 
