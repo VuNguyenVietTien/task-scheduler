@@ -5,6 +5,7 @@ import { Timeline } from '@/components/timeline/Timeline';
 import { TaskListView } from '@/components/tasks/TaskListView';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
 import { MembersView } from '@/components/projects/MembersView';
+import { ProjectReportView } from '@/components/reports/ProjectReportView';
 import { useProjectTasks } from '@/hooks/useProjectTasks';
 import { useUsers } from '@/hooks/useUsers';
 import { useProject } from '@/hooks/useProject';
@@ -18,7 +19,7 @@ import { processTasksAndUpdateStore, processTasksBasedOnPlan } from '@/utils/tas
 import { selectPlans } from '@/redux/features/plansSlice';
 import { updateAutoSort } from '@/redux/features/taskOrderStore';
 
-type ViewType = 'list' | 'kanban' | 'gantt' | 'members';
+type ViewType = 'list' | 'kanban' | 'gantt' | 'members' | 'report';
 
 export function ProjectDetailView({ project }: { project: ProjectData }) {
   const [activeView, setActiveView] = useState<ViewType>('list');
@@ -86,6 +87,15 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       icon: (
         <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+        </svg>
+      )
+    },
+    {
+      id: 'report',
+      label: 'Báo cáo',
+      icon: (
+        <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
         </svg>
       )
     }
@@ -376,6 +386,8 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
           ) : (
             <LoadingState />
           )
+        ) : activeView === 'report' ? (
+          <ProjectReportView projectId={project.id} />
         ) : isLoading ? (
           <LoadingState />
         ) : !displayedTasks.length ? (
