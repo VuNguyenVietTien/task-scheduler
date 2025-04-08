@@ -9,6 +9,7 @@ pub mod auth;
 pub mod comment;
 pub mod user;
 pub mod media_upload;
+pub mod notification;
 
 // Re-export project types
 pub use self::project::{
@@ -47,6 +48,13 @@ pub use self::user::{
 pub use self::media_upload::{
     MediaUploadResponse,
     StorageType,
+};
+
+// Re-export notification types
+pub use self::notification::{
+    Notification,
+    CreateNotificationInput,
+    NotificationCount,
 };
 
 // Common type aliases

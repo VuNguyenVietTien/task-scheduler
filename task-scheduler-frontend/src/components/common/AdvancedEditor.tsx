@@ -17,6 +17,18 @@ export interface AdvancedEditorProps {
   minHeight?: string;
   className?: string;
   readOnly?: boolean;
+  projectMembers?: { 
+    role: string;
+    joinedAt: string;
+    user: {
+      userId: string;
+      email: string;
+      fullName: string;
+      username: string;
+      avatarUrl: string;
+    };
+  }[];
+  onMentionSelect?: (userId: string, username: string) => void;
 }
 
 // Nhập động RichTextEditor để tránh lỗi SSR
@@ -37,7 +49,9 @@ export const AdvancedEditor = forwardRef<any, AdvancedEditorProps>(({
   mode = 'full',
   minHeight = mode === 'full' ? '300px' : '150px',
   className = '',
-  readOnly = false
+  readOnly = false,
+  projectMembers = [],
+  onMentionSelect
 }, ref) => {
   // Chuẩn bị mode cho RichTextEditor
   // RichTextEditor chỉ chấp nhận 'full' hoặc 'compact'
@@ -53,6 +67,8 @@ export const AdvancedEditor = forwardRef<any, AdvancedEditorProps>(({
       minHeight={minHeight}
       className={className}
       readOnly={readOnly}
+      projectMembers={projectMembers}
+      onMentionSelect={onMentionSelect}
     />
   );
 });

@@ -9,6 +9,9 @@ interface NotificationDropdownProps {
   isOpen: boolean;
   onClose: () => void;
   onMarkAsRead: (id: string) => void;
+  onMarkAllAsRead: () => void;
+  onNotificationClick: (notification: Notification) => void;
+  loading?: boolean;
 }
 
 const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
@@ -16,6 +19,9 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
   isOpen,
   onClose,
   onMarkAsRead,
+  onMarkAllAsRead,
+  onNotificationClick,
+  loading = false
 }) => {
   if (!isOpen) return null;
 
@@ -27,7 +33,7 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
           {notifications.length > 0 && (
             <button 
               className="text-sm text-blue-600 hover:text-blue-800"
-              onClick={() => notifications.forEach(n => onMarkAsRead(n.id))}
+              onClick={onMarkAllAsRead}
             >
               Mark all as read
             </button>
@@ -36,24 +42,23 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
       </div>
 
       <div className="max-h-96 overflow-y-auto">
-        {notifications.length === 0 ? (
+        {loading ? (
+          <div className="px-4 py-3 text-sm text-gray-500 flex justify-center">
+            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-blue-500"></div>
+          </div>
+        ) : notifications.length === 0 ? (
           <div className="px-4 py-3 text-sm text-gray-500">
             No new notifications
           </div>
         ) : (
           <div>
             {notifications.map((notification) => (
-              <Link
+              <div
                 key={notification.id}
-                href={notification.link || '#'}
-                className={`block px-4 py-3 hover:bg-gray-50 transition-colors ${
+                className={`block px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer ${
                   !notification.read ? 'bg-blue-50' : ''
                 }`}
-                onClick={() => {
-                  if (!notification.read) {
-                    onMarkAsRead(notification.id);
-                  }
-                }}
+                onClick={() => onNotificationClick(notification)}
               >
                 <div className="flex justify-between">
                   <p className="text-sm font-medium text-gray-900">
@@ -63,8 +68,8 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
                     {new Date(notification.createdAt).toLocaleDateString()}
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-gray-500">{notification.content}</p>
-              </Link>
+                <p className="mt-1 text-sm text-gray-500">{notification.message}</p>
+              </div>
             ))}
           </div>
         )}

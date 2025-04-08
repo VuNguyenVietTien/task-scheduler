@@ -1,0 +1,7 @@
+---
+description: 
+globs: 
+alwaysApply: true
+---
+
+when implement function in task-scheduler-backend, use tree command in task-scheduler-command/src to understand the structure

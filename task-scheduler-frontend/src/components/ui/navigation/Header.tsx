@@ -8,7 +8,17 @@ import AccountDropdown from './AccountDropdown';
 import { useNotifications } from '@/hooks/useNotifications';
 
 const Header = () => {
-  const { notifications, unreadCount, isDropdownOpen: isNotificationOpen, toggleDropdown: toggleNotification, markAsRead } = useNotifications();
+  const { 
+    notifications, 
+    unreadCount, 
+    isDropdownOpen: isNotificationOpen, 
+    toggleDropdown: toggleNotification, 
+    markAsRead,
+    markAllAsRead,
+    handleNotificationClick,
+    loading: notificationsLoading
+  } = useNotifications();
+  
   const [isAccountOpen, setIsAccountOpen] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const accountRef = useRef<HTMLDivElement>(null);
@@ -73,6 +83,9 @@ const Header = () => {
               isOpen={isNotificationOpen}
               onClose={toggleNotification}
               onMarkAsRead={markAsRead}
+              onMarkAllAsRead={markAllAsRead}
+              onNotificationClick={handleNotificationClick}
+              loading={notificationsLoading}
             />
           </div>
           

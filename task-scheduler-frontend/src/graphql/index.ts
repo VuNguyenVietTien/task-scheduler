@@ -3,7 +3,6 @@ export * from './queries/tasks';
 export * from './queries/users';
 export * from './queries/projectMembers';
 export * from './queries/project';
-export * from './queries/projects';
 
 // Export tất cả các mutations
 export * from './mutations/tasks';

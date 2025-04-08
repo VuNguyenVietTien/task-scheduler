@@ -34,6 +34,7 @@ import {
   clearParentTaskSearch
 } from '@/redux/features/taskDetailSlice';
 import TaskDetailSubtasks from './TaskDetailSubtasks';
+import CommentsTab from './tabs/CommentsTab';
 
 interface TaskDetailPageProps {
   task: Task;
@@ -919,6 +920,12 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     } finally {
       setIsPostingComment(false);
     }
+  };
+
+  // Xử lý khi người dùng chọn một thành viên để mention
+  const handleMentionSelect = (userId: string, username: string) => {
+    console.log(`Mentioned user: ${username} (${userId})`);
+    // Có thể thêm logic bổ sung ở đây nếu cần
   };
 
   // Thêm hàm thử lại gửi bình luận
@@ -2681,6 +2688,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
                     onChange={setNewComment}
                     placeholder="Thêm bình luận..."
               mode="compact"
+              projectMembers={projectMembers}
+              onMentionSelect={handleMentionSelect}
             />
                   
                   <div className="mt-3 flex justify-end">

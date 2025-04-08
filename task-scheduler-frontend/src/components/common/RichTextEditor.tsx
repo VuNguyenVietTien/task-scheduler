@@ -14,9 +14,9 @@ import { Color } from "@tiptap/extension-color"
 import TextStyle from "@tiptap/extension-text-style"
 import Underline from "@tiptap/extension-underline"
 import Placeholder from "@tiptap/extension-placeholder"
-import { Node, Editor, NodeType } from "@tiptap/core"
+import { Node, Editor } from "@tiptap/core"
 import type { NodeViewProps } from '@tiptap/react'
-import type { ChainedCommands } from '@tiptap/react'
+import type { ChainedCommands, RawCommands } from '@tiptap/core'
 import {
   Bold,
   Italic,
@@ -38,10 +38,11 @@ import {
 } from "lucide-react"
 import { imageService } from "@/services/imageService"
 
-// Mở rộng ChainedCommands để thêm phương thức setLineHeight
-declare module '@tiptap/react' {
-  interface ChainedCommands {
-    setLineHeight: (lineHeight: string) => ChainedCommands
+// Mở rộng ChainedCommands để thêm phương thức setLineHeight và setMention
+declare module '@tiptap/core' {
+  interface Commands<ReturnType> {
+    setLineHeight: (lineHeight: string) => ReturnType
+    setMention: (options: { id: string; label: string; username: string }) => ReturnType
   }
 }
 
@@ -80,12 +81,83 @@ const LineHeightExtension = Node.create({
       setLineHeight: (lineHeight: string) => ({ commands }: { commands: any }) => {
         return this.options.types.every((type: string) => commands.updateAttributes(type, { lineHeight }))
       },
+    } as Partial<RawCommands>
+  },
+})
+
+// Mention extension for @ mentions
+const Mention = Node.create({
+  name: 'mention',
+  group: 'inline',
+  inline: true,
+  selectable: false,
+  atom: true,
+
+  addAttributes() {
+    return {
+      id: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-id'),
+        renderHTML: attributes => {
+          return {
+            'data-id': attributes.id,
+          }
+        },
+      },
+      label: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-label'),
+        renderHTML: attributes => {
+          return {
+            'data-label': attributes.label,
+          }
+        },
+      },
+      username: {
+        default: null,
+        parseHTML: element => element.getAttribute('data-username'),
+        renderHTML: attributes => {
+          return {
+            'data-username': attributes.username,
+          }
+        },
+      },
     }
+  },
+
+  parseHTML() {
+    return [
+      {
+        tag: 'span[data-mention]',
+      },
+    ]
+  },
+
+  renderHTML({ node, HTMLAttributes }) {
+    // Use the username if available, otherwise use the label
+    const displayText = node.attrs.username || node.attrs.label || '';
+    
+    return ['span', { 
+      ...HTMLAttributes,
+      'data-mention': '',
+      class: 'mention',
+    }, displayText]
+  },
+
+  addCommands() {
+    return {
+      setMention: (options: { id: string; label: string; username: string }) => ({ commands }: { commands: any }) => {
+        return commands.insertContent({
+          type: this.name,
+          attrs: options,
+        })
+      },
+    } as Partial<RawCommands>
   },
 })
 
 // Interface cho ResizableImageComponent
-interface ResizableImageProps extends NodeViewProps {
+interface ResizableImageProps {
   node: {
     attrs: {
       src: string;
@@ -181,7 +253,8 @@ const ResizableImageComponent = ({
   // Delete image
   const deleteImage = () => {
     if (typeof getPos === "function") {
-      editor.commands.deleteRange({ from: getPos(), to: getPos() + node.nodeSize })
+      const pos = getPos();
+      editor.commands.deleteRange({ from: pos, to: pos + 1 });
     }
   }
 
@@ -293,18 +366,13 @@ const ResizableImageComponent = ({
 const ResizableImage = Image.extend({
   name: "resizableImage",
   addAttributes() {
-    // Lấy attributes mặc định từ extension Image
-    const defaultAttrs = {
+    return {
       src: {
         default: null
       },
       alt: {
         default: null
-      }
-    };
-
-    return {
-      ...defaultAttrs,
+      },
       width: {
         default: "auto",
         parseHTML: (element: HTMLElement) => element.getAttribute("width") || "auto",
@@ -332,7 +400,7 @@ const ResizableImage = Image.extend({
     }
   },
   addNodeView() {
-    return ReactNodeViewRenderer(ResizableImageComponent)
+    return ReactNodeViewRenderer(ResizableImageComponent as any)
   },
 })
 
@@ -345,15 +413,50 @@ interface RichTextEditorProps {
   className?: string;
   minHeight?: string;
   readOnly?: boolean;
+  projectMembers?: { 
+    role: string;
+    joinedAt: string;
+    user: {
+      userId: string;
+      email: string;
+      fullName: string;
+      username: string;
+      avatarUrl: string;
+    };
+  }[];
+  onMentionSelect?: (userId: string, username: string) => void;
 }
 
 // Main editor component with forwardRef
 const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps> = (
-  { value, onChange, placeholder = "Viết nội dung...", mode = 'full', className = '', minHeight = '200px', readOnly = false },
+  { 
+    value, 
+    onChange, 
+    placeholder = "Viết nội dung...", 
+    mode = 'full', 
+    className = '', 
+    minHeight = '200px', 
+    readOnly = false,
+    projectMembers = [],
+    onMentionSelect
+  },
   ref
 ) => {
   const [editorKey, setEditorKey] = useState(Date.now())
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [mentionPopup, setMentionPopup] = useState<{
+    show: boolean;
+    query: string;
+    position: { x: number; y: number };
+    items: { id: string; label: string; username: string; avatarUrl?: string }[];
+    selectedIndex: number;
+  }>({
+    show: false,
+    query: '',
+    position: { x: 0, y: 0 },
+    items: [],
+    selectedIndex: 0,
+  });
   
   // Configure editor with extensions
   const lastCursorPositionRef = useRef<{ from: number, to: number } | null>(null);
@@ -378,6 +481,7 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
       Placeholder.configure({
         placeholder,
       }),
+      Mention,
     ],
     content: value,
     editable: !readOnly,
@@ -396,8 +500,102 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
       // Cập nhật vị trí con trỏ khi người dùng di chuyển con trỏ
       const selection = editor.view.state.selection;
       lastCursorPositionRef.current = { from: selection.from, to: selection.to };
+      
+      // Check for @ mentions
+      const { from } = selection;
+      const textBefore = editor.state.doc.textBetween(Math.max(0, from - 50), from);
+      const match = textBefore.match(/@(\w*)$/);
+      
+      if (match) {
+        const query = match[1].toLowerCase();
+        const items = projectMembers
+          .filter(member => 
+            member.user.username.toLowerCase().includes(query)
+          )
+          .map(member => ({
+            id: member.user.userId,
+            label: member.user.fullName,
+            username: member.user.username,
+            avatarUrl: member.user.avatarUrl
+          }));
+        
+        if (items.length > 0) {
+          // Get position of the @ symbol
+          const pos = from - (match[0].length - 1);
+          const coords = editor.view.coordsAtPos(pos);
+          
+          setMentionPopup({
+            show: true,
+            query,
+            position: { x: coords.left, y: coords.bottom },
+            items,
+            selectedIndex: 0
+          });
+        } else {
+          setMentionPopup(prev => ({ ...prev, show: false }));
+        }
+      } else {
+        setMentionPopup(prev => ({ ...prev, show: false }));
+      }
     },
   })
+
+  // Handle mention selection
+  const handleMentionSelect = (item: { id: string; label: string; username: string }) => {
+    if (editor) {
+      // Delete the @ and query text
+      const { from } = editor.state.selection;
+      const textBefore = editor.state.doc.textBetween(Math.max(0, from - 50), from);
+      const match = textBefore.match(/@(\w*)$/);
+      
+      if (match) {
+        const startPos = from - match[0].length;
+        editor.chain().focus().deleteRange({ from: startPos, to: from }).run();
+        
+        // Insert the mention with proper formatting
+        (editor.chain().focus() as any).setMention({
+          id: item.id,
+          label: item.username || item.label, // Use username if available, otherwise use label
+          username: item.username
+        }).run();
+        
+        // Add a space after the mention
+        editor.chain().focus().insertContent(' ').run();
+        
+        // Notify parent component
+        if (onMentionSelect) {
+          onMentionSelect(item.id, item.username);
+        }
+      }
+    }
+    
+    setMentionPopup(prev => ({ ...prev, show: false }));
+  };
+
+  // Handle keyboard navigation in mention popup
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (!mentionPopup.show) return;
+    
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setMentionPopup(prev => ({
+        ...prev,
+        selectedIndex: (prev.selectedIndex + 1) % prev.items.length
+      }));
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setMentionPopup(prev => ({
+        ...prev,
+        selectedIndex: (prev.selectedIndex - 1 + prev.items.length) % prev.items.length
+      }));
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      handleMentionSelect(mentionPopup.items[mentionPopup.selectedIndex]);
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      setMentionPopup(prev => ({ ...prev, show: false }));
+    }
+  };
 
   // Expose editor methods via ref
   useImperativeHandle(ref, () => ({
@@ -520,7 +718,7 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
   }
 
   return (
-    <div className={`rich-text-editor ${className}`} onDrop={handleDrop} onDragOver={handleDragOver}>
+    <div className={`rich-text-editor ${className}`} onDrop={handleDrop} onDragOver={handleDragOver} onKeyDown={handleKeyDown}>
       <style jsx global>{`
         .rich-text-editor {
           border: 1px solid #e5e7eb;
@@ -697,6 +895,48 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
         
         .rich-text-editor ol ol ol {
           list-style-type: lower-roman;
+        }
+        
+        /* Mention styles */
+        .rich-text-editor .mention {
+          color: #3b82f6;
+          font-weight: 500;
+          background-color: #eff6ff;
+          border-radius: 0.25rem;
+          padding: 0.1rem 0.3rem;
+          white-space: nowrap;
+        }
+        
+        .mention-popup {
+          position: absolute;
+          background-color: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.375rem;
+          box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+          z-index: 50;
+          max-height: 200px;
+          overflow-y: auto;
+          min-width: 200px;
+        }
+        
+        .mention-item {
+          padding: 0.5rem 1rem;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+        
+        .mention-item:hover,
+        .mention-item.selected {
+          background-color: #f3f4f6;
+        }
+        
+        .mention-avatar {
+          width: 24px;
+          height: 24px;
+          border-radius: 50%;
+          object-fit: cover;
         }
       `}</style>
 
@@ -912,6 +1152,38 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
       )}
 
       <EditorContent editor={editor} />
+      
+      {/* Mention popup */}
+      {mentionPopup.show && (
+        <div 
+          className="mention-popup"
+          style={{
+            left: `${mentionPopup.position.x}px`,
+            top: `${mentionPopup.position.y + 5}px`,
+          }}
+        >
+          {mentionPopup.items.map((item, index) => (
+            <div
+              key={item.id}
+              className={`mention-item ${index === mentionPopup.selectedIndex ? 'selected' : ''}`}
+              onClick={() => handleMentionSelect(item)}
+            >
+              <img 
+                src={item.avatarUrl || '/default-avatar.png'} 
+                alt={item.label} 
+                className="mention-avatar"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = '/default-avatar.png';
+                }}
+              />
+              <div>
+                <div className="font-medium">{item.label}</div>
+                <div className="text-xs text-gray-500">@{item.username}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

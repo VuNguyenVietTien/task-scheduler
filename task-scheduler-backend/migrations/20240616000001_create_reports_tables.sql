@@ -9,7 +9,7 @@ CREATE TABLE reports (
     report_type report_type NOT NULL,
     report_date DATE NOT NULL,
     project_id UUID NOT NULL REFERENCES projects(project_id) ON DELETE CASCADE,
-    plan_id UUID REFERENCES plans(id),
+    plan_id UUID REFERENCES plans(plan_id),
     period_start_date DATE NOT NULL,
     period_end_date DATE NOT NULL,
     total_tasks INTEGER NOT NULL DEFAULT 0,
