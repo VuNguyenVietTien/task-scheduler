@@ -307,6 +307,71 @@ export const updateTaskEffort = createAsyncThunk(
   }
 );
 
+// Async thunk để update task due date
+export const updateTaskDueDate = createAsyncThunk(
+  'tasks/updateTaskDueDate',
+  async ({ taskId, dueDate }: { taskId: string, dueDate: string }, { getState, rejectWithValue }) => {
+    try {
+      // Lấy thông tin hiện tại của task từ API để lấy parentTaskId
+      const { data: taskData } = await client.query({
+        query: GET_TASK_MINIMAL,
+        variables: { taskId },
+        fetchPolicy: 'network-only'
+      });
+      
+      // Duy trì parentTaskId từ dữ liệu hiện tại
+      const parentTaskId = taskData?.task?.parentTaskId || null;
+      
+      // Đảm bảo định dạng ISO đầy đủ cho datetime
+      let formattedDueDate = null;
+      if (dueDate) {
+        formattedDueDate = new Date(dueDate).toISOString();
+      }
+      
+      // Sửa lại định dạng input đúng với API backend mong đợi
+      const input = {
+        taskId: taskId,
+        dueDate: formattedDueDate,
+        parentTaskId: parentTaskId  // Giữ nguyên parentTaskId
+      };
+      
+      console.log('Gửi request cập nhật hạn với parentTaskId:', parentTaskId);
+      
+      // Cập nhật cách gọi API
+      const response = await client.mutate({
+        mutation: UPDATE_TASK,
+        variables: { input },
+        errorPolicy: 'all',
+        fetchPolicy: 'no-cache' // Đảm bảo không sử dụng cache
+      });
+      
+      if (response.errors) {
+        console.error('Lỗi GraphQL:', response.errors);
+        return rejectWithValue(response.errors[0].message);
+      }
+      
+      if (!response.data) {
+        console.error('Không có dữ liệu trả về từ server');
+        return rejectWithValue('Không có dữ liệu trả về từ server');
+      }
+
+      console.log('Response từ server:', response.data.updateTask);
+      
+      // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
+      const transformedTask = transformTaskFromAPI(response.data.updateTask);
+      
+      return {
+        taskId,
+        dueDate: formattedDueDate || undefined,
+        task: transformedTask
+      };
+    } catch (error) {
+      console.error('Lỗi khi gọi API cập nhật hạn:', error);
+      return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi cập nhật hạn');
+    }
+  }
+);
+
 // Hàm tiện ích để chuyển đổi task từ camelCase (API) sang snake_case (UI)
 const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
   if (!apiTask) return {};
@@ -471,6 +536,25 @@ const tasksSlice = createSlice({
         }
       } else {
         console.log('Không tìm thấy task để cập nhật effort trong store, taskId =', taskId);
+      }
+    });
+    
+    // updateTaskDueDate
+    builder.addCase(updateTaskDueDate.fulfilled, (state, action) => {
+      const { taskId, dueDate, task } = action.payload;
+      
+      // Cập nhật task trong state
+      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
+      if (taskIndex >= 0) {
+        console.log('Cập nhật task due date trong store, index =', taskIndex);
+        state.tasks[taskIndex].due_date = dueDate;
+        
+        // Nếu có thêm data từ API, cập nhật luôn
+        if (task) {
+          state.tasks[taskIndex] = { ...state.tasks[taskIndex], ...task };
+        }
+      } else {
+        console.log('Không tìm thấy task để cập nhật due date trong store, taskId =', taskId);
       }
     });
   }

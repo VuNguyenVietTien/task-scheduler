@@ -18,6 +18,51 @@ const STATUS_COLORS: Record<string, string> = {
   'cancelled': '#6b7280',
 };
 
+// Định nghĩa hàm xác định trạng thái tiến độ task
+const determineTaskScheduleStatus = (task: any, planData: any[]) => {
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
+  // Tìm planTask tương ứng
+  const planTask = planData.find((pt: any) => pt.task_id === task.task_id);
+  
+  if (task.status.toLowerCase() === 'done') {
+    // Kiểm tra hoàn thành đúng hạn
+    if ((planTask && task.actual_end_date && new Date(task.actual_end_date) <= new Date(planTask.end_date)) ||
+        (!planTask && task.actual_end_date && task.due_date && new Date(task.actual_end_date) <= new Date(task.due_date))) {
+      return { status: 'on-schedule', label: 'Đúng tiến độ', color: 'text-green-600' };
+    } else {
+      return { status: 'late', label: 'Trễ tiến độ', color: 'text-red-600' };
+    }
+  } else if (task.status.toLowerCase() === 'todo') {
+    // Kiểm tra chưa đến thời gian bắt đầu
+    const startDate = planTask?.start_date ? new Date(planTask.start_date) : (task.start_date ? new Date(task.start_date) : null);
+    if (startDate) {
+      startDate.setHours(0, 0, 0, 0);
+      if (today.getTime() < startDate.getTime()) {
+        return { status: 'on-schedule', label: 'Chưa đến thời gian', color: 'text-blue-600' };
+      } else if (today.getTime() === startDate.getTime()) {
+        return { status: 'on-schedule', label: 'Bắt đầu hôm nay', color: 'text-green-600' };
+      } else {
+        return { status: 'late', label: 'Trễ bắt đầu', color: 'text-red-600' };
+      }
+    }
+  } else if (['doing', 'review'].includes(task.status.toLowerCase())) {
+    // Kiểm tra đang làm và chưa đến deadline
+    const dueDate = planTask?.end_date ? new Date(planTask.end_date) : (task.due_date ? new Date(task.due_date) : null);
+    if (dueDate) {
+      dueDate.setHours(0, 0, 0, 0);
+      if (today.getTime() <= dueDate.getTime()) {
+        return { status: 'on-schedule', label: 'Đang làm đúng tiến độ', color: 'text-green-600' };
+      } else {
+        return { status: 'late', label: 'Đang làm trễ tiến độ', color: 'text-red-600' };
+      }
+    }
+  }
+  
+  return { status: 'unknown', label: 'Không xác định', color: 'text-gray-500' };
+};
+
 export function ProjectReportView({ projectId }: { projectId: string }) {
   // State for active tabs
   const [activeTab, setActiveTab] = useState<ReportTabType>('overview');
@@ -26,6 +71,9 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
   // Get data from Redux store
   const { tasks } = useAppSelector(state => state.tasks);
   const { plans, activePlan } = useAppSelector(state => state.plans);
+  
+  // Khai báo state cho planTasks để dùng trong cả component
+  const [planTasks, setPlanTasks] = useState<any[]>([]);
 
   // Process tasks data for charts
   const [tasksByStatus, setTasksByStatus] = useState<any[]>([]);
@@ -48,6 +96,10 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
   // Process data when tasks or plans change
   useEffect(() => {
     if (tasks && tasks.length > 0) {
+      // Cập nhật planTasks từ activePlan
+      const newPlanTasks = activePlan?.planData?.tasks || [];
+      setPlanTasks(newPlanTasks);
+      
       // Process data for dashboard overview
       processTasksForOverview();
       
@@ -140,30 +192,51 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    // Process tasks for yesterday report
+    // Dữ liệu tasks và plan - không cần khai báo lại ở đây vì đã có state
+    const currentPlanTasks = activePlan?.planData?.tasks || [];
+    
+    // ---- XỬ LÝ BÁO CÁO HÔM QUA ----
+    
+    // 1. Các task đã hoàn thành hôm qua
+    // Lọc các task có status="done" và actual_end_date là ngày hôm qua
     const completedYesterday = tasks.filter(task => {
+      if (task.status.toLowerCase() !== 'done') return false;
       if (!task.actual_end_date) return false;
+      
       const endDate = new Date(task.actual_end_date);
-      return endDate >= yesterday && endDate < today;
+      endDate.setHours(0, 0, 0, 0);
+      return endDate.getTime() === yesterday.getTime();
     });
     setYesterdayCompletedTasks(completedYesterday);
 
+    // 2. Các task bị trễ so với kế hoạch
+    // Lọc các task có due_date <= hôm qua nhưng status chưa phải done
     const delayedYesterday = tasks.filter(task => {
       if (!task.due_date) return false;
+      
       const dueDate = new Date(task.due_date);
-      return dueDate < today && task.status.toLowerCase() !== 'completed';
+      dueDate.setHours(0, 0, 0, 0);
+      return dueDate.getTime() <= yesterday.getTime() && 
+             task.status.toLowerCase() !== 'done';
     });
     setYesterdayDelayedTasks(delayedYesterday);
 
+    // 3. Các task đã bắt đầu hôm qua
+    // Lọc các task có actual_start_date là ngày hôm qua
     const startedYesterday = tasks.filter(task => {
       if (!task.actual_start_date) return false;
+      
       const startDate = new Date(task.actual_start_date);
-      return startDate >= yesterday && startDate < today;
+      startDate.setHours(0, 0, 0, 0);
+      return startDate.getTime() === yesterday.getTime();
     });
     setYesterdayStartedTasks(startedYesterday);
 
-    // Process member work summary
+    // ---- XỬ LÝ TỔNG HỢP CÔNG VIỆC THEO THÀNH VIÊN ----
+    
+    // Tạo bảng tổng hợp công việc theo thành viên
     const memberSummary: Record<string, any> = {};
+    
     tasks.forEach(task => {
       if (task.assignee) {
         const memberName = task.assignee.username;
@@ -178,15 +251,18 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
         
         memberSummary[memberName].total += 1;
         
-        if (task.status.toLowerCase() === 'completed') {
+        if (task.status.toLowerCase() === 'done') {
           memberSummary[memberName].completed += 1;
-        } else if (task.status.toLowerCase() === 'in-progress') {
+        } else if (['doing', 'review'].includes(task.status.toLowerCase())) {
           memberSummary[memberName].inProgress += 1;
         }
         
+        // Kiểm tra task bị trễ
         if (task.due_date) {
           const dueDate = new Date(task.due_date);
-          if (dueDate < today && task.status.toLowerCase() !== 'completed') {
+          dueDate.setHours(0, 0, 0, 0);
+          if (dueDate.getTime() < today.getTime() && 
+              task.status.toLowerCase() !== 'done') {
             memberSummary[memberName].delayed += 1;
           }
         }
@@ -194,22 +270,55 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     });
     setMemberWorkSummary(memberSummary);
 
-    // Process tasks for today report
-    const startingToday = tasks.filter(task => {
-      if (!task.start_date) return false;
-      const startDate = new Date(task.start_date);
-      return startDate >= today && startDate < tomorrow;
+    // ---- XỬ LÝ BÁO CÁO HÔM NAY ----
+    
+    // 1. Các task dự kiến bắt đầu hôm nay (từ planData hoặc từ start_date)
+    const startingToday = [...tasks].filter(task => {
+      // Kiểm tra trong planData trước (ưu tiên cao hơn)
+      const planTask = currentPlanTasks.find(pt => pt.task_id === task.task_id);
+      if (planTask && planTask.start_date) {
+        const planStartDate = new Date(planTask.start_date);
+        planStartDate.setHours(0, 0, 0, 0);
+        return planStartDate.getTime() === today.getTime() && 
+               task.status.toLowerCase() === 'todo';
+      }
+      
+      // Kiểm tra start_date của task nếu không có trong plan
+      if (task.start_date) {
+        const startDate = new Date(task.start_date);
+        startDate.setHours(0, 0, 0, 0);
+        return startDate.getTime() === today.getTime() && 
+               task.status.toLowerCase() === 'todo';
+      }
+      
+      return false;
     });
     setTodayStartingTasks(startingToday);
 
-    const completingToday = tasks.filter(task => {
-      if (!task.due_date) return false;
-      const dueDate = new Date(task.due_date);
-      return dueDate >= today && dueDate < tomorrow;
+    // 2. Các task dự kiến hoàn thành hôm nay (từ planData hoặc từ due_date)
+    const completingToday = [...tasks].filter(task => {
+      // Kiểm tra trong planData trước (ưu tiên cao hơn)
+      const planTask = currentPlanTasks.find(pt => pt.task_id === task.task_id);
+      if (planTask && planTask.end_date) {
+        const planEndDate = new Date(planTask.end_date);
+        planEndDate.setHours(0, 0, 0, 0);
+        return planEndDate.getTime() === today.getTime() && 
+               task.status.toLowerCase() !== 'done';
+      }
+      
+      // Kiểm tra due_date của task nếu không có trong plan
+      if (task.due_date) {
+        const dueDate = new Date(task.due_date);
+        dueDate.setHours(0, 0, 0, 0);
+        return dueDate.getTime() === today.getTime() && 
+               task.status.toLowerCase() !== 'done';
+      }
+      
+      return false;
     });
     setTodayCompletingTasks(completingToday);
 
-    // Identify assigned and unassigned members for today
+    // 3. Xác định các thành viên có task được phân công hôm nay
     const membersWithTasksToday = new Set<string>();
     const allMemberIds = new Set<string>();
     
@@ -217,32 +326,46 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
       if (task.assignee) {
         allMemberIds.add(task.assignee.userId);
         
-        // Check if member has tasks for today
-        if (task.start_date || task.due_date) {
-          const startDate = task.start_date ? new Date(task.start_date) : null;
-          const dueDate = task.due_date ? new Date(task.due_date) : null;
-          
-          if ((startDate && startDate >= today && startDate < tomorrow) ||
-              (dueDate && dueDate >= today && dueDate < tomorrow)) {
+        // Kiểm tra thành viên có task trong ngày hôm nay
+        // 1. Kiểm tra trong planData
+        const planTask = currentPlanTasks.find(pt => pt.task_id === task.task_id);
+        if (planTask) {
+          const hasTaskToday = 
+            (planTask.start_date && new Date(planTask.start_date).toDateString() === today.toDateString()) ||
+            (planTask.end_date && new Date(planTask.end_date).toDateString() === today.toDateString()) ||
+            (planTask.status === 'doing' || planTask.status === 'review');
+            
+          if (hasTaskToday) {
             membersWithTasksToday.add(task.assignee.userId);
           }
+        } 
+        // 2. Kiểm tra trong dữ liệu task nếu không có trong plan
+        else if (
+          (task.start_date && new Date(task.start_date).toDateString() === today.toDateString()) ||
+          (task.due_date && new Date(task.due_date).toDateString() === today.toDateString()) ||
+          (task.status.toLowerCase() === 'doing' || task.status.toLowerCase() === 'review')
+        ) {
+          membersWithTasksToday.add(task.assignee.userId);
         }
       }
     });
     
-    // Get members who have tasks today
+    // Lấy thông tin thành viên
     const assigned = Array.from(membersWithTasksToday).map(memberId => {
       return tasks.find(task => task.assignee?.userId === memberId)?.assignee;
     }).filter(Boolean);
     setAssignedMembers(assigned);
     
-    // Get members who don't have tasks today
+    // Lấy thành viên không có task hôm nay
     const unassigned = Array.from(allMemberIds)
       .filter(memberId => !membersWithTasksToday.has(memberId))
       .map(memberId => {
         return tasks.find(task => task.assignee?.userId === memberId)?.assignee;
       }).filter(Boolean);
     setUnassignedMembers(unassigned);
+    
+    // Update planTasks trong state từ dữ liệu mới
+    setPlanTasks(currentPlanTasks);
   };
 
   // Get the active plan name
@@ -435,7 +558,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
                           {yesterdayCompletedTasks.map((task) => (
-                            <tr key={task.taskId}>
+                            <tr key={task.task_id}>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{task.title}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.assignee?.username || 'Unassigned'}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
@@ -467,7 +590,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
                           {yesterdayDelayedTasks.map((task) => (
-                            <tr key={task.taskId}>
+                            <tr key={task.task_id}>
                               <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{task.title}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.assignee?.username || 'Unassigned'}</td>
                               <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
@@ -532,17 +655,32 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                           <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Task</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Assignee</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nguồn dữ liệu</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Ngày dự kiến</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Trạng thái</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tiến độ</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
-                          {todayStartingTasks.map((task) => (
-                            <tr key={task.taskId}>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{task.title}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.assignee?.username || 'Unassigned'}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.status}</td>
-                            </tr>
-                          ))}
+                          {todayStartingTasks.map((task) => {
+                            const planTask = planTasks.find((pt: any) => pt.task_id === task.task_id);
+                            const scheduleStatus = determineTaskScheduleStatus(task, planTasks || []);
+                            return (
+                              <tr key={task.task_id}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{task.title}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.assignee?.username || 'Unassigned'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{planTask ? 'Kế hoạch' : 'Task'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                  {planTask?.start_date ? format(new Date(planTask.start_date), 'dd/MM/yyyy') : 
+                                   task.start_date ? format(new Date(task.start_date), 'dd/MM/yyyy') : '-'}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.status}</td>
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm ${scheduleStatus.color}`}>
+                                  {scheduleStatus.label}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -561,19 +699,34 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                           <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Task</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Assignee</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nguồn dữ liệu</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Deadline</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tiến độ</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Trạng thái</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Đánh giá</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
-                          {todayCompletingTasks.map((task) => (
-                            <tr key={task.taskId}>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{task.title}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.assignee?.username || 'Unassigned'}</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.progress || 0}%</td>
-                              <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.status}</td>
-                            </tr>
-                          ))}
+                          {todayCompletingTasks.map((task) => {
+                            const planTask = planTasks.find((pt: any) => pt.task_id === task.task_id);
+                            const scheduleStatus = determineTaskScheduleStatus(task, planTasks || []);
+                            return (
+                              <tr key={task.task_id}>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{task.title}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.assignee?.username || 'Unassigned'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{planTask ? 'Kế hoạch' : 'Task'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
+                                  {planTask?.end_date ? format(new Date(planTask.end_date), 'dd/MM/yyyy') : 
+                                   task.due_date ? format(new Date(task.due_date), 'dd/MM/yyyy') : '-'}
+                                </td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.progress || 0}%</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.status}</td>
+                                <td className={`px-6 py-4 whitespace-nowrap text-sm ${scheduleStatus.color}`}>
+                                  {scheduleStatus.label}
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

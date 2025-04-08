@@ -23,7 +23,8 @@ import {
   updateTaskStatus, 
   updateTaskPriority, 
   updateTaskEffort, 
-  updateTaskAssignee
+  updateTaskAssignee,
+  updateTaskDueDate
 } from '@/redux/features/tasksSlice';
 import { useRouter } from 'next/navigation';
 import { ProjectMember } from '@/hooks/useProject';
@@ -1017,9 +1018,14 @@ export function TaskListView({
         updateSingleTaskInState(taskId, { due_date: dueDate });
         
         try {
-          // CÁCH CŨ: Hiện tại chưa có Redux action cho due_date, sử dụng hook cũ
+          // CÁCH MỚI: Sử dụng Redux dispatch
+          await dispatch(updateTaskDueDate({ taskId, dueDate })).unwrap();
+          console.log(`Đã cập nhật hạn thành: ${dueDate} (qua Redux)`);
+          
+          /* CÁCH CŨ: Sử dụng hook mutation (giữ lại để tham khảo)
           const result = await updateDueDate(taskId, dueDate);
           console.log(`Đã cập nhật hạn thành: ${dueDate}`, result);
+          */
         } catch (error) {
           console.error('Lỗi khi gọi API cập nhật hạn:', error);
           // Khôi phục trạng thái cũ nếu API call thất bại
