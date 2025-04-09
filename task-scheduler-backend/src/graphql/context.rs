@@ -1,9 +1,11 @@
 use sqlx::PgPool;
+use std::sync::Arc;
 
 use crate::{
     auth::types::Claims,
     config::Config,
     graphql::dataloaders::{ProjectLoader, UserLoader},
+    websocket::NotificationBroadcaster,
 };
 
 pub struct Context {
@@ -12,6 +14,7 @@ pub struct Context {
     pub project_loader: ProjectLoader,
     pub user_loader: UserLoader,
     pub config: Config,
+    pub broadcaster: Option<Arc<NotificationBroadcaster>>,
 }
 
 impl Context {
@@ -21,6 +24,7 @@ impl Context {
         project_loader: ProjectLoader,
         user_loader: UserLoader,
         config: Config,
+        broadcaster: Option<Arc<NotificationBroadcaster>>,
     ) -> Self {
         Self {
             db,
@@ -28,6 +32,7 @@ impl Context {
             project_loader,
             user_loader,
             config,
+            broadcaster,
         }
     }
     
@@ -38,5 +43,9 @@ impl Context {
     
     pub fn get_auth(&self) -> Option<&Claims> {
         self.auth.as_ref()
+    }
+    
+    pub fn get_broadcaster(&self) -> Option<&Arc<NotificationBroadcaster>> {
+        self.broadcaster.as_ref()
     }
 }

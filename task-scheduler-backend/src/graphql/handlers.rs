@@ -20,6 +20,7 @@ use crate::graphql::{
     Context,
     dataloaders::{ProjectLoader, UserLoader},
 };
+use crate::websocket::NotificationBroadcaster;
 
 pub async fn graphql_handler(
     schema: web::Data<AppSchema>,
@@ -29,6 +30,8 @@ pub async fn graphql_handler(
     config: web::Data<Config>,
     project_loader: web::Data<ProjectLoader>,
     user_loader: web::Data<UserLoader>,
+    auth: Option<web::ReqData<types::Claims>>,
+    broadcaster: web::Data<Arc<NotificationBroadcaster>>,
 ) -> Result<GraphQLResponse> {
     let start = Instant::now();
     eprintln!("\n=== GraphQL Handler Start ===");
@@ -89,6 +92,7 @@ pub async fn graphql_handler(
         project_loader.get_ref().clone(),
         user_loader.get_ref().clone(),
         config.get_ref().clone(),
+        Some(broadcaster.get_ref().clone()),
     );
 
     let schema = schema.get_ref();

@@ -2,6 +2,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 use regex::Regex;
 use async_graphql::Error;
+use std::sync::Arc;
 
 use crate::db::queries::comment::{create_comment as insert_comment, get_comments_by_task_id as get_comments};
 use crate::db::models::CreateCommentInput;
@@ -10,6 +11,7 @@ use crate::db::queries::notification::create_notification;
 use crate::db::models::CreateNotificationInput;
 use crate::db::models::{Comment};
 use crate::db::services::task_service::get_task_by_id;
+use crate::db::services::notification_broadcaster::NotificationBroadcaster;
 
 // Thêm function extract_mentions để trích xuất các mention từ nội dung comment
 fn extract_mentions(content: &str) -> Vec<(String, String)> {
@@ -57,6 +59,7 @@ pub async fn create_comment_with_notifications(
     pool: &PgPool,
     input: CreateCommentInput,
     task_title: &str,
+    broadcaster: Option<&Arc<NotificationBroadcaster>>,
 ) -> Result<Uuid, Error> {
     println!("Starting create_comment_with_notifications for task: {}", input.task_id);
     println!("Comment content: {}", input.content);
@@ -92,6 +95,7 @@ pub async fn create_comment_with_notifications(
                     input.task_id,
                     input.user_id,
                     comment_id,
+                    broadcaster,
                 ).await {
                     Ok(notification_id) => {
                         println!("Created mention notification: {}", notification_id);
@@ -135,6 +139,11 @@ pub async fn create_comment_with_notifications(
                 assignee_id,
                 input.task_id,
                 input.user_id,
+                task_title,
+                comment_id,
+                input.created_by,
+                input.project_id,
+                broadcaster,
             ).await {
                 Ok(notification_id) => println!("Created task comment notification: {}", notification_id),
                 Err(e) => println!("Error creating task comment notification: {}", e),

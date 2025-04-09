@@ -10,6 +10,7 @@ import {
   MARK_NOTIFICATION_AS_READ,
   MARK_ALL_NOTIFICATIONS_AS_READ
 } from '@/graphql/mutations/notifications';
+import { NOTIFICATION_SUBSCRIPTION } from '@/graphql/subscriptions/notifications';
 import { 
   Notification, 
   BackendNotification,
@@ -19,6 +20,8 @@ import {
   NotificationType
 } from '@/types/notification';
 import { useRouter } from 'next/navigation';
+import { useToastContext as useToast } from '@/components/ui/toast/toast-provider';
+import { useAuth } from '@/contexts/AuthContext';
 
 // Helper function to convert BackendNotification to Notification
 const convertBackendNotification = (notification: BackendNotification): Notification => {
@@ -43,6 +46,8 @@ const convertBackendNotification = (notification: BackendNotification): Notifica
 
 export const useNotifications = () => {
   const router = useRouter();
+  const { toast } = useToast();
+  const { user } = useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   
   // Fetch notifications
@@ -54,6 +59,30 @@ export const useNotifications = () => {
   const { data: countData, loading: countLoading, refetch: refetchCount } = useQuery<NotificationCountQueryResponse>(
     GET_NOTIFICATION_COUNT
   );
+  
+  // Subscribe to new notifications
+  const { data: subscriptionData } = useSubscription(NOTIFICATION_SUBSCRIPTION, {
+    onData: ({ data }) => {
+      // Only handle the notification if it's for the current user and toast is available
+      const notification = data.data?.notificationReceived;
+      if (notification && notification.userId === user?.id && toast) {
+        // Refetch notifications and count
+        refetchNotifications();
+        refetchCount();
+        
+        // Show toast notification
+        toast({
+          title: notification.action || 'New notification',
+          description: notification.message,
+          variant: "default",
+        });
+        
+        // Play notification sound
+        const audio = new Audio('/sounds/notification.mp3');
+        audio.play().catch(err => console.error('Failed to play notification sound:', err));
+      }
+    }
+  });
   
   // Mark notification as read mutation
   const [markAsReadMutation] = useMutation(MARK_NOTIFICATION_AS_READ, {
@@ -114,9 +143,6 @@ export const useNotifications = () => {
     
     toggleDropdown();
   };
-
-  // TODO: Implement WebSocket subscription for real-time notifications
-  // This would be implemented with useSubscription from Apollo Client
 
   return {
     notifications,

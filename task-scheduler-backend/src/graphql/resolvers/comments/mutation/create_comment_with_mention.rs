@@ -6,9 +6,11 @@ use uuid::Uuid;
 use log::{info, debug, error};
 use serde_json::json;
 use std::collections::HashSet;
+use std::sync::Arc;
 
 use crate::graphql::resolvers::comments::CommentResponse;
 use crate::graphql::resolvers::comments::CreateCommentInput;
+use crate::websocket::{NotificationBroadcaster, NotificationMessage};
 
 // Function to extract mentions from comment content
 fn extract_mentions(content: &str) -> Vec<(String, String)> {
@@ -37,6 +39,7 @@ pub async fn create_comment_with_mentions(
     pool: &PgPool, 
     user_id: Uuid,
     input: CreateCommentInput,
+    broadcaster: Option<&Arc<NotificationBroadcaster>>,
 ) -> Result<CommentResponse, Error> {
     info!("Creating comment for task {} with mention detection", input.task_id);
     debug!("Comment content: {}", input.content);
@@ -126,7 +129,8 @@ pub async fn create_comment_with_mentions(
                         user_id,
                         comment_id,
                         &task.title,
-                        task.project_id
+                        task.project_id,
+                        broadcaster,
                     ).await {
                         Ok(_) => {
                             info!("Created mention notification for user {}", username);
@@ -153,7 +157,8 @@ pub async fn create_comment_with_mentions(
                 user_id,
                 &task.title,
                 task.project_id,
-                comment_id
+                comment_id,
+                broadcaster,
             ).await {
                 Ok(_) => info!("Created task comment notification for assignee"),
                 Err(e) => error!("Failed to create task comment notification: {:?}", e),
@@ -173,6 +178,7 @@ async fn create_task_comment_notification(
     task_title: &str,
     project_id: Uuid,
     comment_id: Uuid,
+    broadcaster: Option<&Arc<NotificationBroadcaster>>,
 ) -> Result<(), Error> {
     // Get commenter username
     let user = sqlx::query!(
@@ -217,6 +223,24 @@ async fn create_task_comment_notification(
     .await
     .map_err(|e| Error::new(format!("Failed to create notification: {:?}", e)))?;
     
+    // Send notification through WebSocket if broadcaster is available
+    if let Some(broadcaster) = broadcaster {
+        let now = chrono::Utc::now().fixed_offset();
+        let notification_message = NotificationMessage {
+            id: notification_id,
+            user_id,
+            type_: "COMMENT_MENTION".to_string(),
+            content: metadata,
+            created_at: now,
+        };
+        
+        if let Err(e) = broadcaster.send(notification_message) {
+            error!("Failed to broadcast notification: {:?}", e);
+        } else {
+            info!("Notification broadcasted successfully");
+        }
+    }
+    
     Ok(())
 }
 
@@ -229,6 +253,7 @@ async fn create_mention_notification(
     comment_id: Uuid,
     task_title: &str,
     project_id: Uuid,
+    broadcaster: Option<&Arc<NotificationBroadcaster>>,
 ) -> Result<(), Error> {
     // Get mentioner username
     let user = sqlx::query!(
@@ -276,19 +301,23 @@ async fn create_mention_notification(
     .await
     .map_err(|e| Error::new(format!("Failed to create notification: {:?}", e)))?;
     
-    // Also add an entry to comment_mentions table
-    sqlx::query!(
-        r#"
-        INSERT INTO comment_mentions (id, comment_id, user_id, is_read)
-        VALUES ($1, $2, $3, false)
-        "#,
-        Uuid::new_v4(),
-        comment_id,
-        mentioned_user_id
-    )
-    .execute(pool)
-    .await
-    .map_err(|e| Error::new(format!("Failed to create comment mention: {:?}", e)))?;
+    // Send notification through WebSocket if broadcaster is available
+    if let Some(broadcaster) = broadcaster {
+        let now = chrono::Utc::now().fixed_offset();
+        let notification_message = NotificationMessage {
+            id: notification_id,
+            user_id: mentioned_user_id,
+            type_: "COMMENT_MENTION".to_string(),
+            content: metadata,
+            created_at: now,
+        };
+        
+        if let Err(e) = broadcaster.send(notification_message) {
+            error!("Failed to broadcast notification: {:?}", e);
+        } else {
+            info!("Mention notification broadcasted successfully");
+        }
+    }
     
     Ok(())
 } 

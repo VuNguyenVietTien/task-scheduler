@@ -2,6 +2,7 @@ use async_graphql::{EmptySubscription, MergedObject, Schema};
 use sqlx::PgPool;
 
 use crate::graphql::{
+    Context,
     resolvers::{
         AuthMutation,
         CommentMutation, CommentQuery,
@@ -29,12 +30,20 @@ pub struct Mutation(AuthMutation, ProjectMutation, CommentMutation, UserMutation
 pub type AppSchema = Schema<Query, Mutation, EmptySubscription>;
 
 pub fn create_schema(pool: PgPool, config: Config) -> AppSchema {
-    let pool_ref = &pool;
-    Schema::build(Query::default(), Mutation::default(), EmptySubscription)
-        .data(pool_ref.clone())
-        .data(ProjectLoader::new(pool_ref.clone()))
-        .data(UserLoader::new(pool_ref.clone()))
-        .data(config)
-        .enable_federation()
-        .finish()
+    let schema = Schema::build(
+        Query::default(),
+        Mutation::default(),
+        EmptySubscription,
+    )
+    .data(Context::new(
+        pool.clone(),
+        None,
+        ProjectLoader::new(pool.clone()),
+        UserLoader::new(pool.clone()),
+        config.clone(),
+        None,
+    ))
+    .finish();
+
+    schema
 }
