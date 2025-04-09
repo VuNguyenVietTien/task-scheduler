@@ -418,8 +418,6 @@ interface RichTextEditorProps {
     joinedAt: string;
     user: {
       userId: string;
-      email: string;
-      fullName: string;
       username: string;
       avatarUrl: string;
     };
@@ -514,7 +512,7 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
           )
           .map(member => ({
             id: member.user.userId,
-            label: member.user.fullName,
+            label: member.user.username, 
             username: member.user.username,
             avatarUrl: member.user.avatarUrl
           }));
@@ -524,10 +522,14 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
           const pos = from - (match[0].length - 1);
           const coords = editor.view.coordsAtPos(pos);
           
+          // Sử dụng vị trí tuyệt đối so với trang thay vì tương đối
           setMentionPopup({
             show: true,
             query,
-            position: { x: coords.left, y: coords.bottom },
+            position: {
+              x: coords.left,
+              y: coords.bottom
+            },
             items,
             selectedIndex: 0
           });
@@ -555,7 +557,7 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
         // Insert the mention with proper formatting
         (editor.chain().focus() as any).setMention({
           id: item.id,
-          label: item.username || item.label, // Use username if available, otherwise use label
+          label: item.username,
           username: item.username
         }).run();
         
@@ -1158,30 +1160,35 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
         <div 
           className="mention-popup"
           style={{
+            position: 'fixed',
             left: `${mentionPopup.position.x}px`,
-            top: `${mentionPopup.position.y + 5}px`,
+            top: `${mentionPopup.position.y}px`,
+            zIndex: 9999
           }}
         >
-          {mentionPopup.items.map((item, index) => (
-            <div
-              key={item.id}
-              className={`mention-item ${index === mentionPopup.selectedIndex ? 'selected' : ''}`}
-              onClick={() => handleMentionSelect(item)}
-            >
-              <img 
-                src={item.avatarUrl || '/default-avatar.png'} 
-                alt={item.label} 
-                className="mention-avatar"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = '/default-avatar.png';
-                }}
-              />
-              <div>
-                <div className="font-medium">{item.label}</div>
-                <div className="text-xs text-gray-500">@{item.username}</div>
+          {mentionPopup.items.length > 0 ? (
+            mentionPopup.items.map((item, index) => (
+              <div
+                key={item.id}
+                className={`mention-item ${index === mentionPopup.selectedIndex ? 'selected' : ''}`}
+                onClick={() => handleMentionSelect(item)}
+              >
+                <div className="w-8 h-8 rounded-full flex items-center justify-center text-white" 
+                  style={{
+                    backgroundColor: ['#3b82f6', '#10b981', '#f59e0b', '#8b5cf6', '#ec4899', '#6366f1'][item.username.charCodeAt(0) % 6]
+                  }}
+                >
+                  {item.username.charAt(0).toUpperCase()}
+                </div>
+                <div>
+                  <div className="font-medium">{item.username}</div>
+                  <div className="text-xs text-gray-500">@{item.username}</div>
+                </div>
               </div>
-            </div>
-          ))}
+            ))
+          ) : (
+            <div className="p-3 text-gray-500">Không tìm thấy kết quả</div>
+          )}
         </div>
       )}
     </div>
