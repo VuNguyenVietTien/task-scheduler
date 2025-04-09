@@ -17,7 +17,6 @@ pub struct Notification {
     pub metadata: JsonValue,
     pub is_read: bool,
     pub created_at: DateTime<Utc>,
-    pub read_at: Option<DateTime<Utc>>,
 }
 
 #[derive(InputObject)]
@@ -53,8 +52,7 @@ impl From<crate::db::models::Notification> for Notification {
             action: notif.action,
             metadata: notif.metadata,
             is_read: notif.is_read,
-            created_at: notif.created_at,
-            read_at: notif.read_at,
+            created_at: notif.created_at
         }
     }
 } 

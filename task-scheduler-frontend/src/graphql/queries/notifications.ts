@@ -5,12 +5,16 @@ export const GET_NOTIFICATIONS = gql`
     notifications {
       id
       userId
-      title
-      message
+      projectId
+      senderId
       type
-      read
+      referenceType
+      referenceId
+      message
+      action
+      metadata
+      isRead
       createdAt
-      updatedAt
     }
   }
 `;
@@ -18,13 +22,18 @@ export const GET_NOTIFICATIONS = gql`
 export const GET_NOTIFICATION = gql`
   query GetNotification($id: UUID!) {
     notification(id: $id) {
-      id
+      notificationId
+      userId
+      projectId
+      senderId
       type
-      title
+      referenceType
+      referenceId
       message
-      read
-      created_at
+      action
       metadata
+      isRead
+      createdAt
     }
   }
 `;

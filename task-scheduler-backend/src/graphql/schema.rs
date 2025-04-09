@@ -13,6 +13,7 @@ use crate::graphql::{
         MediaUploadMutation,
         PlanMutation, PlanQuery,
         NotificationMutation, NotificationQuery,
+        comments::CommentResponse,
     },
     dataloaders::{ProjectLoader, UserLoader},
     types::{ProjectPriority, ProjectStatus, ProjectVisibility, MemberRole},

@@ -15,8 +15,7 @@ pub struct Notification {
     pub action: String,
     pub metadata: JsonValue,
     pub is_read: bool,
-    pub created_at: DateTime<Utc>,
-    pub read_at: Option<DateTime<Utc>>,
+    pub created_at: DateTime<Utc>
 }
 
 #[derive(InputObject)]

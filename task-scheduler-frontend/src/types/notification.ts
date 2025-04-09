@@ -1,5 +1,21 @@
 export type NotificationType = 'TASK_ASSIGNED' | 'TASK_REASSIGNED' | 'TASK_COMPLETED' | 'TASK_OVERDUE' | 'COMMENT_MENTION';
 
+export interface BackendNotification {
+  id: string;
+  userId: string;
+  type: string;
+  referenceType: string;
+  referenceId: string;
+  message: string;
+  isRead: boolean;
+  createdAt: string;
+  projectId?: string;
+  senderId?: string;
+  action: string;
+  metadata: any;
+}
+
+// Interface for UI components - camelCase for frontend use
 export interface Notification {
   id: string;
   userId: string;
@@ -8,7 +24,6 @@ export interface Notification {
   type: NotificationType;
   read: boolean;
   createdAt: string;
-  updatedAt: string;
   projectId?: string;
   taskId?: string;
   commentId?: string;
@@ -38,7 +53,7 @@ export interface CreateNotificationInput {
 }
 
 export interface NotificationQueryResponse {
-  notifications: Notification[];
+  notifications: BackendNotification[];
 }
 
 export interface NotificationCountQueryResponse {

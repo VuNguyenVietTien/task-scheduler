@@ -12,11 +12,34 @@ import {
 } from '@/graphql/mutations/notifications';
 import { 
   Notification, 
+  BackendNotification,
   NotificationState,
   NotificationQueryResponse,
-  NotificationCountQueryResponse
+  NotificationCountQueryResponse,
+  NotificationType
 } from '@/types/notification';
 import { useRouter } from 'next/navigation';
+
+// Helper function to convert BackendNotification to Notification
+const convertBackendNotification = (notification: BackendNotification): Notification => {
+  // Extract metadata to get additional information
+  const metadata = notification.metadata || {};
+  
+  return {
+    id: notification.id,
+    userId: notification.userId,
+    title: notification.action || 'Notification',
+    message: notification.message,
+    type: notification.type as NotificationType,
+    read: notification.isRead,
+    createdAt: notification.createdAt,
+    projectId: notification.projectId,
+    taskId: metadata.taskId,
+    commentId: metadata.commentId,
+    senderId: notification.senderId,
+    link: metadata.link
+  };
+};
 
 export const useNotifications = () => {
   const router = useRouter();
@@ -48,7 +71,11 @@ export const useNotifications = () => {
     }
   });
 
-  const notifications = notificationsData?.notifications || [];
+  // Convert backend notifications to frontend format
+  const notifications = notificationsData?.notifications 
+    ? notificationsData.notifications.map(convertBackendNotification)
+    : [];
+    
   const unreadCount = countData?.notificationCount?.unread || 0;
 
   const markAsRead = async (id: string) => {

@@ -158,15 +158,14 @@ pub async fn create_notification(
         r#"
         INSERT INTO notifications (
             notification_id, user_id, type, content,
-            created_at, read_at
-        ) VALUES ($1, $2, $3, $4, $5, NULL)
+            created_at
+        ) VALUES ($1, $2, $3, $4, $5)
         "#
     )
     .bind(Uuid::new_v4())
     .bind(user_id)
     .bind(type_)
     .bind(sqlx::types::Json(content))
-    .bind(Utc::now())
     .execute(pool)
     .await?;
 

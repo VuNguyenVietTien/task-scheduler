@@ -119,7 +119,6 @@ CREATE TABLE notifications (
     user_id UUID REFERENCES users(id),
     type VARCHAR(50) NOT NULL, -- 'TASK_ASSIGNED', 'COMMENT_ADDED', etc.
     content JSONB NOT NULL,
-    read_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 ```

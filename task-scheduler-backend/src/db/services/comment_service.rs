@@ -13,8 +13,8 @@ use crate::db::services::task_service::get_task_by_id;
 
 // Thêm function extract_mentions để trích xuất các mention từ nội dung comment
 fn extract_mentions(content: &str) -> Vec<(String, String)> {
-    // Regex để tìm các thẻ span với data-mention và data-id
-    let re = Regex::new(r#"<span[^>]*?data-id="([^"]*)"[^>]*?data-username="([^"]*)"[^>]*?data-mention[^>]*?>"#).unwrap();
+    // Cập nhật regex để phù hợp với định dạng thực tế của mentions
+    let re = Regex::new(r#"<span[^>]*?data-id="([^"]*)"[^>]*?data-username="([^"]*)"[^>]*?class="mention"[^>]*?>@([^<]*)</span>"#).unwrap();
     
     // Thu thập tất cả các mention từ nội dung
     let mut mentions = Vec::new();
@@ -23,6 +23,12 @@ fn extract_mentions(content: &str) -> Vec<(String, String)> {
         if let (Some(user_id), Some(username)) = (cap.get(1), cap.get(2)) {
             mentions.push((user_id.as_str().to_string(), username.as_str().to_string()));
         }
+    }
+    
+    // Log chi tiết để debug
+    println!("Found {} mentions in comment content: {}", mentions.len(), content);
+    for (user_id, username) in &mentions {
+        println!("  Mention: {} ({})", username, user_id);
     }
     
     mentions
@@ -50,56 +56,97 @@ pub async fn create_comment(pool: &PgPool, input: CreateCommentInput) -> Result<
 pub async fn create_comment_with_notifications(
     pool: &PgPool,
     input: CreateCommentInput,
+    task_title: &str,
 ) -> Result<Uuid, Error> {
+    println!("Starting create_comment_with_notifications for task: {}", input.task_id);
+    println!("Comment content: {}", input.content);
+    
+    // Create the comment first to ensure it's saved
+    let comment_id = create_comment(pool, input.clone()).await?;
+    println!("Comment created with ID: {}", comment_id);
+    
     // Get task details to check assignee
     let task = get_task_by_id(pool, input.task_id).await?;
+    println!("Retrieved task: {}, project_id: {}", task.title, task.project_id);
     
-    // Create the comment
-    let comment_id = create_comment(pool, input.clone()).await?;
-    
-    // If the comment author is not the task assignee, send a notification
-    if let Some(assignee_id) = task.assignee_id {
-        if assignee_id != input.user_id {
-            create_task_comment_notification(
-                pool,
-                assignee_id,
-                input.task_id,
-                input.user_id,
-            ).await?;
-        }
-    }
-    
-    // Extract mentions from comment content and send notifications
+    // Extract mentions from comment content
     let mentions = extract_mentions(&input.content);
+    println!("Extracted {} mentions from comment", mentions.len());
+    
+    // Keep track of users who have already received a notification
+    let mut notified_users = Vec::new();
+    
+    // First, process mentions as they have higher priority
     for (mentioned_user_id, username) in mentions {
+        println!("Processing mention: user_id={}, username={}", mentioned_user_id, username);
+        
         if let Ok(uuid) = Uuid::parse_str(&mentioned_user_id) {
             // Skip if mentioned user is the comment author
             if uuid != input.user_id {
+                println!("Processing mention for user: {} ({})", username, uuid);
+                
                 // Create mention notification
-                create_comment_mention_notification(
+                match create_comment_mention_notification(
                     pool,
                     uuid,
                     input.task_id,
                     input.user_id,
                     comment_id,
-                ).await?;
-                
-                // Optional: Add entry to comment_mentions table
-                sqlx::query!(
-                    r#"
-                    INSERT INTO comment_mentions (id, comment_id, user_id, is_read)
-                    VALUES ($1, $2, $3, false)
-                    "#,
-                    Uuid::new_v4(),
-                    comment_id,
-                    uuid
-                )
-                .execute(pool)
-                .await?;
+                ).await {
+                    Ok(notification_id) => {
+                        println!("Created mention notification: {}", notification_id);
+                        
+                        // Add to notified users list
+                        notified_users.push(uuid);
+                        
+                        // Optional: Add entry to comment_mentions table
+                        match sqlx::query!(
+                            r#"
+                            INSERT INTO comment_mentions (id, comment_id, user_id, is_read)
+                            VALUES ($1, $2, $3, false)
+                            "#,
+                            Uuid::new_v4(),
+                            comment_id,
+                            uuid
+                        )
+                        .execute(pool)
+                        .await {
+                            Ok(_) => println!("Added entry to comment_mentions table"),
+                            Err(e) => println!("Error adding to comment_mentions: {}", e),
+                        }
+                    },
+                    Err(e) => println!("Error creating mention notification: {}", e),
+                }
+            } else {
+                println!("Skipping mention for comment author: {}", uuid);
             }
+        } else {
+            println!("Invalid UUID in mention: {}", mentioned_user_id);
         }
     }
     
+    // Then, check if assignee notification is needed
+    if let Some(assignee_id) = task.assignee_id {
+        // Don't notify assignee if they are the comment author or already received a mention notification
+        if assignee_id != input.user_id && !notified_users.contains(&assignee_id) {
+            println!("Sending notification to task assignee: {}", assignee_id);
+            match create_task_comment_notification(
+                pool,
+                assignee_id,
+                input.task_id,
+                input.user_id,
+            ).await {
+                Ok(notification_id) => println!("Created task comment notification: {}", notification_id),
+                Err(e) => println!("Error creating task comment notification: {}", e),
+            }
+        } else {
+            println!("Skipping task comment notification for assignee: already notified or is the commenter");
+        }
+    } else {
+        println!("No assignee for task, skipping task comment notification");
+    }
+    
+    println!("Completed create_comment_with_notifications");
     Ok(comment_id)
 }
 

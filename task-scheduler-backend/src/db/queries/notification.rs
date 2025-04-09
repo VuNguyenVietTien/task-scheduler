@@ -27,8 +27,7 @@ pub async fn get_notification_by_id(pool: &PgPool, notification_id: Uuid) -> Res
         action: row.get("action"),
         metadata: row.get("metadata"),
         is_read: row.get("is_read"),
-        created_at: row.get("created_at"),
-        read_at: row.get("read_at"),
+        created_at: row.get("created_at")
     }))
 }
 
@@ -65,8 +64,7 @@ pub async fn get_user_notifications(
         action: row.get("action"),
         metadata: row.get("metadata"),
         is_read: row.get("is_read"),
-        created_at: row.get("created_at"),
-        read_at: row.get("read_at"),
+        created_at: row.get("created_at")
     }).collect())
 }
 
@@ -132,8 +130,7 @@ pub async fn create_notification(
         action: row.get("action"),
         metadata: row.get("metadata"),
         is_read: row.get("is_read"),
-        created_at: row.get("created_at"),
-        read_at: row.get("read_at"),
+        created_at: row.get("created_at")
     })
 }
 
@@ -146,12 +143,11 @@ pub async fn mark_notification_as_read(
     let row = sqlx::query(
         r#"
         UPDATE notifications
-        SET is_read = true, read_at = $1
-        WHERE notification_id = $2 AND user_id = $3
+        SET is_read = true
+        WHERE notification_id = $1 AND user_id = $2
         RETURNING *
         "#
     )
-    .bind(Utc::now())
     .bind(notification_id)
     .bind(user_id)
     .fetch_one(pool)
@@ -169,8 +165,7 @@ pub async fn mark_notification_as_read(
         action: row.get("action"),
         metadata: row.get("metadata"),
         is_read: row.get("is_read"),
-        created_at: row.get("created_at"),
-        read_at: row.get("read_at"),
+        created_at: row.get("created_at")
     })
 }
 
@@ -182,11 +177,10 @@ pub async fn mark_all_notifications_as_read(
     sqlx::query(
         r#"
         UPDATE notifications
-        SET is_read = true, read_at = $1
-        WHERE user_id = $2 AND is_read = false
+        SET is_read = true
+        WHERE user_id = $1 AND is_read = false
         "#
     )
-    .bind(Utc::now())
     .bind(user_id)
     .execute(pool)
     .await?;

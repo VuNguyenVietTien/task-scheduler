@@ -30,4 +30,13 @@ impl Context {
             config,
         }
     }
+    
+    // Add helper methods for accessing context data
+    pub fn get_pool(&self) -> &PgPool {
+        &self.db
+    }
+    
+    pub fn get_auth(&self) -> Option<&Claims> {
+        self.auth.as_ref()
+    }
 }

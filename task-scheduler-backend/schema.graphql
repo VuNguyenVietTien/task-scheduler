@@ -419,7 +419,6 @@ type Notification {
   type: NotificationType!
   content: JSON!
   createdAt: DateTime!
-  readAt: DateTime
 }
 
 type AuthPayload {

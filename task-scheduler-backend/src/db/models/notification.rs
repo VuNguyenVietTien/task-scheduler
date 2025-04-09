@@ -17,7 +17,6 @@ pub struct Notification {
     pub metadata: JsonValue,
     pub is_read: bool,
     pub created_at: DateTime<Utc>,
-    pub read_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
