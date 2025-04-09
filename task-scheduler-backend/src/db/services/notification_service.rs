@@ -77,37 +77,70 @@ pub async fn create_task_reassignment_notification(
 /// Create a notification for comment mention
 pub async fn create_comment_mention_notification(
     pool: &PgPool,
-    comment_id: Uuid,
-    task_id: Uuid,
-    project_id: Uuid,
     mentioned_user_id: Uuid,
-    created_by: Uuid,
-    task_title: &str,
-) -> Result<(), sqlx::Error> {
+    task_id: Uuid,
+    mentioned_by: Uuid,
+    comment_id: Uuid,
+) -> Result<Uuid, sqlx::Error> {
     // Don't create notification if the mentioned user is the same as the comment creator
-    if mentioned_user_id == created_by {
-        return Ok(());
+    if mentioned_user_id == mentioned_by {
+        return Ok(Uuid::nil());
     }
 
-    let input = CreateNotificationInput {
-        user_id: mentioned_user_id,
-        project_id: Some(project_id),
-        sender_id: Some(created_by),
-        type_: "comment_mention".to_string(),
-        reference_type: "comment".to_string(),
-        reference_id: comment_id,
-        message: format!("You were mentioned in a comment on task: {}", task_title),
-        action: "mention".to_string(),
-        metadata: Some(json!({
+    let notification_id = Uuid::new_v4();
+    
+    // Lấy thông tin task để hiển thị trong thông báo
+    let task_info = sqlx::query!(
+        r#"
+        SELECT title, project_id FROM tasks WHERE task_id = $1
+        "#,
+        task_id
+    )
+    .fetch_one(pool)
+    .await?;
+    
+    // Lấy tên người mention
+    let user_info = sqlx::query!(
+        r#"
+        SELECT username FROM users WHERE user_id = $1
+        "#,
+        mentioned_by
+    )
+    .fetch_one(pool)
+    .await?;
+    
+    let message = format!("{} mentioned you in a comment on task: {}", 
+        user_info.username, task_info.title);
+    
+    // Lưu thông báo vào bảng notifications
+    sqlx::query!(
+        r#"
+        INSERT INTO notifications (
+            notification_id, user_id, type, reference_type, reference_id, 
+            message, is_read, created_at, project_id, sender_id, action, metadata
+        )
+        VALUES (
+            $1, $2, 'COMMENT_MENTION', 'comment', $3, 
+            $4, false, CURRENT_TIMESTAMP, $5, $6, 'mention',
+            $7::jsonb
+        )
+        "#,
+        notification_id,
+        mentioned_user_id,
+        comment_id,
+        message,
+        task_info.project_id,
+        mentioned_by,
+        serde_json::json!({
             "comment_id": comment_id.to_string(),
             "task_id": task_id.to_string(),
-            "project_id": project_id.to_string(),
-            "task_title": task_title,
-        })),
-    };
-
-    create_notification(pool, input).await?;
-    Ok(())
+            "task_title": task_info.title,
+        }).to_string()
+    )
+    .execute(pool)
+    .await?;
+    
+    Ok(notification_id)
 }
 
 pub async fn create_task_comment_notification(

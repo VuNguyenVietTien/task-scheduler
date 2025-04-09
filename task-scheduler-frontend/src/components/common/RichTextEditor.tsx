@@ -134,14 +134,11 @@ const Mention = Node.create({
   },
 
   renderHTML({ node, HTMLAttributes }) {
-    // Use the username if available, otherwise use the label
-    const displayText = node.attrs.username || node.attrs.label || '';
-    
     return ['span', { 
       ...HTMLAttributes,
       'data-mention': '',
       class: 'mention',
-    }, displayText]
+    }, `@${node.attrs.username}`]
   },
 
   addCommands() {
@@ -455,6 +452,11 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
     items: [],
     selectedIndex: 0,
   });
+
+  // Thêm ref để theo dõi giá trị selectedIndex hiện tại
+  const currentSelectedIndexRef = useRef<number>(0);
+  // Thêm ref để theo dõi trạng thái đang xử lý Enter
+  const isProcessingEnterRef = useRef<boolean>(false);
   
   // Configure editor with extensions
   const lastCursorPositionRef = useRef<{ from: number, to: number } | null>(null);
@@ -495,6 +497,11 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
       }
     },
     onSelectionUpdate: ({ editor }) => {
+      // Bỏ qua sự kiện onSelectionUpdate nếu đang xử lý Enter
+      if (isProcessingEnterRef.current) {
+        return;
+      }
+
       // Cập nhật vị trí con trỏ khi người dùng di chuyển con trỏ
       const selection = editor.view.state.selection;
       lastCursorPositionRef.current = { from: selection.from, to: selection.to };
@@ -522,6 +529,9 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
           const pos = from - (match[0].length - 1);
           const coords = editor.view.coordsAtPos(pos);
           
+          // Nếu popup đã hiển thị, giữ nguyên giá trị selectedIndex
+          const newSelectedIndex = mentionPopup.show ? currentSelectedIndexRef.current : 0;
+          
           // Sử dụng vị trí tuyệt đối so với trang thay vì tương đối
           setMentionPopup({
             show: true,
@@ -531,7 +541,7 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
               y: coords.bottom
             },
             items,
-            selectedIndex: 0
+            selectedIndex: newSelectedIndex
           });
         } else {
           setMentionPopup(prev => ({ ...prev, show: false }));
@@ -541,6 +551,11 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
       }
     },
   })
+
+  // Cập nhật currentSelectedIndexRef mỗi khi mentionPopup.selectedIndex thay đổi
+  useEffect(() => {
+    currentSelectedIndexRef.current = mentionPopup.selectedIndex;
+  }, [mentionPopup.selectedIndex]);
 
   // Handle mention selection
   const handleMentionSelect = (item: { id: string; label: string; username: string }) => {
@@ -557,7 +572,7 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
         // Insert the mention with proper formatting
         (editor.chain().focus() as any).setMention({
           id: item.id,
-          label: item.username,
+          label: item.label,
           username: item.username
         }).run();
         
@@ -571,28 +586,54 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
       }
     }
     
+    // Đặt lại trạng thái xử lý Enter
+    isProcessingEnterRef.current = false;
     setMentionPopup(prev => ({ ...prev, show: false }));
   };
 
   // Handle keyboard navigation in mention popup
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (!mentionPopup.show) return;
+    if (!mentionPopup.show || mentionPopup.items.length === 0) return;
     
     if (e.key === 'ArrowDown') {
       e.preventDefault();
+      const newIndex = (currentSelectedIndexRef.current + 1) % mentionPopup.items.length;
+      currentSelectedIndexRef.current = newIndex;
+      
       setMentionPopup(prev => ({
         ...prev,
-        selectedIndex: (prev.selectedIndex + 1) % prev.items.length
+        selectedIndex: newIndex
       }));
+      console.log('ArrowDown: Selected index now:', newIndex);
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
+      const newIndex = (currentSelectedIndexRef.current - 1 + mentionPopup.items.length) % mentionPopup.items.length;
+      currentSelectedIndexRef.current = newIndex;
+      
       setMentionPopup(prev => ({
         ...prev,
-        selectedIndex: (prev.selectedIndex - 1 + prev.items.length) % prev.items.length
+        selectedIndex: newIndex
       }));
+      console.log('ArrowUp: Selected index now:', newIndex);
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      handleMentionSelect(mentionPopup.items[mentionPopup.selectedIndex]);
+      
+      // Đánh dấu đang xử lý Enter để ngăn chặn onSelectionUpdate
+      isProcessingEnterRef.current = true;
+      
+      // Sử dụng currentSelectedIndexRef thay vì mentionPopup.selectedIndex
+      if (mentionPopup.items.length > 0) {
+        const currentIndex = currentSelectedIndexRef.current;
+        console.log('Selecting item with index:', currentIndex);
+        
+        if (currentIndex >= 0 && currentIndex < mentionPopup.items.length) {
+          const selectedItem = mentionPopup.items[currentIndex];
+          console.log('Selected item for mention:', selectedItem);
+          
+          // Xử lý mention ngay lập tức
+          handleMentionSelect(selectedItem);
+        }
+      }
     } else if (e.key === 'Escape') {
       e.preventDefault();
       setMentionPopup(prev => ({ ...prev, show: false }));
@@ -1170,8 +1211,15 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
             mentionPopup.items.map((item, index) => (
               <div
                 key={item.id}
-                className={`mention-item ${index === mentionPopup.selectedIndex ? 'selected' : ''}`}
-                onClick={() => handleMentionSelect(item)}
+                className={`mention-item ${index === currentSelectedIndexRef.current ? 'selected' : ''}`}
+                onClick={() => {
+                  // Đánh dấu đang xử lý click
+                  isProcessingEnterRef.current = true;
+                  console.log('Clicked item:', item);
+                  
+                  // Xử lý mention ngay lập tức
+                  handleMentionSelect(item);
+                }}
               >
                 <div className="w-8 h-8 rounded-full flex items-center justify-center text-white" 
                   style={{
