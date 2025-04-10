@@ -56,13 +56,19 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
               <div
                 key={notification.id}
                 className={`block px-4 py-3 hover:bg-gray-50 transition-colors cursor-pointer ${
-                  !notification.read ? 'bg-blue-50' : ''
+                  !notification.isRead ? 'bg-blue-50' : ''
                 }`}
                 onClick={() => onNotificationClick(notification)}
               >
                 <div className="flex justify-between">
                   <p className="text-sm font-medium text-gray-900">
-                    {notification.title}
+                    {notification.type === 'TASK_ASSIGNED' ? 'Task Assigned' :
+                     notification.type === 'TASK_REASSIGNED' ? 'Task Reassigned' :
+                     notification.type === 'TASK_COMPLETED' ? 'Task Completed' :
+                     notification.type === 'TASK_OVERDUE' ? 'Task Overdue' :
+                     notification.type === 'COMMENT_MENTION' ? 'Comment Mention' :
+                     notification.type === 'TASK_COMMENT' ? 'Task Comment' :
+                     notification.type}
                   </p>
                   <span className="text-xs text-gray-500">
                     {new Date(notification.createdAt).toLocaleDateString()}

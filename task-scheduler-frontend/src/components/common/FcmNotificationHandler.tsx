@@ -37,196 +37,105 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
       const data = payload.data || {};
       console.log('[FCM] Data from payload:', data);
       
-      // Force refetch notifications để đảm bảo UI được cập nhật
-      console.log('[FCM] Forcing refetch notifications from server');
-      apolloClient.refetchQueries({
-        include: ['GetNotifications', 'GetNotificationCount'],
-      }).then(() => {
-        console.log('[FCM] ✅ Successfully refetched notifications data');
-      }).catch(err => {
-        console.error('[FCM] ❌ Error refetching notifications:', err);
-      });
+      // Sử dụng cả hai kiểu tên trường (snake_case và camelCase)
+      const notificationId = data.notification_id || data.notificationId;
+      const notificationType = data.notification_type || data.notificationType;
+      const title = payload.notification?.title || 'New notification';
+      const body = payload.notification?.body || '';
       
-      // Cập nhật count cache
-      try {
-        const countCache = apolloClient.readQuery({
-          query: GET_NOTIFICATION_COUNT
+      if (notificationId && notificationType) {
+        console.log('[FCM] Creating new notification object with ID:', notificationId);
+        
+        // Create notification object that matches the structure in GET_NOTIFICATIONS query
+        const newNotification = {
+          __typename: 'Notification',
+          notificationId: notificationId,
+          userId: data.user_id || data.userId || userId,
+          type: notificationType,
+          message: body,
+          isRead: false,
+          createdAt: new Date().toISOString(),
+          projectId: data.project_id || data.projectId || null,
+          taskId: data.task_id || data.taskId || null,
+          commentId: data.comment_id || data.commentId || null,
+          senderId: data.sender_id || data.senderId || null,
+          referenceType: data.reference_type || data.referenceType || null,
+          referenceId: data.reference_id || data.referenceId || null,
+          action: data.action || null
+        };
+        
+        console.log('[FCM] New notification object created:', newNotification);
+        
+        // Trigger custom event before cache update to ensure UI components can respond
+        const event = new CustomEvent('notificationReceived', { 
+          detail: { 
+            payload,
+            notification: newNotification
+          } 
         });
-        console.log('[FCM] Current notification count cache:', countCache);
+        console.log('[FCM] Dispatching notificationReceived event with notification data');
+        window.dispatchEvent(event);
         
-        if (countCache?.getNotificationCount) {
-          const currentUnread = countCache.getNotificationCount.unread || 0;
-          console.log('[FCM] Current unread count:', currentUnread);
-          
-          apolloClient.writeQuery({
-            query: GET_NOTIFICATION_COUNT,
-            data: {
-              getNotificationCount: {
-                ...countCache.getNotificationCount,
-                unread: currentUnread + 1
-              }
-            }
+        // Update cache as needed
+        try {
+          // Force refetch to ensure latest data
+          console.log('[FCM] Forcing refetch of notifications');
+          apolloClient.refetchQueries({
+            include: ['GetNotifications', 'GetNotificationCount'],
           });
-          console.log('[FCM] Updated unread count to:', currentUnread + 1);
           
-          // Gọi sự kiện custom để thông báo cho các component khác cập nhật UI
-          const event = new CustomEvent('notificationReceived', { 
-            detail: { payload } 
+          // Try to update notification count in cache
+          const countCache = apolloClient.readQuery({
+            query: GET_NOTIFICATION_COUNT
           });
-          console.log('[FCM] Dispatching notificationReceived event');
-          window.dispatchEvent(event);
-        } else {
-          console.log('[FCM] No notification count cache found, fetching from server');
-          apolloClient.query({
-            query: GET_NOTIFICATION_COUNT,
-            fetchPolicy: 'network-only'
-          }).then(result => {
-            console.log('[FCM] Fetched notification count:', result.data);
-            if (result.data?.getNotificationCount) {
-              const currentUnread = result.data.getNotificationCount.unread || 0;
-              apolloClient.writeQuery({
-                query: GET_NOTIFICATION_COUNT,
-                data: {
-                  getNotificationCount: {
-                    ...result.data.getNotificationCount,
-                    unread: currentUnread + 1
-                  }
-                }
-              });
-              console.log('[FCM] Updated unread count after fetch to:', currentUnread + 1);
-            }
-          }).catch(err => {
-            console.error('[FCM] Error fetching notification count:', err);
-          });
-        }
-      } catch (cacheError) {
-        console.error('[FCM] Error updating notification count cache:', cacheError);
-      }
-      
-      // Tạo notification mới từ FCM payload
-      try {
-        // Log tất cả các trường trong data để kiểm tra tên trường
-        console.log('[FCM] All data fields from FCM payload:', Object.keys(data));
-        
-        // Kiểm tra chuyển đổi tên trường camelCase vs snake_case
-        console.log('[FCM] Checking field names:');
-        console.log('notification_id:', data.notification_id);
-        console.log('notificationId:', data.notificationId);
-        console.log('notification_type:', data.notification_type);
-        console.log('notificationType:', data.notificationType);
-        console.log('project_id:', data.project_id);
-        console.log('projectId:', data.projectId);
-        console.log('task_id:', data.task_id);
-        console.log('taskId:', data.taskId);
-        
-        // Sử dụng cả hai kiểu tên trường (snake_case và camelCase)
-        const notificationId = data.notification_id || data.notificationId;
-        const notificationType = data.notification_type || data.notificationType;
-        
-        if (notificationId && notificationType) {
-          console.log('[FCM] Creating new notification object');
           
-          const newNotification = {
-            __typename: 'Notification',
-            notificationId: notificationId,
-            userId: data.user_id || data.userId || userId,
-            type: notificationType,
-            message: payload.notification?.body || '',
-            isRead: false,
-            createdAt: new Date().toISOString(),
-            projectId: data.project_id || data.projectId || null,
-            taskId: data.task_id || data.taskId || null,
-            commentId: data.comment_id || data.commentId || null,
-            senderId: data.sender_id || data.senderId || null,
-            metadata: {
-              __typename: 'NotificationMetadata',
-              taskId: data.task_id || data.taskId || null,
-              commentId: data.comment_id || data.commentId || null,
-              link: null
-            }
-          };
-          
-          console.log('[FCM] New notification object created:', newNotification);
-          
-          // Đọc notifications hiện tại từ cache và thêm notification mới
-          try {
-            const notificationsCache = apolloClient.readQuery({
-              query: GET_NOTIFICATIONS
-            });
-            console.log('[FCM] Current notifications cache:', notificationsCache);
+          if (countCache?.getNotificationCount) {
+            const currentUnread = countCache.getNotificationCount.unread || 0;
             
-            // Thêm notification mới vào đầu danh sách
-            if (notificationsCache?.getNotifications) {
-              // Kiểm tra xem notification đã tồn tại chưa
-              const exists = notificationsCache.getNotifications.some(
-                (n: any) => n.notificationId === notificationId
-              );
-              
-              if (!exists) {
-                console.log('[FCM] Adding new notification to cache');
-                apolloClient.writeQuery({
-                  query: GET_NOTIFICATIONS,
-                  data: {
-                    getNotifications: [
-                      newNotification,
-                      ...notificationsCache.getNotifications
-                    ]
-                  }
-                });
-                console.log('[FCM] ✅ Updated notifications cache with new notification');
-              } else {
-                console.log('[FCM] Notification already exists in cache, skipping update');
+            apolloClient.writeQuery({
+              query: GET_NOTIFICATION_COUNT,
+              data: {
+                getNotificationCount: {
+                  ...countCache.getNotificationCount,
+                  unread: currentUnread + 1
+                }
               }
-            } else {
-              console.log('[FCM] No notifications cache found, creating new cache with notification');
+            });
+            console.log('[FCM] Updated unread count in cache to:', currentUnread + 1);
+          }
+          
+          // Update notifications cache if possible
+          const notificationsCache = apolloClient.readQuery({
+            query: GET_NOTIFICATIONS
+          });
+          
+          if (notificationsCache?.getNotifications) {
+            // Check if notification already exists
+            const exists = notificationsCache.getNotifications.some(
+              (n: any) => n.notificationId === notificationId
+            );
+            
+            if (!exists) {
               apolloClient.writeQuery({
                 query: GET_NOTIFICATIONS,
                 data: {
-                  getNotifications: [newNotification]
+                  getNotifications: [
+                    newNotification,
+                    ...notificationsCache.getNotifications
+                  ]
                 }
               });
-              console.log('[FCM] ✅ Created new notifications cache with notification');
+              console.log('[FCM] Added new notification to cache');
             }
-          } catch (notificationCacheError) {
-            console.error('[FCM] Error updating notifications cache:', notificationCacheError);
-            // Nếu không đọc được cache, thử fetch mới
-            console.log('[FCM] Trying to fetch notifications from server');
-            apolloClient.query({
-              query: GET_NOTIFICATIONS,
-              fetchPolicy: 'network-only'
-            }).then(result => {
-              console.log('[FCM] Fetched notifications successfully');
-              if (result.data?.getNotifications) {
-                const exists = result.data.getNotifications.some(
-                  (n: any) => n.notificationId === notificationId
-                );
-                
-                if (!exists) {
-                  apolloClient.writeQuery({
-                    query: GET_NOTIFICATIONS,
-                    data: {
-                      getNotifications: [
-                        newNotification,
-                        ...result.data.getNotifications
-                      ]
-                    }
-                  });
-                  console.log('[FCM] ✅ Updated notifications cache after fetch');
-                }
-              }
-            }).catch(fetchError => {
-              console.error('[FCM] Error fetching notifications:', fetchError);
-            });
           }
-        } else {
-          console.log('[FCM] Missing required fields for notification: notificationId or notificationType');
-          console.log('[FCM] Raw notification payload for debugging:', payload);
+        } catch (cacheError) {
+          console.error('[FCM] Error updating cache:', cacheError);
         }
-      } catch (notificationError) {
-        console.error('[FCM] Error creating new notification:', notificationError);
+      } else {
+        console.log('[FCM] Missing required fields for notification');
       }
     } catch (error) {
-      console.error('[FCM] Error updating notification cache:', error);
+      console.error('[FCM] Error in updateNotificationCache:', error);
     }
   };
   
@@ -259,13 +168,14 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
             
             console.log('[FCM] Parsed notification - Title:', title, 'Body:', body);
             
-            // Chơi âm thanh thông báo
+            // Processing flow:
+            // 1. Play sound notification
             playNotificationSound();
             
-            // Cập nhật cache Apollo để UI tự động cập nhật
+            // 2. Update Apollo cache and trigger UI updates
             updateNotificationCache(payload);
             
-            // Tạo thông báo UI
+            // 3. Create in-app notification toast
             try {
               console.log('[FCM] Creating in-app notification UI');
               const notificationDiv = document.createElement('div');
@@ -285,7 +195,7 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
               document.body.appendChild(notificationDiv);
               console.log('[FCM] In-app notification UI created and appended to DOM');
               
-              // Thêm CSS animation
+              // Add CSS animation for smooth appearance/disappearance
               const style = document.createElement('style');
               style.innerHTML = `
                 @keyframes fadeIn {
@@ -305,12 +215,15 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
               `;
               document.head.appendChild(style);
               
-              // Xử lý sự kiện click
+              // Handle close button action
               const closeButton = notificationDiv.querySelector('#close-notification');
               if (closeButton) {
                 closeButton.addEventListener('click', () => {
                   console.log('[FCM] Close button clicked');
-                  notificationDiv.remove();
+                  notificationDiv.classList.add('animate-fadeOut');
+                  setTimeout(() => {
+                    notificationDiv.remove();
+                  }, 300);
                 });
               }
               
@@ -327,7 +240,10 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
                     if (projectId && taskId) {
                       router.push(`/projects/${projectId}/tasks/${taskId}`);
                     }
-                    notificationDiv.remove();
+                    notificationDiv.classList.add('animate-fadeOut');
+                    setTimeout(() => {
+                      notificationDiv.remove();
+                    }, 300);
                   });
                 }
               }

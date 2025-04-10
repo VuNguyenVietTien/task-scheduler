@@ -7,8 +7,6 @@ import { GET_NOTIFICATIONS, GET_NOTIFICATION_COUNT } from '@/graphql/queries/not
 import { MARK_NOTIFICATION_AS_READ, MARK_ALL_NOTIFICATIONS_AS_READ } from '@/graphql/mutations/notifications';
 import { NotificationService } from '@/services/notificationService';
 import type { Notification, BackendNotification, NotificationType } from '@/types/notification';
-import { useToast } from '@/components/ui/use-toast';
-import { NotificationContext } from '@/context/NotificationContext';
 
 export default function useNotifications() {
   const router = useRouter();
@@ -65,17 +63,65 @@ export default function useNotifications() {
   const handleNotificationReceived = useCallback((event: any) => {
     console.log('[useNotifications] Received notificationReceived event:', event.detail);
     
-    // Fetch lại danh sách thông báo và số lượng chưa đọc
+    // Check if we have the full notification object
+    const newNotification = event.detail?.notification;
+    if (newNotification) {
+      console.log('[useNotifications] Using provided notification object for UI update');
+      
+      // Directly update local cache with the new notification
+      try {
+        // Update the notifications cache
+        const existingData = apolloClient.readQuery({ 
+          query: GET_NOTIFICATIONS 
+        });
+        
+        if (existingData?.notifications) {
+          // Check if this notification already exists to prevent duplicates
+          const exists = existingData.notifications.some(
+            (n: BackendNotification) => n.notificationId === newNotification.notificationId
+          );
+          
+          if (!exists) {
+            // Add the new notification to the cache
+            apolloClient.writeQuery({
+              query: GET_NOTIFICATIONS,
+              data: {
+                notifications: [newNotification, ...existingData.notifications]
+              }
+            });
+            console.log('[useNotifications] Added new notification to cache:', newNotification.notificationId);
+            
+            // Update the notification count
+            const countData = apolloClient.readQuery({ 
+              query: GET_NOTIFICATION_COUNT 
+            });
+            
+            if (countData?.notificationCount) {
+              const newUnreadCount = (countData.notificationCount.unread || 0) + 1;
+              apolloClient.writeQuery({
+                query: GET_NOTIFICATION_COUNT,
+                data: {
+                  notificationCount: {
+                    ...countData.notificationCount,
+                    unread: newUnreadCount
+                  }
+                }
+              });
+              setUnreadCount(newUnreadCount);
+              console.log('[useNotifications] Updated unread count:', newUnreadCount);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('[useNotifications] Error updating cache with new notification:', error);
+      }
+    }
+    
+    // Always refetch to ensure UI is up-to-date
+    console.log('[useNotifications] Refetching notifications and counts');
     refetchNotifications();
     refetchCount();
-    
-    // Cập nhật số lượng thông báo chưa đọc
-    if (countData?.notificationCount) {
-      const newUnreadCount = (countData.notificationCount.unread || 0) + 1;
-      setUnreadCount(newUnreadCount);
-      console.log('[useNotifications] Updated unread count after new notification:', newUnreadCount);
-    }
-  }, [refetchNotifications, refetchCount, countData]);
+  }, [apolloClient, refetchNotifications, refetchCount]);
   
   // Init FCM and setup event listeners
   const initFcm = useCallback(async () => {

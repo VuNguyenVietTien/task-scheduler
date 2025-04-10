@@ -335,6 +335,18 @@ impl FirebaseService {
         let response_json = response.json::<Value>().await?;
         info!("[Firebase] FCM send successful: {:?}", response_json);
         
+        // Log more detailed FCM response for debugging
+        debug!("[Firebase] FCM detailed response for token {}: {}", 
+               device_token,
+               serde_json::to_string_pretty(&response_json).unwrap_or_else(|_| "Could not serialize response".to_string()));
+                
+        // Extract the message ID from response for tracking
+        if let Some(name) = response_json.get("name") {
+            if let Some(message_id) = name.as_str() {
+                info!("[Firebase] FCM message sent with ID: {}", message_id);
+            }
+        }
+        
         Ok(())
     }
     
@@ -360,12 +372,29 @@ impl FirebaseService {
         device_tokens: Vec<String>,
         notification: FcmNotificationPayload,
         data: FcmDataPayload,
-    ) -> Result<serde_json::Value, Box<dyn Error>> {
+    ) -> Result<FcmSendResult, Box<dyn Error>> {
         info!("[Firebase] Sending notification to {} tokens", device_tokens.len());
         
         // Logs detailed information about the notification
         debug!("[Firebase] Notification payload: {:?}", notification);
         debug!("[Firebase] Data payload: {:?}", data);
+        
+        // Log in format similar to notifications API for comparison
+        debug!("[Firebase] Notification structure for comparison with API response:");
+        debug!("  - notification_id: {}", data.notification_id);
+        debug!("  - notification_type: {}", data.notification_type);
+        debug!("  - user_id: {}", data.user_id);
+        if let Some(project_id) = &data.project_id {
+            debug!("  - project_id: {}", project_id);
+        }
+        if let Some(task_id) = &data.task_id {
+            debug!("  - task_id: {}", task_id);
+        }
+        if let Some(comment_id) = &data.comment_id {
+            debug!("  - comment_id: {}", comment_id);
+        }
+        debug!("  - notification title: {}", notification.title);
+        debug!("  - notification body: {}", notification.body);
         
         // Keep track of successful and failed deliveries
         let mut success_count = 0;
@@ -391,18 +420,17 @@ impl FirebaseService {
             }
         }
         
-        // Build the final result object
-        let results = serde_json::json!({
-            "total": success_count + failed_count,
-            "successful": success_count,
-            "failed": failed_count,
-            "tokens": token_results
-        });
+        let result = FcmSendResult {
+            success_count,
+            failure_count: failed_count,
+            total: success_count + failed_count,
+            tokens: token_results,
+        };
         
         info!("[Firebase] FCM batch send results: successful={}, failed={}", 
-               success_count, failed_count);
+               result.success_count, result.failure_count);
         
-        Ok(results)
+        Ok(result)
     }
 
     fn build_fcm_message(
@@ -417,7 +445,6 @@ impl FirebaseService {
                 title: Some(notification.title.clone()),
                 body: Some(notification.body.clone()),
                 channel_id: Some("task_notifications".to_string()),
-                priority: Some("high".to_string()),
                 notification_priority: Some("PRIORITY_HIGH".to_string()),
                 default_vibrate_timings: Some(true),
                 default_sound: Some(true),
@@ -485,7 +512,7 @@ impl FirebaseService {
         }
 
         // Tạo FCM message với cấu trúc đúng
-        FcmV1Message {
+        let fcm_message = FcmV1Message {
             validate_only: Some(false),
             message: Message {
                 token: Some(device_token.to_string()),
@@ -499,7 +526,13 @@ impl FirebaseService {
                 data: Some(fcm_data),
                 ..Default::default()
             },
-        }
+        };
+        
+        // Log the final message structure for debugging
+        debug!("[Firebase] Final FCM message structure: {}", 
+               serde_json::to_string_pretty(&fcm_message).unwrap_or_else(|_| "Could not serialize message".to_string()));
+        
+        fcm_message
     }
 }
 
@@ -668,22 +701,19 @@ struct AccessTokenResponse {
     expires_in: u64,
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Clone, Default)]
 struct FcmV1Message {
     validate_only: Option<bool>,
     message: Message,
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Clone, Default)]
 struct AndroidConfig {
     priority: Option<String>,
     notification: Option<AndroidNotification>,
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Clone, Default)]
 struct ApnsConfig {
     headers: Option<HashMap<String, String>>,
     payload: Option<ApnsPayload>,
@@ -702,26 +732,22 @@ impl Default for WebPushConfig {
     }
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Clone, Default)]
 struct AndroidNotification {
     title: Option<String>,
     body: Option<String>,
     channel_id: Option<String>,
-    priority: Option<String>,
     notification_priority: Option<String>,
     default_vibrate_timings: Option<bool>,
     default_sound: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Clone, Default)]
 struct ApnsPayload {
     aps: Aps,
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Clone, Default)]
 struct Aps {
     alert: Option<ApsAlert>,
     badge: Option<u8>,
@@ -730,22 +756,19 @@ struct Aps {
     mutable_content: Option<bool>,
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Clone, Default)]
 struct ApsAlert {
     title: Option<String>,
     body: Option<String>,
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Clone, Default)]
 struct Notification {
     title: Option<String>,
     body: Option<String>,
 }
 
-#[derive(Debug, Serialize, Clone)]
-#[derive(Default)]
+#[derive(Debug, Serialize, Clone, Default)]
 struct Message {
     token: Option<String>,
     notification: Option<Notification>,
@@ -753,4 +776,12 @@ struct Message {
     android: Option<AndroidConfig>,
     apns: Option<ApnsConfig>,
     webpush: Option<WebPushConfig>,
+}
+
+#[derive(Debug, Serialize, Clone)]
+pub struct FcmSendResult {
+    pub success_count: usize,
+    pub failure_count: usize,
+    pub total: usize,
+    pub tokens: serde_json::Map<String, serde_json::Value>,
 }

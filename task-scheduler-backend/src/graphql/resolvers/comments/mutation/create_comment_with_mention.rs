@@ -226,20 +226,38 @@ pub async fn create_comment_with_mentions(
                                                 extra: std::collections::HashMap::new(),
                                             };
                                             
+                                            // Log full payload structure before sending
+                                            info!("Preparing FCM notification for mentioned user {}", mentioned_uuid);
+                                            debug!("FCM notification payload: {:?}", notification_payload);
+                                            debug!("FCM data payload: {:?}", data_payload);
+                                            debug!("FCM targets {} tokens for user {}", tokens.len(), mentioned_uuid);
+                                            
                                             match firebase.send_notification_to_tokens(
                                                 tokens.clone(),
                                                 notification_payload,
-                                                data_payload
+                                                data_payload.clone()
                                             ).await {
                                                 Ok(fcm_response) => {
                                                     info!("Successfully sent FCM notification to user {}: {:?}", mentioned_uuid, fcm_response);
+                                                    // Add detailed logging for FCM response
+                                                    debug!("FCM response details for mention notification to {}: \n\
+                                                           Success count: {} \n\
+                                                           Failure count: {} \n\
+                                                           Full response: {:?}",
+                                                           mentioned_uuid, 
+                                                           fcm_response.success_count, 
+                                                           fcm_response.failure_count,
+                                                           fcm_response);
+                                                    
+                                                    // Log the data payload for comparison with notifications API
+                                                    debug!("FCM data payload for mention notification: {:?}", data_payload);
                                                 },
                                                 Err(e) => {
                                                     error!("Failed to send FCM notification to user {}: {:?}", mentioned_uuid, e);
+                                                    // Add more detailed error logging
+                                                    error!("FCM error details for mention notification: error_type={:?}", e);
                                                 }
                                             }
-                                        } else {
-                                            debug!("Firebase service is not available");
                                         }
                                     }
                                 }
@@ -342,16 +360,39 @@ pub async fn create_comment_with_mentions(
                                         extra: std::collections::HashMap::new(),
                                     };
                                     
+                                    // Log full payload structure before sending
+                                    info!("Preparing FCM notification for task assignee {}", assignee_id);
+                                    debug!("FCM notification payload: {:?}", notification_payload);
+                                    debug!("FCM data payload: {:?}", data_payload);
+                                    debug!("FCM targets {} tokens for assignee {}", tokens.len(), assignee_id);
+                                    
+                                    // Log the data payload for comparison with notifications API
+                                    debug!("FCM data payload for assignee notification: {:?}", data_payload);
+
                                     match firebase.send_notification_to_tokens(
                                         tokens.clone(),
                                         notification_payload,
-                                        data_payload
+                                        data_payload.clone()
                                     ).await {
                                         Ok(fcm_response) => {
                                             info!("Successfully sent FCM notification to assignee {}: {:?}", assignee_id, fcm_response);
+                                            // Add detailed logging for FCM response
+                                            debug!("FCM response details for assignee notification to {}: \n\
+                                                   Success count: {} \n\
+                                                   Failure count: {} \n\
+                                                   Full response: {:?}",
+                                                   assignee_id, 
+                                                   fcm_response.success_count, 
+                                                   fcm_response.failure_count,
+                                                   fcm_response);
+                                            
+                                            // Log the data payload for comparison with notifications API
+                                            debug!("FCM data payload for assignee notification: {:?}", data_payload);
                                         },
                                         Err(e) => {
                                             error!("Failed to send FCM notification to assignee {}: {:?}", assignee_id, e);
+                                            // Add more detailed error logging
+                                            error!("FCM error details for assignee notification: error_type={:?}", e);
                                         }
                                     }
                                 }
