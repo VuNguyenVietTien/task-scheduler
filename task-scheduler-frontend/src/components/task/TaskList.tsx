@@ -64,7 +64,7 @@ export function TaskList({ tasks, onTaskUpdate }: TaskListProps) {
       <div className="bg-white shadow overflow-hidden sm:rounded-md">
         <ul role="list" className="divide-y divide-gray-200">
           {filteredTasks.map(task => (
-            <li key={task.id}>
+            <li key={task.task_id}>
               <TaskItem task={task} onUpdate={onTaskUpdate} />
             </li>
           ))}

@@ -29,7 +29,7 @@ export default function DashboardPage() {
           <div className="p-6">
             <h2 className="text-lg font-semibold mb-4">Priority Tasks</h2>
             <div className="h-[400px]">
-              <PriorityTaskList tasks={tasks || []} />
+              <PriorityTaskList tasks={tasks || []} title="Priority Tasks" />
             </div>
           </div>
         </div>
@@ -50,7 +50,7 @@ export default function DashboardPage() {
             ) : (
               <div className="space-y-4">
                 {tasks?.slice(0, 5).map(task => (
-                  <div key={task.id} className="border-b pb-4 last:border-b-0">
+                  <div key={task.task_id} className="border-b pb-4 last:border-b-0">
                     <div className="flex items-center justify-between">
                       <h3 className="font-medium text-gray-900">{task.title}</h3>
                       <span className={`

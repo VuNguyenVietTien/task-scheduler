@@ -1,5 +1,5 @@
 import React from 'react';
-import { Task, TaskStatus } from '@/types/task';
+import { Task, TaskStatus, TaskStatuses } from '@/types/task';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
 import clsx from 'clsx';
 
@@ -26,21 +26,27 @@ type ChartData = {
 };
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
-  [TaskStatus.BACKLOG]: '#9ca3af',
-  [TaskStatus.PLANNED]: '#6366f1',
-  [TaskStatus.IN_PROGRESS]: '#eab308',
-  [TaskStatus.IN_REVIEW]: '#8b5cf6',
-  [TaskStatus.DONE]: '#22c55e',
-  [TaskStatus.CANCELLED]: '#6b7280',
+  'todo': '#9ca3af',
+  'pending': '#6366f1',
+  'doing': '#eab308',
+  'review': '#8b5cf6',
+  'done': '#22c55e',
+  'close': '#6b7280',
+  'blocked': '#ff0000',
+  'rejected': '#ff6b00',
+  'archived': '#cccccc'
 };
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
-  [TaskStatus.BACKLOG]: 'Backlog',
-  [TaskStatus.PLANNED]: 'Planned',
-  [TaskStatus.IN_PROGRESS]: 'In Progress',
-  [TaskStatus.IN_REVIEW]: 'In Review',
-  [TaskStatus.DONE]: 'Done',
-  [TaskStatus.CANCELLED]: 'Cancelled',
+  'todo': 'To Do',
+  'pending': 'Pending',
+  'doing': 'In Progress',
+  'review': 'In Review',
+  'done': 'Done',
+  'close': 'Closed',
+  'blocked': 'Blocked',
+  'rejected': 'Rejected',
+  'archived': 'Archived'
 };
 
 export const UserDashboard: React.FC<UserDashboardProps> = ({
@@ -71,14 +77,14 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       <div className="space-y-2">
         {tasks.map(task => (
           <div
-            key={task.id}
+            key={task.task_id}
             className={clsx(
               'p-3 rounded-lg border cursor-pointer transition-all hover:shadow-md',
-              task.status === TaskStatus.DONE
+              task.status === TaskStatuses.DONE
                 ? 'border-green-200 bg-green-50'
                 : 'border-gray-200 bg-white'
             )}
-            onClick={() => onTaskClick(task.id)}
+            onClick={() => onTaskClick(task.task_id)}
           >
             <h4 className="font-medium text-sm">{task.title}</h4>
             <p className="text-xs text-gray-500 mt-1">
@@ -181,7 +187,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
           <div data-testid="deadlines-list">
             {renderTaskList(
               tasks
-                .filter(task => task.status !== TaskStatus.DONE)
+                .filter(task => task.status !== TaskStatuses.DONE)
                 .sort((a, b) => {
                   const dateA = a.deadline ? new Date(a.deadline).getTime() : Number.MAX_SAFE_INTEGER;
                   const dateB = b.deadline ? new Date(b.deadline).getTime() : Number.MAX_SAFE_INTEGER;
@@ -196,7 +202,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
       <div className="bg-white p-6 rounded-lg shadow">
         <h3 className="text-lg font-medium mb-4">Quick Filters</h3>
         <div className="flex gap-2 flex-wrap">
-          {Object.values(TaskStatus).map(status => (
+          {Object.values(TaskStatuses).map(status => (
             <button
               key={status}
               onClick={() => onFilter({ status })}
@@ -205,7 +211,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 'border border-gray-300 hover:bg-gray-50'
               )}
             >
-              {STATUS_LABELS[status]}
+              {STATUS_LABELS[status as TaskStatus]}
             </button>
           ))}
         </div>

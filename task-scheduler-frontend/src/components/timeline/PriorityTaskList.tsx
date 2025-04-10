@@ -26,6 +26,13 @@ import { restrictToVerticalAxis } from '@dnd-kit/modifiers';
 import { useAppDispatch } from '@/redux/hooks';
 import { updateTaskOrder } from '@/redux/features/taskOrderStore';
 import { processTasksAndUpdateStore } from '@/utils/taskScheduler';
+// Replace the incorrect import with a utility function
+// import { classNames } from '@/utils/classNames';
+
+// Simple utility function for combining class names
+const classNames = (...classes: (string | undefined | boolean)[]) => {
+  return classes.filter(Boolean).join(' ');
+};
 
 interface PriorityTaskListProps {
   tasks: Task[];
@@ -33,6 +40,11 @@ interface PriorityTaskListProps {
   onTaskReorder?: (taskId: string, newIndex: number) => void;
   activePlanId?: string | null;
   autoSort?: boolean;
+  title: string;
+  showCount?: boolean;
+  headerAction?: React.ReactNode;
+  containerClassName?: string;
+  maxHeight?: string;
 }
 
 // Component cho task có thể kéo thả trong PriorityTaskList
@@ -108,7 +120,12 @@ export function PriorityTaskList({
   onTaskClick, 
   onTaskReorder, 
   activePlanId, 
-  autoSort 
+  autoSort,
+  title,
+  showCount,
+  headerAction,
+  containerClassName,
+  maxHeight
 }: PriorityTaskListProps) {
   const [activeTasks, setActiveTasks] = useState<Task[]>([]);
   const [hasUserReordered, setHasUserReordered] = useState(false);
@@ -227,6 +244,8 @@ export function PriorityTaskList({
       <p>Không có công việc nào để hiển thị</p>
     </div>
   );
+
+  const hasItems = activeTasks.length > 0;
 
   return (
     <div className="flex flex-col">

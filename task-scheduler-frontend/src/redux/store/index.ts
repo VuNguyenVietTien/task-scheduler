@@ -5,6 +5,7 @@ import membersReducer from '../features/membersSlice';
 import plansReducer from '../features/plansSlice';
 import taskOrderReducer from '../features/taskOrderStore';
 import taskDetailReducer from '../features/taskDetailSlice';
+import notificationsReducer from '../features/notificationsSlice';
 
 export const store = configureStore({
   reducer: {
@@ -13,7 +14,8 @@ export const store = configureStore({
     members: membersReducer,
     plans: plansReducer,
     taskOrder: taskOrderReducer,
-    taskDetail: taskDetailReducer
+    taskDetail: taskDetailReducer,
+    notifications: notificationsReducer
   },
   middleware: (getDefaultMiddleware) => getDefaultMiddleware({
     serializableCheck: false, // Disable cho phép lưu trữ non-serializable values trong Redux store
