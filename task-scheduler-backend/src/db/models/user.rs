@@ -1,18 +1,25 @@
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 use serde::{Serialize, Deserialize};
+use serde_json::Value;
+use sqlx::FromRow;
 
-#[derive(Debug, Clone, Serialize, Deserialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, FromRow, Clone)]
 pub struct User {
-    pub user_id: Uuid,
+    pub id: i32,
+    pub name: String,
     pub email: String,
-    pub full_name: String,
-    pub username: String,
-    pub password_hash: String,
     pub avatar_url: Option<String>,
-    pub bio: Option<String>,
-    pub work_capacity: f32,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub firebase_uid: Option<String>,
+    pub fcm_tokens: Option<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FcmToken {
+    pub token: String,
+    pub device_id: Option<String>,
     pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,
-    pub is_deleted: bool,
+    pub last_used_at: Option<DateTime<Utc>>,
 }

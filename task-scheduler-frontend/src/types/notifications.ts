@@ -15,8 +15,9 @@ export interface Notification {
   type: NotificationType;
   title: string;
   message: string;
-  read: boolean;
-  created_at: string;
+  isRead: boolean;
+  createdAt: string;
+  updatedAt: string;
   metadata: Record<string, any>;
 }
 
@@ -27,7 +28,7 @@ export interface NotificationCount {
 
 export interface NotificationResponse {
   notifications: Notification[];
-  notification_count: NotificationCount;
+  notificationCount: NotificationCount;
 }
 
 export interface SingleNotificationResponse {

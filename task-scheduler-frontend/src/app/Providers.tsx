@@ -1,16 +1,11 @@
 'use client';
 
-import { ApolloClient, InMemoryCache, ApolloProvider, createHttpLink, ApolloLink, split } from '@apollo/client';
-import { GraphQLWsLink } from '@apollo/client/link/subscriptions';
-import { getMainDefinition } from '@apollo/client/utilities';
-import { createClient } from 'graphql-ws';
+import { ApolloClient, InMemoryCache, ApolloProvider, createHttpLink, ApolloLink } from '@apollo/client';
 import { useState, useEffect } from 'react';
 import { AuthProvider } from '@/contexts/AuthContext';
 import { QueryProvider } from '@/providers/QueryProvider';
 import { SyncProvider } from '@/providers/SyncProvider';
-import { ToastProvider } from '@/components/ui/toast/toast-provider';
 
-// HTTP link for queries and mutations
 const httpLink = createHttpLink({
   uri: `${process.env.NEXT_PUBLIC_BACKEND_URL}/graphql`,
   credentials: 'include'
@@ -108,46 +103,13 @@ const errorLink = new ApolloLink((operation, forward) => {
 });
 
 function createApolloClient() {
-  // Create an HTTP link for queries and mutations
-  const httpWithMiddleware = ApolloLink.from([
-    loggerMiddleware,
-    errorLink,
-    authMiddleware,
-    httpLink
-  ]);
-  
-  // Create WebSocket link for subscriptions
-  // WebSocket URL should match your backend subscription endpoint 
-  // (typically the same URL as GraphQL but with ws:// or wss:// protocol)
-  const wsLink = typeof window !== 'undefined' 
-    ? new GraphQLWsLink(createClient({
-        url: `${process.env.NEXT_PUBLIC_BACKEND_URL?.replace('http', 'ws') || 'ws://localhost:8080'}/graphql/subscriptions`,
-        connectionParams: () => {
-          const token = getToken();
-          return token ? {
-            Authorization: `Bearer ${token}`
-          } : {};
-        }
-      }))
-    : null;
-    
-  // Use split to route the operations based on their type
-  const splitLink = wsLink 
-    ? split(
-        ({ query }) => {
-          const definition = getMainDefinition(query);
-          return (
-            definition.kind === 'OperationDefinition' &&
-            definition.operation === 'subscription'
-          );
-        },
-        wsLink,
-        httpWithMiddleware
-      )
-    : httpWithMiddleware;
-  
   return new ApolloClient({
-    link: splitLink,
+    link: ApolloLink.from([
+      loggerMiddleware,
+      errorLink,
+      authMiddleware,
+      httpLink
+    ]),
     cache: new InMemoryCache(),
     defaultOptions: {
       watchQuery: {
@@ -185,13 +147,11 @@ export default function Providers({
   return (
     <QueryProvider>
       <AuthProvider>
-        <ToastProvider>
-          <SyncProvider>
-            <ApolloProvider client={client}>
-              {children}
-            </ApolloProvider>
-          </SyncProvider>
-        </ToastProvider>
+        <SyncProvider>
+          <ApolloProvider client={client}>
+            {children}
+          </ApolloProvider>
+        </SyncProvider>
       </AuthProvider>
     </QueryProvider>
   );

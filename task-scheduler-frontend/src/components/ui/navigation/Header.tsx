@@ -5,7 +5,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import NotificationDropdown from './NotificationDropdown';
 import AccountDropdown from './AccountDropdown';
-import { useNotifications } from '@/hooks/useNotifications';
+import useNotifications from '@/hooks/useNotifications';
 
 const Header = () => {
   const { 

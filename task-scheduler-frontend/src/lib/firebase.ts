@@ -18,12 +18,27 @@ const firebaseConfig = {
   storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
   messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
+  measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID
 };
+
+console.log('[Firebase] Initializing with config:', 
+  Object.keys(firebaseConfig).reduce((acc: Record<string, string>, key) => {
+    const value = firebaseConfig[key as keyof typeof firebaseConfig];
+    if (key === 'apiKey' && typeof value === 'string') {
+      acc[key] = value.substring(0, 8) + '...';
+    } else {
+      acc[key] = value as string;
+    }
+    return acc;
+  }, {})
+);
 
 try {
   app = getApp();
+  console.log('[Firebase] Using existing Firebase app');
 } catch {
   app = initializeApp(firebaseConfig);
+  console.log('[Firebase] Firebase app initialized');
 }
 
 export const auth = getAuth(app);

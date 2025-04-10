@@ -32,11 +32,11 @@ impl CommentMutation {
         
         info!("GraphQL create_comment called by user {} for task {}", user_id, input.task_id);
         
-        // Get broadcaster from context
-        let broadcaster = context.get_broadcaster();
+        // Get firebase service if available from data context
+        let firebase_service = ctx.data::<crate::firebase::FirebaseService>().ok();
         
         // Create comment with mention detection and notifications
-        let comment = create_comment_with_mentions(pool, user_id, input, broadcaster)
+        let comment = create_comment_with_mentions(pool, user_id, input, firebase_service)
             .await
             .map_err(|e| {
                 error!("Failed to create comment: {:?}", e);

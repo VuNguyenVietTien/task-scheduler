@@ -14,11 +14,11 @@ import { vi } from 'date-fns/locale';
 const GET_NOTIFICATIONS = gql`
   query GetNotifications($limit: Int) {
     notifications(limit: $limit) {
-      id
+      notificationId
       type
       title
       message
-      read
+      isRead
       created_at
       metadata
     }
@@ -27,8 +27,8 @@ const GET_NOTIFICATIONS = gql`
 `;
 
 const MARK_NOTIFICATION_AS_READ = gql`
-  mutation MarkNotificationAsRead($id: UUID!) {
-    markNotificationAsRead(id: $id)
+  mutation MarkNotificationAsRead($notificationId: UUID!) {
+    markNotificationAsRead(notificationId: $notificationId)
   }
 `;
 
@@ -69,12 +69,12 @@ export default function Header() {
   }, []);
 
   const isActive = (path: string) => {
-    return pathname === path || pathname.startsWith(`${path}/`);
+    return pathname === path || pathname?.startsWith(`${path}/`);
   };
   
   const handleNotificationClick = async (notificationId: string) => {
     try {
-      await markAsRead({ variables: { id: notificationId } });
+      await markAsRead({ variables: { notificationId: notificationId } });
       refetch();
     } catch (error) {
       console.error('Error marking notification as read:', error);
@@ -144,12 +144,12 @@ export default function Header() {
                         ) : data?.notifications?.length > 0 ? (
                           data.notifications.map((notification: any) => (
                             <div
-                              key={notification.id}
+                              key={notification.notificationId}
                               className={`px-4 py-3 hover:bg-gray-50 cursor-pointer ${
-                                !notification.read ? 'bg-blue-50' : ''
+                                !notification.isRead ? 'bg-blue-50' : ''
                               }`}
                               onClick={() => {
-                                handleNotificationClick(notification.id);
+                                handleNotificationClick(notification.notificationId);
                                 if (notification.metadata?.taskId) {
                                   navigateToTask(notification.metadata.taskId);
                                 }

@@ -3,16 +3,10 @@ import { gql } from '@apollo/client';
 export const GET_NOTIFICATIONS = gql`
   query GetNotifications {
     notifications {
-      id
+      notificationId
       userId
-      projectId
-      senderId
-      type
-      referenceType
-      referenceId
       message
-      action
-      metadata
+      type
       isRead
       createdAt
     }
@@ -20,18 +14,11 @@ export const GET_NOTIFICATIONS = gql`
 `;
 
 export const GET_NOTIFICATION = gql`
-  query GetNotification($id: UUID!) {
-    notification(id: $id) {
+  query GetNotification($notificationId: UUID!) {
+    notification(notificationId: $notificationId) {
       notificationId
-      userId
-      projectId
-      senderId
       type
-      referenceType
-      referenceId
       message
-      action
-      metadata
       isRead
       createdAt
     }

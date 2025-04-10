@@ -1,10 +1,11 @@
 use chrono::{DateTime, NaiveDate, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::postgres::PgRow;
 use sqlx::{FromRow, Row};
 use uuid::Uuid;
 
-use crate::db::types::{BugSeverity, BugStatus};
+use crate::db::queries::reports::{BugSeverity, BugStatus};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Bug {

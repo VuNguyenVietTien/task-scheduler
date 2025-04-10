@@ -19,8 +19,8 @@ export interface NotificationResponse {
 
 export interface MarkNotificationAsReadResponse {
   markNotificationAsRead: {
-    id: string;
-    read: boolean;
+    notificationId: string;
+    isRead: boolean;
   };
 }
 

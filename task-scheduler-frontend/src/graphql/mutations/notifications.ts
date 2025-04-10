@@ -3,7 +3,7 @@ import { gql } from '@apollo/client';
 export const CREATE_NOTIFICATION = gql`
   mutation CreateNotification($input: CreateNotificationInput!) {
     createNotification(input: $input) {
-      id
+      notificationId
       type
       message
       isRead
@@ -14,9 +14,9 @@ export const CREATE_NOTIFICATION = gql`
 `;
 
 export const MARK_NOTIFICATION_AS_READ = gql`
-  mutation MarkNotificationAsRead($id: ID!) {
-    markNotificationAsRead(id: $id) {
-      id
+  mutation MarkNotificationAsRead($notificationId: UUID!) {
+    markNotificationAsRead(notificationId: $notificationId) {
+      notificationId
       isRead
     }
   }

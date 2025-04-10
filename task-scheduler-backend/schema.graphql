@@ -308,6 +308,21 @@ type Mutation {
   Set a plan as active
   """
   setPlanActive(id: String!): Plan!
+
+  """
+  Delete account
+  """
+  deleteAccount: Boolean!
+  
+  """
+  Register FCM token for push notifications
+  """
+  registerFcmToken(token: String!, deviceId: String): Boolean!
+  
+  """
+  Unregister FCM token when logging out
+  """
+  unregisterFcmToken(token: String!): Boolean!
 }
 
 # Types

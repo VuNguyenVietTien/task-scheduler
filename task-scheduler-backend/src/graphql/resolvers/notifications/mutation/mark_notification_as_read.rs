@@ -8,7 +8,7 @@ use crate::graphql::types::Notification;
 
 pub async fn mark_notification_as_read(
     ctx: &Context<'_>,
-    id: ID,
+    notification_id: ID,
 ) -> Result<Notification> {
     let context = ctx.data::<GraphQLContext>()?;
     let pool = &context.db;
@@ -16,7 +16,7 @@ pub async fn mark_notification_as_read(
         .ok_or_else(|| AuthError::Unauthorized("Not authenticated".to_string()))?
         .user_id()?;
     
-    let notification_id = Uuid::parse_str(&id)?;
+    let notification_id = Uuid::parse_str(&notification_id)?;
     
     let notification = db_mark_notification_as_read(pool, notification_id, user_id)
         .await

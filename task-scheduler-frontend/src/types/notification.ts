@@ -1,7 +1,20 @@
-export type NotificationType = 'TASK_ASSIGNED' | 'TASK_REASSIGNED' | 'TASK_COMPLETED' | 'TASK_OVERDUE' | 'COMMENT_MENTION';
-
+export type NotificationType = 'TASK_ASSIGNED' | 'TASK_REASSIGNED' | 'TASK_COMPLETED' | 'TASK_OVERDUE' | 'COMMENT_MENTION' | 'TASK_COMMENT' | 'COMMENT_MENTION';
+// column_name               |
+// --------------------------+
+// notification_id           |
+// user_id                   |
+// type                      |
+// reference_type            |
+// reference_id              |
+// message                   |
+// is_read                   |
+// created_at                |
+// project_id                |
+// sender_id                 |
+// action                    |
+// metadata                  |
 export interface BackendNotification {
-  id: string;
+  notificationId?: string;
   userId: string;
   type: string;
   referenceType: string;
@@ -19,10 +32,9 @@ export interface BackendNotification {
 export interface Notification {
   id: string;
   userId: string;
-  title: string;
   message: string;
   type: NotificationType;
-  read: boolean;
+  isRead: boolean;
   createdAt: string;
   projectId?: string;
   taskId?: string;
@@ -43,7 +55,6 @@ export interface NotificationCount {
 
 export interface CreateNotificationInput {
   userId: string;
-  title: string;
   message: string;
   type: NotificationType;
   projectId?: string;
@@ -52,10 +63,13 @@ export interface CreateNotificationInput {
   senderId?: string;
 }
 
+// Response interfaces updated for new naming convention
 export interface NotificationQueryResponse {
-  notifications: BackendNotification[];
+  getNotifications?: BackendNotification[];
+  notifications?: BackendNotification[];  // Fallback for backward compatibility
 }
 
 export interface NotificationCountQueryResponse {
-  notificationCount: NotificationCount;
+  getNotificationCount?: NotificationCount;
+  notificationCount?: NotificationCount;  // Fallback for backward compatibility
 }

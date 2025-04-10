@@ -17,7 +17,7 @@ pub struct NotificationMutation;
 
 #[Object]
 impl NotificationMutation {
-    async fn mark_as_read(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
+    async fn mark_as_read(&self, ctx: &Context<'_>, notification_id: String) -> Result<bool> {
         // TODO: Implement actual mark as read logic
         Ok(true)
     }

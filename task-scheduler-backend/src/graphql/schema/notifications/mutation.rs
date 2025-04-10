@@ -19,7 +19,7 @@ impl NotificationMutation {
     async fn mark_notification_as_read(
         &self, 
         ctx: &Context<'_>, 
-        id: ID
+        notification_id: ID
     ) -> Result<Notification> {
         // This will be implemented in the resolver
         Err(Error::new("Not implemented"))

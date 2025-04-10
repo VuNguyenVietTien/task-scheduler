@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 #[derive(SimpleObject)]
 pub struct Notification {
-    pub id: ID,
+    pub notification_id: ID,
     pub user_id: ID,
     pub project_id: Option<ID>,
     pub sender_id: Option<ID>,
@@ -41,7 +41,7 @@ pub struct NotificationCount {
 impl From<crate::db::models::Notification> for Notification {
     fn from(notif: crate::db::models::Notification) -> Self {
         Self {
-            id: notif.notification_id.to_string().into(),
+            notification_id: notif.notification_id.to_string().into(),
             user_id: notif.user_id.to_string().into(),
             project_id: notif.project_id.map(|id| id.to_string().into()),
             sender_id: notif.sender_id.map(|id| id.to_string().into()),

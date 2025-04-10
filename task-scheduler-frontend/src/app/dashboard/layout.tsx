@@ -1,8 +1,15 @@
 'use client';
 
-import { useAuth } from '@/hooks/useAuth';
+import { useAuth } from '@/contexts/AuthContext';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
+import dynamic from 'next/dynamic';
+
+// Import FCM handler dynamically to avoid SSR issues
+const FcmNotificationHandler = dynamic(
+  () => import('@/components/common/FcmNotificationHandler'),
+  { ssr: false }
+);
 
 export default function DashboardLayout({
   children,
@@ -62,6 +69,9 @@ export default function DashboardLayout({
       <main className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         {children}
       </main>
+      
+      {/* FCM Notification handler will initialize notifications */}
+      {user && <FcmNotificationHandler userId={user.id} />}
     </div>
   );
 }

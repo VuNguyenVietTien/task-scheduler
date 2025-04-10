@@ -2,7 +2,6 @@ use async_graphql::{EmptySubscription, MergedObject, Schema};
 use sqlx::PgPool;
 
 use crate::graphql::{
-    Context,
     resolvers::{
         AuthMutation,
         CommentMutation, CommentQuery,
@@ -20,6 +19,7 @@ use crate::graphql::{
     types::{ProjectPriority, ProjectStatus, ProjectVisibility, MemberRole},
 };
 use crate::config::Config;
+use crate::firebase::FirebaseService;
 
 #[derive(MergedObject, Default)]
 pub struct Query(ProjectQuery, CommentQuery, UserQuery, ProjectMemberQuery, TaskQuery, MemberQuery, PlanQuery, NotificationQuery);
@@ -30,20 +30,18 @@ pub struct Mutation(AuthMutation, ProjectMutation, CommentMutation, UserMutation
 pub type AppSchema = Schema<Query, Mutation, EmptySubscription>;
 
 pub fn create_schema(pool: PgPool, config: Config) -> AppSchema {
-    let schema = Schema::build(
-        Query::default(),
-        Mutation::default(),
-        EmptySubscription,
-    )
-    .data(Context::new(
-        pool.clone(),
-        None,
-        ProjectLoader::new(pool.clone()),
-        UserLoader::new(pool.clone()),
-        config.clone(),
-        None,
-    ))
-    .finish();
-
-    schema
+    let pool_ref = &pool;
+    
+    // Initialize Firebase service
+    let firebase_service = FirebaseService::new("config/firebase-service-account.json".to_string())
+        .expect("Failed to initialize Firebase service in GraphQL schema");
+    
+    Schema::build(Query::default(), Mutation::default(), EmptySubscription)
+        .data(pool_ref.clone())
+        .data(ProjectLoader::new(pool_ref.clone()))
+        .data(UserLoader::new(pool_ref.clone()))
+        .data(config)
+        .data(firebase_service)
+        .enable_federation()
+        .finish()
 }

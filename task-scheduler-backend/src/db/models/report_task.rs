@@ -4,7 +4,7 @@ use sqlx::postgres::PgRow;
 use sqlx::{FromRow, Row};
 use uuid::Uuid;
 
-use crate::db::types::TaskStatus;
+use crate::db::enums::TaskStatus;
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ReportTask {

@@ -4,6 +4,10 @@ mod task;
 mod task_status;
 mod comment;
 mod notification;
+mod user;
+mod bug;
+mod report;
+mod report_task;
 
 pub use member::*;
 pub use project::*;
@@ -11,3 +15,7 @@ pub use task::*;
 pub use task_status::*;
 pub use comment::*;
 pub use notification::*;
+pub use user::*;
+pub use bug::*;
+pub use report::*;
+pub use report_task::*;

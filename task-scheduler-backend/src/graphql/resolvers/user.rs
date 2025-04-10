@@ -1,6 +1,9 @@
 use async_graphql::{Context, Object, ID, Result, InputObject};
 use uuid::Uuid;
 use sqlx::{PgPool, Row};
+use crate::auth::error::AuthError;
+use crate::graphql::context::Context as GraphQLContext;
+use crate::db::queries::user;
 
 pub struct UserResponse {
     pub id: String,
@@ -177,5 +180,66 @@ impl UserMutation {
         .map_err(|e| async_graphql::Error::new(format!("Row mapping error: {}", e)))?;
 
         Ok(record)
+    }
+
+    /// Register FCM token for push notifications
+    pub async fn register_fcm_token(
+        &self,
+        ctx: &Context<'_>,
+        token: String,
+        device_id: Option<String>,
+    ) -> Result<bool> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let pool = &context.db;
+        
+        // Get current user from context
+        let current_user = context.auth.as_ref()
+            .ok_or_else(|| AuthError::Unauthorized("Not authenticated".to_string()))?;
+        
+        let user_id = current_user.user_id()?;
+        
+        // Add FCM token to user
+        user::add_fcm_token(
+            pool, 
+            user_id, 
+            &token,
+            device_id.as_deref(),
+        ).await
+        .map_err(|e| {
+            eprintln!("Error registering FCM token: {:?}", e);
+            AuthError::Database(e)
+        })?;
+        
+        Ok(true)
+    }
+
+    /// Unregister FCM token
+    pub async fn unregister_fcm_token(
+        &self,
+        ctx: &Context<'_>,
+        token: String,
+    ) -> Result<bool> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let pool = &context.db;
+        
+        // Get current user from context
+        let current_user = context.auth.as_ref()
+            .ok_or_else(|| AuthError::Unauthorized("Not authenticated".to_string()))?;
+        
+        let user_id = current_user.user_id()?;
+        
+        // Remove FCM token from user
+        user::remove_fcm_token(
+            pool, 
+            user_id, 
+            &token
+        )
+        .await
+        .map_err(|e| {
+            eprintln!("Error unregistering FCM token: {:?}", e);
+            AuthError::Database(e)
+        })?;
+        
+        Ok(true)
     }
 }

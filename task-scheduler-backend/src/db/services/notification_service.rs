@@ -2,41 +2,12 @@ use sqlx::PgPool;
 use uuid::Uuid;
 use serde_json::json;
 use async_graphql::Error;
-use std::sync::Arc;
+use chrono::Utc;
 
 use crate::db::queries::notification::create_notification;
 use crate::db::models::CreateNotificationInput;
-use crate::websocket::NotificationBroadcaster;
-use crate::websocket::NotificationMessage;
-
-/// Broadcast notification through WebSocket
-pub async fn broadcast_notification(
-    broadcaster: Option<&Arc<NotificationBroadcaster>>, 
-    notification_id: Uuid,
-    user_id: Uuid,
-    type_: &str,
-    message: &str,
-    content: serde_json::Value,
-) {
-    if let Some(broadcaster) = broadcaster {
-        let notification = NotificationMessage {
-            id: notification_id,
-            user_id,
-            type_: type_.to_string(),
-            content,
-            created_at: chrono::offset::Utc::now().into(),
-        };
-        
-        println!("Broadcasting notification to websocket: {:?}", notification);
-        
-        match broadcaster.send(notification) {
-            Ok(receivers) => println!("Notification broadcasted to {} receivers", receivers),
-            Err(err) => println!("Failed to broadcast notification: {}", err),
-        };
-    } else {
-        println!("No broadcaster available, skipping websocket notification");
-    }
-}
+use crate::firebase::{FirebaseService, FcmNotificationPayload, FcmDataPayload};
+use crate::db::queries::user::get_fcm_tokens;
 
 /// Create a notification for task assignment
 pub async fn create_task_assignment_notification(
@@ -46,7 +17,6 @@ pub async fn create_task_assignment_notification(
     assignee_id: Uuid,
     created_by: Uuid,
     task_title: &str,
-    broadcaster: Option<&Arc<NotificationBroadcaster>>,
 ) -> Result<(), sqlx::Error> {
     // Don't create notification if the assignee is the same as the creator
     if assignee_id == created_by {
@@ -69,22 +39,7 @@ pub async fn create_task_assignment_notification(
         })),
     };
 
-    let notification = create_notification(pool, input).await?;
-    
-    // Broadcast through WebSocket
-    broadcast_notification(
-        broadcaster,
-        notification.notification_id,
-        assignee_id,
-        "task_assignment",
-        &format!("You have been assigned to task: {}", task_title),
-        json!({
-            "task_id": task_id.to_string(),
-            "project_id": project_id.to_string(),
-            "task_title": task_title,
-        }),
-    ).await;
-
+    create_notification(pool, input).await?;
     Ok(())
 }
 
@@ -94,23 +49,22 @@ pub async fn create_task_reassignment_notification(
     task_id: Uuid,
     project_id: Uuid,
     assignee_id: Uuid,
-    created_by: Uuid,
+    updated_by: Uuid,
     task_title: &str,
-    broadcaster: Option<&Arc<NotificationBroadcaster>>,
 ) -> Result<(), sqlx::Error> {
-    // Don't create notification if the assignee is the same as the creator
-    if assignee_id == created_by {
+    // Don't create notification if the assignee is the same as the updater
+    if assignee_id == updated_by {
         return Ok(());
     }
 
     let input = CreateNotificationInput {
         user_id: assignee_id,
         project_id: Some(project_id),
-        sender_id: Some(created_by),
+        sender_id: Some(updated_by),
         type_: "task_reassignment".to_string(),
         reference_type: "task".to_string(),
         reference_id: task_id,
-        message: format!("You have been reassigned to task: {}", task_title),
+        message: format!("You have been assigned to task: {}", task_title),
         action: "reassign".to_string(),
         metadata: Some(json!({
             "task_id": task_id.to_string(),
@@ -119,196 +73,264 @@ pub async fn create_task_reassignment_notification(
         })),
     };
 
-    let notification = create_notification(pool, input).await?;
-    
-    // Broadcast through WebSocket
-    broadcast_notification(
-        broadcaster,
-        notification.notification_id,
-        assignee_id,
-        "task_reassignment",
-        &format!("You have been reassigned to task: {}", task_title),
-        json!({
-            "task_id": task_id.to_string(),
-            "project_id": project_id.to_string(),
-            "task_title": task_title,
-        }),
-    ).await;
-
+    create_notification(pool, input).await?;
     Ok(())
 }
 
 /// Create a notification for comment mention
 pub async fn create_comment_mention_notification(
     pool: &PgPool,
+    mentioned_user_id: Uuid,
     task_id: Uuid,
     task_title: &str,
     comment_id: Uuid,
-    mentioned_user_id: Uuid,
-    commenter_id: Uuid,
-    project_id: Uuid,
-    broadcaster: Option<&Arc<NotificationBroadcaster>>,
-) -> Result<(), sqlx::Error> {
-    println!(
-        "Creating comment mention notification for user: {}, task: {}",
-        mentioned_user_id, task_id
-    );
-
-    // Don't create notification if the mentioned user is the same as the commenter
-    if mentioned_user_id == commenter_id {
-        println!("Mentioned user is the same as commenter, skipping notification");
-        return Ok(());
+    comment_content: &str,
+    mentioned_by: Uuid,
+    firebase_service: Option<&FirebaseService>,
+) -> Result<Uuid, sqlx::Error> {
+    // Don't create notification if the mentioned user is the same as the comment creator
+    if mentioned_user_id == mentioned_by {
+        println!("Not creating mention notification, mentioned user is the comment creator");
+        return Ok(Uuid::nil());
     }
 
-    println!(
-        "Fetching task title for task: {} to include in notification",
-        task_id
-    );
+    let notification_id = Uuid::new_v4();
 
-    // Get commenter's name
-    let commenter = match sqlx::query!(
+    println!("Creating mention notification - Getting task info for task_id: {}", task_id);
+    
+    // Get project ID for the task
+    let task = sqlx::query!(
         r#"
-        SELECT username as "username!"
-        FROM users
-        WHERE user_id = $1
+        SELECT project_id FROM tasks WHERE task_id = $1
         "#,
-        commenter_id
+        task_id
     )
     .fetch_one(pool)
-    .await
-    {
-        Ok(user) => user.username,
-        Err(err) => {
-            println!("Failed to get commenter name: {}", err);
-            "Someone".to_string()
-        }
-    };
+    .await?;
 
-    println!("Creating notification with commenter name: {}", commenter);
+    // Get mentioned by user info
+    let mentioner = sqlx::query!(
+        r#"
+        SELECT username FROM users WHERE user_id = $1
+        "#,
+        mentioned_by
+    )
+    .fetch_one(pool)
+    .await?;
 
-    let input = CreateNotificationInput {
-        user_id: mentioned_user_id,
-        project_id: Some(project_id),
-        sender_id: Some(commenter_id),
-        type_: "comment_mention".to_string(),
-        reference_type: "comment".to_string(),
-        reference_id: comment_id,
-        message: format!("{} mentioned you in a comment on task: {}", commenter, task_title),
-        action: "mention".to_string(),
-        metadata: Some(json!({
-            "task_id": task_id.to_string(),
-            "project_id": project_id.to_string(),
-            "task_title": task_title,
-            "comment_id": comment_id.to_string(),
-            "commenter": commenter,
-        })),
-    };
+    // Create notification message
+    let mentioner_name = mentioner.username.unwrap_or_else(|| "Someone".to_string());
+    let message = format!("{} mentioned you in a comment on task: {}", mentioner_name, task_title);
+    println!("Notification message: {}", message);
 
-    println!("Inserting mention notification into database");
-    let notification = create_notification(pool, input).await?;
-    println!("Successfully created mention notification");
-    
-    // Broadcast through WebSocket
-    broadcast_notification(
-        broadcaster,
-        notification.notification_id,
+    // Create metadata with task and comment info
+    let metadata = serde_json::json!({
+        "taskId": task_id.to_string(),
+        "projectId": task.project_id.to_string(),
+        "commentId": comment_id.to_string(),
+        "taskTitle": task_title,
+        "excerpt": truncate_comment(comment_content, 100),
+    });
+    println!("Notification metadata: {}", metadata);
+
+    // Lưu thông báo vào bảng notifications - Cải thiện xử lý lỗi
+    let notification = sqlx::query!(
+        r#"
+        INSERT INTO notifications (
+            notification_id, user_id, type, reference_type, reference_id,
+            message, is_read, created_at, project_id, sender_id, action, metadata
+        )
+        VALUES (
+            $1, $2, 'COMMENT_MENTION', 'comment', $3,
+            $4, false, $5, $6, $7, 'comment_mention', $8
+        )
+        RETURNING notification_id
+        "#,
+        notification_id,
         mentioned_user_id,
-        "comment_mention",
-        &format!("{} mentioned you in a comment on task: {}", commenter, task_title),
-        json!({
-            "task_id": task_id.to_string(),
-            "project_id": project_id.to_string(),
-            "task_title": task_title,
-            "comment_id": comment_id.to_string(),
-            "commenter": commenter,
-        }),
-    ).await;
+        comment_id,
+        message,
+        Utc::now(),
+        task.project_id,
+        mentioned_by,
+        metadata
+    )
+    .fetch_one(pool)
+    .await?;
 
-    Ok(())
+    // Send push notification via FCM if firebase service is available
+    if let Some(firebase) = firebase_service {
+        // Get FCM tokens for the mentioned user
+        match get_fcm_tokens(pool, mentioned_user_id).await {
+            Ok(tokens) if !tokens.is_empty() => {
+                println!("Found {} FCM tokens for user {}", tokens.len(), mentioned_user_id);
+                
+                // Create FCM notification payload
+                let notification_payload = FcmNotificationPayload {
+                    title: format!("You were mentioned by {}", mentioner_name),
+                    body: format!("In task: {}", task_title),
+                    icon: None,
+                    click_action: Some("OPEN_TASK".to_string()),
+                };
+                
+                // Create FCM data payload
+                let data_payload = FcmDataPayload {
+                    notification_id: notification_id.to_string(),
+                    notification_type: "COMMENT_MENTION".to_string(),
+                    project_id: Some(task.project_id.to_string()),
+                    task_id: Some(task_id.to_string()),
+                    comment_id: Some(comment_id.to_string()),
+                    user_id: mentioned_user_id.to_string(),
+                    sender_id: Some(mentioned_by.to_string()),
+                    extra: std::collections::HashMap::new(),
+                };
+                
+                // Send notifications to all tokens
+                match firebase.send_fcm_notification_to_multiple(&tokens, notification_payload, data_payload).await {
+                    Ok(_) => println!("Successfully sent FCM notifications for mention"),
+                    Err(e) => println!("Failed to send FCM notifications: {}", e),
+                }
+            },
+            Ok(_) => println!("No FCM tokens found for user {}", mentioned_user_id),
+            Err(e) => println!("Error fetching FCM tokens: {}", e),
+        }
+    } else {
+        println!("Firebase service not available, skipping FCM notification");
+    }
+
+    println!("Successfully created mention notification with ID: {}", notification_id);
+    Ok(notification_id)
 }
 
-/// Create a notification for a comment on a task
+/// Create a notification for task comment
 pub async fn create_task_comment_notification(
     pool: &PgPool,
+    user_id: Uuid,
     task_id: Uuid,
     task_title: &str,
     comment_id: Uuid,
-    assignee_id: Uuid,
+    comment_content: &str,
     commenter_id: Uuid,
-    project_id: Uuid,
-    broadcaster: Option<&Arc<NotificationBroadcaster>>,
-) -> Result<(), sqlx::Error> {
-    println!(
-        "Creating task comment notification for assignee: {}, task: {}",
-        assignee_id, task_id
-    );
-
-    // Don't create notification if the assignee is the same as the commenter
-    if assignee_id == commenter_id {
-        println!("Assignee is the same as commenter, skipping notification");
-        return Ok(());
+    firebase_service: Option<&FirebaseService>,
+) -> Result<Uuid, sqlx::Error> {
+    // Don't create notification if the user is the same as the commenter
+    if user_id == commenter_id {
+        println!("Not creating task comment notification, user is the commenter");
+        return Ok(Uuid::nil());
     }
 
-    // Get commenter's name
-    let commenter = match sqlx::query!(
+    let notification_id = Uuid::new_v4();
+    
+    // Get project ID for the task
+    let task = sqlx::query!(
         r#"
-        SELECT username as "username!"
-        FROM users
-        WHERE user_id = $1
+        SELECT project_id FROM tasks WHERE task_id = $1
+        "#,
+        task_id
+    )
+    .fetch_one(pool)
+    .await?;
+
+    // Get commenter info
+    let commenter = sqlx::query!(
+        r#"
+        SELECT username FROM users WHERE user_id = $1
         "#,
         commenter_id
     )
     .fetch_one(pool)
-    .await
-    {
-        Ok(user) => user.username,
-        Err(err) => {
-            println!("Failed to get commenter name: {}", err);
-            "Someone".to_string()
-        }
-    };
+    .await?;
 
-    println!("Creating notification with commenter name: {}", commenter);
-
-    let input = CreateNotificationInput {
-        user_id: assignee_id,
-        project_id: Some(project_id),
-        sender_id: Some(commenter_id),
-        type_: "task_comment".to_string(),
-        reference_type: "comment".to_string(),
-        reference_id: comment_id,
-        message: format!("{} commented on your task: {}", commenter, task_title),
-        action: "comment".to_string(),
-        metadata: Some(json!({
-            "task_id": task_id.to_string(),
-            "project_id": project_id.to_string(),
-            "task_title": task_title,
-            "comment_id": comment_id.to_string(),
-            "commenter": commenter,
-        })),
-    };
-
-    println!("Inserting task comment notification into database");
-    let notification = create_notification(pool, input).await?;
-    println!("Successfully created task comment notification");
+    // Create notification message
+    let commenter_name = commenter.username.unwrap_or_else(|| "Someone".to_string());
+    let message = format!("{} commented on your task: {}", commenter_name, task_title);
     
-    // Broadcast through WebSocket
-    broadcast_notification(
-        broadcaster,
-        notification.notification_id,
-        assignee_id,
-        "task_comment",
-        &format!("{} commented on your task: {}", commenter, task_title),
-        json!({
-            "task_id": task_id.to_string(),
-            "project_id": project_id.to_string(),
-            "task_title": task_title,
-            "comment_id": comment_id.to_string(),
-            "commenter": commenter,
-        }),
-    ).await;
+    println!("Creating task comment notification: user_id={}, task_id={}, commenter_id={}", 
+        user_id, task_id, commenter_id);
+    println!("Notification message: {}", message);
+    
+    // Lưu thông báo vào bảng notifications với schema phù hợp
+    let notification = sqlx::query!(
+        r#"
+        INSERT INTO notifications (
+            notification_id, user_id, type, reference_type, reference_id,
+            message, is_read, created_at, project_id, sender_id, action, metadata
+        )
+        VALUES (
+            $1, $2, 'TASK_COMMENT', 'comment', $3,
+            $4, false, $5, $6, $7, 'task_comment', $8
+        )
+        RETURNING notification_id
+        "#,
+        notification_id,
+        user_id,
+        comment_id,
+        message,
+        Utc::now(),
+        task.project_id,
+        commenter_id,
+        serde_json::json!({
+            "taskId": task_id.to_string(),
+            "projectId": task.project_id.to_string(),
+            "commentId": comment_id.to_string(),
+            "taskTitle": task_title,
+            "excerpt": truncate_comment(comment_content, 100),
+        })
+    )
+    .fetch_one(pool)
+    .await?;
 
-    Ok(())
+    // Send push notification via FCM if firebase service is available
+    if let Some(firebase) = firebase_service {
+        // Get FCM tokens for the task owner
+        match get_fcm_tokens(pool, user_id).await {
+            Ok(tokens) if !tokens.is_empty() => {
+                println!("Found {} FCM tokens for user {}", tokens.len(), user_id);
+                
+                // Create FCM notification payload
+                let notification_payload = FcmNotificationPayload {
+                    title: format!("New comment from {}", commenter_name),
+                    body: format!("On task: {}", task_title),
+                    icon: None,
+                    click_action: Some("OPEN_TASK".to_string()),
+                };
+                
+                // Create FCM data payload
+                let data_payload = FcmDataPayload {
+                    notification_id: notification_id.to_string(),
+                    notification_type: "TASK_COMMENT".to_string(),
+                    project_id: Some(task.project_id.to_string()),
+                    task_id: Some(task_id.to_string()),
+                    comment_id: Some(comment_id.to_string()),
+                    user_id: user_id.to_string(),
+                    sender_id: Some(commenter_id.to_string()),
+                    extra: std::collections::HashMap::new(),
+                };
+                
+                // Send notifications to all tokens
+                match firebase.send_fcm_notification_to_multiple(&tokens, notification_payload, data_payload).await {
+                    Ok(_) => println!("Successfully sent FCM notifications for task comment"),
+                    Err(e) => println!("Failed to send FCM notifications: {}", e),
+                }
+            },
+            Ok(_) => println!("No FCM tokens found for user {}", user_id),
+            Err(e) => println!("Error fetching FCM tokens: {}", e),
+        }
+    }
+
+    println!("Successfully created task comment notification with ID: {}", notification_id);
+    Ok(notification_id)
+}
+
+// Helper function to truncate comment content for notification
+fn truncate_comment(content: &str, max_length: usize) -> String {
+    if content.len() <= max_length {
+        content.to_string()
+    } else {
+        let mut truncated = content.chars().take(max_length - 3).collect::<String>();
+        truncated.push_str("...");
+        truncated
+    }
 }
 
 pub async fn get_notifications_by_user_id(
@@ -346,23 +368,23 @@ pub async fn get_notification_by_id(
     .await
 }
 
-pub async fn mark_notification_as_read(
-    pool: &PgPool,
-    notification_id: Uuid,
-) -> Result<(), sqlx::Error> {
-    sqlx::query!(
-        r#"
-        UPDATE notifications
-        SET read = true, updated_at = NOW()
-        WHERE id = $1
-        "#,
-        notification_id
-    )
-    .execute(pool)
-    .await?;
+// pub async fn mark_notification_as_read(
+//     pool: &PgPool,
+//     notification_id: Uuid,
+// ) -> Result<(), sqlx::Error> {
+//     sqlx::query!(
+//         r#"
+//         UPDATE notifications
+//         SET read = true, updated_at = NOW()
+//         WHERE notification_id = $1
+//         "#,
+//         notification_id
+//     )
+//     .execute(pool)
+//     .await?;
     
-    Ok(())
-}
+//     Ok(())
+// }
 
 pub async fn mark_all_notifications_as_read(
     pool: &PgPool,

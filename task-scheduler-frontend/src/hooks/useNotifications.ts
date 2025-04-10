@@ -1,157 +1,221 @@
 "use client";
 
-import { useState, useEffect } from 'react';
-import { useQuery, useMutation, useSubscription } from '@apollo/client';
-import { 
-  GET_NOTIFICATIONS, 
-  GET_NOTIFICATION_COUNT
-} from '@/graphql/queries/notifications';
-import { 
-  MARK_NOTIFICATION_AS_READ,
-  MARK_ALL_NOTIFICATIONS_AS_READ
-} from '@/graphql/mutations/notifications';
-import { NOTIFICATION_SUBSCRIPTION } from '@/graphql/subscriptions/notifications';
-import { 
-  Notification, 
-  BackendNotification,
-  NotificationState,
-  NotificationQueryResponse,
-  NotificationCountQueryResponse,
-  NotificationType
-} from '@/types/notification';
+import { useState, useEffect, useCallback } from 'react';
+import { useQuery, useMutation, useApolloClient } from '@apollo/client';
 import { useRouter } from 'next/navigation';
-import { useToastContext as useToast } from '@/components/ui/toast/toast-provider';
-import { useAuth } from '@/contexts/AuthContext';
+import { GET_NOTIFICATIONS, GET_NOTIFICATION_COUNT } from '@/graphql/queries/notifications';
+import { MARK_NOTIFICATION_AS_READ, MARK_ALL_NOTIFICATIONS_AS_READ } from '@/graphql/mutations/notifications';
+import { NotificationService } from '@/services/notificationService';
+import type { Notification, BackendNotification, NotificationType } from '@/types/notification';
+import { useToast } from '@/components/ui/use-toast';
+import { NotificationContext } from '@/context/NotificationContext';
 
-// Helper function to convert BackendNotification to Notification
-const convertBackendNotification = (notification: BackendNotification): Notification => {
-  // Extract metadata to get additional information
-  const metadata = notification.metadata || {};
-  
-  return {
-    id: notification.id,
-    userId: notification.userId,
-    title: notification.action || 'Notification',
-    message: notification.message,
-    type: notification.type as NotificationType,
-    read: notification.isRead,
-    createdAt: notification.createdAt,
-    projectId: notification.projectId,
-    taskId: metadata.taskId,
-    commentId: metadata.commentId,
-    senderId: notification.senderId,
-    link: metadata.link
-  };
-};
-
-export const useNotifications = () => {
+export default function useNotifications() {
   const router = useRouter();
-  const { toast } = useToast();
-  const { user } = useAuth();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [fcmToken, setFcmToken] = useState<string | null>(null);
+  const [unreadCount, setUnreadCount] = useState(0);
+  const apolloClient = useApolloClient();
   
   // Fetch notifications
-  const { data: notificationsData, loading: notificationsLoading, refetch: refetchNotifications } = useQuery<NotificationQueryResponse>(
-    GET_NOTIFICATIONS
-  );
+  const { 
+    data: notificationsData, 
+    loading: notificationsLoading, 
+    error: notificationsError,
+    refetch: refetchNotifications
+  } = useQuery(GET_NOTIFICATIONS, {
+    fetchPolicy: 'network-only',
+    onCompleted: (data) => {
+      console.log('[useNotifications] Fetched notifications:', data?.notifications?.length || 0);
+    }
+  });
   
   // Fetch notification count
-  const { data: countData, loading: countLoading, refetch: refetchCount } = useQuery<NotificationCountQueryResponse>(
-    GET_NOTIFICATION_COUNT
-  );
-  
-  // Subscribe to new notifications
-  const { data: subscriptionData } = useSubscription(NOTIFICATION_SUBSCRIPTION, {
-    onData: ({ data }) => {
-      // Only handle the notification if it's for the current user and toast is available
-      const notification = data.data?.notificationReceived;
-      if (notification && notification.userId === user?.id && toast) {
-        // Refetch notifications and count
-        refetchNotifications();
-        refetchCount();
-        
-        // Show toast notification
-        toast({
-          title: notification.action || 'New notification',
-          description: notification.message,
-          variant: "default",
-        });
-        
-        // Play notification sound
-        const audio = new Audio('/sounds/notification.mp3');
-        audio.play().catch(err => console.error('Failed to play notification sound:', err));
+  const {
+    data: countData,
+    loading: countLoading,
+    error: countError,
+    refetch: refetchCount
+  } = useQuery(GET_NOTIFICATION_COUNT, {
+    fetchPolicy: 'network-only',
+    onCompleted: (data) => {
+      if (data?.notificationCount) {
+        setUnreadCount(data.notificationCount.unread || 0);
+        console.log('[useNotifications] Unread count updated:', data.notificationCount.unread);
       }
     }
   });
   
-  // Mark notification as read mutation
-  const [markAsReadMutation] = useMutation(MARK_NOTIFICATION_AS_READ, {
+  // Mark as read mutation
+  const [markAsRead] = useMutation(MARK_NOTIFICATION_AS_READ, {
     onCompleted: () => {
-      refetchNotifications();
       refetchCount();
     }
   });
   
-  // Mark all notifications as read mutation
-  const [markAllAsReadMutation] = useMutation(MARK_ALL_NOTIFICATIONS_AS_READ, {
+  // Mark all as read mutation
+  const [markAllAsRead] = useMutation(MARK_ALL_NOTIFICATIONS_AS_READ, {
     onCompleted: () => {
-      refetchNotifications();
       refetchCount();
+      refetchNotifications();
     }
   });
-
-  // Convert backend notifications to frontend format
-  const notifications = notificationsData?.notifications 
-    ? notificationsData.notifications.map(convertBackendNotification)
-    : [];
+  
+  // Cập nhật lại danh sách thông báo khi nhận được thông báo mới từ FCM
+  const handleNotificationReceived = useCallback((event: any) => {
+    console.log('[useNotifications] Received notificationReceived event:', event.detail);
     
-  const unreadCount = countData?.notificationCount?.unread || 0;
-
-  const markAsRead = async (id: string) => {
+    // Fetch lại danh sách thông báo và số lượng chưa đọc
+    refetchNotifications();
+    refetchCount();
+    
+    // Cập nhật số lượng thông báo chưa đọc
+    if (countData?.notificationCount) {
+      const newUnreadCount = (countData.notificationCount.unread || 0) + 1;
+      setUnreadCount(newUnreadCount);
+      console.log('[useNotifications] Updated unread count after new notification:', newUnreadCount);
+    }
+  }, [refetchNotifications, refetchCount, countData]);
+  
+  // Init FCM and setup event listeners
+  const initFcm = useCallback(async () => {
     try {
-      await markAsReadMutation({
-        variables: { id }
+      const notificationService = new NotificationService(apolloClient);
+      console.log('[useNotifications] Initializing FCM...');
+      const token = await notificationService.initializeFcm((payload) => {
+        console.log('[useNotifications] FCM message received in hook:', payload);
       });
+      
+      setFcmToken(token);
+      console.log('[useNotifications] FCM token set:', token ? 'success' : 'null');
+      return token;
     } catch (error) {
-      console.error('Failed to mark notification as read:', error);
+      console.error('[useNotifications] Error initializing FCM:', error);
+      return null;
     }
-  };
-
-  const markAllAsRead = async () => {
-    try {
-      await markAllAsReadMutation();
-    } catch (error) {
-      console.error('Failed to mark all notifications as read:', error);
-    }
-  };
-
-  const toggleDropdown = () => {
-    setIsDropdownOpen(prev => !prev);
-  };
-
-  const handleNotificationClick = (notification: Notification) => {
-    if (!notification.read) {
-      markAsRead(notification.id);
+  }, [apolloClient]);
+  
+  // Thiết lập service và event listener cho FCM
+  useEffect(() => {
+    // Đăng ký listener cho sự kiện notificationReceived
+    window.addEventListener('notificationReceived', handleNotificationReceived);
+    
+    // Khởi tạo FCM nếu cần thiết và đang ở client-side
+    if (typeof window !== 'undefined') {
+      initFcm();
     }
     
-    // Navigate to the appropriate page based on notification type
-    if (notification.projectId && notification.taskId) {
-      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}`);
-    } else if (notification.projectId) {
-      router.push(`/projects/${notification.projectId}`);
+    // Cleanup khi component unmount
+    return () => {
+      // Xóa event listener
+      window.removeEventListener('notificationReceived', handleNotificationReceived);
+      
+      // Hủy đăng ký FCM token khi component unmount
+      if (fcmToken) {
+        const notificationService = new NotificationService(apolloClient);
+        notificationService.unregisterFcmToken(fcmToken).catch(console.error);
+      }
+    };
+  }, [apolloClient, handleNotificationReceived, initFcm, fcmToken]);
+  
+  // Xử lý đánh dấu một thông báo đã đọc
+  const handleMarkAsRead = async (notificationId: string) => {
+    try {
+      await markAsRead({
+        variables: { notificationId }
+      });
+      
+      // Cập nhật cache tại chỗ để UI cập nhật ngay lập tức
+      const cachedData = apolloClient.readQuery({ query: GET_NOTIFICATIONS });
+      
+      if (cachedData?.notifications) {
+        const updatedNotifications = cachedData.notifications.map((notification: any) => {
+          if (notification.notificationId === notificationId) {
+            return { ...notification, isRead: true };
+          }
+          return notification;
+        });
+        
+        apolloClient.writeQuery({
+          query: GET_NOTIFICATIONS,
+          data: { notifications: updatedNotifications }
+        });
+      }
+      
+      console.log('[useNotifications] Notification marked as read:', notificationId);
+    } catch (error) {
+      console.error('[useNotifications] Error marking notification as read:', error);
+    }
+  };
+  
+  // Xử lý đánh dấu tất cả thông báo đã đọc
+  const handleMarkAllAsRead = async () => {
+    try {
+      await markAllAsRead();
+      console.log('[useNotifications] All notifications marked as read');
+      setUnreadCount(0);
+    } catch (error) {
+      console.error('[useNotifications] Error marking all notifications as read:', error);
+    }
+  };
+  
+  // Convert backend notifications to frontend format
+  const convertBackendNotification = (notification: BackendNotification): Notification => {
+    return {
+      id: notification.notificationId || '',
+      userId: notification.userId,
+      message: notification.message,
+      type: notification.type as NotificationType,
+      isRead: notification.isRead,
+      createdAt: notification.createdAt,
+      projectId: notification.projectId,
+      taskId: notification.referenceType === 'TASK' ? notification.referenceId : undefined,
+      commentId: notification.referenceType === 'COMMENT' ? notification.referenceId : undefined,
+      senderId: notification.senderId,
+      link: notification.action ? notification.action : undefined
+    };
+  };
+  
+  const notifications = notificationsData?.notifications 
+        ? notificationsData.notifications.map(convertBackendNotification) 
+        : [];
+  
+  const toggleDropdown = () => {
+    setIsDropdownOpen(!isDropdownOpen);
+  };
+  
+  const handleNotificationClick = (notification: Notification) => {
+    if (!notification.isRead) {
+      handleMarkAsRead(notification.id);
+    }
+    
+    // Navigate to related page based on notification type
+    if (notification.type === 'TASK_ASSIGNED' && notification.taskId) {
+      router.push(`/dashboard/tasks/${notification.taskId}`);
+    } else if (notification.type === ('TASK_DUE_SOON' as NotificationType) && notification.taskId) {
+      router.push(`/dashboard/tasks/${notification.taskId}`);
+    } else if (notification.type === ('PROJECT_INVITATION' as NotificationType) && notification.projectId) {
+      router.push(`/dashboard/projects/${notification.projectId}`);
     }
     
     toggleDropdown();
   };
-
+  
   return {
     notifications,
     unreadCount,
     isDropdownOpen,
     toggleDropdown,
-    markAsRead,
-    markAllAsRead,
+    markAsRead: handleMarkAsRead,
+    markAllAsRead: handleMarkAllAsRead,
     handleNotificationClick,
-    loading: notificationsLoading || countLoading
+    loading: notificationsLoading || countLoading,
+    error: notificationsError || countError,
+    refetch: () => {
+      refetchNotifications();
+      refetchCount();
+    },
+    fcmToken,
+    initializeFcm: initFcm
   };
-};
+}

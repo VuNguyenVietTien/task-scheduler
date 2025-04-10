@@ -54,9 +54,9 @@ impl NotificationMutation {
     async fn mark_notification_as_read(
         &self, 
         ctx: &Context<'_>, 
-        id: ID
+        notification_id: ID
     ) -> Result<Notification> {
-        mutation::mark_notification_as_read(ctx, id).await
+        mutation::mark_notification_as_read(ctx, notification_id).await
     }
 
     async fn mark_all_notifications_as_read(

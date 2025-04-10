@@ -306,3 +306,4 @@ role                      |              20|USER-DEFINED            |NO         
 provider                  |              21|USER-DEFINED            |NO         |'email'::user_provider           |
 work_capacity             |              22|integer                 |YES        |                                 |
 metadata                  |              23|jsonb                   |YES        |                                 |
+fcm_tokens                |              24|jsonb                   |YES        |                                 | 
