@@ -372,65 +372,42 @@ impl FirebaseService {
         device_tokens: Vec<String>,
         notification: FcmNotificationPayload,
         data: FcmDataPayload,
-    ) -> Result<FcmSendResult, Box<dyn Error>> {
-        info!("[Firebase] Sending notification to {} tokens", device_tokens.len());
-        
-        // Logs detailed information about the notification
-        debug!("[Firebase] Notification payload: {:?}", notification);
-        debug!("[Firebase] Data payload: {:?}", data);
-        
-        // Log in format similar to notifications API for comparison
-        debug!("[Firebase] Notification structure for comparison with API response:");
-        debug!("  - notification_id: {}", data.notification_id);
-        debug!("  - notification_type: {}", data.notification_type);
-        debug!("  - user_id: {}", data.user_id);
-        if let Some(project_id) = &data.project_id {
-            debug!("  - project_id: {}", project_id);
+    ) -> Result<FcmSendResult, FirebaseError> {
+        if device_tokens.is_empty() {
+            return Ok(FcmSendResult {
+                success_count: 0,
+                failure_count: 0,
+                total: 0,
+                tokens: serde_json::Map::new(),
+            });
         }
-        if let Some(task_id) = &data.task_id {
-            debug!("  - task_id: {}", task_id);
-        }
-        if let Some(comment_id) = &data.comment_id {
-            debug!("  - comment_id: {}", comment_id);
-        }
-        debug!("  - notification title: {}", notification.title);
-        debug!("  - notification body: {}", notification.body);
-        
-        // Keep track of successful and failed deliveries
+
         let mut success_count = 0;
-        let mut failed_count = 0;
-        let mut token_results = serde_json::Map::new();
-        
-        // Process each token
+        let mut failure_count = 0;
+        let mut results = serde_json::Map::new();
+
         for token in device_tokens {
             match self.send_fcm_notification(&token, notification.clone(), data.clone()).await {
                 Ok(_) => {
-                    info!("[Firebase] FCM notification sent to device: {}", token);
                     success_count += 1;
-                    token_results.insert(token, serde_json::json!({"status": "success"}));
+                    results.insert(token.clone(), serde_json::json!({ "status": "success" }));
                 },
                 Err(e) => {
-                    error!("[Firebase] Failed to send FCM to device {}: {}", token, e);
-                    failed_count += 1;
-                    token_results.insert(token, serde_json::json!({
+                    failure_count += 1;
+                    results.insert(token.clone(), serde_json::json!({ 
                         "status": "error",
                         "error": e.to_string()
                     }));
-                },
+                }
             }
         }
-        
-        let result = FcmSendResult {
+
+        Ok(FcmSendResult {
             success_count,
-            failure_count: failed_count,
-            total: success_count + failed_count,
-            tokens: token_results,
-        };
-        
-        info!("[Firebase] FCM batch send results: successful={}, failed={}", 
-               result.success_count, result.failure_count);
-        
-        Ok(result)
+            failure_count,
+            total: success_count + failure_count,
+            tokens: results,
+        })
     }
 
     fn build_fcm_message(
@@ -785,3 +762,16 @@ pub struct FcmSendResult {
     pub total: usize,
     pub tokens: serde_json::Map<String, serde_json::Value>,
 }
+
+#[derive(Debug)]
+pub struct FirebaseError {
+    message: String,
+}
+
+impl std::fmt::Display for FirebaseError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Firebase error: {}", self.message)
+    }
+}
+
+impl std::error::Error for FirebaseError {}

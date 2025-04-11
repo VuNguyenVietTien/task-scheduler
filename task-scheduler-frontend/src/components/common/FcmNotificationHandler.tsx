@@ -5,7 +5,8 @@ import { useApolloClient } from '@apollo/client';
 import { NotificationService } from '@/services/notificationService';
 import { useRouter } from 'next/navigation';
 import { useAppDispatch } from '@/redux/hooks';
-import { addNotification, fetchNotificationCount } from '@/redux/features/notificationsSlice';
+import { addNotification, fetchNotificationCount, incrementUnreadCount } from '@/redux/features/notificationsSlice';
+import type { Notification, NotificationType } from '@/types/notification';
 
 interface FcmNotificationHandlerProps {
   userId?: string | null;
@@ -54,33 +55,49 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
   const processNotification = (payload: any) => {
     console.log('[FcmNotificationHandler] Processing notification:', payload);
     
-    // Extract notification data
-    const notificationData = payload.data;
-    const notification = {
-      id: notificationData.notification_id,
-      userId: notificationData.user_id,
-      message: payload.notification.body,
-      type: notificationData.notification_type,
-      isRead: false,
-      createdAt: new Date().toISOString(),
-      projectId: notificationData.project_id,
-      taskId: notificationData.task_id,
-      commentId: notificationData.comment_id,
-      senderId: notificationData.sender_id,
-      link: `/projects/${notificationData.project_id}/tasks/${notificationData.task_id}${notificationData.comment_id ? `/comments/${notificationData.comment_id}` : ''}`
+    if (!payload.data) {
+        console.warn('[FcmNotificationHandler] No data in notification payload');
+        return;
+    }
+
+    const {
+        notification_id,
+        notification_type,
+        project_id,
+        task_id,
+        comment_id,
+        user_id,
+        sender_id,
+    } = payload.data;
+
+    // Create notification object
+    const notification: Notification = {
+        id: notification_id,
+        userId: user_id,
+        message: payload.notification?.body || '',
+        type: notification_type as NotificationType,
+        isRead: false,
+        createdAt: new Date().toISOString(),
+        projectId: project_id || undefined,
+        taskId: task_id || undefined,
+        commentId: comment_id || undefined,
+        senderId: sender_id || undefined,
+        metadata: {
+            project_id: project_id || '',
+            task_id: task_id || '',
+            comment_id: comment_id,
+            task_title: payload.notification?.title || '',
+        }
     };
-    
-    // Dispatch to Redux store
+
+    // Add to Redux store (this will automatically increment unread count in the reducer)
     dispatch(addNotification(notification));
-    dispatch(fetchNotificationCount());
     
     // Create in-app notification
     createInAppNotification(notification);
     
-    // Create browser notification if app is not in focus
-    if (document.hidden) {
-      createBrowserNotification(notification);
-    }
+    // Create browser notification
+    createBrowserNotification(notification);
   };
   
   useEffect(() => {
@@ -116,35 +133,21 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
   // Create in-app notification element
   const createInAppNotification = (notification: any) => {
     const notificationElement = document.createElement('div');
-    notificationElement.className = 'fixed top-4 right-4 z-50 bg-white shadow-lg rounded-lg p-4 max-w-sm transform transition-all duration-300 translate-x-0 opacity-100';
-    notificationElement.style.width = '320px';
-    
-    // Add notification content
+    notificationElement.className = 'notification-toast';
     notificationElement.innerHTML = `
-      <div class="flex items-start">
-        <div class="flex-shrink-0">
-          <svg class="h-6 w-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
-          </svg>
-        </div>
-        <div class="ml-3 w-0 flex-1">
-          <p class="text-sm font-medium text-gray-900">${notification.message}</p>
-          <p class="mt-1 text-xs text-gray-500">Just now</p>
-        </div>
-        <div class="ml-4 flex-shrink-0 flex">
-          <button class="bg-white rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none">
-            <span class="sr-only">Close</span>
-            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+      <div class="notification-content">
+        <div class="notification-message">${notification.message}</div>
+        <div class="notification-time">Just now</div>
       </div>
     `;
     
-    // Add click handler
     notificationElement.addEventListener('click', () => {
-      window.location.href = notification.link;
+      const { project_id, task_id, comment_id } = notification.metadata;
+      if (comment_id) {
+        window.location.href = `/projects/${project_id}/tasks/${task_id}#comment-${comment_id}`;
+      } else {
+        window.location.href = `/projects/${project_id}/tasks/${task_id}`;
+      }
     });
     
     // Add to DOM
@@ -162,20 +165,29 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
   
   // Create browser notification
   const createBrowserNotification = (notification: any) => {
+    const { project_id, task_id, comment_id, task_title } = notification.metadata;
+    const notificationOptions = {
+      body: notification.message,
+      icon: '/favicon.ico',
+      data: {
+        url: comment_id 
+          ? `/projects/${project_id}/tasks/${task_id}#comment-${comment_id}`
+          : `/projects/${project_id}/tasks/${task_id}`,
+        taskTitle: task_title
+      }
+    };
+    
     if (!('Notification' in window)) {
       console.log('This browser does not support desktop notification');
       return;
     }
     
     if (Notification.permission === 'granted') {
-      const browserNotification = new Notification(notification.message, {
-        body: notification.message,
-        icon: '/notification-icon.png',
-        data: notification
-      });
+      const browserNotification = new Notification(notification.message, notificationOptions);
       
       browserNotification.onclick = () => {
-        window.location.href = notification.link;
+        const { url } = notificationOptions.data;
+        window.location.href = url;
       };
     }
   };

@@ -158,6 +158,10 @@ const notificationsSlice = createSlice({
     },
     clearErrors: (state) => {
       state.error = null;
+    },
+    incrementUnreadCount: (state) => {
+      state.count.unread += 1;
+      state.count.total += 1;
     }
   },
   extraReducers: (builder) => {
@@ -233,7 +237,8 @@ export const {
   addNotification, 
   updateNotificationReadStatus, 
   clearAllNotifications,
-  clearErrors 
+  clearErrors,
+  incrementUnreadCount
 } = notificationsSlice.actions;
 
 export default notificationsSlice.reducer;

@@ -90,14 +90,6 @@ export default function useNotificationsRedux() {
 
       // Dispatch to Redux store
       dispatch(addNotification(notification));
-      dispatch(fetchNotificationCount());
-      
-      // Play notification sound
-      const audio = document.getElementById('notification-sound') as HTMLAudioElement;
-      if (audio) {
-        audio.currentTime = 0;
-        audio.play().catch(e => console.log('[useNotificationsRedux] Error playing sound:', e));
-      }
       
       // Create browser notification if app is not in focus
       if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
@@ -215,37 +207,23 @@ export default function useNotificationsRedux() {
   };
   
   // Handle notification click
-  const handleNotificationClick = async (notification: Notification) => {
-    try {
-      // Mark notification as read first
-      if (!notification.isRead) {
-        await dispatch(markNotificationAsRead(notification.id)).unwrap();
-        console.log('[useNotificationsRedux] Notification marked as read:', notification.id);
-        // Force refresh to update UI
-        dispatch(fetchNotificationCount());
-      }
-
-      // Get project_id, task_id, and comment_id from either metadata or direct fields
-      const projectId = notification.metadata?.project_id || notification.projectId;
-      const taskId = notification.metadata?.task_id || notification.taskId;
-      const commentId = notification.metadata?.comment_id || notification.commentId;
-
-      // Only navigate if we have both projectId and taskId
-      if (projectId && taskId) {
-        // For comment-related notifications, include comment_id in hash
-        if (commentId && (notification.type === 'COMMENT_MENTION' || notification.type === 'TASK_COMMENT')) {
-          router.push(`/projects/${projectId}/tasks/${taskId}#comment-${commentId}`);
-        } else {
-          // For task-related notifications, just link to task
-          router.push(`/projects/${projectId}/tasks/${taskId}`);
-        }
-      }
-      
-      // Close dropdown after clicking
-      toggleDropdown();
-    } catch (error) {
-      console.error('[useNotificationsRedux] Error handling notification click:', error);
+  const handleNotificationClick = (notification: Notification) => {
+    if (notification.type === 'TASK_ASSIGNED' && notification.taskId && notification.projectId) {
+      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}`);
+    } else if (notification.type === 'TASK_REASSIGNED' && notification.taskId && notification.projectId) {
+      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}`);
+    } else if (notification.type === 'TASK_COMPLETED' && notification.taskId && notification.projectId) {
+      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}`);
+    } else if (notification.type === 'TASK_OVERDUE' && notification.taskId && notification.projectId) {
+      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}`);
+    } else if (notification.type === 'COMMENT_MENTION' && notification.taskId && notification.projectId && notification.commentId) {
+      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}#comment-${notification.commentId}`);
+    } else if (notification.type === 'TASK_COMMENT' && notification.taskId && notification.projectId && notification.commentId) {
+      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}#comment-${notification.commentId}`);
     }
+    
+    // Close dropdown after clicking
+    toggleDropdown();
   };
   
   // Toggle dropdown visibility

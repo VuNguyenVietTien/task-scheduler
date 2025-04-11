@@ -59,13 +59,13 @@ async fn create_notification(
         r#"
         INSERT INTO notifications (
             notification_id, user_id, type, reference_type, reference_id, 
-            message, is_read, created_at, project_id, sender_id, action, metadata,
-            task_id, comment_id
+            message, is_read, created_at, project_id, sender_id, action, metadata
+
         )
         VALUES (
             $1, $2, $3, 'comment', $4, 
             $5, false, CURRENT_TIMESTAMP, $6, $7, $8,
-            $9, $10, $11
+            $9
         )
         "#
     )
@@ -87,6 +87,96 @@ async fn create_notification(
     Ok(notification_id)
 }
 
+// Helper function to clean up invalid FCM tokens
+async fn cleanup_invalid_tokens(pool: &PgPool, user_id: Uuid, invalid_tokens: &[String]) -> Result<(), Error> {
+    if invalid_tokens.is_empty() {
+        return Ok(());
+    }
+
+    // Get current tokens
+    let user_result = sqlx::query(
+        "SELECT fcm_tokens FROM users WHERE user_id = $1"
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| Error::new(format!("Failed to fetch user tokens: {:?}", e)))?;
+
+    let current_tokens: Option<serde_json::Value> = user_result.try_get("fcm_tokens")
+        .map_err(|e| Error::new(format!("Failed to get fcm_tokens: {:?}", e)))?;
+
+    // Filter out invalid tokens
+    let valid_tokens: Vec<String> = match current_tokens {
+        Some(value) if value.is_array() => {
+            value.as_array().unwrap().iter()
+                .filter_map(|t| t.as_str().map(|s| s.to_string()))
+                .filter(|token| !invalid_tokens.contains(token))
+                .collect()
+        },
+        _ => Vec::new()
+    };
+
+    // Update user's tokens
+    sqlx::query(
+        "UPDATE users SET fcm_tokens = $1 WHERE user_id = $2"
+    )
+    .bind(serde_json::to_value(valid_tokens).unwrap())
+    .bind(user_id)
+    .execute(pool)
+    .await
+    .map_err(|e| Error::new(format!("Failed to update user tokens: {:?}", e)))?;
+
+    Ok(())
+}
+
+// Helper function to send FCM notifications
+async fn send_fcm_notification(
+    firebase: &FirebaseService,
+    tokens: Vec<String>,
+    notification_payload: crate::firebase::FcmNotificationPayload,
+    data_payload: crate::firebase::FcmDataPayload,
+    user_id: Uuid,
+    pool: &PgPool,
+) -> Result<(), Error> {
+    if tokens.is_empty() {
+        return Ok(());
+    }
+
+    // Send notification to all tokens at once
+    match firebase.send_notification_to_tokens(
+        tokens.clone(),
+        notification_payload,
+        data_payload
+    ).await {
+        Ok(fcm_response) => {
+            info!("Successfully sent FCM notification to user {}: {:?}", user_id, fcm_response);
+            
+            // Check for invalid tokens in response
+            let invalid_tokens: Vec<String> = fcm_response.tokens.iter()
+                .filter(|(_, result)| {
+                    if let Some(error) = result.get("error") {
+                        error.as_str() == Some("UNREGISTERED")
+                    } else {
+                        false
+                    }
+                })
+                .map(|(token, _)| token.clone())
+                .collect();
+
+            // Clean up invalid tokens if any
+            if !invalid_tokens.is_empty() {
+                info!("Cleaning up {} invalid tokens for user {}", invalid_tokens.len(), user_id);
+                cleanup_invalid_tokens(pool, user_id, &invalid_tokens).await?;
+            }
+        },
+        Err(e) => {
+            error!("Failed to send FCM notification to user {}: {:?}", user_id, e);
+        }
+    }
+
+    Ok(())
+}
+
 pub async fn create_comment_with_mentions(
     pool: &PgPool, 
     user_id: Uuid,
@@ -95,8 +185,6 @@ pub async fn create_comment_with_mentions(
 ) -> Result<CommentResponse, Error> {
     info!("Creating comment for task {} with mention detection", input.task_id);
     debug!("Comment content: {}", input.content);
-    
-    // Thêm log kiểm tra Firebase service
     debug!("Firebase service available: {}", firebase_service.is_some());
 
     let task_id = Uuid::parse_str(&input.task_id)
@@ -270,14 +358,15 @@ pub async fn create_comment_with_mentions(
                                             extra: std::collections::HashMap::new(),
                                         };
                                         
-                                        // Log payload before sending
-                                        info!("Preparing FCM notification for mentioned user {}", mentioned_uuid);
-                                        debug!("FCM notification payload: {:?}", notification_payload);
-                                        debug!("FCM data payload: {:?}", data_payload);
-                                        debug!("FCM targets {} tokens for user {}", tokens.len(), mentioned_uuid);
-                                        
                                         // Send FCM notification
-                                        send_fcm_notification(firebase, tokens, notification_payload, data_payload.clone(), mentioned_uuid).await;
+                                        send_fcm_notification(
+                                            firebase,
+                                            tokens,
+                                            notification_payload,
+                                            data_payload,
+                                            mentioned_uuid,
+                                            pool
+                                        ).await?;
                                     } else {
                                         debug!("No FCM tokens found for mentioned user: {}", mentioned_uuid);
                                     }
@@ -360,14 +449,15 @@ pub async fn create_comment_with_mentions(
                                     extra: std::collections::HashMap::new(),
                                 };
                                 
-                                // Log payload before sending
-                                info!("Preparing FCM notification for task assignee {}", assignee_id);
-                                debug!("FCM notification payload: {:?}", notification_payload);
-                                debug!("FCM data payload: {:?}", data_payload);
-                                debug!("FCM targets {} tokens for assignee {}", tokens.len(), assignee_id);
-                                
                                 // Send FCM notification
-                                send_fcm_notification(firebase, tokens, notification_payload, data_payload.clone(), assignee_id).await;
+                                send_fcm_notification(
+                                    firebase,
+                                    tokens,
+                                    notification_payload,
+                                    data_payload,
+                                    assignee_id,
+                                    pool
+                                ).await?;
                             } else {
                                 debug!("No FCM tokens found for task assignee: {}", assignee_id);
                             }
@@ -380,40 +470,4 @@ pub async fn create_comment_with_mentions(
     }
     
     Ok(record)
-}
-
-// Helper function to send FCM notifications
-async fn send_fcm_notification(
-    firebase: &FirebaseService,
-    tokens: Vec<String>,
-    notification_payload: crate::firebase::FcmNotificationPayload,
-    data_payload: crate::firebase::FcmDataPayload,
-    user_id: Uuid,
-) {
-    match firebase.send_notification_to_tokens(
-        tokens.clone(),
-        notification_payload,
-        data_payload.clone()
-    ).await {
-        Ok(fcm_response) => {
-            info!("Successfully sent FCM notification to user {}: {:?}", user_id, fcm_response);
-            // Add detailed logging for FCM response
-            debug!("FCM response details for notification to {}: \n\
-                   Success count: {} \n\
-                   Failure count: {} \n\
-                   Full response: {:?}",
-                   user_id, 
-                   fcm_response.success_count, 
-                   fcm_response.failure_count,
-                   fcm_response);
-            
-            // Log the data payload for comparison with notifications API
-            debug!("FCM data payload for notification: {:?}", data_payload);
-        },
-        Err(e) => {
-            error!("Failed to send FCM notification to user {}: {:?}", user_id, e);
-            // Add more detailed error logging
-            error!("FCM error details for notification: error_type={:?}", e);
-        }
-    }
 } 
