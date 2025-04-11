@@ -1,13 +1,13 @@
 'use client';
 
-import { Inter } from "next/font/google";
-import { usePathname } from "next/navigation";
-import Layout from "@/components/ui/navigation/Layout";
-import { Toaster } from "sonner";
-import "./globals.css";
+import './globals.css';
+import { Inter } from 'next/font/google';
 import { ClientProviders } from "@/providers/ClientProviders";
+import { Toaster } from "sonner";
+import Layout from "@/components/ui/navigation/Layout";
+import { usePathname } from "next/navigation";
 
-const inter = Inter({ subsets: ["latin"] });
+const inter = Inter({ subsets: ['latin'] });
 
 export default function RootLayout({
   children,

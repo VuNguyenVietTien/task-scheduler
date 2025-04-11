@@ -35,6 +35,7 @@ import {
 } from '@/redux/features/taskDetailSlice';
 import TaskDetailSubtasks from './TaskDetailSubtasks';
 import CommentsTab from './tabs/CommentsTab';
+import { toast } from "sonner";
 
 interface TaskDetailPageProps {
   task: Task;
@@ -120,13 +121,12 @@ export function TaskDetailPage({
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const commentRef = React.useRef<HTMLTextAreaElement>(null);
-  const [activeTab, setActiveTab] = useState(initialActiveTab);
+  const [activeTab, setActiveTab] = useState(initialActiveTab || 'description');
   const [userId, setUserId] = useState<string | null>(null);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [isLoadingSubtasks, setIsLoadingSubtasks] = useState(false);
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(initialCommentId);
-  const commentsRef = useRef<HTMLDivElement>(null);
   
   // Thêm refs để theo dõi trạng thái API call và tránh gọi trùng lặp
   const apiCallsInProgressRef = useRef<{[key: string]: boolean}>({});
@@ -1059,6 +1059,7 @@ export function TaskDetailPage({
     const comment = comments.find(c => c.id === commentId);
     if (comment && comment.status && (comment.status === 'pending' || comment.status === 'failed')) {
       // This is a local comment that hasn't been saved to the server yet, không cần gọi API
+      toast.success('Đã xóa bình luận thành công');
       return;
     }
     
@@ -1069,15 +1070,29 @@ export function TaskDetailPage({
           commentId: commentId
         }
       })
+      .then(() => {
+        toast.success('Đã xóa bình luận thành công');
+      })
       .catch((error) => {
         console.error('Error deleting comment:', error);
         // Thông báo lỗi cho người dùng
-        setError('Không thể xóa bình luận. Vui lòng thử lại sau.');
-        // Nếu lỗi, cũng không cần refetch lại dữ liệu
+        toast.error('Không thể xóa bình luận. Vui lòng thử lại sau.');
+        // Nếu lỗi, khôi phục comment
+        if (commentsData && commentsData.taskComments) {
+          const formattedComments: TaskComment[] = commentsData.taskComments.map(comment => ({
+            id: comment.id,
+            content: comment.content,
+            user_id: comment.authorId,
+            username: comment.username,
+            created_at: comment.createdAt,
+            updated_at: comment.updatedAt
+          }));
+          setComments(formattedComments);
+        }
       });
     } catch (error) {
       console.error('Error processing delete comment:', error);
-      setError('Đã xảy ra lỗi khi xóa bình luận.');
+      toast.error('Đã xảy ra lỗi khi xóa bình luận.');
       // Không cần refetch
     }
   };
@@ -1232,6 +1247,8 @@ export function TaskDetailPage({
   // Sửa lại renderComment để xử lý URL trước khi hiển thị
   const renderComment = (comment: TaskComment) => {
     const isHighlighted = highlightedCommentId === comment.id;
+    const isAuthor = currentUser && comment.user_id === currentUser.id;
+    
     return (
       <div 
         id={`comment-${comment.id}`}
@@ -1240,8 +1257,13 @@ export function TaskDetailPage({
       >
         <CommentCard
           comment={comment}
-          currentUserId={userId || undefined}
-          onDelete={comment.status === 'failed' ? () => handleDeleteFailedComment(comment.id) : undefined}
+          currentUserId={currentUser?.id}
+          onDelete={
+            // Show delete option for failed comments or if user is the comment author
+            comment.status === 'failed' || isAuthor
+              ? () => handleDeleteFailedComment(comment.id)
+              : undefined
+          }
         />
       </div>
     );
@@ -1280,25 +1302,28 @@ export function TaskDetailPage({
 
   // Add effect to scroll to and highlight comment when initialCommentId changes
   useEffect(() => {
-    if (initialCommentId) {
+    if (initialCommentId && comments.length > 0) {
+      console.log(`[TaskDetailPage] Highlighting comment: ${initialCommentId}`);
+      
+      // Set active tab to comments
       setActiveTab('comments');
+      
+      // Set highlighted comment
       setHighlightedCommentId(initialCommentId);
       
-      // Scroll to comment after a short delay to ensure comments are loaded
+      // Small delay to ensure DOM is ready and comments are rendered
       setTimeout(() => {
         const commentElement = document.getElementById(`comment-${initialCommentId}`);
         if (commentElement) {
+          console.log(`[TaskDetailPage] Scrolling to comment element`);
           commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-          commentElement.classList.add('highlight-comment');
-          
-          // Remove highlight after animation
-          setTimeout(() => {
-            commentElement.classList.remove('highlight-comment');
-          }, 2000);
+          commentElement.classList.add('comment-highlight-animation');
+        } else {
+          console.log(`[TaskDetailPage] Comment element not found`);
         }
-      }, 500);
+      }, 300);
     }
-  }, [initialCommentId]);
+  }, [initialCommentId, comments.length]);
 
   // Add parent task search handlers
   const handleTaskSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1644,20 +1669,7 @@ export function TaskDetailPage({
         .comment-highlight-animation {
           animation: highlightFade 2s ease;
           }
-
-        .comment-container {
-          transition: background-color 0.3s ease;
-        }
-        .highlight-comment {
-          background-color: rgba(255, 255, 0, 0.2);
-          animation: highlight-pulse 2s ease-out;
-        }
-        @keyframes highlight-pulse {
-          0% { background-color: rgba(255, 255, 0, 0.2); }
-          50% { background-color: rgba(255, 255, 0, 0.4); }
-          100% { background-color: rgba(255, 255, 0, 0.2); }
-        }
-      `}</style>
+        `}</style>
 
       {error && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
