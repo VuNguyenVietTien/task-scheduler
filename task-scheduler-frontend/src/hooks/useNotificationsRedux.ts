@@ -199,8 +199,6 @@ export default function useNotificationsRedux() {
     try {
       await dispatch(markAllNotificationsAsRead()).unwrap();
       console.log('[useNotificationsRedux] All notifications marked as read');
-      // Force refresh to update UI
-      dispatch(fetchNotificationCount());
     } catch (error) {
       console.error('[useNotificationsRedux] Error marking all notifications as read:', error);
     }
