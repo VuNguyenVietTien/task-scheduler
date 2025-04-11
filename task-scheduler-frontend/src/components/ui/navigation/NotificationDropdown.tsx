@@ -105,19 +105,20 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
   
   // Get notification link based on type and metadata
   const getNotificationLink = (notification: Notification) => {
-    if (!notification.metadata) return null;
-
-    const { project_id, task_id, comment_id } = notification.metadata;
+    // Extract projectId, taskId, commentId from either direct properties or metadata
+    const projectId = notification.projectId || notification.metadata?.project_id;
+    const taskId = notification.taskId || notification.metadata?.task_id;
+    const commentId = notification.commentId || notification.metadata?.comment_id;
     
-    if (!project_id || !task_id) return null;
+    if (!projectId || !taskId) return null;
 
     // For comment-related notifications, include comment_id in hash
-    if (comment_id && (notification.type === 'COMMENT_MENTION' || notification.type === 'TASK_COMMENT')) {
-      return `/projects/${project_id}/tasks/${task_id}#comment-${comment_id}`;
+    if (commentId && (notification.type === 'COMMENT_MENTION' || notification.type === 'TASK_COMMENT')) {
+      return `/projects/${projectId}/tasks/${taskId}#comment-${commentId}`;
     }
 
     // For task-related notifications, just link to task
-    return `/projects/${project_id}/tasks/${task_id}`;
+    return `/projects/${projectId}/tasks/${taskId}`;
   };
 
   // Handle notification click with logging and link navigation
@@ -186,8 +187,8 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
                     !notification.isRead ? 'bg-blue-50' : ''
                   }`}
                   onClick={() => handleNotificationClick(notification)}
-                  data-has-comment={!!notification.metadata?.comment_id}
-                  data-has-task={!!notification.metadata?.task_id}
+                  data-has-comment={!!(notification.commentId || notification.metadata?.comment_id)}
+                  data-has-task={!!(notification.taskId || notification.metadata?.task_id)}
                 >
                   <div className="flex justify-between">
                     <p className="text-sm font-medium text-gray-900">
@@ -200,7 +201,7 @@ const NotificationDropdown: React.FC<NotificationDropdownProps> = ({
                   <p className="mt-1 text-sm text-gray-500">{notification.message}</p>
                   {link && (
                     <p className="mt-1 text-xs text-blue-600 hover:text-blue-800">
-                      View {notification.metadata?.comment_id ? 'comment' : 'task'}
+                      View {(notification.commentId || notification.metadata?.comment_id) ? 'comment' : 'task'}
                     </p>
                   )}
                 </div>

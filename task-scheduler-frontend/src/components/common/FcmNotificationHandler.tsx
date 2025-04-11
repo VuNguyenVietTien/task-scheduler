@@ -90,7 +90,7 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
         }
     };
 
-    // Add to Redux store (this will automatically increment unread count in the reducer)
+    // Add to Redux store
     dispatch(addNotification(notification));
     
     // Create in-app notification
@@ -131,23 +131,25 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
   }, [userId, initialized, apolloClient, router, dispatch]);
   
   // Create in-app notification element
-  const createInAppNotification = (notification: any) => {
+  const createInAppNotification = (notification: Notification) => {
     const notificationElement = document.createElement('div');
     notificationElement.className = 'notification-toast';
     notificationElement.innerHTML = `
-      <div class="notification-content">
-        <div class="notification-message">${notification.message}</div>
-        <div class="notification-time">Just now</div>
-      </div>
+        <div class="notification-content">
+            <div class="notification-message">${notification.message}</div>
+            <div class="notification-time">Just now</div>
+        </div>
     `;
     
     notificationElement.addEventListener('click', () => {
-      const { project_id, task_id, comment_id } = notification.metadata;
-      if (comment_id) {
-        window.location.href = `/projects/${project_id}/tasks/${task_id}#comment-${comment_id}`;
-      } else {
-        window.location.href = `/projects/${project_id}/tasks/${task_id}`;
-      }
+        if (notification.metadata) {
+            const { project_id, task_id, comment_id } = notification.metadata;
+            if (comment_id) {
+                window.location.href = `/projects/${project_id}/tasks/${task_id}#comment-${comment_id}`;
+            } else {
+                window.location.href = `/projects/${project_id}/tasks/${task_id}`;
+            }
+        }
     });
     
     // Add to DOM
@@ -155,40 +157,44 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
     
     // Remove after 5 seconds
     setTimeout(() => {
-      notificationElement.style.transform = 'translateX(100%)';
-      notificationElement.style.opacity = '0';
-      setTimeout(() => {
-        document.body.removeChild(notificationElement);
-      }, 300);
+        notificationElement.style.transform = 'translateX(100%)';
+        notificationElement.style.opacity = '0';
+        setTimeout(() => {
+            document.body.removeChild(notificationElement);
+        }, 300);
     }, 5000);
   };
   
   // Create browser notification
-  const createBrowserNotification = (notification: any) => {
+  const createBrowserNotification = (notification: Notification) => {
+    if (!notification.metadata) {
+        return;
+    }
+
     const { project_id, task_id, comment_id, task_title } = notification.metadata;
     const notificationOptions = {
-      body: notification.message,
-      icon: '/favicon.ico',
-      data: {
-        url: comment_id 
-          ? `/projects/${project_id}/tasks/${task_id}#comment-${comment_id}`
-          : `/projects/${project_id}/tasks/${task_id}`,
-        taskTitle: task_title
-      }
+        body: notification.message,
+        icon: '/favicon.ico',
+        data: {
+            url: comment_id 
+                ? `/projects/${project_id}/tasks/${task_id}#comment-${comment_id}`
+                : `/projects/${project_id}/tasks/${task_id}`,
+            taskTitle: task_title
+        }
     };
     
     if (!('Notification' in window)) {
-      console.log('This browser does not support desktop notification');
-      return;
+        console.log('This browser does not support desktop notification');
+        return;
     }
     
     if (Notification.permission === 'granted') {
-      const browserNotification = new Notification(notification.message, notificationOptions);
-      
-      browserNotification.onclick = () => {
-        const { url } = notificationOptions.data;
-        window.location.href = url;
-      };
+        const browserNotification = new Notification(notification.message, notificationOptions);
+        
+        browserNotification.onclick = () => {
+            const { url } = notificationOptions.data;
+            window.location.href = url;
+        };
     }
   };
   

@@ -206,18 +206,28 @@ export default function useNotificationsRedux() {
   
   // Handle notification click
   const handleNotificationClick = (notification: Notification) => {
-    if (notification.type === 'TASK_ASSIGNED' && notification.taskId && notification.projectId) {
-      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}`);
-    } else if (notification.type === 'TASK_REASSIGNED' && notification.taskId && notification.projectId) {
-      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}`);
-    } else if (notification.type === 'TASK_COMPLETED' && notification.taskId && notification.projectId) {
-      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}`);
-    } else if (notification.type === 'TASK_OVERDUE' && notification.taskId && notification.projectId) {
-      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}`);
-    } else if (notification.type === 'COMMENT_MENTION' && notification.taskId && notification.projectId && notification.commentId) {
-      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}#comment-${notification.commentId}`);
-    } else if (notification.type === 'TASK_COMMENT' && notification.taskId && notification.projectId && notification.commentId) {
-      router.push(`/projects/${notification.projectId}/tasks/${notification.taskId}#comment-${notification.commentId}`);
+    // Extract projectId, taskId, commentId from either direct properties or metadata
+    const projectId = notification.projectId || notification.metadata?.project_id;
+    const taskId = notification.taskId || notification.metadata?.task_id;
+    const commentId = notification.commentId || notification.metadata?.comment_id;
+    
+    console.log('[useNotificationsRedux] Handling notification click:', {
+      type: notification.type,
+      projectId,
+      taskId,
+      commentId
+    });
+    
+    if (projectId && taskId) {
+      // For comment-related notifications, include comment ID in hash
+      if (commentId && (notification.type === 'COMMENT_MENTION' || notification.type === 'TASK_COMMENT')) {
+        router.push(`/projects/${projectId}/tasks/${taskId}#comment-${commentId}`);
+      } else {
+        // Regular task notifications
+        router.push(`/projects/${projectId}/tasks/${taskId}`);
+      }
+    } else {
+      console.warn('[useNotificationsRedux] Unable to navigate, missing projectId or taskId');
     }
     
     // Close dropdown after clicking
