@@ -6,6 +6,8 @@ export interface Notification {
   read: boolean;
   created_at: string;
   metadata: Record<string, any>;
+  taskId: string;
+  commentId: string;
 }
 
 export interface NotificationCount {

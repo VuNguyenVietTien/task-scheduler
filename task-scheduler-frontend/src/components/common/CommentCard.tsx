@@ -15,7 +15,7 @@ export interface Comment {
   created_at: string;
   task_id?: string;
   updated_at?: string;
-  status?: 'pending' | 'saved' | 'failed';
+  status?: 'pending' | 'saved' | 'failed' | 'local';
   error?: string;
 }
 

@@ -9,6 +9,7 @@ export const GET_NOTIFICATIONS = gql`
       type
       isRead
       createdAt
+      metadata
     }
   }
 `;
@@ -21,6 +22,7 @@ export const GET_NOTIFICATION = gql`
       message
       isRead
       createdAt
+      metadata
     }
   }
 `;

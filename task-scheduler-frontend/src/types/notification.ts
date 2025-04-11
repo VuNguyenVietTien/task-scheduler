@@ -16,16 +16,21 @@ export type NotificationType = 'TASK_ASSIGNED' | 'TASK_REASSIGNED' | 'TASK_COMPL
 export interface BackendNotification {
   notificationId?: string;
   userId: string;
+  message: string;
   type: string;
   referenceType: string;
   referenceId: string;
-  message: string;
   isRead: boolean;
   createdAt: string;
   projectId?: string;
   senderId?: string;
   action: string;
-  metadata: any;
+  metadata?: {
+    project_id: string;
+    task_id: string;
+    comment_id?: string;
+    task_title?: string;
+  };
 }
 
 // Interface for UI components - camelCase for frontend use
@@ -40,7 +45,12 @@ export interface Notification {
   taskId?: string;
   commentId?: string;
   senderId?: string;
-  link?: string;
+  metadata?: {
+    project_id: string;
+    task_id: string;
+    comment_id?: string;
+    task_title?: string;
+  };
 }
 
 export interface NotificationState {

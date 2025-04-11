@@ -133,13 +133,11 @@ export class NotificationService {
       // Khởi tạo Firebase app nếu chưa có
       let app;
       try {
-        // Thử lấy app Firebase đã khởi tạo
         const { getApp } = await import('firebase/app');
         app = getApp();
         console.log('[NotificationService] Using existing Firebase app');
       } catch (error) {
         console.log('[NotificationService] Initializing new Firebase app');
-        // Khởi tạo app mới nếu chưa có
         const { initializeApp } = await import('firebase/app');
         const firebaseConfig = {
           apiKey: "AIzaSyBlW27-Kk7j32MaEqlQMmlZzeuPDPQPcH0",
@@ -170,7 +168,7 @@ export class NotificationService {
       
       console.log('[NotificationService] Notification permission granted');
       
-      // Đảm bảo Service Worker được đăng ký trước khi lấy FCM token
+      // Đảm bảo Service Worker được đăng ký
       try {
         console.log('[NotificationService] Checking for service worker registration');
         const registration = await navigator.serviceWorker.getRegistration('/firebase-messaging-sw.js');
@@ -181,97 +179,46 @@ export class NotificationService {
           await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
             scope: '/'
           });
-          // Đợi một chút để đảm bảo Service Worker đã được kích hoạt
           await new Promise(resolve => setTimeout(resolve, 1000));
           console.log('[NotificationService] Service Worker registered successfully');
         }
       } catch (swError) {
         console.error('[NotificationService] Service Worker registration error:', swError);
-        // Tiếp tục vì một số trường hợp FCM vẫn hoạt động ngay cả khi SW có vấn đề
       }
-      
-      // ĐỂ TROUBLESHOOT
-      console.log('[NotificationService] Starting token request for FCM...');
-      console.log('[NotificationService] Current Firebase auth status:', 
-        await import('@/lib/firebase').then(fb => fb.getCurrentUser()).catch(e => 'Error loading auth'));
       
       // Lấy instance messaging
       const { getMessaging, getToken, onMessage } = await import('firebase/messaging');
       const messaging = getMessaging(app);
       console.log('[NotificationService] Firebase messaging instance created');
       
-      // THAY ĐỔI 1: Kiểm tra xem Service Worker đã sẵn sàng chưa
-      const swRegistration = await navigator.serviceWorker.ready;
-      console.log('[NotificationService] Service Worker is ready:', swRegistration.active ? true : false);
+      // Lấy FCM token
+      const token = await getToken(messaging, {
+        vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
+      }).catch(error => {
+        console.warn('[NotificationService] Error getting FCM token:', error);
+        return null;
+      });
       
-      // THAY ĐỔI 2: Thêm bước xác thực người dùng trước khi lấy FCM token
-      // Tương tự như cài đặt FCM trong docs của Firebase
-      try {
-        const { getIdToken } = await import('@/lib/firebase');
-        const authToken = await getIdToken();
-        console.log('[NotificationService] User authentication status:', authToken ? 'authenticated' : 'not authenticated');
-      } catch (authError) {
-        console.warn('[NotificationService] User auth check failed:', authError);
-      }
-      
-      // Thử lấy token (không dùng serviceWorker trong cấu hình)
-      console.log('[NotificationService] Requesting FCM token with updated config...');
-      
-      // THAY ĐỔI 3: Thêm serviceWorker vào cấu hình và thử mỗi lần một cấu hình
-      try {
-        // Thử cấu hình không có serviceWorker
-        console.log('[NotificationService] Trying FCM token request without serviceWorker option');
-        const token = await getToken(messaging, {
-          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY
-        }).catch(error => {
-          console.warn('[NotificationService] Error getting FCM token (first attempt):', error);
-          return null;
+      if (token) {
+        console.log('[NotificationService] FCM token obtained successfully');
+        await this.saveTokenToServer(token);
+        
+        // Thiết lập handler thông báo
+        console.log('[NotificationService] Setting up foreground message handler');
+        onMessage(messaging, (payload) => {
+          console.log('[NotificationService] 🔔 Foreground message received:', payload);
+          // Dispatch custom event để useNotificationsRedux xử lý
+          const event = new CustomEvent('notificationReceived', {
+            detail: { payload }
+          });
+          window.dispatchEvent(event);
         });
         
-        if (token) {
-          console.log('[NotificationService] FCM token obtained successfully (first attempt)');
-          await this.saveTokenToServer(token);
-          
-          // Thiết lập handler thông báo
-          console.log('[NotificationService] Setting up foreground message handler');
-          onMessage(messaging, (payload) => {
-            console.log('[NotificationService] 🔔 Foreground message received:', payload);
-            onMessageCallback(payload);
-          });
-          
-          return token;
-        }
-        
-        // Thử lại với serviceWorker rõ ràng
-        console.log('[NotificationService] Trying FCM token request with serviceWorker option');
-        const tokenWithSW = await getToken(messaging, {
-          vapidKey: process.env.NEXT_PUBLIC_FIREBASE_VAPID_KEY,
-          serviceWorkerRegistration: swRegistration
-        }).catch(error => {
-          console.warn('[NotificationService] Error getting FCM token (second attempt):', error);
-          return null;
-        });
-        
-        if (tokenWithSW) {
-          console.log('[NotificationService] FCM token obtained successfully (second attempt)');
-          await this.saveTokenToServer(tokenWithSW);
-          
-          // Thiết lập handler thông báo
-          console.log('[NotificationService] Setting up foreground message handler');
-          onMessage(messaging, (payload) => {
-            console.log('[NotificationService] 🔔 Foreground message received:', payload);
-            onMessageCallback(payload);
-          });
-          
-          return tokenWithSW;
-        }
-        
-        console.error('[NotificationService] All FCM token requests failed');
-        return null;
-      } catch (error) {
-        console.error('[NotificationService] Critical error in FCM initialization:', error);
-        return null;
+        return token;
       }
+      
+      console.error('[NotificationService] FCM token request failed');
+      return null;
     } catch (error) {
       console.error('[NotificationService] Error in initializeFcm:', error);
       return null;

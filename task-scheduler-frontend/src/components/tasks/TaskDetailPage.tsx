@@ -55,6 +55,8 @@ interface TaskDetailPageProps {
   }[];
   hideTitleHeader?: boolean;
   refetchMembers?: () => void;
+  initialCommentId?: string | null;
+  initialActiveTab?: string;
 }
 
 interface Comment {
@@ -92,7 +94,18 @@ interface CreateCommentData {
   createComment: LocalTaskComment;
 }
 
-export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isLoadingProp = false, projectMembers, hideTitleHeader = false, refetchMembers }: TaskDetailPageProps) {
+export function TaskDetailPage({ 
+  task, 
+  projectId, 
+  currentUser, 
+  onTaskUpdate, 
+  isLoadingProp = false, 
+  projectMembers, 
+  hideTitleHeader = false, 
+  refetchMembers,
+  initialCommentId = null,
+  initialActiveTab = 'description'
+}: TaskDetailPageProps) {
   // Khai báo các biến cần dùng chung
   const taskId = task.task_id || task.id || '';
   const taskIdString = taskId.toString();
@@ -107,11 +120,13 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const commentRef = React.useRef<HTMLTextAreaElement>(null);
-  const [activeTab, setActiveTab] = useState('description');
+  const [activeTab, setActiveTab] = useState(initialActiveTab);
   const [userId, setUserId] = useState<string | null>(null);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
   const [subtasks, setSubtasks] = useState<Task[]>([]);
   const [isLoadingSubtasks, setIsLoadingSubtasks] = useState(false);
+  const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(initialCommentId);
+  const commentsRef = useRef<HTMLDivElement>(null);
   
   // Thêm refs để theo dõi trạng thái API call và tránh gọi trùng lặp
   const apiCallsInProgressRef = useRef<{[key: string]: boolean}>({});
@@ -1216,706 +1231,21 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
 
   // Sửa lại renderComment để xử lý URL trước khi hiển thị
   const renderComment = (comment: TaskComment) => {
-    // Xử lý nội dung comment để thay đổi URL
-    const processedContent = processCommentContent(comment.content);
-    
-    // Chuyển đổi Comment nội bộ sang định dạng CommentCard
-    const commentForCard = {
-      id: comment.id,
-      content: processedContent,
-      user_id: comment.user_id,
-      username: comment.username,
-      avatar_url: comment.avatar_url,
-      created_at: comment.created_at,
-      task_id: task.task_id || task.id || 'unknown'  // Sử dụng giá trị mặc định
-    };
-
-    // Hiển thị bình luận đã lưu
-    if (!comment.status || comment.status === 'saved') {
-      return (
+    const isHighlighted = highlightedCommentId === comment.id;
+    return (
+      <div 
+        id={`comment-${comment.id}`}
+        key={comment.id}
+        className={`comment-container ${isHighlighted ? 'highlight-comment' : ''}`}
+      >
         <CommentCard
-          key={comment.id}
-          comment={commentForCard}
-          currentUserId={currentUser?.id}
-          onDelete={comment.user_id === currentUser?.id ? 
-            (id) => handleDeleteFailedComment(id) : undefined}
+          comment={comment}
+          currentUserId={userId || undefined}
+          onDelete={comment.status === 'failed' ? () => handleDeleteFailedComment(comment.id) : undefined}
         />
-      );
-    }
-
-    // Hiển thị bình luận local (chỉ lưu ở client)
-    if (comment.status === 'local') {
-      return (
-        <div key={comment.id} className="p-4 rounded-lg border border-blue-200 bg-blue-50">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              {comment.avatar_url ? (
-                <img src={comment.avatar_url} alt={comment.username} className="h-10 w-10 rounded-full" />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                  <span className="text-gray-600 font-medium text-sm">{comment.username.substring(0, 2).toUpperCase()}</span>
-                </div>
-              )}
-            </div>
-            <div className="ml-3 flex-1">
-              <div className="flex items-center">
-                <p className="text-sm font-medium text-gray-900">{comment.username}</p>
-                <span className="ml-2 text-xs text-blue-500 italic">Chỉ hiển thị cho bạn</span>
-              </div>
-              <div 
-                className="mt-1 text-sm text-gray-700 rich-text-content"
-                dangerouslySetInnerHTML={{ __html: processedContent }}
-              />
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Hiển thị bình luận đang được gửi
-    if (comment.status === 'pending') {
-      return (
-        <div key={comment.id} className="bg-gray-50 p-4 rounded-lg border border-gray-200 opacity-70">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              {comment.avatar_url ? (
-                <img src={comment.avatar_url} alt={comment.username} className="h-10 w-10 rounded-full" />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                  <span className="text-gray-600 font-medium text-sm">{comment.username.substring(0, 2).toUpperCase()}</span>
-                </div>
-              )}
-            </div>
-            <div className="ml-3 flex-1">
-              <div className="flex items-center">
-                <p className="text-sm font-medium text-gray-900">{comment.username}</p>
-                <span className="ml-2 text-xs text-gray-500 italic">Đang gửi...</span>
-                <span className="ml-2">
-                  <Spinner size="sm" />
-                </span>
-              </div>
-              <div 
-                className="mt-1 text-sm text-gray-700 rich-text-content"
-                dangerouslySetInnerHTML={{ __html: processedContent }}
-              />
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Hiển thị bình luận thất bại
-    if (comment.status === 'failed') {
-      return (
-        <div key={comment.id} className="bg-red-50 p-4 rounded-lg border border-red-200">
-          <div className="flex items-start">
-            <div className="flex-shrink-0">
-              {comment.avatar_url ? (
-                <img src={comment.avatar_url} alt={comment.username} className="h-10 w-10 rounded-full" />
-              ) : (
-                <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center">
-                  <span className="text-gray-600 font-medium text-sm">{comment.username.substring(0, 2).toUpperCase()}</span>
-                </div>
-              )}
-            </div>
-            <div className="ml-3 flex-1">
-              <div className="flex items-center">
-                <p className="text-sm font-medium text-gray-900">{comment.username}</p>
-                <span className="ml-2 text-xs text-red-500 italic">Gửi thất bại</span>
-              </div>
-              <div 
-                className="mt-1 text-sm text-gray-700 rich-text-content"
-                dangerouslySetInnerHTML={{ __html: processedContent }}
-              />
-              <div className="mt-2 flex space-x-2">
-                <button 
-                  onClick={() => handleRetryComment(comment.id, comment.content)}
-                  className="text-xs text-blue-600 hover:text-blue-800 border border-blue-500 hover:bg-blue-50 rounded px-2 py-1"
-                >
-                  Thử lại
-                </button>
-                <button 
-                  onClick={() => handleDeleteFailedComment(comment.id)}
-                  className="text-xs text-red-600 hover:text-red-800 border border-red-500 hover:bg-red-50 rounded px-2 py-1"
-                >
-                  Xóa
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      );
-    }
-    
-    return null;
-  };
-
-  // Xóa định nghĩa trùng lặp và sử dụng hàm để lấy task con
-  const getSubtasks = () => {
-    return subtasks;
-  };
-
-  // Xử lý danh sách các task có thể là parent
-  useEffect(() => {
-    if (tasksData && tasksData.tasks) {
-      // Lọc ra những task có thể là parent (không phải chính nó và không phải child của nó)
-      const filteredTasks = tasksData.tasks.filter((t: any) => {
-        // Không chọn chính nó làm parent
-        const currentTaskId = task.task_id || task.id;
-        if (t.taskId === currentTaskId) return false;
-        
-        // Kiểm tra nếu task hiện tại đã là parent của t, thì t không thể là parent của task hiện tại (tránh vòng lặp)
-        return true;
-      });
-      
-      // Chuyển đổi từ camelCase sang snake_case để phù hợp với định nghĩa Task
-      const formattedTasks = filteredTasks.map((t: any) => ({
-        task_id: t.taskId,
-        id: t.taskId,
-        title: t.title || '',
-        description: t.description || '',
-        project_id: t.projectId || projectId,
-        status: (t.status?.toLowerCase() || 'todo') as TaskStatus,
-        priority: (t.priority?.toLowerCase() || 'medium') as Priority,
-        priority_order: t.priorityOrder || 0,
-        created_by: t.createdBy || 'system',
-        parent_task_id: t.parentTaskId
-      } as Task));
-      
-      setAvailableParentTasks(formattedTasks);
-    }
-  }, [tasksData, task, projectId]);
-  
-  // Hàm kiểm tra nếu potentialChildId là child hoặc descendant của potentialParent
-  const isChildTask = (potentialChildId: string, potentialParent: Task): boolean => {
-    if (!potentialParent.child_tasks) return false;
-    
-    // Kiểm tra trực tiếp
-    const isDirectChild = potentialParent.child_tasks.some(child => 
-      child.task_id === potentialChildId || child.id === potentialChildId
+      </div>
     );
-    
-    if (isDirectChild) return true;
-    
-    // Kiểm tra đệ quy thông qua các child
-    return potentialParent.child_tasks.some(child => isChildTask(potentialChildId, child));
   };
-
-  // Hàm debounce cho tìm kiếm parent task
-  const handleParentTaskSearch = (query: string) => {
-    setParentSearchQuery(query);
-    setShowParentResults(true);
-    
-    // Xóa timeout cũ nếu có
-    if (parentSearchTimeout) {
-      clearTimeout(parentSearchTimeout);
-    }
-    
-    // Tạo timeout mới để delay trước khi thực hiện tìm kiếm
-    const timeout = setTimeout(() => {
-      setIsSearchingParent(true);
-      // Ở đây có thể gọi API riêng để tìm kiếm task nếu cần
-      setIsSearchingParent(false);
-    }, 1000);
-    
-    setParentSearchTimeout(timeout);
-  };
-
-  // Lọc danh sách parent tasks dựa trên query
-  const filteredParentTasks = parentSearchQuery
-    ? availableParentTasks.filter(t => 
-        t.title.toLowerCase().includes(parentSearchQuery.toLowerCase()) ||
-        t.task_id.toLowerCase().includes(parentSearchQuery.toLowerCase())
-      )
-    : availableParentTasks.slice(0, 5); // Chỉ hiển thị 5 task gần nhất nếu không có query
-
-  // Thêm hàm để xử lý khi chọn task cha
-  const handleSelectParentTask = (parentTask: Task) => {
-    // Cập nhật parent_task_id trong task
-    setEditedTask(prev => ({
-      ...prev,
-      parent_task_id: parentTask.task_id
-    }));
-    setParentSearchQuery('');
-    setShowParentResults(false);
-  };
-
-  // Hàm xử lý khi nhấn tìm kiếm task cha
-  const handleSearchClick = () => {
-    if (parentTaskIdInput) {
-      setShowParentResults(true);
-      dispatch(searchParentTaskById(parentTaskIdInput));
-    }
-  };
-
-  // Sửa lại handleTaskSearchInputChange để chỉ cập nhật input, không gọi tìm kiếm tự động
-  const handleTaskSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setParentTaskIdInput(e.target.value);
-    // Xóa hành vi tìm kiếm tự động khi gõ để tăng hiệu năng
-    if (showParentResults) {
-      setShowParentResults(false);
-      dispatch(clearParentTaskSearch());
-    }
-  };
-
-  // Xử lý khi nhấn Enter trong input tìm kiếm
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter' && parentTaskIdInput) {
-      e.preventDefault();
-      handleSearchClick();
-    }
-  };
-
-  // Thêm đoạn JavaScript để tính toán vị trí sticky dựa trên chiều cao header
-  useEffect(() => {
-    function calculateStickyPosition() {
-      const appHeader = document.querySelector('header'); // Lấy header chính của ứng dụng
-      const sidebar = document.getElementById('task-tabs-sidebar');
-      
-      if (sidebar) {
-        // Tính toán khoảng cách top cho sidebar
-        if (appHeader) {
-          // Lấy chiều cao của header ứng dụng
-          const appHeaderHeight = appHeader.getBoundingClientRect().height;
-          
-          // Gán vị trí top cho sidebar bằng chiều cao của header
-          sidebar.style.position = 'sticky';
-          sidebar.style.top = `${appHeaderHeight}px`;
-        } else {
-          // Nếu không tìm thấy header ứng dụng, dùng giá trị mặc định
-          sidebar.style.position = 'sticky';
-          sidebar.style.top = '0px';
-        }
-      }
-    }
-    
-    // Gọi hàm khi scroll
-    window.addEventListener('scroll', calculateStickyPosition);
-    // Gọi hàm khi resize cửa sổ
-    window.addEventListener('resize', calculateStickyPosition);
-    // Gọi lần đầu để thiết lập vị trí ban đầu
-    calculateStickyPosition();
-    
-    // Cleanup event listeners khi component unmount
-    return () => {
-      window.removeEventListener('scroll', calculateStickyPosition);
-      window.removeEventListener('resize', calculateStickyPosition);
-    };
-  }, []);
-
-  // Sử dụng Redux để lắng nghe sự thay đổi của members
-  const { members: reduxMembers } = useAppSelector(state => state.members);
-  
-  // Theo dõi sự thay đổi trong Redux store để cập nhật UI
-  useEffect(() => {
-    if (reduxMembers && reduxMembers.length >= 0 && refetchMembers) {
-      // Khi danh sách members trong Redux thay đổi, gọi hàm refetchMembers
-      refetchMembers();
-    }
-  }, [reduxMembers, refetchMembers]);
-
-  // Render phần liên quan đến members
-  const handleMembersUpdate = () => {
-    // Gọi callback nếu có
-    if (refetchMembers) {
-      refetchMembers();
-    }
-  };
-
-  // Tính tổng effort của task dựa trên subtasks
-  const calculateTotalEffort = useCallback((subtasksList: Task[]) => {
-    if (!subtasksList || subtasksList.length === 0) {
-      return task.effort || 0;
-    }
-    
-    return subtasksList.reduce((total, subtask) => {
-      return total + (subtask.effort || 0);
-    }, 0);
-  }, [task.effort]);
-
-  // Tính progress của task dựa trên subtasks đã hoàn thành
-  const calculateProgress = useCallback((subtasksList: Task[]) => {
-    if (!subtasksList || subtasksList.length === 0) {
-      return task.progress || 0;
-    }
-    
-    const completedTasks = subtasksList.filter(subtask => 
-      subtask.status === 'done' || subtask.status === 'close'
-    ).length;
-    
-    return Math.round((completedTasks / subtasksList.length) * 100);
-  }, [task.progress]);
-
-  // Tính số giờ effort còn lại
-  const calculateRemainingEffort = useCallback((subtasksList: Task[]) => {
-    if (!subtasksList || subtasksList.length === 0) {
-      return task.effort || 0;
-    }
-    
-    const totalEffort = calculateTotalEffort(subtasksList);
-    const completedEffort = subtasksList
-      .filter(subtask => subtask.status === 'done' || subtask.status === 'close')
-      .reduce((total, subtask) => total + (subtask.effort || 0), 0);
-    
-    return totalEffort - completedEffort;
-  }, [calculateTotalEffort, task.effort]);
-
-  // Định dạng effort với phần còn lại
-  const formatEffortWithRemaining = useCallback((subtasksList: Task[]) => {
-    const totalEffort = calculateTotalEffort(subtasksList);
-    
-    if (subtasksList && subtasksList.length > 0) {
-      const remainingEffort = calculateRemainingEffort(subtasksList);
-      
-      if (remainingEffort < totalEffort) {
-        return `${remainingEffort}/${totalEffort} giờ`;
-      }
-    }
-    
-    return formatEffort(totalEffort);
-  }, [calculateTotalEffort, calculateRemainingEffort, formatEffort]);
-
-  // Cập nhật task effort và progress dựa trên subtasks
-  useEffect(() => {
-    if (subtasks && subtasks.length > 0) {
-      const totalEffort = calculateTotalEffort(subtasks);
-      const progress = calculateProgress(subtasks);
-      
-      // Nếu tổng effort từ subtasks khác với effort hiện tại, cập nhật
-      if (totalEffort !== task.effort || progress !== task.progress) {
-        onTaskUpdate({
-          effort: totalEffort,
-          progress: progress
-        }).catch(error => {
-          console.error('Không thể cập nhật effort và progress từ subtasks:', error);
-        });
-      }
-    }
-  }, [subtasks, calculateTotalEffort, calculateProgress, task.effort, task.progress, onTaskUpdate]);
-
-  // Lấy thông tin effort và progress động
-  const getDynamicEffort = () => {
-    if (subtasks && subtasks.length > 0) {
-      return formatEffortWithRemaining(subtasks);
-    }
-    return formatEffort(task.effort);
-  };
-  
-  const getDynamicProgress = () => {
-    if (subtasks && subtasks.length > 0) {
-      return `${calculateProgress(subtasks)}%`;
-    }
-    return task.progress ? `${task.progress}%` : '0%';
-  };
-
-  // Các phương thức xử lý subtasks đã được chuyển sang component TaskDetailSubtasks
-  /*
-  // Handler cho việc edit subtask
-  const handleStartEditing = (taskId: string, field: string, currentValue: string | number | null) => {
-    setEditingCell({ taskId, field });
-    setEditValue(currentValue !== null ? String(currentValue) : '');
-  };
-
-  const handleCancelEditing = () => {
-    setEditingCell(null);
-    setEditValue('');
-  };
-
-  const handleTaskStatusChange = async (taskId: string, newStatus: TaskStatus) => {
-    try {
-      // Sử dụng preventDefault và stopPropagation để tránh request media không cần thiết
-      event?.preventDefault();
-      event?.stopPropagation();
-      
-      await dispatch(updateTaskStatus({ taskId, status: newStatus })).unwrap();
-      
-      // Cập nhật UI cục bộ
-      setSubtasks(currentSubtasks => 
-        currentSubtasks.map(subtask => 
-          subtask.task_id === taskId || subtask.id === taskId
-            ? { ...subtask, status: newStatus }
-            : subtask
-        )
-      );
-      
-      // Refetch để đảm bảo đồng bộ
-      refetchSubtasks();
-    } catch (error) {
-      console.error('Lỗi khi cập nhật trạng thái:', error);
-    }
-  };
-
-  const handleTaskPriorityChange = async (taskId: string, newPriority: Priority) => {
-    try {
-      // Sử dụng preventDefault và stopPropagation để tránh request media không cần thiết
-      event?.preventDefault();
-      event?.stopPropagation();
-      
-      await dispatch(updateTaskPriority({ taskId, priority: newPriority })).unwrap();
-      
-      // Cập nhật UI cục bộ
-      setSubtasks(currentSubtasks => 
-        currentSubtasks.map(subtask => 
-          subtask.task_id === taskId || subtask.id === taskId
-            ? { ...subtask, priority: newPriority }
-            : subtask
-        )
-      );
-      
-      // Refetch để đảm bảo đồng bộ
-      refetchSubtasks();
-    } catch (error) {
-      console.error('Lỗi khi cập nhật mức ưu tiên:', error);
-    }
-  };
-
-  const handleTaskEffortChange = async (taskId: string, newEffort: number) => {
-    try {
-      // Sử dụng preventDefault và stopPropagation để tránh request media không cần thiết
-      event?.preventDefault();
-      event?.stopPropagation();
-      
-      await dispatch(updateTaskEffort({ taskId, effort: newEffort })).unwrap();
-      
-      // Cập nhật UI cục bộ
-      setSubtasks(currentSubtasks => 
-        currentSubtasks.map(subtask => 
-          subtask.task_id === taskId || subtask.id === taskId
-            ? { ...subtask, effort: newEffort }
-            : subtask
-        )
-      );
-      
-      // Refetch để đảm bảo đồng bộ
-      refetchSubtasks();
-    } catch (error) {
-      console.error('Lỗi khi cập nhật effort:', error);
-    }
-  };
-
-  // Thêm Component SubtasksTable
-  const SubtasksTable = () => (
-    <div className="overflow-x-auto">
-      <table className="min-w-full divide-y divide-gray-200">
-        <thead className="bg-gray-50">
-          <tr>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Tiêu đề
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Trạng thái
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Ưu tiên
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Effort (giờ)
-            </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-              Người thực hiện
-            </th>
-          </tr>
-        </thead>
-        <tbody className="bg-white divide-y divide-gray-200">
-          {subtasks.map((subtask) => (
-            <tr key={subtask.task_id || subtask.id} className="hover:bg-gray-50">
-              <td className="px-4 py-2">
-                <Link href={`/projects/${projectId}/tasks/${subtask.task_id || subtask.id}`} className="text-blue-600 hover:text-blue-800 font-medium">
-                  {subtask.title}
-                </Link>
-              </td>
-              <td className="px-4 py-2">
-                {editingCell?.taskId === subtask.task_id && editingCell?.field === 'status' ? (
-                  <div className="flex flex-col space-y-2">
-                    <select
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2"
-                      autoFocus
-                      title="Chọn trạng thái task"
-                      aria-label="Trạng thái task"
-                    >
-                      {Object.values(TaskStatuses).map((status) => (
-                        <option key={status} value={status}>
-                          {status.charAt(0).toUpperCase() + status.slice(1)}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex space-x-2">
-                      <button
-                        className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleTaskStatusChange(subtask.task_id || subtask.id || '', editValue as TaskStatus);
-                          handleCancelEditing();
-                        }}
-                      >
-                        Lưu
-                      </button>
-                      <button
-                        className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition-colors"
-                        onClick={handleCancelEditing}
-                      >
-                        Hủy
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className="flex items-center cursor-pointer"
-                    onClick={() => handleStartEditing(subtask.task_id || subtask.id || '', 'status', subtask.status)}
-                  >
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(subtask.status)}`}>
-                      {subtask.status}
-                    </span>
-                    <button 
-                      className="ml-2 text-gray-400 hover:text-gray-600"
-                      title="Chỉnh sửa trạng thái"
-                      aria-label="Chỉnh sửa trạng thái"
-                    >
-                      <PencilIcon className="h-3 w-3" />
-                    </button>
-                  </div>
-                )}
-              </td>
-              <td className="px-4 py-2">
-                {editingCell?.taskId === subtask.task_id && editingCell?.field === 'priority' ? (
-                  <div className="flex flex-col space-y-2">
-                    <select
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2"
-                      autoFocus
-                      title="Chọn mức độ ưu tiên"
-                      aria-label="Mức độ ưu tiên"
-                    >
-                      {Object.values(Priorities).map((priority) => (
-                        <option key={priority} value={priority}>
-                          {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                        </option>
-                      ))}
-                    </select>
-                    <div className="flex space-x-2">
-                      <button
-                        className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleTaskPriorityChange(subtask.task_id || subtask.id || '', editValue as Priority);
-                          handleCancelEditing();
-                        }}
-                      >
-                        Lưu
-                      </button>
-                      <button
-                        className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition-colors"
-                        onClick={handleCancelEditing}
-                      >
-                        Hủy
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className="flex items-center cursor-pointer"
-                    onClick={() => handleStartEditing(subtask.task_id || subtask.id || '', 'priority', subtask.priority)}
-                  >
-                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(subtask.priority)}`}>
-                      {subtask.priority}
-                    </span>
-                    <button 
-                      className="ml-2 text-gray-400 hover:text-gray-600"
-                      title="Chỉnh sửa mức độ ưu tiên"
-                      aria-label="Chỉnh sửa mức độ ưu tiên"
-                    >
-                      <PencilIcon className="h-3 w-3" />
-                    </button>
-                  </div>
-                )}
-              </td>
-              <td className="px-4 py-2">
-                {editingCell?.taskId === subtask.task_id && editingCell?.field === 'effort' ? (
-                  <div className="flex flex-col space-y-2">
-                    <input
-                      type="number"
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2"
-                      min="0"
-                      step="0.5"
-                      autoFocus
-                      title="Nhập số giờ effort"
-                      aria-label="Số giờ effort"
-                      placeholder="Giờ"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          handleTaskEffortChange(subtask.task_id || subtask.id || '', Number(editValue) || 0);
-                          handleCancelEditing();
-                        } else if (e.key === 'Escape') {
-                          handleCancelEditing();
-                        }
-                      }}
-                    />
-                    <div className="flex space-x-2">
-                      <button
-                        className="px-2 py-1 bg-blue-600 text-white text-xs rounded hover:bg-blue-700 transition-colors"
-                        onClick={(e) => {
-                          e.preventDefault();
-                          e.stopPropagation();
-                          handleTaskEffortChange(subtask.task_id || subtask.id || '', Number(editValue) || 0);
-                          handleCancelEditing();
-                        }}
-                      >
-                        Lưu
-                      </button>
-                      <button
-                        className="px-2 py-1 bg-gray-200 text-gray-700 text-xs rounded hover:bg-gray-300 transition-colors"
-                        onClick={handleCancelEditing}
-                      >
-                        Hủy
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div
-                    className="flex items-center cursor-pointer"
-                    onClick={() => handleStartEditing(subtask.task_id || subtask.id || '', 'effort', subtask.effort !== undefined ? subtask.effort : null)}
-                  >
-                    <span>{subtask.effort || 0}</span>
-                    <button 
-                      className="ml-2 text-gray-400 hover:text-gray-600"
-                      title="Chỉnh sửa effort"
-                      aria-label="Chỉnh sửa effort"
-                    >
-                      <PencilIcon className="h-3 w-3" />
-                    </button>
-                  </div>
-                )}
-              </td>
-              <td className="px-4 py-2">
-                {subtask.assignee ? (
-                  <div className="flex items-center">
-                    {subtask.assignee.avatarUrl ? (
-                      <img src={subtask.assignee.avatarUrl} alt={subtask.assignee.username} className="h-6 w-6 rounded-full mr-2" />
-                    ) : (
-                      <div className="h-6 w-6 rounded-full bg-gray-300 flex items-center justify-center mr-2">
-                        <span className="text-gray-600 text-xs">{subtask.assignee.username?.charAt(0).toUpperCase() || '?'}</span>
-                      </div>
-                    )}
-                    <span className="text-sm">{subtask.assignee.username}</span>
-                  </div>
-                ) : (
-                  <span className="text-gray-500 text-sm">Chưa gán</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  );
-  */
 
   // Thêm useEffect mới để đảm bảo luôn fetch parent task title khi component mount
   useEffect(() => {
@@ -1947,6 +1277,84 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       }
     }
   }, [task?.parent_task_id, apolloClient, parentTaskTitle, markApiCallStatus]);
+
+  // Add effect to scroll to and highlight comment when initialCommentId changes
+  useEffect(() => {
+    if (initialCommentId) {
+      setActiveTab('comments');
+      setHighlightedCommentId(initialCommentId);
+      
+      // Scroll to comment after a short delay to ensure comments are loaded
+      setTimeout(() => {
+        const commentElement = document.getElementById(`comment-${initialCommentId}`);
+        if (commentElement) {
+          commentElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+          commentElement.classList.add('highlight-comment');
+          
+          // Remove highlight after animation
+          setTimeout(() => {
+            commentElement.classList.remove('highlight-comment');
+          }, 2000);
+        }
+      }, 500);
+    }
+  }, [initialCommentId]);
+
+  // Add parent task search handlers
+  const handleTaskSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setParentTaskIdInput(e.target.value);
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      handleSearchClick();
+    }
+  };
+
+  const handleSearchClick = () => {
+    if (parentTaskIdInput) {
+      dispatch(searchParentTaskById(parentTaskIdInput));
+      setShowParentResults(true);
+    }
+  };
+  
+  // Add missing utility functions for subtasks effort and progress
+  const formatEffortWithRemaining = (tasks: Task[]) => {
+    let totalEffort = 0;
+    let completedEffort = 0;
+    
+    tasks.forEach(task => {
+      const effort = task.effort || 0;
+      totalEffort += effort;
+      
+      if (task.status === 'done') {
+        completedEffort += effort;
+      }
+    });
+    
+    return `${completedEffort}/${totalEffort} giờ`;
+  };
+  
+  const calculateProgress = (tasks: Task[]) => {
+    if (!tasks || tasks.length === 0) return 0;
+    
+    let totalEffort = 0;
+    let completedEffort = 0;
+    
+    tasks.forEach(task => {
+      const effort = task.effort || 0;
+      totalEffort += effort;
+      
+      if (task.status === 'done') {
+        completedEffort += effort;
+      } else if (task.status === 'doing' && task.progress) { // Change 'in_progress' to 'doing'
+        completedEffort += (effort * (task.progress / 100));
+      }
+    });
+    
+    if (totalEffort === 0) return 0;
+    return Math.round((completedEffort / totalEffort) * 100);
+  };
 
   return (
     <div className="w-full space-y-8">
@@ -2219,7 +1627,37 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         .tab-item.active::after {
           width: 100%;
           }
-        `}</style>
+
+        /* Add highlighting styles for comments */
+        .comment-highlight {
+          position: relative;
+          background-color: rgba(59, 130, 246, 0.08);
+          border-radius: 0.5rem;
+          box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+        }
+        
+        @keyframes highlightFade {
+          0% { background-color: rgba(59, 130, 246, 0.3); }
+          100% { background-color: rgba(59, 130, 246, 0.08); }
+        }
+        
+        .comment-highlight-animation {
+          animation: highlightFade 2s ease;
+          }
+
+        .comment-container {
+          transition: background-color 0.3s ease;
+        }
+        .highlight-comment {
+          background-color: rgba(255, 255, 0, 0.2);
+          animation: highlight-pulse 2s ease-out;
+        }
+        @keyframes highlight-pulse {
+          0% { background-color: rgba(255, 255, 0, 0.2); }
+          50% { background-color: rgba(255, 255, 0, 0.4); }
+          100% { background-color: rgba(255, 255, 0, 0.2); }
+        }
+      `}</style>
 
       {error && (
         <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">

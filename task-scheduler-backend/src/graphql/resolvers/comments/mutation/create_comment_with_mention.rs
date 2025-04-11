@@ -34,6 +34,59 @@ fn extract_mentions(content: &str) -> Vec<(String, String)> {
     mentions
 }
 
+// Refactor to use a single notification creation function
+async fn create_notification(
+    pool: &PgPool,
+    user_id: Uuid,
+    task_id: Uuid,
+    project_id: Uuid,
+    comment_id: Uuid,
+    sender_id: Uuid,
+    notification_type: &str,
+    action: &str,
+    message: String,
+) -> Result<Uuid, Error> {
+    let notification_id = Uuid::new_v4();
+    
+    let metadata = json!({
+        "comment_id": comment_id.to_string(),
+        "task_id": task_id.to_string(),
+        "project_id": project_id.to_string(),
+    });
+    
+    // Insert notification with taskid and commentid fields (lowercase)
+    sqlx::query(
+        r#"
+        INSERT INTO notifications (
+            notification_id, user_id, type, reference_type, reference_id, 
+            message, is_read, created_at, project_id, sender_id, action, metadata,
+            task_id, comment_id
+        )
+        VALUES (
+            $1, $2, $3, 'comment', $4, 
+            $5, false, CURRENT_TIMESTAMP, $6, $7, $8,
+            $9, $10, $11
+        )
+        "#
+    )
+    .bind(notification_id)
+    .bind(user_id)
+    .bind(notification_type)
+    .bind(comment_id)
+    .bind(message)
+    .bind(project_id)
+    .bind(sender_id)
+    .bind(action)
+    .bind(metadata)
+    .bind(task_id)  // taskid field
+    .bind(comment_id)  // commentid field
+    .execute(pool)
+    .await
+    .map_err(|e| Error::new(format!("Failed to create notification: {:?}", e)))?;
+    
+    Ok(notification_id)
+}
+
 pub async fn create_comment_with_mentions(
     pool: &PgPool, 
     user_id: Uuid,
@@ -131,6 +184,18 @@ pub async fn create_comment_with_mentions(
     // Keep track of which users we've already sent notifications to
     let mut notified_users = HashSet::new();
     
+    // Get commenter username for notifications
+    let commenter_row = sqlx::query(
+        "SELECT username FROM users WHERE user_id = $1"
+    )
+    .bind(user_id)
+    .fetch_one(pool)
+    .await
+    .map_err(|e| Error::new(format!("Failed to fetch user: {:?}", e)))?;
+    
+    let commenter_name: String = commenter_row.try_get("username")
+        .map_err(|e| Error::new(format!("Failed to get username: {:?}", e)))?;
+    
     // First, process all mentions (these take priority)
     for (mentioned_user_id, username) in mentions {
         match Uuid::parse_str(&mentioned_user_id) {
@@ -139,38 +204,28 @@ pub async fn create_comment_with_mentions(
                 if mentioned_uuid != user_id {
                     debug!("Processing mention notification for user: {}", username);
                     
-                    match create_mention_notification(
+                    // Create mention notification message
+                    let message = format!("{} mentioned you in a comment on task: {}", 
+                        commenter_name, task_title);
+                    
+                    match create_notification(
                         pool,
                         mentioned_uuid,
                         task_id,
-                        user_id,
+                        project_id,
                         comment_id,
-                        &task_title,
-                        project_id
+                        user_id,
+                        "COMMENT_MENTION",
+                        "mention",
+                        message
                     ).await {
                         Ok(notification_id) => {
                             info!("Created mention notification for user {}", username);
                             notified_users.insert(mentioned_uuid);
                             
-                            // Gửi FCM notification nếu có FirebaseService
+                            // Send FCM notification if Firebase service is available
                             if let Some(firebase) = firebase_service {
-                                // Lấy thông tin người comment
-                                let commenter_row = sqlx::query(
-                                    "SELECT username FROM users WHERE user_id = $1"
-                                )
-                                .bind(user_id)
-                                .fetch_one(pool)
-                                .await;
-                                
-                                let commenter_name = match commenter_row {
-                                    Ok(row) => row.try_get::<String, _>("username").unwrap_or_else(|_| "Someone".to_string()),
-                                    Err(e) => {
-                                        error!("Failed to get commenter info: {:?}", e);
-                                        "Someone".to_string()
-                                    }
-                                };
-                                
-                                // Lấy FCM tokens của người được mention
+                                // Get FCM tokens for the mentioned user
                                 let user_result = sqlx::query(
                                     "SELECT fcm_tokens FROM users WHERE user_id = $1"
                                 )
@@ -179,7 +234,7 @@ pub async fn create_comment_with_mentions(
                                 .await;
                                 
                                 if let Ok(user_row) = user_result {
-                                    // Xử lý FCM tokens từ JSONB
+                                    // Process FCM tokens from JSONB
                                     let fcm_tokens_value: Option<serde_json::Value> = user_row.try_get("fcm_tokens").ok();
                                     debug!("FCM tokens for user {}: {:?}", mentioned_uuid, fcm_tokens_value);
                                     
@@ -192,73 +247,39 @@ pub async fn create_comment_with_mentions(
                                         _ => Vec::new()
                                     };
                                     
-                                    if tokens.is_empty() {
-                                        debug!("No FCM tokens found for mentioned user: {}", mentioned_uuid);
-                                        
-                                        // Thêm log để kiểm tra FCM service
-                                        if let Some(firebase) = firebase_service {
-                                            debug!("Firebase service is available, but no tokens to send notifications to");
-                                        } else {
-                                            debug!("Firebase service is not available");
-                                        }
-                                    } else {
+                                    if !tokens.is_empty() {
                                         info!("Found {} FCM tokens for user {}", tokens.len(), mentioned_uuid);
                                         
-                                        // Chỉ thực hiện FCM notification khi có tokens
-                                        if let Some(firebase) = firebase_service {
-                                            let notification_title = format!("You were mentioned in a comment");
-                                            let notification_body = format!("{} mentioned you in a comment on task '{}'", 
-                                                commenter_name, task_title);
-                                            
-                                            let notification_payload = crate::firebase::FcmNotificationPayload {
-                                                title: notification_title,
-                                                body: notification_body,
-                                            };
-                                            
-                                            let data_payload = crate::firebase::FcmDataPayload {
-                                                notification_id: notification_id.to_string(),
-                                                notification_type: "COMMENT_MENTION".to_string(),
-                                                project_id: Some(project_id.to_string()),
-                                                task_id: Some(task_id.to_string()),
-                                                comment_id: Some(comment_id.to_string()),
-                                                user_id: mentioned_uuid.to_string(),
-                                                sender_id: Some(user_id.to_string()),
-                                                extra: std::collections::HashMap::new(),
-                                            };
-                                            
-                                            // Log full payload structure before sending
-                                            info!("Preparing FCM notification for mentioned user {}", mentioned_uuid);
-                                            debug!("FCM notification payload: {:?}", notification_payload);
-                                            debug!("FCM data payload: {:?}", data_payload);
-                                            debug!("FCM targets {} tokens for user {}", tokens.len(), mentioned_uuid);
-                                            
-                                            match firebase.send_notification_to_tokens(
-                                                tokens.clone(),
-                                                notification_payload,
-                                                data_payload.clone()
-                                            ).await {
-                                                Ok(fcm_response) => {
-                                                    info!("Successfully sent FCM notification to user {}: {:?}", mentioned_uuid, fcm_response);
-                                                    // Add detailed logging for FCM response
-                                                    debug!("FCM response details for mention notification to {}: \n\
-                                                           Success count: {} \n\
-                                                           Failure count: {} \n\
-                                                           Full response: {:?}",
-                                                           mentioned_uuid, 
-                                                           fcm_response.success_count, 
-                                                           fcm_response.failure_count,
-                                                           fcm_response);
-                                                    
-                                                    // Log the data payload for comparison with notifications API
-                                                    debug!("FCM data payload for mention notification: {:?}", data_payload);
-                                                },
-                                                Err(e) => {
-                                                    error!("Failed to send FCM notification to user {}: {:?}", mentioned_uuid, e);
-                                                    // Add more detailed error logging
-                                                    error!("FCM error details for mention notification: error_type={:?}", e);
-                                                }
-                                            }
-                                        }
+                                        let notification_title = format!("You were mentioned in a comment");
+                                        let notification_body = format!("{} mentioned you in a comment on task '{}'", 
+                                            commenter_name, task_title);
+                                        
+                                        let notification_payload = crate::firebase::FcmNotificationPayload {
+                                            title: notification_title,
+                                            body: notification_body,
+                                        };
+                                        
+                                        let data_payload = crate::firebase::FcmDataPayload {
+                                            notification_id: notification_id.to_string(),
+                                            notification_type: "COMMENT_MENTION".to_string(),
+                                            project_id: Some(project_id.to_string()),
+                                            task_id: Some(task_id.to_string()),
+                                            comment_id: Some(comment_id.to_string()),
+                                            user_id: mentioned_uuid.to_string(),
+                                            sender_id: Some(user_id.to_string()),
+                                            extra: std::collections::HashMap::new(),
+                                        };
+                                        
+                                        // Log payload before sending
+                                        info!("Preparing FCM notification for mentioned user {}", mentioned_uuid);
+                                        debug!("FCM notification payload: {:?}", notification_payload);
+                                        debug!("FCM data payload: {:?}", data_payload);
+                                        debug!("FCM targets {} tokens for user {}", tokens.len(), mentioned_uuid);
+                                        
+                                        // Send FCM notification
+                                        send_fcm_notification(firebase, tokens, notification_payload, data_payload.clone(), mentioned_uuid).await;
+                                    } else {
+                                        debug!("No FCM tokens found for mentioned user: {}", mentioned_uuid);
                                     }
                                 }
                             }
@@ -277,37 +298,27 @@ pub async fn create_comment_with_mentions(
     if let Some(assignee_id) = assignee_id {
         if assignee_id != user_id && !notified_users.contains(&assignee_id) {
             debug!("Notifying task assignee: {}", assignee_id);
-            match create_task_comment_notification(
-                pool, 
-                assignee_id, 
-                task_id, 
-                user_id,
-                &task_title,
+            
+            // Create task comment notification message
+            let message = format!("{} commented on task: {}", commenter_name, task_title);
+            
+            match create_notification(
+                pool,
+                assignee_id,
+                task_id,
                 project_id,
-                comment_id
+                comment_id,
+                user_id,
+                "TASK_COMMENT",
+                "comment",
+                message
             ).await {
                 Ok(notification_id) => {
                     info!("Created task comment notification for assignee");
                     
-                    // Gửi FCM notification cho assignee nếu có FirebaseService
+                    // Send FCM notification if Firebase service is available
                     if let Some(firebase) = firebase_service {
-                        // Lấy thông tin người comment
-                        let commenter_row = sqlx::query(
-                            "SELECT username FROM users WHERE user_id = $1"
-                        )
-                        .bind(user_id)
-                        .fetch_one(pool)
-                        .await;
-                        
-                        let commenter_name = match commenter_row {
-                            Ok(row) => row.try_get::<String, _>("username").unwrap_or_else(|_| "Someone".to_string()),
-                            Err(e) => {
-                                error!("Failed to get commenter info: {:?}", e);
-                                "Someone".to_string()
-                            }
-                        };
-                        
-                        // Lấy FCM tokens của assignee
+                        // Get FCM tokens for the assignee
                         let user_query = sqlx::query!(
                             "SELECT fcm_tokens FROM users WHERE user_id = $1",
                             assignee_id
@@ -316,7 +327,7 @@ pub async fn create_comment_with_mentions(
                         .await;
                         
                         if let Ok(user) = user_query {
-                            // Xử lý FCM tokens từ JSONB
+                            // Process FCM tokens from JSONB
                             let tokens = match user.fcm_tokens {
                                 Some(value) if value.is_array() => {
                                     value.as_array().unwrap().iter()
@@ -326,76 +337,39 @@ pub async fn create_comment_with_mentions(
                                 _ => Vec::new()
                             };
                             
-                            if tokens.is_empty() {
-                                debug!("No FCM tokens found for task assignee: {}", assignee_id);
-                                
-                                // Thêm log để kiểm tra FCM service
-                                if let Some(firebase) = firebase_service {
-                                    debug!("Firebase service is available, but no tokens to send notifications to");
-                                } else {
-                                    debug!("Firebase service is not available");
-                                }
-                            } else {
+                            if !tokens.is_empty() {
                                 info!("Found {} FCM tokens for assignee {}", tokens.len(), assignee_id);
                                 
-                                // Chỉ thực hiện FCM notification khi có tokens
-                                if let Some(firebase) = firebase_service {
-                                    let notification_title = format!("New comment on your task");
-                                    let notification_body = format!("{} commented on task '{}'", 
-                                        commenter_name, task_title);
-                                    
-                                    let notification_payload = crate::firebase::FcmNotificationPayload {
-                                        title: notification_title,
-                                        body: notification_body,
-                                    };
-                                    
-                                    let data_payload = crate::firebase::FcmDataPayload {
-                                        notification_id: notification_id.to_string(),
-                                        notification_type: "TASK_COMMENT".to_string(),
-                                        project_id: Some(project_id.to_string()),
-                                        task_id: Some(task_id.to_string()),
-                                        comment_id: Some(comment_id.to_string()),
-                                        user_id: assignee_id.to_string(),
-                                        sender_id: Some(user_id.to_string()),
-                                        extra: std::collections::HashMap::new(),
-                                    };
-                                    
-                                    // Log full payload structure before sending
-                                    info!("Preparing FCM notification for task assignee {}", assignee_id);
-                                    debug!("FCM notification payload: {:?}", notification_payload);
-                                    debug!("FCM data payload: {:?}", data_payload);
-                                    debug!("FCM targets {} tokens for assignee {}", tokens.len(), assignee_id);
-                                    
-                                    // Log the data payload for comparison with notifications API
-                                    debug!("FCM data payload for assignee notification: {:?}", data_payload);
-
-                                    match firebase.send_notification_to_tokens(
-                                        tokens.clone(),
-                                        notification_payload,
-                                        data_payload.clone()
-                                    ).await {
-                                        Ok(fcm_response) => {
-                                            info!("Successfully sent FCM notification to assignee {}: {:?}", assignee_id, fcm_response);
-                                            // Add detailed logging for FCM response
-                                            debug!("FCM response details for assignee notification to {}: \n\
-                                                   Success count: {} \n\
-                                                   Failure count: {} \n\
-                                                   Full response: {:?}",
-                                                   assignee_id, 
-                                                   fcm_response.success_count, 
-                                                   fcm_response.failure_count,
-                                                   fcm_response);
-                                            
-                                            // Log the data payload for comparison with notifications API
-                                            debug!("FCM data payload for assignee notification: {:?}", data_payload);
-                                        },
-                                        Err(e) => {
-                                            error!("Failed to send FCM notification to assignee {}: {:?}", assignee_id, e);
-                                            // Add more detailed error logging
-                                            error!("FCM error details for assignee notification: error_type={:?}", e);
-                                        }
-                                    }
-                                }
+                                let notification_title = format!("New comment on your task");
+                                let notification_body = format!("{} commented on task '{}'", 
+                                    commenter_name, task_title);
+                                
+                                let notification_payload = crate::firebase::FcmNotificationPayload {
+                                    title: notification_title,
+                                    body: notification_body,
+                                };
+                                
+                                let data_payload = crate::firebase::FcmDataPayload {
+                                    notification_id: notification_id.to_string(),
+                                    notification_type: "TASK_COMMENT".to_string(),
+                                    project_id: Some(project_id.to_string()),
+                                    task_id: Some(task_id.to_string()),
+                                    comment_id: Some(comment_id.to_string()),
+                                    user_id: assignee_id.to_string(),
+                                    sender_id: Some(user_id.to_string()),
+                                    extra: std::collections::HashMap::new(),
+                                };
+                                
+                                // Log payload before sending
+                                info!("Preparing FCM notification for task assignee {}", assignee_id);
+                                debug!("FCM notification payload: {:?}", notification_payload);
+                                debug!("FCM data payload: {:?}", data_payload);
+                                debug!("FCM targets {} tokens for assignee {}", tokens.len(), assignee_id);
+                                
+                                // Send FCM notification
+                                send_fcm_notification(firebase, tokens, notification_payload, data_payload.clone(), assignee_id).await;
+                            } else {
+                                debug!("No FCM tokens found for task assignee: {}", assignee_id);
                             }
                         }
                     }
@@ -408,137 +382,38 @@ pub async fn create_comment_with_mentions(
     Ok(record)
 }
 
-// Helper function to create a task comment notification
-async fn create_task_comment_notification(
-    pool: &PgPool,
+// Helper function to send FCM notifications
+async fn send_fcm_notification(
+    firebase: &FirebaseService,
+    tokens: Vec<String>,
+    notification_payload: crate::firebase::FcmNotificationPayload,
+    data_payload: crate::firebase::FcmDataPayload,
     user_id: Uuid,
-    task_id: Uuid,
-    commenter_id: Uuid,
-    task_title: &str,
-    project_id: Uuid,
-    comment_id: Uuid,
-) -> Result<Uuid, Error> {
-    // Get commenter username
-    let user_row = sqlx::query(
-        "SELECT username FROM users WHERE user_id = $1"
-    )
-    .bind(commenter_id)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| Error::new(format!("Failed to fetch user: {:?}", e)))?;
-    
-    let username: String = user_row.try_get("username")
-        .map_err(|e| Error::new(format!("Failed to get username: {:?}", e)))?;
-    
-    let message = format!("{} commented on task: {}", username, task_title);
-    let notification_id = Uuid::new_v4();
-    
-    let metadata = json!({
-        "comment_id": comment_id.to_string(),
-        "task_id": task_id.to_string(),
-        "task_title": task_title,
-        "project_id": project_id.to_string(),
-    });
-    
-    sqlx::query(
-        r#"
-        INSERT INTO notifications (
-            notification_id, user_id, type, reference_type, reference_id, 
-            message, is_read, created_at, project_id, sender_id, action, metadata
-        )
-        VALUES (
-            $1, $2, 'COMMENT_MENTION', 'comment', $3, 
-            $4, false, CURRENT_TIMESTAMP, $5, $6, 'comment',
-            $7
-        )
-        "#
-    )
-    .bind(notification_id)
-    .bind(user_id)
-    .bind(comment_id)
-    .bind(message)
-    .bind(project_id)
-    .bind(commenter_id)
-    .bind(metadata)
-    .execute(pool)
-    .await
-    .map_err(|e| Error::new(format!("Failed to create notification: {:?}", e)))?;
-    
-    Ok(notification_id)
-}
-
-// Helper function to create a mention notification
-async fn create_mention_notification(
-    pool: &PgPool,
-    mentioned_user_id: Uuid,
-    task_id: Uuid,
-    mentioned_by: Uuid,
-    comment_id: Uuid,
-    task_title: &str,
-    project_id: Uuid,
-) -> Result<Uuid, Error> {
-    // Get mentioner username
-    let user_row = sqlx::query(
-        "SELECT username FROM users WHERE user_id = $1"
-    )
-    .bind(mentioned_by)
-    .fetch_one(pool)
-    .await
-    .map_err(|e| Error::new(format!("Failed to fetch user: {:?}", e)))?;
-    
-    let username: String = user_row.try_get("username")
-        .map_err(|e| Error::new(format!("Failed to get username: {:?}", e)))?;
-    
-    let message = format!("{} mentioned you in a comment on task: {}", 
-        username, task_title);
-    
-    let notification_id = Uuid::new_v4();
-    
-    let metadata = json!({
-        "comment_id": comment_id.to_string(),
-        "task_id": task_id.to_string(),
-        "task_title": task_title,
-        "project_id": project_id.to_string(),
-    });
-    
-    // Insert notification
-    sqlx::query(
-        r#"
-        INSERT INTO notifications (
-            notification_id, user_id, type, reference_type, reference_id, 
-            message, is_read, created_at, project_id, sender_id, action, metadata
-        )
-        VALUES (
-            $1, $2, 'COMMENT_MENTION', 'comment', $3, 
-            $4, false, CURRENT_TIMESTAMP, $5, $6, 'mention',
-            $7
-        )
-        "#
-    )
-    .bind(notification_id)
-    .bind(mentioned_user_id)
-    .bind(comment_id)
-    .bind(message)
-    .bind(project_id)
-    .bind(mentioned_by)
-    .bind(metadata)
-    .execute(pool)
-    .await
-    .map_err(|e| Error::new(format!("Failed to create notification: {:?}", e)))?;
-    
-    // Also add an entry to comment_mentions table
-    sqlx::query(
-        r#"
-        INSERT INTO comment_mentions (id, comment_id, user_id, is_read)
-        VALUES ($1, $2, $3, false)
-        "#
-    )
-    .bind(Uuid::new_v4())
-    .bind(comment_id)
-    .bind(mentioned_user_id)
-    .execute(pool)
-    .await
-    .map_err(|e| Error::new(format!("Failed to create comment mention: {:?}", e)))?;
-    
-    Ok(notification_id)
+) {
+    match firebase.send_notification_to_tokens(
+        tokens.clone(),
+        notification_payload,
+        data_payload.clone()
+    ).await {
+        Ok(fcm_response) => {
+            info!("Successfully sent FCM notification to user {}: {:?}", user_id, fcm_response);
+            // Add detailed logging for FCM response
+            debug!("FCM response details for notification to {}: \n\
+                   Success count: {} \n\
+                   Failure count: {} \n\
+                   Full response: {:?}",
+                   user_id, 
+                   fcm_response.success_count, 
+                   fcm_response.failure_count,
+                   fcm_response);
+            
+            // Log the data payload for comparison with notifications API
+            debug!("FCM data payload for notification: {:?}", data_payload);
+        },
+        Err(e) => {
+            error!("Failed to send FCM notification to user {}: {:?}", user_id, e);
+            // Add more detailed error logging
+            error!("FCM error details for notification: error_type={:?}", e);
+        }
+    }
 } 

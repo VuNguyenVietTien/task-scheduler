@@ -34,7 +34,7 @@ const convertBackendNotification = (notification: BackendNotification): Notifica
     taskId: notification.referenceType === 'TASK' ? notification.referenceId : undefined,
     commentId: notification.referenceType === 'COMMENT' ? notification.referenceId : undefined,
     senderId: notification.senderId,
-    link: notification.action ? notification.action : undefined
+    metadata: notification.metadata
   };
 };
 

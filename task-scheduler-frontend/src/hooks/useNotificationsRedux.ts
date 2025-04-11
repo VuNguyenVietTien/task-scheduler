@@ -68,33 +68,53 @@ export default function useNotificationsRedux() {
   const handleNotificationReceived = useCallback((event: any) => {
     console.log('[useNotificationsRedux] Received notificationReceived event with details:', event.detail);
     
-    // If we have a notification object in the event, add it to Redux
-    const newNotification = event.detail?.notification;
-    if (newNotification && newNotification.id) {
-      console.log('[useNotificationsRedux] Processing notification:', newNotification);
+    const payload = event.detail?.payload;
+    if (payload) {
+      console.log('[useNotificationsRedux] Processing notification payload:', payload);
       
-      // Save the ID of the last notification to prevent duplicate refreshes
-      setLastReceivedNotification(newNotification.id);
+      // Extract notification data
+      const notificationData = payload.data;
+      const notification = {
+        id: notificationData.notification_id,
+        userId: notificationData.user_id,
+        message: payload.notification.body,
+        type: notificationData.notification_type,
+        isRead: false,
+        createdAt: new Date().toISOString(),
+        projectId: notificationData.project_id,
+        taskId: notificationData.task_id,
+        commentId: notificationData.comment_id,
+        senderId: notificationData.sender_id,
+        link: `/projects/${notificationData.project_id}/tasks/${notificationData.task_id}${notificationData.comment_id ? `#comment-${notificationData.comment_id}` : ''}`
+      };
+
+      // Dispatch to Redux store
+      dispatch(addNotification(notification));
+      dispatch(fetchNotificationCount());
       
-      // Trigger immediate UI update
-      setForceUpdate(prev => prev + 1);
-      
-      // Play notification sound if available
+      // Play notification sound
       const audio = document.getElementById('notification-sound') as HTMLAudioElement;
       if (audio) {
-        audio.currentTime = 0; // Reset to start
+        audio.currentTime = 0;
         audio.play().catch(e => console.log('[useNotificationsRedux] Error playing sound:', e));
-      } else {
-        console.warn('[useNotificationsRedux] Notification sound element not found');
       }
       
-      // Note: We don't need to dispatch to Redux here since FcmNotificationHandler already did it
-      // But we'll trigger a re-fetch to ensure data consistency
-      debouncedRefetch();
+      // Create browser notification if app is not in focus
+      if (document.hidden && 'Notification' in window && Notification.permission === 'granted') {
+        const browserNotification = new Notification(payload.notification.title || 'New notification', {
+          body: payload.notification.body,
+          icon: '/notification-icon.png',
+          data: notification
+        });
+        
+        browserNotification.onclick = () => {
+          window.location.href = notification.link;
+        };
+      }
     } else {
-      console.warn('[useNotificationsRedux] Received event but no valid notification data found:', event.detail);
+      console.warn('[useNotificationsRedux] Received event but no valid payload found:', event.detail);
     }
-  }, [debouncedRefetch]);
+  }, [dispatch]);
   
   // Initialize FCM and set up listeners
   const initFcm = useCallback(async () => {
@@ -195,28 +215,37 @@ export default function useNotificationsRedux() {
   };
   
   // Handle notification click
-  const handleNotificationClick = (notification: Notification) => {
-    if (!notification.isRead) {
-      handleMarkAsRead(notification.id);
+  const handleNotificationClick = async (notification: Notification) => {
+    try {
+      // Mark notification as read first
+      if (!notification.isRead) {
+        await dispatch(markNotificationAsRead(notification.id)).unwrap();
+        console.log('[useNotificationsRedux] Notification marked as read:', notification.id);
+        // Force refresh to update UI
+        dispatch(fetchNotificationCount());
+      }
+
+      // Get project_id, task_id, and comment_id from either metadata or direct fields
+      const projectId = notification.metadata?.project_id || notification.projectId;
+      const taskId = notification.metadata?.task_id || notification.taskId;
+      const commentId = notification.metadata?.comment_id || notification.commentId;
+
+      // Only navigate if we have both projectId and taskId
+      if (projectId && taskId) {
+        // For comment-related notifications, include comment_id in hash
+        if (commentId && (notification.type === 'COMMENT_MENTION' || notification.type === 'TASK_COMMENT')) {
+          router.push(`/projects/${projectId}/tasks/${taskId}#comment-${commentId}`);
+        } else {
+          // For task-related notifications, just link to task
+          router.push(`/projects/${projectId}/tasks/${taskId}`);
+        }
+      }
+      
+      // Close dropdown after clicking
+      toggleDropdown();
+    } catch (error) {
+      console.error('[useNotificationsRedux] Error handling notification click:', error);
     }
-    
-    // Navigate to related page based on notification type
-    if (notification.type === 'TASK_ASSIGNED' && notification.taskId) {
-      router.push(`/dashboard/tasks/${notification.taskId}`);
-    } else if (notification.type === 'TASK_REASSIGNED' && notification.taskId) {
-      router.push(`/dashboard/tasks/${notification.taskId}`);
-    } else if (notification.type === 'TASK_COMPLETED' && notification.taskId) {
-      router.push(`/dashboard/tasks/${notification.taskId}`);
-    } else if (notification.type === 'TASK_OVERDUE' && notification.taskId) {
-      router.push(`/dashboard/tasks/${notification.taskId}`);
-    } else if (notification.type === 'COMMENT_MENTION' && notification.taskId) {
-      router.push(`/dashboard/tasks/${notification.taskId}`);
-    } else if (notification.type === 'TASK_COMMENT' && notification.taskId) {
-      router.push(`/dashboard/tasks/${notification.taskId}`);
-    }
-    
-    // Close dropdown after clicking
-    toggleDropdown();
   };
   
   // Toggle dropdown visibility

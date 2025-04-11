@@ -48,6 +48,7 @@ export default function TaskDetailsPage() {
   const [projectName, setProjectName] = useState<string>('Dự án');
   const [hideTitleHeader, setHideTitleHeader] = useState(false);
   const [previousTaskId, setPreviousTaskId] = useState<string | null>(null);
+  const [commentId, setCommentId] = useState<string | null>(null);
   const updateTaskHook = useUpdateTask();
   const dispatch = useAppDispatch();
   
@@ -203,6 +204,17 @@ export default function TaskDetailsPage() {
     }
   }, [reduxTask, task]);
 
+  // Extract commentId from URL hash
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.startsWith('#comment-')) {
+      const extractedCommentId = hash.replace('#comment-', '');
+      setCommentId(extractedCommentId);
+    } else {
+      setCommentId(null);
+    }
+  }, [window.location.hash]);
+
   const handleTaskUpdate = async (updates: Partial<Task>) => {
     try {
       console.log('[TaskDetailsPage] handleTaskUpdate called with:', updates);
@@ -310,6 +322,8 @@ export default function TaskDetailsPage() {
           isLoadingProp={loading}
           projectMembers={reduxMembers as ProjectMember[]}
           hideTitleHeader={hideTitleHeader}
+          initialCommentId={commentId}
+          initialActiveTab={commentId ? 'comments' : 'description'}
         />
       )}
     </div>

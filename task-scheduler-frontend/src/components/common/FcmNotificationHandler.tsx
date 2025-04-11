@@ -52,87 +52,34 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
   
   // Process notification and update store
   const processNotification = (payload: any) => {
-    console.log('[FCM] Processing notification in FcmNotificationHandler:', payload);
+    console.log('[FcmNotificationHandler] Processing notification:', payload);
     
     // Extract notification data
-    const notification = payload.notification || {};
-    const data = payload.data || {};
-    const title = notification.title || 'New notification';
-    const body = notification.body || '';
+    const notificationData = payload.data;
+    const notification = {
+      id: notificationData.notification_id,
+      userId: notificationData.user_id,
+      message: payload.notification.body,
+      type: notificationData.notification_type,
+      isRead: false,
+      createdAt: new Date().toISOString(),
+      projectId: notificationData.project_id,
+      taskId: notificationData.task_id,
+      commentId: notificationData.comment_id,
+      senderId: notificationData.sender_id,
+      link: `/projects/${notificationData.project_id}/tasks/${notificationData.task_id}${notificationData.comment_id ? `/comments/${notificationData.comment_id}` : ''}`
+    };
     
-    console.log('[FCM] Notification details:', { title, body, data });
+    // Dispatch to Redux store
+    dispatch(addNotification(notification));
+    dispatch(fetchNotificationCount());
     
-    // Play sound regardless of whether we can create a complete notification object
-    playNotificationSound();
+    // Create in-app notification
+    createInAppNotification(notification);
     
-    // Process the notification and dispatch to Redux
-    if (data) {
-      // Create notification object
-      const notificationId = data.notification_id || data.notificationId;
-      const notificationType = data.notification_type || data.notificationType;
-      
-      console.log('[FCM] Extracted notification data:', { 
-        notificationId, 
-        notificationType,
-        userId: data.user_id || data.userId || userId,
-        taskId: data.task_id || data.taskId,
-        projectId: data.project_id || data.projectId
-      });
-      
-      if (notificationId && notificationType) {
-        const newNotification = {
-          id: notificationId,
-          userId: data.user_id || data.userId || userId || '',
-          type: notificationType,
-          message: body,
-          isRead: false,
-          createdAt: new Date().toISOString(),
-          projectId: data.project_id || data.projectId || null,
-          taskId: data.task_id || data.taskId || null,
-          commentId: data.comment_id || data.commentId || null,
-          senderId: data.sender_id || data.senderId || null,
-          link: data.action || null
-        };
-        
-        console.log('[FCM] Dispatching to Redux:', newNotification);
-        
-        // First, update the store - this is synchronous
-        try {
-          dispatch(addNotification(newNotification));
-          console.log('[FCM] Successfully dispatched notification to Redux');
-          
-          // Then immediately update the notification count
-          dispatch(fetchNotificationCount());
-          console.log('[FCM] Dispatched fetchNotificationCount');
-        } catch (dispatchError) {
-          console.error('[FCM] Error dispatching to Redux:', dispatchError);
-        }
-        
-        // Trigger custom event for other components to synchronize
-        // We do this after Redux update to ensure store is updated first
-        try {
-          const event = new CustomEvent('notificationReceived', {
-            detail: { payload, notification: newNotification }
-          });
-          window.dispatchEvent(event);
-          console.log('[FCM] CustomEvent notificationReceived dispatched');
-        } catch (eventError) {
-          console.error('[FCM] Error dispatching custom event:', eventError);
-        }
-        
-        // Create and show a custom notification UI element
-        createInAppNotification(newNotification, title, body);
-      } else {
-        console.warn('[FCM] Missing required fields in notification data:', data);
-        
-        // Create a basic notification UI element even if data is incomplete
-        createInAppNotification(null, title, body);
-      }
-    }
-    
-    // Show browser notification if app is not in focus
-    if (document.visibilityState !== 'visible' && 'Notification' in window && Notification.permission === 'granted') {
-      createBrowserNotification(title, body, data);
+    // Create browser notification if app is not in focus
+    if (document.hidden) {
+      createBrowserNotification(notification);
     }
   };
   
@@ -167,90 +114,70 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
   }, [userId, initialized, apolloClient, router, dispatch]);
   
   // Create in-app notification element
-  const createInAppNotification = (notification: any, title: string, body: string) => {
-    const notificationDiv = document.createElement('div');
-    notificationDiv.className = 'fixed top-5 right-5 bg-white shadow-lg rounded-lg p-4 z-50 max-w-sm';
-    notificationDiv.innerHTML = `
-      <div class="flex justify-between items-start">
-        <h4 class="font-semibold text-lg">${title}</h4>
-        <button class="text-gray-400 hover:text-gray-500" id="close-notification">
-          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-            <path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd" />
+  const createInAppNotification = (notification: any) => {
+    const notificationElement = document.createElement('div');
+    notificationElement.className = 'fixed top-4 right-4 z-50 bg-white shadow-lg rounded-lg p-4 max-w-sm transform transition-all duration-300 translate-x-0 opacity-100';
+    notificationElement.style.width = '320px';
+    
+    // Add notification content
+    notificationElement.innerHTML = `
+      <div class="flex items-start">
+        <div class="flex-shrink-0">
+          <svg class="h-6 w-6 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
           </svg>
-        </button>
+        </div>
+        <div class="ml-3 w-0 flex-1">
+          <p class="text-sm font-medium text-gray-900">${notification.message}</p>
+          <p class="mt-1 text-xs text-gray-500">Just now</p>
+        </div>
+        <div class="ml-4 flex-shrink-0 flex">
+          <button class="bg-white rounded-md inline-flex text-gray-400 hover:text-gray-500 focus:outline-none">
+            <span class="sr-only">Close</span>
+            <svg class="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       </div>
-      <p class="text-sm text-gray-600 mt-2">${body}</p>
-      ${(notification?.taskId) ? '<button class="mt-3 bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded text-sm font-medium" id="view-notification">View</button>' : ''}
     `;
-    document.body.appendChild(notificationDiv);
     
-    // Add style for animation
-    ensureAnimationStyles();
-    notificationDiv.classList.add('fadeIn');
+    // Add click handler
+    notificationElement.addEventListener('click', () => {
+      window.location.href = notification.link;
+    });
     
-    // Add click handler for close button
-    const closeButton = notificationDiv.querySelector('#close-notification');
-    if (closeButton) {
-      closeButton.addEventListener('click', () => {
-        notificationDiv.classList.add('fadeOut');
-        setTimeout(() => {
-          notificationDiv.remove();
-        }, 300);
-      });
-    }
+    // Add to DOM
+    document.body.appendChild(notificationElement);
     
-    // Add click handler for the action button
-    if (notification?.taskId) {
-      const actionButton = notificationDiv.querySelector('#view-notification');
-      if (actionButton) {
-        actionButton.addEventListener('click', () => {
-          const taskId = notification.taskId;
-          const projectId = notification.projectId;
-          if (projectId && taskId) {
-            router.push(`/projects/${projectId}/tasks/${taskId}`);
-          } else if (taskId) {
-            router.push(`/dashboard/tasks/${taskId}`);
-          }
-          notificationDiv.classList.add('fadeOut');
-          setTimeout(() => {
-            notificationDiv.remove();
-          }, 300);
-        });
-      }
-    }
-    
-    // Auto remove after 5 seconds
+    // Remove after 5 seconds
     setTimeout(() => {
-      notificationDiv.classList.add('fadeOut');
+      notificationElement.style.transform = 'translateX(100%)';
+      notificationElement.style.opacity = '0';
       setTimeout(() => {
-        notificationDiv.remove();
+        document.body.removeChild(notificationElement);
       }, 300);
     }, 5000);
   };
   
   // Create browser notification
-  const createBrowserNotification = (title: string, body: string, data: any) => {
-    // Create notification
-    const notificationOptions = {
-      body,
-      icon: '/favicon.ico',
-      requireInteraction: true,
-    };
+  const createBrowserNotification = (notification: any) => {
+    if (!('Notification' in window)) {
+      console.log('This browser does not support desktop notification');
+      return;
+    }
     
-    const browserNotification = new Notification(title, notificationOptions);
-    
-    // Handle notification click
-    browserNotification.onclick = function() {
-      window.focus();
-      const taskId = data?.task_id || data?.taskId;
-      const projectId = data?.project_id || data?.projectId;
-      if (projectId && taskId) {
-        router.push(`/projects/${projectId}/tasks/${taskId}`);
-      } else if (taskId) {
-        router.push(`/dashboard/tasks/${taskId}`);
-      }
-      browserNotification.close();
-    };
+    if (Notification.permission === 'granted') {
+      const browserNotification = new Notification(notification.message, {
+        body: notification.message,
+        icon: '/notification-icon.png',
+        data: notification
+      });
+      
+      browserNotification.onclick = () => {
+        window.location.href = notification.link;
+      };
+    }
   };
   
   // Ensure animation styles are added to document
