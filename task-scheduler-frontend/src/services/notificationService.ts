@@ -71,6 +71,9 @@ interface CreateNotificationInput {
 
 export class NotificationService {
   private apolloClient: ApolloClient<any>;
+  // Add static token tracking to prevent duplicate registrations
+  private static registeredToken: string | null = null;
+  private static isRegistering: boolean = false;
 
   constructor(apolloClient: ApolloClient<any>) {
     this.apolloClient = apolloClient;
@@ -201,7 +204,19 @@ export class NotificationService {
       
       if (token) {
         console.log('[NotificationService] FCM token obtained successfully');
-        await this.saveTokenToServer(token);
+        
+        // Check if we've already registered this token
+        if (NotificationService.registeredToken === token) {
+          console.log('[NotificationService] Token already registered with server, skipping registration');
+        } else if (NotificationService.isRegistering) {
+          console.log('[NotificationService] Token registration in progress, skipping duplicate request');
+        } else {
+          // Save token to server (only once)
+          NotificationService.isRegistering = true;
+          await this.saveTokenToServer(token);
+          NotificationService.registeredToken = token;
+          NotificationService.isRegistering = false;
+        }
         
         // Thiết lập handler thông báo
         console.log('[NotificationService] Setting up foreground message handler');
@@ -221,6 +236,7 @@ export class NotificationService {
       return null;
     } catch (error) {
       console.error('[NotificationService] Error in initializeFcm:', error);
+      NotificationService.isRegistering = false;
       return null;
     }
   }
@@ -243,10 +259,12 @@ export class NotificationService {
         return true;
       } else {
         console.error('[NotificationService] Server rejected token save');
+        NotificationService.isRegistering = false;
         return false;
       }
     } catch (error) {
       console.error('[NotificationService] Error saving token to server:', error);
+      NotificationService.isRegistering = false;
       return false;
     }
   }

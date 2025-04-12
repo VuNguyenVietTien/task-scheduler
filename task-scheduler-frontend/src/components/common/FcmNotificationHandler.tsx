@@ -8,6 +8,13 @@ import { useAppDispatch } from '@/redux/hooks';
 import { addNotification, fetchNotificationCount, incrementUnreadCount } from '@/redux/features/notificationsSlice';
 import type { Notification, NotificationType } from '@/types/notification';
 
+// Global initialization tracking
+const globalFcmState = {
+  isInitialized: false,
+  isInitializing: false,
+  currentUserId: null as string | null
+};
+
 interface FcmNotificationHandlerProps {
   userId?: string | null;
 }
@@ -103,6 +110,23 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
   useEffect(() => {
     // Only initialize if user is logged in and component hasn't been initialized
     if (userId && !initialized) {
+      // Check global state first to prevent duplicate initialization
+      if (globalFcmState.isInitialized) {
+        // If already initialized globally, just mark this instance as initialized
+        console.log('[FCM] Already initialized globally, skipping initialization');
+        setInitialized(true);
+        return;
+      }
+      
+      // If another instance is initializing, wait
+      if (globalFcmState.isInitializing) {
+        console.log('[FCM] Another instance is initializing, waiting...');
+        return;
+      }
+      
+      // Mark as initializing to prevent duplicate initialization
+      globalFcmState.isInitializing = true;
+      
       const notificationService = new NotificationService(
         // @ts-ignore - Type mismatch is acceptable here
         apolloClient
@@ -118,15 +142,27 @@ export default function FcmNotificationHandler({ userId }: FcmNotificationHandle
           if (token) {
             console.log('[FCM] Initialized with token:', token);
             setInitialized(true);
+            // Update global state
+            globalFcmState.isInitialized = true;
+            globalFcmState.isInitializing = false;
+            globalFcmState.currentUserId = userId;
           } else {
             console.log('[FCM] Initialization failed');
+            globalFcmState.isInitializing = false;
           }
         } catch (error) {
           console.error('[FCM] Error initializing FCM:', error);
+          globalFcmState.isInitializing = false;
         }
       };
       
       initializeFcm();
+    } else if (userId && initialized && globalFcmState.currentUserId !== userId) {
+      // User has changed, need to reinitialize
+      console.log('[FCM] User changed, reinitializing');
+      globalFcmState.isInitialized = false;
+      globalFcmState.currentUserId = null;
+      setInitialized(false);
     }
   }, [userId, initialized, apolloClient, router, dispatch]);
   

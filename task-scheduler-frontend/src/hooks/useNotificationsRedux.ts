@@ -25,6 +25,14 @@ const debounce = (func: Function, wait: number) => {
   };
 };
 
+// Declare a global identifier to prevent duplicate initializations
+declare global {
+  interface Window {
+    __fcmInitialized?: boolean;
+    __fcmInitializing?: boolean;
+  }
+}
+
 export default function useNotificationsRedux() {
   const router = useRouter();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
@@ -111,6 +119,22 @@ export default function useNotificationsRedux() {
   // Initialize FCM and set up listeners
   const initFcm = useCallback(async () => {
     try {
+      // Check if FCM is already initialized globally
+      if (typeof window !== 'undefined' && window.__fcmInitialized) {
+        console.log('[useNotificationsRedux] FCM already initialized globally, skipping');
+        return null;
+      }
+      
+      // Check if FCM is being initialized
+      if (typeof window !== 'undefined' && window.__fcmInitializing) {
+        console.log('[useNotificationsRedux] FCM initialization in progress, skipping');
+        return null;
+      }
+      
+      if (typeof window !== 'undefined') {
+        window.__fcmInitializing = true;
+      }
+      
       const notificationService = new NotificationService(apolloClient);
       console.log('[useNotificationsRedux] Initializing FCM...');
       
@@ -119,11 +143,19 @@ export default function useNotificationsRedux() {
         // This callback is just for logging - the actual handling happens via the custom event
       });
       
+      if (typeof window !== 'undefined') {
+        window.__fcmInitialized = !!token;
+        window.__fcmInitializing = false;
+      }
+      
       setFcmToken(token);
       console.log('[useNotificationsRedux] FCM token set:', token ? 'success' : 'null');
       return token;
     } catch (error) {
       console.error('[useNotificationsRedux] Error initializing FCM:', error);
+      if (typeof window !== 'undefined') {
+        window.__fcmInitializing = false;
+      }
       return null;
     }
   }, [apolloClient]);
@@ -149,7 +181,7 @@ export default function useNotificationsRedux() {
     window.addEventListener('notificationReceived', handleNotificationReceived);
     
     // Initialize FCM if needed and on client-side
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && !window.__fcmInitialized && !window.__fcmInitializing) {
       initFcm();
     }
     

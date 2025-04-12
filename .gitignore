@@ -8,7 +8,7 @@
 frontend-backup/
 backend-backup/
 
-
+logDebug/
 
 # Dependencies
 node_modules/
