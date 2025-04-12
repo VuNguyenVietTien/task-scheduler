@@ -545,7 +545,7 @@ input CreateTaskInput {
   priority: TaskPriority!
   effort: Float
   startDate: DateTime
-  deadline: DateTime
+  dueDate: DateTime
   assigneeId: ID
   priorityOrder: Int
   type: String

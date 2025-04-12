@@ -448,7 +448,7 @@ const tasksSlice = createSlice({
       
       // Chuyển đổi từ camelCase sang snake_case trước khi lưu vào state
       state.tasks = action.payload.map((task: any) => transformTaskFromAPI(task) as Task);
-      
+      console.log('TASKS STATE:', state.tasks);
       // Tính toán pagination dựa trên tổng số tasks
       state.pagination.totalItems = action.payload.length;
       state.pagination.totalPages = Math.ceil(action.payload.length / state.pagination.pageSize);

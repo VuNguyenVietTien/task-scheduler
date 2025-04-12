@@ -18,15 +18,15 @@ export interface PlanData {
 }
 
 export interface PlanTaskData {
-  taskId: string;
-  priorityOrder: number;
-  originalPriority?: Priority;
-  startDate?: string;
-  endDate?: string;
+  task_id: string;
+  priority_order: number;
+  original_priority?: Priority;
+  start_date?: string;
+  end_date?: string;
   title?: string;
   effort?: number;
-  assigneeId?: string;
-  assigneeName?: string;
+  assignee_id?: string;
+  assignee_name?: string;
   priority?: Priority;
   status?: string;
 }
@@ -56,14 +56,14 @@ export interface CreatePlanDataInput {
 }
 
 export interface CreatePlanTaskDataInput {
-  taskId: string;
-  priorityOrder: number;
-  startDate?: string;
-  endDate?: string;
+  task_id: string;
+  priority_order: number;
+  start_date?: string;
+  end_date?: string;
   title?: string;
   effort?: number;
-  assigneeId?: string;
-  assigneeName?: string;
+  assignee_id?: string;
+  assignee_name?: string;
   priority?: Priority;
   status?: string;
 }

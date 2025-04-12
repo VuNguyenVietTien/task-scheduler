@@ -27,7 +27,8 @@ export interface TaskFormInputs {
   title: string;
   description: string;
   assignee: string;
-  deadline: string;
+  startDate: string;
+  dueDate: string;
   category: string;
   type: string;
   effort?: number;
@@ -320,8 +321,8 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
         status: data.status,
         priority: data.priority,
         priorityOrder: data.priorityOrder || 0,
-        startDate: data.deadline ? new Date().toISOString() : null,
-        deadline: data.deadline ? new Date(data.deadline).toISOString() : null,
+        startDate: data.startDate ? new Date().toISOString() : null,
+        dueDate: data.dueDate ? new Date(data.dueDate).toISOString() : null,
         assigneeId: data.assignee || null,
         effort: data.effort || 0,
         type: data.type || null,
@@ -565,20 +566,20 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
 
         <div>
           <label
-            htmlFor="deadline"
+            htmlFor="dueDate"
             className="block text-sm font-medium text-gray-700"
           >
-            Deadline
+            Due Date
           </label>
           <input
-            {...register("deadline")}
+            {...register("dueDate")}
             type="datetime-local"
-            id="deadline"
+            id="dueDate"
             className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500"
           />
-          {errors.deadline && (
+          {errors.dueDate && (
             <p className="mt-1 text-sm text-red-600">
-              {errors.deadline.message as string}
+              {errors.dueDate.message as string}
             </p>
           )}
         </div>

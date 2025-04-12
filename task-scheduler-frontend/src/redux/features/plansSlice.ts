@@ -192,6 +192,7 @@ const plansSlice = createSlice({
       .addCase(fetchProjectPlans.fulfilled, (state, action) => {
         state.loading = false;
         state.plans = action.payload ? action.payload.map(parsePlanData) : [];
+        console.log('PLANS STATE:', state.plans);
       })
       .addCase(fetchProjectPlans.rejected, (state, action) => {
         state.loading = false;

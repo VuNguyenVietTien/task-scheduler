@@ -47,7 +47,7 @@ const determineTaskScheduleStatus = (task: any, planData: any[]) => {
         return { status: 'late', label: 'Trễ bắt đầu', color: 'text-red-600' };
       }
     }
-  } else if (['doing', 'review'].includes(task.status.toLowerCase())) {
+  } else if (['doing', 'review', 'pending', 'blocked'].includes(task.status.toLowerCase())) {
     // Kiểm tra đang làm và chưa đến deadline
     const dueDate = planTask?.end_date ? new Date(planTask.end_date) : (task.due_date ? new Date(task.due_date) : null);
     if (dueDate) {
@@ -58,6 +58,10 @@ const determineTaskScheduleStatus = (task: any, planData: any[]) => {
         return { status: 'late', label: 'Đang làm trễ tiến độ', color: 'text-red-600' };
       }
     }
+  } else if (['done', 'close', 'archived'].includes(task.status.toLowerCase())) {
+    return { status: 'on-schedule', label: 'Đã hoàn thành', color: 'text-green-600' };
+  } else if (task.status.toLowerCase() === 'rejected') {
+    return { status: 'on-schedule', label: 'Đã bị từ chối', color: 'text-gray-600' };
   }
   
   return { status: 'unknown', label: 'Không xác định', color: 'text-gray-500' };
@@ -195,6 +199,9 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     // Dữ liệu tasks và plan - không cần khai báo lại ở đây vì đã có state
     const currentPlanTasks = activePlan?.planData?.tasks || [];
     
+    console.log('Processing daily report with plan tasks:', currentPlanTasks);
+    console.log('And tasks:', tasks);
+
     // ---- XỬ LÝ BÁO CÁO HÔM QUA ----
     
     // 1. Các task đã hoàn thành hôm qua
@@ -212,12 +219,46 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     // 2. Các task bị trễ so với kế hoạch
     // Lọc các task có due_date <= hôm qua nhưng status chưa phải done
     const delayedYesterday = tasks.filter(task => {
-      if (!task.due_date) return false;
+      // Kiểm tra trong planData trước (ưu tiên cao hơn)
+      const planTask = currentPlanTasks.find(pt => pt.task_id === task.task_id);
       
-      const dueDate = new Date(task.due_date);
-      dueDate.setHours(0, 0, 0, 0);
-      return dueDate.getTime() <= yesterday.getTime() && 
-             task.status.toLowerCase() !== 'done';
+      // Trường hợp 1: Theo plan - task phải bắt đầu hôm qua hoặc trước đó mà vẫn là todo
+      if (planTask && planTask.start_date) {
+        const planStartDate = new Date(planTask.start_date);
+        planStartDate.setHours(0, 0, 0, 0);
+        if (planStartDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() === 'todo') {
+          return true; // Trễ, lẽ ra phải ở trạng thái doing trở lên
+        }
+      }
+      
+      // Trường hợp 2: Theo plan - task phải hoàn thành hôm qua hoặc trước đó mà chưa done
+      if (planTask && planTask.end_date) {
+        const planEndDate = new Date(planTask.end_date);
+        planEndDate.setHours(0, 0, 0, 0);
+        if (planEndDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() !== 'done') {
+          return true; // Trễ, lẽ ra phải ở trạng thái done
+        }
+      }
+      
+      // Trường hợp 3: Nếu không có plan, kiểm tra theo start_date - task phải bắt đầu hôm qua hoặc trước đó mà vẫn là todo
+      if (!planTask && task.start_date) {
+        const startDate = new Date(task.start_date);
+        startDate.setHours(0, 0, 0, 0);
+        if (startDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() === 'todo') {
+          return true; // Trễ, lẽ ra phải ở trạng thái doing trở lên
+        }
+      }
+      
+      // Trường hợp 4: Nếu không có plan, kiểm tra theo due_date - task phải hoàn thành hôm qua hoặc trước đó mà chưa done
+      if (!planTask && task.due_date) {
+        const dueDate = new Date(task.due_date);
+        dueDate.setHours(0, 0, 0, 0);
+        if (dueDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() !== 'done') {
+          return true; // Trễ, lẽ ra phải ở trạng thái done
+        }
+      }
+      
+      return false;
     });
     setYesterdayDelayedTasks(delayedYesterday);
 
@@ -240,6 +281,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     tasks.forEach(task => {
       if (task.assignee) {
         const memberName = task.assignee.username;
+        
         if (!memberSummary[memberName]) {
           memberSummary[memberName] = {
             completed: 0,
@@ -257,13 +299,47 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
           memberSummary[memberName].inProgress += 1;
         }
         
-        // Kiểm tra task bị trễ
-        if (task.due_date) {
-          const dueDate = new Date(task.due_date);
-          dueDate.setHours(0, 0, 0, 0);
-          if (dueDate.getTime() < today.getTime() && 
-              task.status.toLowerCase() !== 'done') {
-            memberSummary[memberName].delayed += 1;
+        // Kiểm tra task bị trễ - cập nhật theo logic mới
+        const planTask = currentPlanTasks.find(pt => pt.task_id === task.task_id);
+        
+        // Kiểm tra trễ theo plan
+        if (planTask) {
+          // Trễ bắt đầu theo plan
+          if (planTask.start_date) {
+            const planStartDate = new Date(planTask.start_date);
+            planStartDate.setHours(0, 0, 0, 0);
+            if (planStartDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() === 'todo') {
+              memberSummary[memberName].delayed += 1;
+            }
+          }
+          
+          // Trễ kết thúc theo plan
+          if (planTask.end_date) {
+            const planEndDate = new Date(planTask.end_date);
+            planEndDate.setHours(0, 0, 0, 0);
+            if (planEndDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() !== 'done') {
+              memberSummary[memberName].delayed += 1;
+            }
+          }
+        } 
+        // Kiểm tra trễ theo task nếu không có plan
+        else {
+          // Trễ bắt đầu
+          if (task.start_date) {
+            const startDate = new Date(task.start_date);
+            startDate.setHours(0, 0, 0, 0);
+            if (startDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() === 'todo') {
+              memberSummary[memberName].delayed += 1;
+            }
+          }
+          
+          // Trễ kết thúc
+          if (task.due_date) {
+            const dueDate = new Date(task.due_date);
+            dueDate.setHours(0, 0, 0, 0);
+            if (dueDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() !== 'done') {
+              memberSummary[memberName].delayed += 1;
+            }
           }
         }
       }
