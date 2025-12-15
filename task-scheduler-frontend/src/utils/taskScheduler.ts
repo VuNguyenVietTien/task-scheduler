@@ -18,16 +18,16 @@ export function calculateTaskDates(tasks: Task[]): Task[] {
     if (a.start_date && b.start_date) {
       return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
     }
-    
+
     // If neither has a start date, sort by priority order
     if (!a.start_date && !b.start_date) {
       return a.priority_order - b.priority_order;
     }
-    
+
     // Tasks with start dates come first
     if (!a.start_date) return 1;
     if (!b.start_date) return -1;
-    
+
     return 0;
   });
 
@@ -63,7 +63,7 @@ export function calculateTaskDates(tasks: Task[]): Task[] {
     // Case 4: Task has neither
     else {
       let startDate: Date;
-      
+
       if (lastEndDate) {
         // Start after the previous task
         startDate = new Date(lastEndDate);
@@ -93,16 +93,16 @@ export function calculateTaskDates(tasks: Task[]): Task[] {
     if (a.start_date && b.start_date) {
       return new Date(a.start_date).getTime() - new Date(b.start_date).getTime();
     }
-    
+
     // Sort by priority order for tasks without dates
     if (!a.start_date && !b.start_date) {
       return a.priority_order - b.priority_order;
     }
-    
+
     // Tasks with dates come first
     if (!a.start_date) return 1;
     if (!b.start_date) return -1;
-    
+
     return 0;
   });
 }
@@ -117,7 +117,7 @@ export const isWeekend = (date: Date): boolean => {
 export const getNextWorkDay = (date: Date): Date => {
   const nextDay = new Date(date);
   nextDay.setDate(nextDay.getDate() + 1);
-  
+
   // Bỏ qua ngày cuối tuần
   while (isWeekend(nextDay)) {
     nextDay.setDate(nextDay.getDate() + 1);
@@ -138,20 +138,20 @@ export interface WorkSchedule {
 
 // Hàm tìm thời gian bắt đầu khả dụng cho task tiếp theo (dựa trên người được gán)
 export const findNextAvailableStartDate = (
-  assigneeId: string | undefined, 
+  assigneeId: string | undefined,
   lastTaskEndTime: Record<string, Date>,
   currentTime: Date,
   taskPriority?: string
 ): Date => {
   console.log(`Tìm ngày bắt đầu khả dụng cho assignee: ${assigneeId || 'unassigned'}, Priority: ${taskPriority || 'unknown'}`);
   console.log(`  - Ngày hiện tại: ${formatDateVN(currentTime)}`);
-  
+
   // Không ưu tiên task urgent nữa - xử lý tất cả các task như nhau
-  
+
   // Nếu không có assigneeId hoặc không có lịch sử kết thúc của người này, bắt đầu từ ngày hiện tại
   if (!assigneeId || !lastTaskEndTime[assigneeId]) {
     console.log(`  - Không có lịch sử cho assignee này, bắt đầu từ: ${formatDateVN(currentTime)}`);
-    
+
     // Luôn bắt đầu từ ngày hiện tại hoặc ngày làm việc tiếp theo
     // Nếu là cuối tuần, chuyển sang ngày làm việc tiếp theo
     let startDate = new Date(currentTime);
@@ -160,18 +160,18 @@ export const findNextAvailableStartDate = (
       console.log(`  - Ngày hiện tại là cuối tuần, chuyển sang ngày làm việc tiếp theo: ${formatDateVN(nextWorkDay)}`);
       return nextWorkDay;
     }
-    
+
     return startDate;
   }
-  
+
   // Nếu có lịch sử kết thúc, bắt đầu sau ngày kết thúc gần nhất
   const userLastEndTime = lastTaskEndTime[assigneeId];
   console.log(`  - Ngày kết thúc gần nhất của assignee: ${formatDateVN(userLastEndTime)}`);
-  
+
   // Nếu ngày kết thúc gần nhất là sau ngày hiện tại, bắt đầu từ ngày đó
   // Ngược lại, bắt đầu từ ngày hiện tại
   let startDate = userLastEndTime > currentTime ? userLastEndTime : currentTime;
-  
+
   // Đảm bảo ngày bắt đầu không phải là cuối tuần
   if (isWeekend(startDate)) {
     startDate = getNextWorkDay(startDate);
@@ -179,19 +179,19 @@ export const findNextAvailableStartDate = (
   } else {
     console.log(`  - Ngày bắt đầu dự kiến: ${formatDateVN(startDate)}`);
   }
-  
+
   return startDate;
 };
 
 // Tính thời điểm kết thúc của task dựa trên effort và thời gian làm việc còn lại
 export const calculateTaskSchedule = (
-  startDate: Date, 
+  startDate: Date,
   effort: number,
   workSchedule: WorkSchedule = {}
 ): { endDate: Date, updatedSchedule: WorkSchedule, hoursPerDay: Record<string, number> } => {
   // Nếu effort là 0, task không chiếm thời gian làm việc nào
   if (effort <= 0) {
-    return { 
+    return {
       endDate: new Date(startDate), // Kết thúc cùng ngày bắt đầu
       updatedSchedule: { ...workSchedule },
       hoursPerDay: { [formatDateVN(startDate)]: 0 } // Không có giờ làm việc
@@ -203,71 +203,69 @@ export const calculateTaskSchedule = (
   const updatedSchedule = { ...workSchedule };
   const hoursPerDay: Record<string, number> = {}; // Số giờ task chiếm trong mỗi ngày
   let lastWorkDate = new Date(startDate); // Theo dõi ngày làm việc cuối cùng
-  
+
   // Đặt thời gian về 00:00:00 để so sánh chính xác
   currentDate.setHours(0, 0, 0, 0);
-  
-  console.log(`Tính lịch cho task: Bắt đầu từ ${formatDateVN(startDate)} với ${effort}h effort`);
-  console.log(`  - Task có ${effort}h effort, cần ${Math.ceil(effort / WORK_HOURS_PER_DAY)} ngày làm việc`);
-  
+
+
   let currentDay = 0; // Số ngày đã xử lý
-  
+
   while (remainingEffort > 0) {
     // Tạo bản sao của ngày hiện tại để tránh thay đổi trực tiếp
     const processingDate = new Date(currentDate);
     processingDate.setDate(processingDate.getDate() + currentDay);
-    
+
     if (isWeekend(processingDate)) {
       // Bỏ qua việc tính giờ làm cho ngày cuối tuần, tăng ngày và tiếp tục vòng lặp
       console.log(`  - Bỏ qua ngày cuối tuần: ${formatDateVN(processingDate)}`);
       currentDay++;
       continue;
     }
-    
+
     const dateStr = formatDateVN(processingDate);
     lastWorkDate = new Date(processingDate); // Cập nhật ngày làm việc cuối cùng
-    
+
     // Số giờ còn lại trong ngày này (mặc định WORK_HOURS_PER_DAY nếu chưa có ai dùng)
-    const availableHoursInDay = updatedSchedule[dateStr] !== undefined 
-      ? updatedSchedule[dateStr] 
+    const availableHoursInDay = updatedSchedule[dateStr] !== undefined
+      ? updatedSchedule[dateStr]
       : WORK_HOURS_PER_DAY;
-    
+
     if (availableHoursInDay <= 0) {
       // Ngày đã hết giờ làm việc, chuyển sang ngày tiếp theo
       console.log(`  - Ngày ${dateStr} đã hết giờ làm việc, chuyển ngày tiếp theo`);
       currentDay++;
       continue;
     }
-    
+
     // Tính toán số giờ làm việc trong ngày này (tối đa là số giờ còn lại trong ngày)
     const hoursForThisDay = Math.min(remainingEffort, availableHoursInDay);
-    
+
     // Log để debug
     console.log(`  - Ngày ${dateStr}: ${hoursForThisDay}h (còn lại: ${remainingEffort - hoursForThisDay}h)`);
-    
+
     // Lưu số giờ task chiếm trong ngày
     hoursPerDay[dateStr] = hoursForThisDay;
-    
+
     // Cập nhật số giờ còn lại trong ngày
     updatedSchedule[dateStr] = availableHoursInDay - hoursForThisDay;
-    
+
     // Cập nhật effort còn lại
     remainingEffort -= hoursForThisDay;
-    
+
     // Nếu đã sử dụng hết effort, không cần tăng ngày nữa
     if (remainingEffort <= 0) {
       break;
     }
-    
+
     // Tăng ngày để xử lý ngày tiếp theo
     currentDay++;
   }
-  
+
   console.log(`  => Kết thúc vào: ${formatDateVN(lastWorkDate)}`);
-  
+
   // Trả về ngày làm việc cuối cùng làm ngày kết thúc
-  return { 
-    endDate: lastWorkDate, 
+  return {
+    endDate: lastWorkDate,
     updatedSchedule,
     hoursPerDay
   };
@@ -283,7 +281,7 @@ export const convertTaskOrderToTask = (item: TaskOrderItem, projectId: string): 
     priority_order: item.priorityOrder,
     status: item.status || 'todo',
     effort: item.effort || 0,
-    assignee: item.assigneeId ? { 
+    assignee: item.assigneeId ? {
       userId: item.assigneeId,
       username: item.assigneeName || item.assigneeId  // Sử dụng assigneeName nếu có, nếu không thì dùng userId
     } : undefined,
@@ -299,6 +297,7 @@ export const convertTaskOrderToTask = (item: TaskOrderItem, projectId: string): 
 // Hàm sắp xếp tasks theo priority
 export const sortTasksByPriority = (tasks: Task[]): Task[] => {
   const priorityOrder: Record<string, number> = {
+    critical: 0,
     urgent: 1,  // Ưu tiên cao nhất
     high: 2,
     medium: 3,
@@ -306,8 +305,15 @@ export const sortTasksByPriority = (tasks: Task[]): Task[] => {
   };
 
   return [...tasks].sort((a, b) => {
-    const aPriority = priorityOrder[a.priority?.toLowerCase() || 'medium'] || 3;
-    const bPriority = priorityOrder[b.priority?.toLowerCase() || 'medium'] || 3;
+    // 1. Sort by status: Active first, Done last
+    const isDoneA = a.status === 'done';
+    const isDoneB = b.status === 'done';
+    if (isDoneA && !isDoneB) return 1;
+    if (!isDoneA && isDoneB) return -1;
+
+    // 2. Sort by priority
+    const aPriority = priorityOrder[a.priority?.toLowerCase() || 'medium'] ?? 3;
+    const bPriority = priorityOrder[b.priority?.toLowerCase() || 'medium'] ?? 3;
     return aPriority - bPriority;
   });
 };
@@ -316,7 +322,7 @@ export const sortTasksByPriority = (tasks: Task[]): Task[] => {
 export const updateReduxStore = (
   tasks: Task[],
   dispatch: AppDispatch,
-  dateUpdates: {taskId: string, startDate: string, endDate: string}[] = []
+  dateUpdates: { taskId: string, startDate: string, endDate: string }[] = []
 ) => {
   // Chuyển đổi từ Task[] sang TaskOrderItem[]
   const orderItems = tasks.map((task, index) => ({
@@ -357,17 +363,9 @@ export const processTasksAndUpdateStore = (
   keepOrder: boolean = false,
   dispatch: AppDispatch
 ): Task[] => {
-  console.log(`Xử lý và cập nhật store cho ${inputTasks.length} tasks, keepOrder: ${keepOrder}`);
-  
-  // Log thứ tự input trước khi xử lý
-  console.log('Thứ tự tasks trước khi xử lý:');
-  inputTasks.forEach((task, idx) => {
-    console.log(`  ${idx + 1}. ${task.title} (${task.priority})`);
-  });
-  
   // Sử dụng trực tiếp inputTasks mà không sắp xếp lại
   let tasksToProcess: Task[] = [...inputTasks];
-  
+
   // Đảm bảo priority_order được cập nhật chính xác theo thứ tự đầu vào
   if (!keepOrder) {
     // Chỉ cập nhật priority_order nếu không giữ thứ tự
@@ -376,13 +374,7 @@ export const processTasksAndUpdateStore = (
       priority_order: index + 1
     }));
   }
-  
-  // Log thứ tự sau khi chuẩn bị xử lý
-  console.log('Thứ tự tasks để xử lý (giữ nguyên thứ tự đầu vào):');
-  tasksToProcess.forEach((task, idx) => {
-    console.log(`  ${idx + 1}. ${task.title} (${task.priority})`);
-  });
-  
+
   // XỬ LÝ TASK - Thay thế phần này thay vì gọi processTasks
   // Bắt đầu xử lý từng task từ tasksToProcess để tính start_date và end_date
   let completedTasks: Task[] = [];
@@ -401,10 +393,11 @@ export const processTasksAndUpdateStore = (
       activeTasks.push(task);
     }
   });
-  
+
+
   // Map để lưu trữ thông tin về start_date từ database (chỉ dùng khi cần)
   const originalStartDates = new Map<string, string | undefined>();
-  
+
   // Lưu lại start_date gốc từ database của mỗi task nếu cần
   activeTasks.forEach(task => {
     // Chỉ lưu start_date từ database nếu được đánh dấu
@@ -412,7 +405,7 @@ export const processTasksAndUpdateStore = (
       originalStartDates.set(task.task_id, task.db_start_date);
     }
   });
-  
+
   // Mảng 2 chiều để theo dõi lịch làm việc theo ngày và assignee
   interface WorkDay {
     date: Date;
@@ -428,7 +421,7 @@ export const processTasksAndUpdateStore = (
   }
 
   const assigneeSchedules: AssigneeSchedule = {};
-  
+
   // Khởi tạo lịch làm việc cho các assignee
   const uniqueAssignees = new Set<string>();
   activeTasks.forEach(task => {
@@ -442,79 +435,79 @@ export const processTasksAndUpdateStore = (
       lastTaskEndDate: null
     };
   });
-  
+
   // Tạo hàm helper để tìm ngày làm việc tiếp theo
   const findNextWorkDay = (date: Date): Date => {
     const nextDay = new Date(date);
     nextDay.setDate(nextDay.getDate() + 1);
-    
+
     // Bỏ qua ngày cuối tuần
     while (isWeekend(nextDay)) {
       nextDay.setDate(nextDay.getDate() + 1);
     }
     return nextDay;
   };
-  
+
   // Hàm helper để lấy hoặc tạo workDay mới cho assignee
   const getOrCreateWorkDay = (assigneeId: string, date: Date): WorkDay => {
     const schedule = assigneeSchedules[assigneeId];
-    
+
     // Tìm workDay cho ngày này
-    const existingDay = schedule.workDays.find(day => 
+    const existingDay = schedule.workDays.find(day =>
       isSameDay(day.date, date)
     );
-    
+
     if (existingDay) {
       return existingDay;
     }
-    
+
     // Tạo workDay mới
     const newWorkDay: WorkDay = {
       date: new Date(date),
       remainingHours: WORK_HOURS_PER_DAY // Mặc định 8h một ngày
     };
-    
+
     schedule.workDays.push(newWorkDay);
     return newWorkDay;
   };
-  
+
   // Xử lý từng task trong danh sách đã sắp xếp
   const processedTasks: Task[] = [];
-  const dateUpdates: {taskId: string, startDate: string, endDate: string}[] = [];
-  
+  const dateUpdates: { taskId: string, startDate: string, endDate: string }[] = [];
+
   for (let i = 0; i < activeTasks.length; i++) {
     const task = activeTasks[i];
     const assigneeId = task.assignee?.userId || 'unassigned';
     let updatedTask = { ...task };
-    
+
     console.log(`Xử lý task thứ ${i + 1}: ${task.title} (${task.priority})`);
-    
+
     // Tìm thời gian bắt đầu khả dụng cho task này
     let startDate: Date;
-    
+
     // Kiểm tra nếu task có start_date cố định từ database VÀ không cần tính toán lại
     if (task.db_start_date && !task.force_recalculate) {
       console.log(`Task ${task.title} giữ nguyên start_date cố định từ DB: ${task.db_start_date}`);
       startDate = new Date(task.db_start_date);
-      
+
       // Ghi nhớ đây là start_date từ DB
       updatedTask.db_start_date = task.db_start_date;
     } else {
       // Mọi trường hợp khác đều tính toán lại start_date dựa trên thứ tự trong danh sách
       console.log(`Task ${task.title} tính toán lại start_date dựa trên thứ tự trong danh sách`);
-      
+
       // Kiểm tra assignee có lịch sử kết thúc task không
       const assigneeSchedule = assigneeSchedules[assigneeId];
-      
+
       if (assigneeSchedule.lastTaskEndDate) {
         // Bắt đầu từ ngày kết thúc task cuối cùng của assignee này
         startDate = new Date(assigneeSchedule.lastTaskEndDate);
-        
+
         // Kiểm tra xem có cần chuyển sang ngày làm việc tiếp theo không
-        const lastWorkDay = assigneeSchedule.workDays.find(day => 
+        const lastWorkDay = assigneeSchedule.workDays.find(day =>
           isSameDay(day.date, startDate)
         );
-        
+
         if (lastWorkDay && lastWorkDay.remainingHours <= 0) {
           // Nếu ngày này đã hết giờ làm việc, chuyển sang ngày tiếp theo
           startDate = findNextWorkDay(startDate);
@@ -523,7 +516,7 @@ export const processTasksAndUpdateStore = (
       } else {
         // Nếu không có lịch sử, bắt đầu từ ngày hiện tại
         startDate = new Date(currentDate);
-        
+
         // Nếu là cuối tuần, chuyển sang ngày làm việc tiếp theo
         if (isWeekend(startDate)) {
           startDate = findNextWorkDay(startDate);
@@ -531,15 +524,15 @@ export const processTasksAndUpdateStore = (
         }
       }
     }
-    
+
     // Lấy effort thực tế, mặc định là 0 nếu không có
     const taskEffort = task.effort !== undefined ? task.effort : 0;
-    
+
     // Xử lý lịch trình làm việc theo mảng 2 chiều
     let remainingEffort = taskEffort;
     let endDate = new Date(startDate);
     const hoursPerDay: Record<string, number> = {};
-    
+
     // Nếu task không có effort, đánh dấu kết thúc cùng ngày với bắt đầu
     if (remainingEffort <= 0) {
       console.log(`Task ${task.title} không có effort, kết thúc cùng ngày bắt đầu: ${formatDateVN(startDate)}`);
@@ -547,79 +540,79 @@ export const processTasksAndUpdateStore = (
     } else {
       // Xử lý từng ngày cho đến khi hết effort
       let currentDay = startDate;
-      
+
       while (remainingEffort > 0) {
         // Bỏ qua ngày cuối tuần
         if (isWeekend(currentDay)) {
           currentDay = findNextWorkDay(currentDay);
           continue;
         }
-        
+
         // Lấy hoặc tạo workDay cho ngày này
         const workDay = getOrCreateWorkDay(assigneeId, currentDay);
-        
+
         // Tính toán số giờ có thể làm trong ngày này
         const hoursForThisDay = Math.min(remainingEffort, workDay.remainingHours);
-        
+
         if (hoursForThisDay <= 0) {
           // Ngày này đã hết giờ, chuyển sang ngày tiếp theo
           currentDay = findNextWorkDay(currentDay);
           continue;
         }
-        
+
         // Đánh dấu số giờ đã sử dụng
         const dateStr = formatDateVN(currentDay);
         hoursPerDay[dateStr] = hoursForThisDay;
-        
+
         // Cập nhật giờ còn lại trong ngày
         workDay.remainingHours -= hoursForThisDay;
-        
+
         // Cập nhật effort còn lại
         remainingEffort -= hoursForThisDay;
-        
+
         // Đánh dấu ngày kết thúc
         endDate = new Date(currentDay);
-        
+
         // Nếu còn effort, chuyển sang ngày tiếp theo
         if (remainingEffort > 0) {
           currentDay = findNextWorkDay(currentDay);
         }
       }
     }
-    
+
     // Cập nhật thời gian kết thúc mới nhất cho assignee
     assigneeSchedules[assigneeId].lastTaskEndDate = new Date(endDate);
-    
+
     // Lưu lịch trình của task - đảm bảo taskId không bao giờ là undefined
     const taskId = task.task_id || task.id || `task-${i}`;
-    
+
     console.log(`Task ${task.title} (${taskEffort}h):`, {
       startDate: formatDateVN(startDate),
       endDate: formatDateVN(endDate),
       hoursPerDay: Object.entries(hoursPerDay).map(([date, hours]) => `${date}: ${hours}h`).join(', ')
     });
-    
+
     updatedTask.start_date = formatDateVN(startDate);
     updatedTask.due_date = formatDateVN(endDate);
-    
+
     // Lưu vào mảng dateUpdates để cập nhật store
     dateUpdates.push({
       taskId: taskId,
       startDate: formatDateVN(startDate),
       endDate: formatDateVN(endDate)
     });
-    
+
     // Đảm bảo xóa flag force_recalculate sau khi đã tính toán lại
     if (updatedTask.force_recalculate) {
       updatedTask.force_recalculate = false;
     }
-    
+
     processedTasks.push(updatedTask);
   }
-  
+
   // Kết hợp lại với các task đã hoàn thành
   const allProcessedTasks = [...processedTasks, ...completedTasks];
-  
+
   // Tạo mảng dateUpdates từ kết quả xử lý
   console.log(`Cập nhật ${dateUpdates.length} ngày tháng vào store:`);
   dateUpdates.forEach((update, index) => {
@@ -628,10 +621,10 @@ export const processTasksAndUpdateStore = (
       console.log(`  ${index + 1}. ${task.title} (${task.priority}): ${update.startDate} đến ${update.endDate}`);
     }
   });
-  
+
   // Chuyển đổi từ Task[] sang TaskOrderItem[] - GIỮ ĐÚNG THỨ TỰ của processedTasks
   const orderItems = allProcessedTasks.map((task, index) => ({
-      taskId: task.task_id,
+    taskId: task.task_id,
     title: task.title,
     priorityOrder: task.priority_order || index + 1,
     startDate: task.start_date,
@@ -643,26 +636,17 @@ export const processTasksAndUpdateStore = (
     status: task.status,
     fromPlan: false
   }));
-  
-  // Log thứ tự sau khi xử lý trước khi cập nhật store
-  console.log('Thứ tự orderItems trước khi cập nhật store:');
-  orderItems.forEach((item, idx) => {
-    console.log(`  ${idx + 1}. ${item.title} (${item.priority}), priorityOrder: ${item.priorityOrder}, startDate: ${item.startDate}, endDate: ${item.endDate}`);
-  });
-  
+
   // Tìm component gọi hàm này bằng cách phân tích stack trace
   const stackTrace = new Error().stack || '';
   const callerInfo = stackTrace.split('\n')[2] || 'unknown'; // Dòng thứ 3 thường là caller
-  console.log('📢 processTasksAndUpdateStore được gọi từ:', callerInfo);
-  
+
   // Dispatch action kết hợp để cập nhật cả thứ tự và dates trong một lần
-  console.log('🔄 Đang dispatch updateTaskOrderAndDates...');
   dispatch(updateTaskOrderAndDates({
     tasks: orderItems,
     dateUpdates: dateUpdates
   }));
-  console.log('✅ Đã dispatch updateTaskOrderAndDates thành công');
-  
+
   // Trả về các tasks đã xử lý
   return allProcessedTasks;
 };
@@ -683,30 +667,30 @@ export const processTasksBasedOnPlan = (
   if (hasActivePlan) {
     // Nếu có active plan, hệ thống đã load dữ liệu vào TaskOrderStore qua extraReducers
     console.log('Đã có active plan, dữ liệu sẽ được tự động cập nhật thông qua reducer');
-    
+
     // KHÔNG GỌI THÊM initializeFromTasks khi đã có active plan vì sẽ gây duplicate
     // Chỉ log thông báo
     console.log('Đã có active plan, bỏ qua việc gọi initializeFromTasks để tránh duplicate');
-    
+
     // KHÔNG ĐƯỢC gọi processTasksAndUpdateStore khi đã có active plan
     // vì sẽ gây ra duplicate tasks trong store
     console.log('Đã có active plan, chỉ bổ sung task mới, không tính toán lại để tránh duplicate');
   } else {
     // Nếu không có active plan, sử dụng processTasksAndUpdateStore và sắp xếp theo priority
     console.log('Không có active plan, tính toán ngày dựa trên thứ tự priority');
-    
+
     // Nếu không cần tính toán lại, vẫn cần cập nhật store với định dạng của TaskOrderItem
     dispatch(initializeFromTasks({
       tasks,
       autoSort: true
     }));
-    
+
     // Kiểm tra xem có task nào được đánh dấu force_recalculate không
     const needsRecalculation = tasks.some(task => task.force_recalculate);
-    
+
     // Nếu có task cần tính toán lại hoặc chưa có task nào có start_date và due_date
     const needsInitialCalculation = tasks.some(task => !task.start_date || !task.due_date);
-    
+
     if (needsRecalculation || needsInitialCalculation) {
       // Sắp xếp task theo priority trước khi tính toán ngày
       console.log('Sắp xếp tasks theo priority trước khi tính toán ngày');
@@ -715,7 +699,7 @@ export const processTasksBasedOnPlan = (
       sortedTasks.forEach((task, idx) => {
         console.log(`  ${idx + 1}. ${task.title} (${task.priority})`);
       });
-      
+
       // Chỉ thực hiện sắp xếp và tính toán một lần duy nhất
       // Dùng keepOrder=true để giữ nguyên thứ tự đã sắp xếp theo priority
       processTasksAndUpdateStore(sortedTasks, true, dispatch);

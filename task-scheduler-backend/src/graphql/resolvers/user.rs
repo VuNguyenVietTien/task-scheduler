@@ -86,7 +86,7 @@ impl UserQuery {
             .map_err(|_| async_graphql::Error::new("Invalid user ID"))?;
 
         let record = sqlx::query(
-            "SELECT user_id, email, username, full_name, avatar_url, email_verified, role, created_at, updated_at 
+            "SELECT user_id, email, username, full_name, avatar_url, email_verified, role::text, created_at, updated_at 
              FROM users WHERE user_id = $1"
         )
         .bind(user_id)
@@ -107,7 +107,7 @@ impl UserQuery {
             .map_err(|_| async_graphql::Error::new("Invalid user ID"))?;
 
         let record = sqlx::query(
-            "SELECT user_id, email, username, full_name, avatar_url, email_verified, role, created_at, updated_at 
+            "SELECT user_id, email, username, full_name, avatar_url, email_verified, role::text, created_at, updated_at 
              FROM users WHERE user_id = $1"
         )
         .bind(user_id)
@@ -125,7 +125,7 @@ impl UserQuery {
         let db = ctx.data::<PgPool>().unwrap();
 
         let records = sqlx::query(
-            "SELECT user_id, email, username, full_name, avatar_url, email_verified, role, created_at, updated_at 
+            "SELECT user_id, email, username, full_name, avatar_url, email_verified, role::text, created_at, updated_at 
              FROM users ORDER BY created_at DESC"
         )
         .map(|row: sqlx::postgres::PgRow| UserResponse::try_from(row))
@@ -168,7 +168,7 @@ impl UserMutation {
                 avatar_url = COALESCE($2, avatar_url),
                 updated_at = NOW() 
              WHERE user_id = $3
-             RETURNING user_id, email, username, full_name, avatar_url, email_verified, role, created_at, updated_at"
+             RETURNING user_id, email, username, full_name, avatar_url, email_verified, role::text, created_at, updated_at"
         )
         .bind(input.full_name)
         .bind(input.avatar_url)

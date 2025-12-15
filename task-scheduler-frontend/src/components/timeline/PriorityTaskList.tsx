@@ -12,7 +12,7 @@ import {
   useSensor,
   useSensors
 } from '@dnd-kit/core';
-import { 
+import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
@@ -48,10 +48,10 @@ interface PriorityTaskListProps {
 }
 
 // Component cho task có thể kéo thả trong PriorityTaskList
-function SortableTaskItem({ 
-  task, 
-  onClick 
-}: { 
+function SortableTaskItem({
+  task,
+  onClick
+}: {
   task: Task;
   onClick?: (taskId: string) => void;
 }) {
@@ -115,11 +115,11 @@ function SortableTaskItem({
   );
 }
 
-export function PriorityTaskList({ 
-  tasks, 
-  onTaskClick, 
-  onTaskReorder, 
-  activePlanId, 
+export function PriorityTaskList({
+  tasks,
+  onTaskClick,
+  onTaskReorder,
+  activePlanId,
   autoSort,
   title,
   showCount,
@@ -131,7 +131,7 @@ export function PriorityTaskList({
   const [hasUserReordered, setHasUserReordered] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const dispatch = useAppDispatch();
-  
+
   // Sensors cho DnD - Luôn định nghĩa ở cấp cao nhất của component
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -152,23 +152,23 @@ export function PriorityTaskList({
   // Xử lý khi kéo thả hoàn tất - Định nghĩa callback trước useEffect
   const handleDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
-    
+
     // Đánh dấu đã kết thúc quá trình kéo thả
     setIsDragging(false);
-    
+
     if (over && active.id !== over.id) {
       const oldIndex = activeTasks.findIndex(task => task.task_id === active.id);
       const newIndex = activeTasks.findIndex(task => task.task_id === over.id);
-      
+
       // Cập nhật thứ tự tasks
       if (oldIndex !== -1 && newIndex !== -1) {
         // Tạo mảng mới theo thứ tự sau khi kéo thả
         const newTasks = arrayMove(activeTasks, oldIndex, newIndex);
-        
+
         // Cập nhật state local trước
         setActiveTasks(newTasks);
         setHasUserReordered(true);
-        
+
         // Chuyển đổi tasks thành định dạng phù hợp để tính toán lại ngày
         const tasksToRecalculate = newTasks.map((task, index) => ({
           ...task,
@@ -177,13 +177,13 @@ export function PriorityTaskList({
           start_date: undefined,
           due_date: undefined
         }));
-        
+
         // QUAN TRỌNG: Chỉ gọi processTasksAndUpdateStore - KHÔNG gọi updateTaskOrder trước đó
         // vì processTasksAndUpdateStore sẽ tự động dispatch updateTaskOrderAndDates
-        console.log('🔄 PriorityTaskList - handleDragEnd: Gọi processTasksAndUpdateStore để cập nhật thứ tự và ngày:', 
+        console.log('🔄 PriorityTaskList - handleDragEnd: Gọi processTasksAndUpdateStore để cập nhật thứ tự và ngày:',
           tasksToRecalculate.length, 'tasks');
         processTasksAndUpdateStore(tasksToRecalculate, true, dispatch);
-        
+
         // Gọi callback để thông báo thay đổi
         if (onTaskReorder) {
           setTimeout(() => {
@@ -202,28 +202,28 @@ export function PriorityTaskList({
       if (isDragging) {
         return;
       }
-      
+
       // Reset trạng thái khi tasks, plan, hoặc autoSort thay đổi
       if (activePlanId || autoSort) {
         setHasUserReordered(false);
       } else if (hasUserReordered && tasks.length === activeTasks.length) {
         return; // Chỉ giữ nguyên thứ tự nếu người dùng đã kéo thả và không có plan/autoSort
       }
-      
+
       // Lọc tasks đã hoàn thành
       const filteredTasks = tasks.filter(task => task.status !== 'done');
-      
+
       console.log(`PriorityTaskList updating - activePlanId: ${activePlanId}, autoSort: ${autoSort}, tasks: ${filteredTasks.length}`);
-      
+
       // Nếu có plan active hoặc tất cả tasks đều có priority_order, sắp xếp theo priority_order
-      const allTasksHavePriorityOrder = filteredTasks.length > 0 && 
-                                        filteredTasks.every(task => task.priority_order !== undefined);
-      
+      const allTasksHavePriorityOrder = filteredTasks.length > 0 &&
+        filteredTasks.every(task => task.priority_order !== undefined);
+
       let sortedTasks: Task[] = [];
       if (activePlanId || allTasksHavePriorityOrder) {
         // Sắp xếp theo priority_order nếu có plan hoặc tất cả tasks đều có priority_order
         console.log('Sắp xếp tasks theo priority_order (từ plan hoặc đã có thứ tự)');
-        sortedTasks = [...filteredTasks].sort((a, b) => 
+        sortedTasks = [...filteredTasks].sort((a, b) =>
           (a.priority_order || 999) - (b.priority_order || 999)
         );
       } else {
@@ -231,10 +231,13 @@ export function PriorityTaskList({
         console.log('Sắp xếp tasks theo priority (urgent > high > medium > low)');
         sortedTasks = sortTasksByPriority(filteredTasks);
       }
-      
-      setActiveTasks(sortedTasks);
+
+      // Deduplicate sortedTasks to ensure unique keys
+      const uniqueSortedTasks = Array.from(new Map(sortedTasks.map(task => [task.task_id, task])).values());
+
+      setActiveTasks(uniqueSortedTasks);
     };
-    
+
     updateTasksOrder();
   }, [tasks, hasUserReordered, activeTasks.length, isDragging, activePlanId, autoSort]);
 
@@ -253,7 +256,7 @@ export function PriorityTaskList({
         <h3 className="font-medium text-slate-800">Thứ tự ưu tiên công việc</h3>
         <p className="text-xs text-slate-500 mt-1">Kéo và thả để thay đổi thứ tự ưu tiên</p>
       </div>
-      
+
       <div>
         {activeTasks.length > 0 ? (
           <DndContext

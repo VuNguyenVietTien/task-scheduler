@@ -21,6 +21,7 @@
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@headlessui/react": "^1.7.17",
+    "@hello-pangea/dnd": "^18.0.1",
     "@heroicons/react": "^2.0.18",
     "@hookform/resolvers": "^3.10.0",
     "@mui/icons-material": "^6.4.8",
@@ -46,7 +47,6 @@
     "@tiptap/starter-kit": "^2.11.5",
     "@types/firebase": "^2.4.32",
     "@types/formidable": "^3.4.5",
-    "@types/react-beautiful-dnd": "^13.1.8",
     "@types/uuid": "^10.0.0",
     "apollo-upload-client": "^18.0.1",
     "class-variance-authority": "^0.7.1",
@@ -64,7 +64,6 @@
     "quill-magic-url": "^4.2.0",
     "quill-table": "^1.0.0",
     "react": "^18.2.0",
-    "react-beautiful-dnd": "^13.1.1",
     "react-day-picker": "^9.5.1",
     "react-dom": "^18.2.0",
     "react-hook-form": "^7.54.2",
@@ -108,5 +107,8 @@
     "postcss": "^8.4.30",
     "typescript": "^5.2.2",
     "whatwg-fetch": "^3.6.19"
+  },
+  "optionalDependencies": {
+    "@next/swc-darwin-arm64": "^16.0.10"
   }
 }

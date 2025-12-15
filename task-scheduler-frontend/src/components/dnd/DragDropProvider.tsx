@@ -3,6 +3,7 @@
 import { ReactNode } from 'react';
 import {
   DragDropContext,
+  Droppable,
   Draggable,
   DragStart,
   DragUpdate,
@@ -10,8 +11,7 @@ import {
   type DroppableProvided,
   type DraggableProvided,
   type DraggableStateSnapshot,
-} from 'react-beautiful-dnd';
-import { StrictModeDroppable } from './StrictModeDroppable';
+} from '@hello-pangea/dnd';
 
 interface DragDropProviderProps {
   children: ReactNode;
@@ -26,7 +26,7 @@ export type {
   DropResult
 };
 
-export { Draggable, StrictModeDroppable as Droppable };
+export { Draggable, Droppable };
 
 export function DragDropProvider({ children, onDragEnd }: DragDropProviderProps) {
   return (

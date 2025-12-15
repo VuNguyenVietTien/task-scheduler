@@ -54,13 +54,13 @@ export interface Task {
   project_id: string;
   projectId?: string; // Alias for project_id for backward compatibility
   parent_task_id?: string;
-  
+
   // Basic info
   title: string;
   description?: string;
   assignee?: UserBasic;
   priority_order: number;
-  
+
   // Dates
   start_date?: string;
   original_start_date?: string;
@@ -71,18 +71,18 @@ export interface Task {
   actual_end_date?: string;
   created_at?: string;
   updated_at?: string;
-  
+
   // Progress tracking
   effort?: number;
   progress?: number;
-  
+
   // Status and categorization
   status: TaskStatus;
   priority: Priority;
   type?: TaskType;
   category?: TaskCategory;
   progress_type?: ProgressType;
-  
+
   // Additional info
   created_by: string | UserBasic;
   is_deleted?: boolean;

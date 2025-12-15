@@ -27,25 +27,32 @@ const getPriorityColor = (priority: string | undefined) => {
 // Hàm quyết định màu dựa trên status thay vì priority
 const getStatusColor = (status: string | number): string => {
   if (!status) return 'bg-gray-300';
-  
-  switch(String(status).toLowerCase()) {
+
+  switch (String(status).toLowerCase()) {
     case 'todo':
     case 'to_do':
-      return 'bg-blue-500';
+      return 'bg-gray-100 text-gray-800 border border-gray-200';
+    case 'doing':
     case 'in_progress':
-      return 'bg-yellow-500';
-    case 'pending':
-      return 'bg-amber-200';
-    case 'review':
-      return 'bg-purple-500';
+      return 'bg-blue-100 text-blue-800 border border-blue-200';
     case 'done':
-      return 'bg-green-500';
-    case 'cancelled':
-      return 'bg-red-500';
+      return 'bg-green-100 text-green-800 border border-green-200';
+    case 'close':
+      return 'bg-purple-100 text-purple-800 border border-purple-200';
+    case 'pending':
+      return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
+    case 'review':
+      return 'bg-indigo-100 text-indigo-800 border border-indigo-200';
     case 'blocked':
-      return 'bg-red-500';
+      return 'bg-red-100 text-red-800 border border-red-200';
+    case 'rejected':
+      return 'bg-pink-100 text-pink-800 border border-pink-200';
+    case 'archived':
+      return 'bg-gray-300 text-gray-900 border border-gray-400';
+    case 'cancelled':
+      return 'bg-red-100 text-red-800 border border-red-200';
     default:
-      return 'bg-gray-300';
+      return 'bg-gray-100 text-gray-800 border border-gray-200';
   }
 };
 
@@ -68,7 +75,7 @@ export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
   const barRef = useRef<HTMLDivElement>(null);
   const [showTooltip, setShowTooltip] = useState(false);
   const [tooltipPosition, setTooltipPosition] = useState({ x: 0, y: 0 });
-  
+
   useEffect(() => {
     if (barRef.current && showTooltip) {
       const rect = barRef.current.getBoundingClientRect();
@@ -81,13 +88,13 @@ export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
 
   // Lấy màu dựa vào status thay vì priority
   const bgColor = getStatusColor(task.status);
-  
+
   return (
     <>
-      <div 
+      <div
         ref={barRef}
         className={`${bgColor} rounded-sm text-gray-800 text-xs relative cursor-pointer group shadow hover:brightness-95 transition-all overflow-hidden`}
-        style={{ 
+        style={{
           width: `${Math.max(width, 20)}px`,
           height: `${height}px`,
           display: 'flex',
@@ -100,14 +107,10 @@ export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
         <span className="truncate font-medium pl-2">
           {task.title}
         </span>
-        
-        {task.status === 'done' && (
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="w-full border-t border-white border-dashed opacity-70"></div>
-          </div>
-        )}
+
+
       </div>
-      
+
       {showTooltip && (
         <div
           className="fixed bg-gray-800 text-white p-2 rounded shadow-lg text-xs z-50"
@@ -132,13 +135,13 @@ export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
           <div className="mt-2 border-t border-gray-700 pt-1">
             <div className="mb-1">Thời gian: {formatDateRange(task.start_date, task.due_date)}</div>
             <div className="flex items-center gap-2">
-              <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] text-white ${getStatusColor(task.status)}`}>
+              <span className={`inline-block rounded-full px-2 py-0.5 text-[10px] ${getStatusColor(task.status)}`}>
                 {getStatusBadge(task.status)}
               </span>
               {task.tags && task.tags.length > 0 && (
                 <div className="flex gap-1 flex-wrap">
                   {task.tags.map((tag, idx) => (
-                    <span 
+                    <span
                       key={idx}
                       className="inline-block rounded-full px-2 py-0.5 text-[10px] bg-gray-600 text-white"
                     >

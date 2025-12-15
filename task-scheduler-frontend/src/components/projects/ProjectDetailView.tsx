@@ -23,11 +23,11 @@ type ViewType = 'list' | 'kanban' | 'gantt' | 'members' | 'report';
 export function ProjectDetailView({ project }: { project: ProjectData }) {
   const lastFetchedProjectIdRef = useRef<string | null>(null);
   const [activeView, setActiveView] = useState<ViewType>('list');
-  
+
   const [filters, setFilters] = useState<TaskFilter>({});
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
-  
+
   const { data: users, loading: usersLoading } = useUsers();
   const { data: projectData, refetch: refetchProject } = useProject(project.id);
 
@@ -46,7 +46,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
     };
 
     window.addEventListener('task-status-updated', handleTaskStatusUpdate);
-    
+
     return () => {
       window.removeEventListener('task-status-updated', handleTaskStatusUpdate);
     };
@@ -66,7 +66,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
     // Đảm bảo chỉ fetch dữ liệu khi đang ở client side
     if (typeof window !== 'undefined' && project.id) {
       console.log('Bắt đầu fetch dữ liệu cho project:', project.id);
-      
+
       // Lập kế hoạch fetch dữ liệu theo thứ tự
       const fetchProjectData = async () => {
         try {
@@ -79,32 +79,32 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
             dispatch(fetchProjectMembers(project.id))
           ]);
           console.log('Đã fetch tasks và members xong');
-          
+
           // Check again if still mounted
           if (!isMounted) return;
-          
+
           // Bước 2: Sau khi có tasks, fetch plans
           const plansResult = await dispatch(fetchProjectPlans(project.id));
           console.log('Đã fetch plans xong');
-          
+
           // Check again if still mounted
           if (!isMounted) return;
-          
+
           // Bước 3: Sau khi có plans, fetch latest plan
           const latestPlanResult = await dispatch(fetchLatestProjectPlan(project.id));
           console.log('Đã fetch latest plan xong');
-          
+
           // Final mount check
           if (!isMounted) return;
-          
+
           // Bước 4: Xử lý dữ liệu sau khi tất cả đã được load
           handleDataProcessing(tasksResult, plansResult, latestPlanResult);
-          
+
           // Update the ref to the current project ID only if we're still mounted
           if (isMounted) {
             lastFetchedProjectIdRef.current = project.id;
           }
-          
+
         } catch (error) {
           // Only log error if we're still mounted and it wasn't caused by abort
           if (isMounted && !abortController.signal.aborted) {
@@ -112,7 +112,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
           }
         }
       };
-      
+
       fetchProjectData();
 
       // Clean up function
@@ -123,29 +123,29 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       };
     }
   }, [dispatch, project.id]); // Only re-run if project.id changes
-  
+
   const handleDataProcessing = (tasksResult: any, plansResult: any, latestPlanResult: any) => {
     if (tasksResult && tasksResult.payload) {
       console.log('Bắt đầu xử lý dữ liệu tasks và plans');
-      
+
       const hasTasks = tasksResult.payload && tasksResult.payload.length > 0;
       const hasPlans = plansResult.payload && plansResult.payload.length > 0;
       const hasActivePlan = latestPlanResult.payload !== null;
-      
-      console.log('Trạng thái dữ liệu:', { 
-        hasTasks, 
-        hasPlans, 
+
+      console.log('Trạng thái dữ liệu:', {
+        hasTasks,
+        hasPlans,
         hasActivePlan
       });
-      
+
       if (hasTasks) {
         processTasksBasedOnPlan(
-          tasksResult.payload, 
-          hasActivePlan, 
+          tasksResult.payload,
+          hasActivePlan,
           dispatch
         );
         console.log('Đã xử lý và cập nhật task order store');
-        
+
         if (!hasActivePlan) {
           dispatch(updateAutoSort(true));
           console.log('Không có active plan, đã đặt autoSort=true trong Redux store');
@@ -156,10 +156,10 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       }
     }
   };
-  
+
   const transformTask = (task: any) => {
     if (task.task_id) return task;
-    
+
     return {
       task_id: task.taskId,
       id: task.taskId,
@@ -195,9 +195,9 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       child_tasks: task.childTasks ? task.childTasks.map(transformTask) : undefined
     };
   };
-  
+
   const displayedTasks = reduxTasks.map(transformTask);
-    
+
   const pagination = {
     currentPage: page,
     totalPages: Math.ceil(reduxTasks.length / pageSize),
@@ -206,7 +206,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
     setPage: setPage,
     setPageSize: setPageSize
   };
-  
+
   console.log("DEBUG TASKS DATA:", {
     reduxTasks: reduxTasks?.length,
     displayedTasks: displayedTasks?.length,
@@ -224,7 +224,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       avatarUrl: string | null;
     };
   }
-  
+
   const displayedMembers = reduxMembers.map(member => ({
     ...member,
     user: {
@@ -233,11 +233,11 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       avatarUrl: member.user.avatarUrl || ""
     }
   }));
-  
+
   const isLoading = loadingTasks || loadingMembers || usersLoading;
 
   const currentUserRole = projectData?.project?.userRole || 'guest';
-  
+
   const isProjectAdmin = String(currentUserRole).toLowerCase() === 'admin';
   const canManageProject = isProjectAdmin;
 
@@ -245,7 +245,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
   console.log('Project role từ API:', currentUserRole);
   console.log('Project role (type):', typeof currentUserRole);
   console.log('Is project admin:', isProjectAdmin);
-  
+
   console.log('===== CHI TIẾT DỮ LIỆU MEMBERS =====');
   console.log('Project data available:', !!projectData?.project);
   console.log('All members count:', projectData?.project?.members?.length || 0);
@@ -319,7 +319,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       <div className="text-center">
         <h3 className="text-lg font-medium mb-2">No tasks found</h3>
         <p>Start by adding tasks to your project.</p>
-        <a 
+        <a
           href={`/projects/${project.id}/add-task`}
           className="mt-4 inline-flex items-center text-blue-600 hover:text-blue-700"
         >
@@ -337,7 +337,7 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       <div className="mb-6">
         <div className="flex justify-between items-center">
           <h1 className="text-2xl font-bold">{project.name}</h1>
-          <a 
+          <a
             href={`/projects/${project.id}/add-task`}
             className="btn-primary inline-block"
           >
@@ -345,12 +345,14 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
           </a>
         </div>
         <div className="flex gap-4 mt-2 text-slate-600">
-          <div className="flex items-center">
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span>Hạn {new Date(project.dueDate).toLocaleDateString('vi-VN')}</span>
-          </div>
+          {project.dueDate && new Date(project.dueDate).getFullYear() > 1970 && (
+            <div className="flex items-center">
+              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Hạn {new Date(project.dueDate).toLocaleDateString('vi-VN')}</span>
+            </div>
+          )}
           <div className="flex items-center">
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -367,8 +369,8 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
               key={tab.id}
               onClick={() => setActiveView(tab.id as ViewType)}
               className={`flex items-center pb-4 px-1 -mb-px text-sm font-medium transition-colors relative
-                ${activeView === tab.id 
-                  ? 'text-blue-600 border-b-2 border-blue-600' 
+                ${activeView === tab.id
+                  ? 'text-blue-600 border-b-2 border-blue-600'
                   : 'text-slate-600 hover:text-slate-900'
                 }`}
             >
@@ -382,11 +384,11 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
       <div className="h-[calc(100vh-240px)]">
         {activeView === 'members' ? (
           projectData?.project ? (
-            <MembersView 
+            <MembersView
               projectId={project.id}
               members={displayedMembers}
               currentUserRole={currentUserRole}
-              refetch={() => {}}
+              refetch={() => { }}
             />
           ) : (
             <LoadingState />
@@ -400,8 +402,8 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
         ) : (
           <>
             {activeView === 'list' && (
-              <TaskListView 
-                tasks={displayedTasks} 
+              <TaskListView
+                tasks={displayedTasks}
                 pagination={pagination}
                 filters={filters}
                 setFilters={setFilters}
@@ -409,10 +411,10 @@ export function ProjectDetailView({ project }: { project: ProjectData }) {
             )}
             {activeView === 'kanban' && (
               <div className="h-full overflow-x-auto">
-                <KanbanBoard 
-                  tasks={displayedTasks} 
+                <KanbanBoard
+                  tasks={displayedTasks}
                   projectId={project.id}
-                  onTasksReorder={handleTasksUpdated} 
+                  onTasksReorder={handleTasksUpdated}
                 />
               </div>
             )}

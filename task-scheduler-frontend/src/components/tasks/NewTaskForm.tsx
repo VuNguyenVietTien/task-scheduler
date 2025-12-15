@@ -36,15 +36,15 @@ export interface TaskFormInputs {
   tags: string[];
   parentTaskId?: string;
   status:
-    | "todo"
-    | "doing"
-    | "done"
-    | "close"
-    | "pending"
-    | "review"
-    | "blocked"
-    | "rejected"
-    | "archived";
+  | "todo"
+  | "doing"
+  | "done"
+  | "close"
+  | "pending"
+  | "review"
+  | "blocked"
+  | "rejected"
+  | "archived";
   priority: "low" | "medium" | "high" | "urgent" | "critical";
   priorityOrder: number;
 }
@@ -116,17 +116,15 @@ function ComboboxField({
               key={option.value}
               value={option.value}
               className={({ active }) =>
-                `relative cursor-pointer select-none py-2 pl-3 pr-9 min-h-[40px] ${
-                  active ? "bg-blue-50 text-gray-900" : "text-gray-900"
+                `relative cursor-pointer select-none py-2 pl-3 pr-9 min-h-[40px] ${active ? "bg-blue-50 text-gray-900" : "text-gray-900"
                 }`
               }
             >
               {({ selected }) => (
                 <>
                   <span
-                    className={`block truncate ${
-                      selected ? "font-semibold" : "font-normal"
-                    }`}
+                    className={`block truncate ${selected ? "font-semibold" : "font-normal"
+                      }`}
                   >
                     {option.label}
                   </span>
@@ -209,24 +207,24 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
   const filteredMembers = useMemo(() => {
     const members = projectData?.project?.members || [];
     let filtered = members;
-    
+
     if (assigneeSearchQuery) {
-      filtered = members.filter((member) => 
-        member && member.user && member.user.username && 
+      filtered = members.filter((member) =>
+        member && member.user && member.user.username &&
         member.user.username.toLowerCase().includes(assigneeSearchQuery.toLowerCase())
       );
     }
-    
+
     // Sắp xếp thành viên theo tên người dùng
     filtered = [...filtered].sort((a, b) => {
       if (!a.user || !b.user || !a.user.username || !b.user.username) return 0;
       return a.user.username.localeCompare(b.user.username);
     });
-    
+
     // Limit the number of displayed members to 10
     return filtered.slice(0, 10);
   }, [projectData?.project?.members, assigneeSearchQuery]);
-  
+
   // Get selected assignee member
   const selectedAssigneeMember = useMemo(() => {
     if (!selectedAssignee || !projectData?.project?.members) return null;
@@ -340,16 +338,16 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
 
       if (result.data?.createTask) {
         console.log('Task created successfully:', result.data.createTask);
-        
+
         // Hiển thị thông báo thành công
         alert('Tạo công việc thành công!');
-        
+
         // Navigate back to project
         router.push(`/projects/${projectId}`);
       }
     } catch (error) {
       console.error('Error creating task:', error);
-      
+
       // Hiển thị thông báo lỗi
       alert('Có lỗi xảy ra khi tạo công việc. Vui lòng thử lại.');
     }
@@ -563,6 +561,11 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
             </div>
           </div>
         </div>
+        {errors.assignee && (
+          <p className="mt-1 text-sm text-red-600">
+            {errors.assignee.message as string}
+          </p>
+        )}
 
         <div>
           <label
@@ -815,11 +818,10 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
         <button
           type="submit"
           disabled={createTaskLoading}
-          className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 ${
-            createTaskLoading
+          className={`px-4 py-2 border border-transparent rounded-md shadow-sm text-sm font-medium text-white bg-blue-600 ${createTaskLoading
               ? "opacity-50 cursor-not-allowed"
               : "hover:bg-blue-700"
-          } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
+            } focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500`}
         >
           {createTaskLoading ? "Creating..." : "Create Task"}
         </button>

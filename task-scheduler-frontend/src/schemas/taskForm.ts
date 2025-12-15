@@ -8,10 +8,10 @@ export const taskFormSchema = z.object({
     .min(1, 'Description is required'),
   assignee: z.string()
     .min(1, 'Assignee is required'),
-  deadline: z.string()
-    .min(1, 'Deadline is required')
+  dueDate: z.string()
+    .min(1, 'Due date is required')
     .refine((date) => new Date(date) > new Date(), {
-      message: 'Deadline must be in the future',
+      message: 'Due date must be in the future',
     }),
   category: z.string()
     .min(1, 'Category is required'),
@@ -32,7 +32,7 @@ export const taskFormSchema = z.object({
     required_error: 'Progress type is required',
   }),
   status: z.enum([
-    'todo', 
+    'todo',
     'doing',
     'done',
     'close',
@@ -46,7 +46,7 @@ export const taskFormSchema = z.object({
   }),
   priority: z.enum([
     'low',
-    'medium', 
+    'medium',
     'high',
     'urgent',
     'critical'
@@ -90,7 +90,7 @@ export const tagOptions = [
 
 export const progressTypeOptions = [
   'study',
-  'investigate', 
+  'investigate',
   'code',
   'test',
   'review_code',

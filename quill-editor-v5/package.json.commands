@@ -1,3 +1,0 @@
-# Run this command to install TipTap and its extensions
-npm install @tiptap/react @tiptap/starter-kit @tiptap/extension-image @tiptap/extension-table @tiptap/extension-table-row @tiptap/extension-table-cell @tiptap/extension-table-header @tiptap/extension-text-align @tiptap/extension-color @tiptap/extension-text-style @tiptap/extension-underline @tiptap/extension-placeholder lucide-react
-
