@@ -1,0 +1,29 @@
+version: '3.8'
+services:
+  design-doc-db:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: design_doc_db
+      POSTGRES_USER: design_doc
+      POSTGRES_PASSWORD: design_doc_pass
+    ports:
+      - "5433:5432"
+    volumes:
+      - design_doc_data:/var/lib/postgresql/data
+
+  design-doc-service:
+    build: .
+    ports:
+      - "8081:8081"
+    environment:
+      DESIGN_DOC_DATABASE_URL: postgres://design_doc:design_doc_pass@design-doc-db:5432/design_doc_db
+      JWT_SECRET: ${JWT_SECRET}
+      DESIGN_DOC_HOST: 0.0.0.0
+      DESIGN_DOC_PORT: 8081
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://localhost:3000}
+      TASK_SCHEDULER_URL: ${TASK_SCHEDULER_URL:-http://host.docker.internal:8080}
+    depends_on:
+      - design-doc-db
+
+volumes:
+  design_doc_data:
