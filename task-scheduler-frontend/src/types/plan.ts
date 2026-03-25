@@ -19,6 +19,7 @@ export interface PlanData {
 
 export interface PlanTaskData {
   task_id: string;
+  taskId?: string; // camelCase alias for backward compat with mixed DB data
   priority_order: number;
   original_priority?: Priority;
   start_date?: string;
@@ -56,16 +57,17 @@ export interface CreatePlanDataInput {
 }
 
 export interface CreatePlanTaskDataInput {
-  task_id: string;
-  priority_order: number;
-  start_date?: string;
-  end_date?: string;
+  taskId: string;
+  priorityOrder: number;
+  startDate?: string;
+  endDate?: string;
   title?: string;
   effort?: number;
-  assignee_id?: string;
-  assignee_name?: string;
+  assigneeId?: string;
+  assigneeName?: string;
   priority?: Priority;
   status?: string;
+  originalPriority?: string;
 }
 
 export interface CreatePlanMetadataInput {

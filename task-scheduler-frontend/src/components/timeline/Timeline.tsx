@@ -775,8 +775,9 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
       return;
     }
 
-    // Tạo dữ liệu cho kế hoạch mới với định dạng đúng theo API và lưu đầy đủ thông tin
-    const planTasks: CreatePlanTaskDataInput[] = orderedTaskItems.map((item, index) => {
+    // Tạo dữ liệu cho kế hoạch mới - loại bỏ task done/close
+    const activeOrderedItems = orderedTaskItems.filter(item => !['done', 'close'].includes(item.status?.toLowerCase() || ''));
+    const planTasks: CreatePlanTaskDataInput[] = activeOrderedItems.map((item, index) => {
       // Kiểm tra nếu calculatedTaskDates là object và có thuộc tính cho taskId này
       const calculatedDates = typeof calculatedTaskDates === 'object' && calculatedTaskDates !== null
         ? calculatedTaskDates[item.taskId]
@@ -797,15 +798,15 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
         taskPriority = 'medium'; // Giá trị mặc định nếu không hợp lệ
       }
 
-      // Tạo dữ liệu theo kiểu yêu cầu của API (CreatePlanTaskDataInput)
+      // Tạo dữ liệu theo kiểu yêu cầu của API (CreatePlanTaskDataInput) - camelCase cho GraphQL
       return {
-        task_id: item.taskId,
+        taskId: item.taskId,
         title: item.title,
-        priority_order: item.priorityOrder,
-        start_date: startDate,
-        due_date: endDate,
+        priorityOrder: item.priorityOrder,
+        startDate: startDate,
+        endDate: endDate,
         effort: item.effort,
-        assignee_id: item.assigneeId,
+        assigneeId: item.assigneeId,
         priority: taskPriority,
         status: item.status
       };
@@ -924,37 +925,25 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     setAutoSort(true);
     dispatch(updateAutoSort(true));
 
-    // 2. Sắp xếp tasks theo priority
-    console.log('Bắt đầu sắp xếp tự động cho', tasks.length, 'tasks');
-    const sortedTasks = sortTasksByPriority(tasks);
+    // 2. Lọc bỏ task đã done/close, chỉ sắp xếp task chưa hoàn thành
+    const activeTasks = tasks.filter(task => !['done', 'close'].includes(task.status.toLowerCase()));
+    console.log(`Bắt đầu sắp xếp tự động cho ${activeTasks.length} tasks (bỏ ${tasks.length - activeTasks.length} task done/close)`);
+    const sortedTasks = sortTasksByPriority(activeTasks);
 
     console.log('Thứ tự tasks sau khi sắp xếp theo priority:');
     sortedTasks.slice(0, 5).forEach((task, idx) => {
       console.log(`  ${idx + 1}. ${task.title} (${task.priority}), Priority Order: ${task.priority_order}`);
     });
 
-    // 3. Chuẩn bị tasks cho tính toán ngày - đánh dấu force_recalculate
-    const tasksToProcess = sortedTasks.map(task => {
-      // Với task đã hoàn thành, giữ nguyên ngày tháng, không tính toán lại
-      if (task.status === 'done') {
-        return {
-          ...task,
-          force_recalculate: false
-        };
-      }
-
-      // Với task chưa hoàn thành, reset ngày để tính toán lại theo priority
-      return {
-        ...task,
-        force_recalculate: true,
-        // Xóa start_date và due_date để buộc tính toán lại từ đầu
-        start_date: undefined,
-        due_date: undefined
-      };
-    });
+    // 3. Chuẩn bị tasks cho tính toán ngày - reset ngày để tính toán lại theo priority
+    const tasksToProcess = sortedTasks.map(task => ({
+      ...task,
+      force_recalculate: true,
+      start_date: undefined,
+      due_date: undefined
+    }));
 
     // 4. Gọi processTasksAndUpdateStore để tính toán lại ngày và cập nhật vào store
-    // Dùng keepOrder=true để duy trì thứ tự đã sắp xếp ở bước 2
     processTasksAndUpdateStore(tasksToProcess, true, dispatch);
 
     toast.success('Đã sắp xếp lại tasks theo mức độ ưu tiên');

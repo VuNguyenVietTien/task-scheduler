@@ -24,7 +24,7 @@ const determineTaskScheduleStatus = (task: any, planData: any[]) => {
   today.setHours(0, 0, 0, 0);
   
   // Tìm planTask tương ứng
-  const planTask = planData.find((pt: any) => pt.task_id === task.task_id);
+  const planTask = planData.find((pt: any) => (pt.task_id || pt.taskId) === task.task_id);
   
   if (task.status.toLowerCase() === 'done') {
     // Kiểm tra hoàn thành đúng hạn
@@ -84,6 +84,8 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
   const [taskProgressData, setTaskProgressData] = useState<any[]>([]);
   const [tasksByPriority, setTasksByPriority] = useState<any[]>([]);
   const [delayedTasksByAssignee, setDelayedTasksByAssignee] = useState<any[]>([]);
+  const [overdueTaskCount, setOverdueTaskCount] = useState(0);
+  const [onScheduleTaskCount, setOnScheduleTaskCount] = useState(0);
   
   // Process yesterday's tasks for daily report
   const [yesterdayCompletedTasks, setYesterdayCompletedTasks] = useState<any[]>([]);
@@ -139,16 +141,17 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     });
     setTaskProgressData(lastTwoWeeks);
 
-    // Group tasks by priority for bar chart (bugs)
+    // Group tasks by priority for bar chart (bugs) - chỉ count bug chưa done/close
     const priorityCounts: Record<string, number> = {
       low: 0,
       medium: 0,
       high: 0,
       critical: 0
     };
-    
+
     tasks.forEach(task => {
-      if (task.type?.toLowerCase() === 'bug') {
+      const status = task.status.toLowerCase();
+      if (task.type?.toLowerCase() === 'bug' && !['done', 'close', 'archived'].includes(status)) {
         const priority = task.priority?.toLowerCase() || 'medium';
         priorityCounts[priority] = (priorityCounts[priority] || 0) + 1;
       }
@@ -160,16 +163,41 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     }));
     setTasksByPriority(priorityData);
 
-    // Get delayed tasks by assignee
+    // Get delayed tasks by assignee - loại trừ task done/close/archived
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     const delayedByAssignee: Record<string, number> = {};
-    
+    const completedStatuses = ['done', 'close', 'archived', 'rejected'];
+
+    // Đếm task trễ và đúng tiến độ cho overview cards
+    let overdueCount = 0;
+    let onScheduleCount = 0;
+    const currentPlanTasksForOverview = activePlan?.planData?.tasks || [];
+
     tasks.forEach(task => {
-      if (task.status.toLowerCase() !== 'completed' && task.due_date) {
-        const dueDate = new Date(task.due_date);
-        if (dueDate < today) {
-          const assigneeName = task.assignee?.username || 'Unassigned';
-          delayedByAssignee[assigneeName] = (delayedByAssignee[assigneeName] || 0) + 1;
+      const status = task.status.toLowerCase();
+
+      // Tính overdue/on-schedule cho tất cả task chưa hoàn thành
+      if (!completedStatuses.includes(status)) {
+        const planTask = currentPlanTasksForOverview.find((pt: any) => (pt.task_id || pt.taskId) === task.task_id);
+        const dueDate = planTask?.end_date
+          ? new Date(planTask.end_date)
+          : (task.due_date ? new Date(task.due_date) : null);
+
+        if (dueDate) {
+          const dueDateNorm = new Date(dueDate);
+          dueDateNorm.setHours(0, 0, 0, 0);
+          if (dueDateNorm < today) {
+            overdueCount++;
+            // Count by assignee
+            const assigneeName = task.assignee?.username || 'Unassigned';
+            delayedByAssignee[assigneeName] = (delayedByAssignee[assigneeName] || 0) + 1;
+          } else {
+            onScheduleCount++;
+          }
+        } else {
+          // Không có deadline → coi là on-schedule
+          onScheduleCount++;
         }
       }
     });
@@ -181,8 +209,10 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
       }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 5); // Top 5 assignees with most delayed tasks
-    
+
     setDelayedTasksByAssignee(assigneeData);
+    setOverdueTaskCount(overdueCount);
+    setOnScheduleTaskCount(onScheduleCount);
   };
 
   // Process tasks for daily report
@@ -220,7 +250,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     // Lọc các task có due_date <= hôm qua nhưng status chưa phải done
     const delayedYesterday = tasks.filter(task => {
       // Kiểm tra trong planData trước (ưu tiên cao hơn)
-      const planTask = currentPlanTasks.find(pt => pt.task_id === task.task_id);
+      const planTask = currentPlanTasks.find(pt => (pt.task_id || pt.taskId) === task.task_id);
       
       // Trường hợp 1: Theo plan - task phải bắt đầu hôm qua hoặc trước đó mà vẫn là todo
       if (planTask && planTask.start_date) {
@@ -300,7 +330,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
         }
         
         // Kiểm tra task bị trễ - cập nhật theo logic mới
-        const planTask = currentPlanTasks.find(pt => pt.task_id === task.task_id);
+        const planTask = currentPlanTasks.find(pt => (pt.task_id || pt.taskId) === task.task_id);
         
         // Kiểm tra trễ theo plan
         if (planTask) {
@@ -351,7 +381,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     // 1. Các task dự kiến bắt đầu hôm nay (từ planData hoặc từ start_date)
     const startingToday = [...tasks].filter(task => {
       // Kiểm tra trong planData trước (ưu tiên cao hơn)
-      const planTask = currentPlanTasks.find(pt => pt.task_id === task.task_id);
+      const planTask = currentPlanTasks.find(pt => (pt.task_id || pt.taskId) === task.task_id);
       if (planTask && planTask.start_date) {
         const planStartDate = new Date(planTask.start_date);
         planStartDate.setHours(0, 0, 0, 0);
@@ -374,7 +404,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     // 2. Các task dự kiến hoàn thành hôm nay (từ planData hoặc từ due_date)
     const completingToday = [...tasks].filter(task => {
       // Kiểm tra trong planData trước (ưu tiên cao hơn)
-      const planTask = currentPlanTasks.find(pt => pt.task_id === task.task_id);
+      const planTask = currentPlanTasks.find(pt => (pt.task_id || pt.taskId) === task.task_id);
       if (planTask && planTask.end_date) {
         const planEndDate = new Date(planTask.end_date);
         planEndDate.setHours(0, 0, 0, 0);
@@ -404,7 +434,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
         
         // Kiểm tra thành viên có task trong ngày hôm nay
         // 1. Kiểm tra trong planData
-        const planTask = currentPlanTasks.find(pt => pt.task_id === task.task_id);
+        const planTask = currentPlanTasks.find(pt => (pt.task_id || pt.taskId) === task.task_id);
         if (planTask) {
           const hasTaskToday = 
             (planTask.start_date && new Date(planTask.start_date).toDateString() === today.toDateString()) ||
@@ -498,7 +528,29 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
         {activeTab === 'overview' && (
           <div>
             <h2 className="text-xl font-bold mb-6">Dashboard tổng quan</h2>
-            
+
+            {/* Summary Cards */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+              <div className="card p-4 shadow-sm text-center">
+                <p className="text-sm text-slate-500">Tổng task</p>
+                <p className="text-2xl font-bold text-slate-800">{tasks.length}</p>
+              </div>
+              <div className="card p-4 shadow-sm text-center">
+                <p className="text-sm text-slate-500">Hoàn thành</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {tasks.filter(t => ['done', 'close'].includes(t.status.toLowerCase())).length}
+                </p>
+              </div>
+              <div className="card p-4 shadow-sm text-center">
+                <p className="text-sm text-slate-500">Đúng tiến độ</p>
+                <p className="text-2xl font-bold text-blue-600">{onScheduleTaskCount}</p>
+              </div>
+              <div className="card p-4 shadow-sm text-center">
+                <p className="text-sm text-slate-500">Đang trễ</p>
+                <p className="text-2xl font-bold text-red-600">{overdueTaskCount}</p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               {/* Task Status Pie Chart */}
               <div className="card p-4 shadow-sm">
@@ -739,7 +791,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
                           {todayStartingTasks.map((task) => {
-                            const planTask = planTasks.find((pt: any) => pt.task_id === task.task_id);
+                            const planTask = planTasks.find((pt: any) => (pt.task_id || pt.taskId) === task.task_id);
                             const scheduleStatus = determineTaskScheduleStatus(task, planTasks || []);
                             return (
                               <tr key={task.task_id}>
@@ -784,7 +836,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
                           {todayCompletingTasks.map((task) => {
-                            const planTask = planTasks.find((pt: any) => pt.task_id === task.task_id);
+                            const planTask = planTasks.find((pt: any) => (pt.task_id || pt.taskId) === task.task_id);
                             const scheduleStatus = determineTaskScheduleStatus(task, planTasks || []);
                             return (
                               <tr key={task.task_id}>
