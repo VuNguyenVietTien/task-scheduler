@@ -1,6 +1,8 @@
 import { Task } from '@/types/task';
 import { formatDateRange, cn } from '@/lib/utils';
 import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import { STATUS_LABELS, PRIORITY_LABELS, TYPE_LABELS, CATEGORY_LABELS, PROGRESS_TYPE_LABELS, getLabel } from '@/constants/task-display-labels';
 
 interface TaskBarProps {
   task: Task;
@@ -30,10 +32,8 @@ const getStatusColor = (status: string | number): string => {
 
   switch (String(status).toLowerCase()) {
     case 'todo':
-    case 'to_do':
       return 'bg-gray-100 text-gray-800 border border-gray-200';
     case 'doing':
-    case 'in_progress':
       return 'bg-blue-100 text-blue-800 border border-blue-200';
     case 'done':
       return 'bg-green-100 text-green-800 border border-green-200';
@@ -57,18 +57,7 @@ const getStatusColor = (status: string | number): string => {
 };
 
 const getStatusBadge = (status: string | undefined) => {
-  switch (status?.toLowerCase()) {
-    case 'done':
-      return 'Hoàn thành';
-    case 'in_progress':
-      return 'Đang làm';
-    case 'to_do':
-      return 'Cần làm';
-    case 'blocked':
-      return 'Bị chặn';
-    default:
-      return 'Không xác định';
-  }
+  return getLabel(STATUS_LABELS, status, 'Khong xac dinh');
 };
 
 export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
@@ -111,26 +100,27 @@ export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
 
       </div>
 
-      {showTooltip && (
+      {showTooltip && typeof document !== 'undefined' && createPortal(
         <div
-          className="fixed bg-gray-800 text-white p-2 rounded shadow-lg text-xs z-50"
+          className="fixed bg-gray-800 text-white p-2 rounded shadow-lg text-xs"
           style={{
             left: `${tooltipPosition.x}px`,
             top: `${tooltipPosition.y - 5}px`,
             transform: 'translate(-50%, -100%)',
-            maxWidth: '300px'
+            maxWidth: '300px',
+            zIndex: 9999,
           }}
         >
           <div className="font-bold border-b border-gray-700 pb-1 mb-2">{task.title}</div>
           <div className="grid grid-cols-2 gap-x-4 gap-y-1">
             <div>Thứ tự: {task.priority_order}</div>
             <div>Người làm: {task.assignee?.username || 'Chưa gán'}</div>
-            <div>Công việc: {task.effort !== undefined ? `${task.effort}h` : 'N/A'}</div>
-            <div>Độ ưu tiên: {task.priority || 'N/A'}</div>
-            <div>Loại: {task.type || 'N/A'}</div>
-            <div>Phân loại: {task.category || 'N/A'}</div>
+            <div>Công sức: {task.effort !== undefined ? `${task.effort}h` : 'Chưa thiết lập'}</div>
+            <div>Ưu tiên: {getLabel(PRIORITY_LABELS, task.priority)}</div>
+            <div>Loại: {getLabel(TYPE_LABELS, task.type)}</div>
+            <div>Phân loại: {getLabel(CATEGORY_LABELS, task.category)}</div>
             <div>Tiến độ: {task.progress || 0}%</div>
-            <div>Tiến trình: {task.progress_type || 'N/A'}</div>
+            <div>Tiến trình: {getLabel(PROGRESS_TYPE_LABELS, task.progress_type)}</div>
           </div>
           <div className="mt-2 border-t border-gray-700 pt-1">
             <div className="mb-1">Thời gian: {formatDateRange(task.start_date, task.due_date)}</div>
@@ -152,7 +142,8 @@ export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
               )}
             </div>
           </div>
-        </div>
+        </div>,
+        document.body
       )}
     </>
   );

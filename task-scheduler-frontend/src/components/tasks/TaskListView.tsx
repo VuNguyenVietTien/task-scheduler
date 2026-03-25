@@ -54,6 +54,14 @@ interface TaskAssignee extends UserBasic {
   // Không cần thêm gì vì UserBasic đã đủ
 }
 
+// Task type badge colors following design system
+const TYPE_BADGE_COLORS: Record<string, string> = {
+  'Bug': 'bg-red-50 text-red-700 border border-red-200',
+  'Feature': 'bg-blue-50 text-blue-700 border border-blue-200',
+  'Enhancement': 'bg-purple-50 text-purple-700 border border-purple-200',
+  'Documentation': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
+};
+
 // Thêm CSS bên ngoài component
 const taskNestedStyles = `
   .child-task-row {
@@ -534,6 +542,15 @@ export function TaskListView({
               >
                 {childTask.priority}
               </span>
+            )}
+          </td>
+          <td className="px-3 py-4 whitespace-nowrap">
+            {childTask.type ? (
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE_COLORS[childTask.type] || 'bg-gray-100 text-gray-800'}`}>
+                {childTask.type}
+              </span>
+            ) : (
+              <span className="text-slate-400">-</span>
             )}
           </td>
           <td className="px-3 py-4 text-sm">
@@ -1149,6 +1166,9 @@ export function TaskListView({
                 Ưu tiên
               </th>
               <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                Loai
+              </th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                 Người được giao
               </th>
               <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
@@ -1304,6 +1324,15 @@ export function TaskListView({
                         >
                           {task.priority}
                         </span>
+                      )}
+                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap">
+                      {task.type ? (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE_COLORS[task.type] || 'bg-gray-100 text-gray-800'}`}>
+                          {task.type}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">-</span>
                       )}
                     </td>
                     <td className="px-3 py-4 text-sm">
@@ -1476,7 +1505,7 @@ export function TaskListView({
               ))
             ) : (
               <tr>
-                <td colSpan={8} className="px-6 py-8 text-center text-slate-500">
+                <td colSpan={9} className="px-6 py-8 text-center text-slate-500">
                   <div className="py-12">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-slate-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />

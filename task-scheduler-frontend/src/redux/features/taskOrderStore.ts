@@ -11,12 +11,16 @@ export interface TaskOrderItem {
   priorityOrder: number;
   startDate?: string;
   endDate?: string;
-  effort?: number;  // Thêm effort để tính toán lại nếu cần
-  assigneeId?: string; // Thêm assigneeId để tính toán lại nếu cần
-  assigneeName?: string; // Thêm tên người được gán
-  priority?: string; // Ưu tiên của task (urgent, high, medium, low)
+  effort?: number;
+  assigneeId?: string;
+  assigneeName?: string;
+  priority?: string;
   fromPlan?: boolean;
-  status?: string; // Trạng thái của task (todo, doing, done)
+  status?: string;
+  type?: string;
+  category?: string;
+  progressType?: string;
+  progress?: number;
 }
 
 interface TaskOrderState {
@@ -137,7 +141,7 @@ const taskOrderSlice = createSlice({
         const newOrderItems = newTasks.map(task => ({
           taskId: task.task_id,
           title: task.title,
-          priorityOrder: state.orderedTasks.length + 1, // Thêm vào cuối
+          priorityOrder: state.orderedTasks.length + 1,
           startDate: task.start_date,
           endDate: task.due_date,
           effort: task.effort,
@@ -145,6 +149,10 @@ const taskOrderSlice = createSlice({
           assigneeName: task.assignee?.username,
           priority: task.priority,
           status: task.status,
+          type: task.type,
+          category: task.category,
+          progressType: task.progress_type,
+          progress: task.progress,
           fromPlan: false
         }));
         
@@ -180,6 +188,10 @@ const taskOrderSlice = createSlice({
         assigneeName: task.assignee?.username,
         priority: task.priority,
         status: task.status,
+        type: task.type,
+        category: task.category,
+        progressType: task.progress_type,
+        progress: task.progress,
         fromPlan: false
       }));
       
@@ -370,17 +382,19 @@ function updateTaskOrderFromPlan(state: TaskOrderState, plan: Plan) {
       // Thêm vào danh sách với đầy đủ thông tin
       orderItems.push({
         taskId: taskId,
-        // Ưu tiên dùng title từ Redux store nếu title trong plan là null
         title: currentTask?.title || planTask.title || 'Không có tiêu đề',
         priorityOrder: planTask.priority_order || planTask.priorityOrder || 0,
         startDate: planTask.start_date || planTask.startDate,
         endDate: planTask.end_date || planTask.endDate,
-        // Thông tin bổ sung
         effort: planTask.effort !== undefined ? planTask.effort : (currentTask?.effort),
         assigneeId: planTask.assignee_id || planTask.assigneeId || currentTask?.assigneeId,
         assigneeName: planTask.assignee_name || planTask.assigneeName || currentTask?.assigneeName,
         priority: taskPriority,
         status: taskStatus,
+        type: currentTask?.type,
+        category: currentTask?.category,
+        progressType: currentTask?.progressType,
+        progress: currentTask?.progress,
         fromPlan: true
       });
     });

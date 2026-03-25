@@ -18,6 +18,11 @@ ProjectManager is an integrated platform for task scheduling, project management
   - Component database mapping
   - Business flow diagrams
   - Audit trail and impact analysis
+- UI Refactor v2.29 (Sidebar + Dashboard + Gantt improvements)
+  - Dark sidebar with expandable project tree
+  - URL-driven navigation
+  - Role-based dashboard with real GraphQL data
+  - Gantt responsive buttons and task type column
 
 ### In Progress 🔄
 - Design service performance optimization
@@ -50,9 +55,15 @@ Deliverables:
 
 **Timeline**: Q1-Q2 2025
 
-**Status**: IN PROGRESS 🔄 (40% complete)
+**Status**: IN PROGRESS 🔄 (60% complete)
 
 Deliverables:
+- [x] Enhanced UI components (COMPLETE)
+  - Dark sidebar with expandable project tree
+  - URL-driven navigation with tab switching
+  - Role-based dashboard (PM vs member views)
+  - Gantt responsive button fixes
+  - Task type column with color-coded badges
 - [ ] Design service performance tuning
   - Query caching optimization
   - Index performance analysis
@@ -65,10 +76,6 @@ Deliverables:
   - Component versioning
   - Change history per component
   - Usage tracking
-- [ ] Enhanced UI components
-  - Collaborative editing indicators
-  - Real-time validation
-  - Advanced filtering and search
 
 **Success Metrics**:
 - Design query latency < 100ms (p99)

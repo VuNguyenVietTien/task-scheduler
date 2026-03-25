@@ -16,8 +16,8 @@ const Layout = ({ children }: LayoutProps) => {
       <Header />
       <Sidebar />
       {user && <FcmNotificationHandler userId={user.id} />}
-      <main className="pl-64 pt-16 min-h-screen">
-        <div className="p-6">
+      <main className="pl-60 pt-16 min-h-screen">
+        <div className="p-5">
           {children}
         </div>
       </main>

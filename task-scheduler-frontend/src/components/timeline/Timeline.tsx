@@ -74,6 +74,7 @@ interface DateRange {
 export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const ganttContentRef = useRef<HTMLDivElement>(null);
+  const ganttHeaderRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [planName, setPlanName] = useState<string>('');
   const [showSavePlanDialog, setShowSavePlanDialog] = useState(false);
@@ -688,6 +689,16 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     return () => observer.disconnect();
   }, []);
 
+  // Sync horizontal scroll between gantt grid and sticky date header
+  useEffect(() => {
+    const grid = ganttContentRef.current;
+    const header = ganttHeaderRef.current;
+    if (!grid || !header) return;
+    const onScroll = () => { header.scrollLeft = grid.scrollLeft; };
+    grid.addEventListener('scroll', onScroll);
+    return () => grid.removeEventListener('scroll', onScroll);
+  }, []);
+
   const days = getDatesBetween(dateRange.startDate, dateRange.endDate);
   const dayWidth = Math.max(80, dimensions.width / days.length);
   const rowHeight = 48;
@@ -979,8 +990,67 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     <div className="bg-white rounded-lg p-2">
       <div className="flex flex-col">
         {/* Toolbar */}
-        <div className="flex justify-between mb-4 border-b pb-2">
-          <div className="flex gap-2 items-center">
+        <div className="flex flex-col gap-2 mb-4 border-b pb-2">
+          {/* Row 1: Plan controls - right-aligned */}
+          <div className="flex justify-end gap-2 items-center flex-wrap">
+            <select
+              className="px-3 py-1 border rounded text-sm"
+              value={activePlan?.id || ''}
+              onChange={(e) => {
+                const selectedPlan = plans.find((p: Plan) => p.id === e.target.value);
+                if (selectedPlan) {
+                  handleSelectPlan(selectedPlan);
+                }
+              }}
+              title="Chọn kế hoạch"
+            >
+              <option value="" disabled>Chọn kế hoạch</option>
+              {plans.map((plan: Plan) => (
+                <option key={plan.id} value={plan.id}>
+                  {plan.name}
+                </option>
+              ))}
+            </select>
+
+            <button
+              onClick={handleNewPlan}
+              className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-slate-100 hover:bg-slate-200 whitespace-nowrap"
+              title="Tạo kế hoạch mới"
+            >
+              <PlusIcon className="h-4 w-4" />
+              New Plan
+            </button>
+
+            <button
+              onClick={handleSavePlan}
+              className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-blue-100 hover:bg-blue-200 whitespace-nowrap"
+              title="Lưu kế hoạch hiện tại"
+            >
+              <span>Lưu kế hoạch</span>
+            </button>
+
+            {activePlan && (
+              <button
+                onClick={() => setShowDeletePlanDialog(true)}
+                className="flex items-center gap-1 px-2 py-1 rounded text-sm bg-red-100 hover:bg-red-200 whitespace-nowrap"
+                title="Xóa kế hoạch hiện tại"
+              >
+                <TrashIcon className="h-4 w-4" />
+              </button>
+            )}
+
+            <button
+              onClick={handleAutoSort}
+              className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-slate-100 hover:bg-slate-200 whitespace-nowrap"
+              title="Sắp xếp task tự động theo priority"
+            >
+              <ArrowUpDown className="h-4 w-4" />
+              <span>Sắp xếp tự động</span>
+            </button>
+          </div>
+
+          {/* Row 2: View mode + date range */}
+          <div className="flex gap-2 items-center flex-wrap">
             <div className="flex items-center space-x-2">
               <button
                 onClick={() => setViewMode('project')}
@@ -1049,75 +1119,16 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
               />
             </div>
           </div>
-
-          {/* Phần quản lý Plan */}
-          <div className="flex gap-2 items-center">
-            {/* Dropdown chọn Plan - Sử dụng select thay cho DropdownMenu */}
-            <select
-              className="px-3 py-1 border rounded text-sm"
-              value={activePlan?.id || ''}
-              onChange={(e) => {
-                const selectedPlan = plans.find((p: Plan) => p.id === e.target.value);
-                if (selectedPlan) {
-                  handleSelectPlan(selectedPlan);
-                }
-              }}
-              title="Chọn kế hoạch"
-            >
-              <option value="" disabled>Chọn kế hoạch</option>
-              {plans.map((plan: Plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.name}
-                </option>
-              ))}
-            </select>
-
-            {/* Button tạo Plan mới */}
-            <button
-              onClick={handleNewPlan}
-              className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-slate-100 hover:bg-slate-200"
-              title="Tạo kế hoạch mới"
-            >
-              <PlusIcon className="h-4 w-4" />
-              New Plan
-            </button>
-
-            {/* Button lưu Plan */}
-            <button
-              onClick={handleSavePlan}
-              className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-blue-100 hover:bg-blue-200"
-              title="Lưu kế hoạch hiện tại"
-            >
-              <span>Lưu kế hoạch</span>
-            </button>
-
-            {/* Button xóa Plan */}
-            {activePlan && (
-              <button
-                onClick={() => setShowDeletePlanDialog(true)}
-                className="flex items-center gap-1 px-2 py-1 rounded text-sm bg-red-100 hover:bg-red-200"
-                title="Xóa kế hoạch hiện tại"
-              >
-                <TrashIcon className="h-4 w-4" />
-              </button>
-            )}
-
-            {/* Button sắp xếp tự động */}
-            <button
-              onClick={handleAutoSort}
-              className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-slate-100 hover:bg-slate-200"
-              title="Sắp xếp task tự động theo priority"
-            >
-              <ArrowUpDown className="h-4 w-4" />
-              <span>Sắp xếp tự động</span>
-            </button>
-          </div>
         </div>
 
-        {/* Nội dung - Phần này sẽ được mở rộng theo nội dung thay vì bị giới hạn chiều cao */}
-        <div className="flex gap-4">
-          {/* Sidebar - tasks - xóa giới hạn chiều cao và scroll */}
-          <div className="w-80 flex-shrink-0 border-r border-slate-200">
+        {/* Content: Left task list + Right gantt chart - uses page scroll only */}
+        <div className="flex">
+          {/* Left panel - task priority list */}
+          <div className="w-52 flex-shrink-0 border-r border-slate-200">
+            {/* Sticky header - sticks below page header when page scrolls */}
+            <div className="h-[40px] border-b border-slate-200 bg-slate-50 flex items-center px-2 sticky z-40" style={{ top: '64px' }}>
+              <span className="text-xs font-medium text-slate-500">Công việc</span>
+            </div>
             {viewMode === 'project' ? (
               <PriorityTaskList
                 title="Danh sách task"
@@ -1153,52 +1164,58 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
             )}
           </div>
 
-          {/* Gantt Chart - Cấu trúc mới với sticky headers */}
-          <div className="flex-1 flex flex-col overflow-hidden" ref={containerRef}>
-            {/* Container chứa cả headers và grid - Sửa lại cấu trúc để header và nội dung scroll đồng bộ */}
-            <div className="relative flex-1 overflow-x-auto" ref={ganttContentRef}>
-              <div style={{ width: `${days.length * dayWidth}px`, minWidth: '100%' }}>
-                {/* Header phía trên */}
-                <div className="sticky top-0 z-20 bg-white border-b border-slate-200">
-                  <div className="flex date-headers" style={{
-                    height: '40px',
-                  }}>
-                    {days.map((day: Date, index: number) => {
-                      const isToday = isSameDay(day, today);
-                      const isWeekendDay = isWeekend(day);
+          {/* Gantt Chart */}
+          <div className="flex-1 min-w-0" ref={containerRef}>
+            {/* Date header - sticky, synced horizontal scroll with grid below */}
+            <div
+              className="sticky z-40 bg-white border-b border-slate-200 overflow-hidden"
+              style={{ top: '64px' }}
+              ref={ganttHeaderRef}
+            >
+              <div className="flex date-headers" style={{
+                width: `${days.length * dayWidth}px`,
+                height: '40px',
+              }}>
+                {days.map((day: Date, index: number) => {
+                  const isToday = isSameDay(day, today);
+                  const isWeekendDay = isWeekend(day);
 
-                      return (
-                        <div
-                          key={day.toISOString()}
-                          style={{ width: `${dayWidth}px`, minWidth: `${dayWidth}px` }}
-                          className={`
-                            flex-shrink-0 border-r border-slate-200 p-2
-                            ${isWeekendDay ? 'bg-slate-100/80' : ''}
-                            ${isToday ? 'bg-yellow-100/80 font-semibold' : ''}
-                          `}
-                        >
-                          <div className="flex flex-col justify-center items-center h-full">
-                            <div className="text-xs text-slate-700 font-medium text-center">
-                              {day.toLocaleDateString('vi-VN', {
-                                day: '2-digit',
-                                month: '2-digit'
-                              })}
-                            </div>
-                            <div className="text-[0.6rem] text-slate-500 text-center">
-                              {day.toLocaleDateString('vi-VN', { weekday: 'short' })}
-                            </div>
-                          </div>
+                  return (
+                    <div
+                      key={day.toISOString()}
+                      style={{ width: `${dayWidth}px`, minWidth: `${dayWidth}px` }}
+                      className={`
+                        flex-shrink-0 border-r border-slate-200 p-2
+                        ${isWeekendDay ? 'bg-slate-100/80' : ''}
+                        ${isToday ? 'bg-yellow-100/80 font-semibold' : ''}
+                      `}
+                    >
+                      <div className="flex flex-col justify-center items-center h-full">
+                        <div className="text-xs text-slate-700 font-medium text-center">
+                          {day.toLocaleDateString('vi-VN', {
+                            day: '2-digit',
+                            month: '2-digit'
+                          })}
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                        <div className="text-[0.6rem] text-slate-500 text-center">
+                          {day.toLocaleDateString('vi-VN', { weekday: 'short' })}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Grid and task bars - horizontally scrollable */}
+            <div className="overflow-x-auto" ref={ganttContentRef}>
+              <div style={{ width: `${days.length * dayWidth}px`, minWidth: '100%' }}>
 
                 {/* Phần grid và task bars */}
                 <div
                   style={{
-                    height: `${Math.max(10, orderedTaskItems.length) * rowHeight}px`,
-                    minHeight: '480px'
+                    height: `${Math.max(filteredTasks.length, orderedTaskItems.length) * rowHeight}px`,
+                    minHeight: `${6 * rowHeight}px`
                   }}
                 >
                   <div
@@ -1240,13 +1257,13 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                         className="grid relative"
                         style={{
                           gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
-                          gridTemplateRows: `repeat(${Math.max(10, orderedTaskItems.length)}, ${rowHeight}px)`,
+                          gridTemplateRows: `repeat(${Math.max(filteredTasks.length, orderedTaskItems.length, 6)}, ${rowHeight}px)`,
                           gridAutoFlow: 'row',
                           height: '100%',
                           zIndex: 10
                         }}
                       >
-                        {Array.from({ length: days.length * Math.max(10, orderedTaskItems.length) }).map((_, index) => (
+                        {Array.from({ length: days.length * Math.max(filteredTasks.length, orderedTaskItems.length, 6) }).map((_, index) => (
                           <div
                             key={`grid-cell-${index}`}
                             className="border-r border-b border-slate-200 relative"
@@ -1353,7 +1370,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                               top: `${rowIndex * rowHeight}px`,
                               width: `${displayDays * dayWidth}px`,
                               height: `${rowHeight}px`,
-                              zIndex: 30,
+                              zIndex: 15,
                               display: 'flex',
                               alignItems: 'center',
                               justifyContent: 'flex-start',

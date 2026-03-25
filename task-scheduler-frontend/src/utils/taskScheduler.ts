@@ -283,11 +283,15 @@ export const convertTaskOrderToTask = (item: TaskOrderItem, projectId: string): 
     effort: item.effort || 0,
     assignee: item.assigneeId ? {
       userId: item.assigneeId,
-      username: item.assigneeName || item.assigneeId  // Sử dụng assigneeName nếu có, nếu không thì dùng userId
+      username: item.assigneeName || item.assigneeId
     } : undefined,
     start_date: item.startDate,
     due_date: item.endDate,
     project_id: projectId || '',
+    type: item.type as any,
+    category: item.category as any,
+    progress_type: item.progressType as any,
+    progress: item.progress,
     created_by: '',
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
@@ -336,6 +340,10 @@ export const updateReduxStore = (
     assigneeName: task.assignee?.username,
     priority: task.priority,
     status: task.status,
+    type: task.type,
+    category: task.category,
+    progressType: task.progress_type,
+    progress: task.progress,
     fromPlan: false
   }));
 
@@ -634,6 +642,10 @@ export const processTasksAndUpdateStore = (
     assigneeName: task.assignee?.username,
     priority: task.priority,
     status: task.status,
+    type: task.type,
+    category: task.category,
+    progressType: task.progress_type,
+    progress: task.progress,
     fromPlan: false
   }));
 

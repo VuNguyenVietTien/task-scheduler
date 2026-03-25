@@ -1,17 +1,5 @@
-export const TaskStatuses = {
-  NOT_STARTED: 'NOT_STARTED',
-  IN_PROGRESS: 'IN_PROGRESS',
-  COMPLETED: 'COMPLETED',
-  ON_HOLD: 'ON_HOLD',
-  CANCELLED: 'CANCELLED'
-} as const;
-
-export const TaskPriorities = {
-  LOW: 'LOW',
-  MEDIUM: 'MEDIUM',
-  HIGH: 'HIGH',
-  URGENT: 'URGENT'
-} as const;
+// Task enums are defined in src/types/task.ts
+// Use TaskStatuses and Priorities from there instead
 
 export const ProjectStatuses = {
   ACTIVE: 'active',

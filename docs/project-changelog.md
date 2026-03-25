@@ -6,6 +6,18 @@ All notable changes to the ProjectManager system are documented here. Format fol
 
 ### Added
 
+#### UI Refactor v2.29 (2025-03-25)
+- **Sidebar Navigation Redesign**: Dark sidebar (w-60, bg-slate-900) with Dashboard link and expandable project tree
+  - URL-driven navigation with `/projects/{id}?tab={tabId}` routing
+  - LocalStorage persistence for expanded/collapsed project states
+- **Project Detail View Compression**: Removed header and tab bar from ProjectDetailView; tab switching now handled via sidebar
+- **Role-Based Dashboard**: Real GraphQL data integration with role-specific views
+  - Project Managers see overdue tasks, bugs, and critical issues
+  - Team members see assigned tasks
+- **Gantt Chart Responsive Improvements**: Fixed plan toolbar with `whitespace-nowrap` and `overflow-x-auto` for better mobile handling
+- **Task List Type Column**: New "Loai" (Type) column with color-coded badges
+  - Bug (red), Feature (blue), Enhancement (purple), Documentation (green)
+
 #### Design Document Service (v1.0.0)
 - New microservice: `design-doc-service` (Rust, Actix-web, async-graphql, SQLx)
   - Async GraphQL API for design document operations

@@ -55,13 +55,16 @@ export function useTaskFilters(tasks: Task[]) {
         }
         
         case 'status': {
-          const statusWeight = {
-            [TaskStatus.BACKLOG]: 1,
-            [TaskStatus.PLANNED]: 2,
-            [TaskStatus.IN_PROGRESS]: 3,
-            [TaskStatus.IN_REVIEW]: 4,
-            [TaskStatus.DONE]: 5,
-            [TaskStatus.CANCELLED]: 6
+          const statusWeight: Record<string, number> = {
+            todo: 1,
+            pending: 2,
+            doing: 3,
+            review: 4,
+            done: 5,
+            close: 6,
+            blocked: 7,
+            rejected: 8,
+            archived: 9,
           };
           return (statusWeight[a.status] - statusWeight[b.status]) * direction;
         }
@@ -83,13 +86,16 @@ export function useTaskFilters(tasks: Task[]) {
         low: 0
       } as Record<Priority, number>,
       byStatus: {
-        [TaskStatus.BACKLOG]: 0,
-        [TaskStatus.PLANNED]: 0,
-        [TaskStatus.IN_PROGRESS]: 0,
-        [TaskStatus.IN_REVIEW]: 0,
-        [TaskStatus.DONE]: 0,
-        [TaskStatus.CANCELLED]: 0
-      }
+        todo: 0,
+        doing: 0,
+        done: 0,
+        close: 0,
+        pending: 0,
+        review: 0,
+        blocked: 0,
+        rejected: 0,
+        archived: 0,
+      } as Record<string, number>
     };
 
     return tasks.reduce((acc, task) => {

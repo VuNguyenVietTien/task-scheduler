@@ -76,7 +76,6 @@ function SortableTaskItem({
     switch (status?.toLowerCase()) {
       case 'done':
         return 'border-l-green-500';
-      case 'in_progress':
       case 'doing':
         return 'border-l-blue-500';
       case 'blocked':
@@ -89,9 +88,9 @@ function SortableTaskItem({
   return (
     <div
       ref={setNodeRef}
-      style={style}
+      style={{ ...style, height: '48px' }}
       className={`
-        flex items-center py-2 px-3 border-b border-slate-200 border-l-4 
+        flex items-center px-2 border-b border-slate-200 border-l-4
         ${getStatusColor(task.status)}
         hover:bg-slate-50 cursor-pointer
         ${isDragging ? 'shadow-md rounded bg-white' : ''}
@@ -101,14 +100,14 @@ function SortableTaskItem({
       <div
         {...attributes}
         {...listeners}
-        className="mr-2 text-slate-400 cursor-grab"
+        className="mr-1.5 text-slate-400 cursor-grab flex-shrink-0"
       >
-        <ArrowUpDown size={14} />
+        <ArrowUpDown size={12} />
       </div>
-      <div className="flex-1 truncate font-medium text-sm">
-        {task.title}
+      <div className="flex-1 min-w-0 leading-tight">
+        <div className="text-xs font-medium text-slate-800 line-clamp-2">{task.title}</div>
       </div>
-      <div className="ml-2 text-xs text-slate-500 flex-shrink-0">
+      <div className="ml-1 text-[10px] text-slate-500 flex-shrink-0">
         {task.priority}
       </div>
     </div>
@@ -252,11 +251,6 @@ export function PriorityTaskList({
 
   return (
     <div className="flex flex-col">
-      <div className="p-3 border-b border-slate-200 bg-slate-50">
-        <h3 className="font-medium text-slate-800">Thứ tự ưu tiên công việc</h3>
-        <p className="text-xs text-slate-500 mt-1">Kéo và thả để thay đổi thứ tự ưu tiên</p>
-      </div>
-
       <div>
         {activeTasks.length > 0 ? (
           <DndContext

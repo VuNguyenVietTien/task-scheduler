@@ -2,9 +2,9 @@
 
 import { Suspense } from 'react';
 import dynamic from 'next/dynamic';
+import { useSearchParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 
-// Tạo component loading fallback
 function LoadingFallback() {
   return (
     <div className="p-6">
@@ -21,26 +21,20 @@ function LoadingFallback() {
   );
 }
 
-// Import component với {ssr: false} để tránh xung đột Apollo Client ở server
 const DynamicProjectContent = dynamic(
   () => import('@/components/projects/ProjectPage'),
-  { 
-    ssr: false, // Đảm bảo component chỉ render ở client side
+  {
+    ssr: false,
     loading: () => <LoadingFallback />
   }
 );
 
-// Tạo một wrapper component để truyền props một cách an toàn với type
-type ProjectPageProps = {
-  id: string;
-};
-
-// Wrapper component giúp xử lý truyền props id vào dynamic import
-function ProjectPageWrapper({ id }: ProjectPageProps) {
-  return <DynamicProjectContent id={id} />;
+function ProjectPageWrapper({ id }: { id: string }) {
+  const searchParams = useSearchParams();
+  const tab = searchParams?.get('tab') || 'list';
+  return <DynamicProjectContent id={id} initialTab={tab} />;
 }
 
-// Component ProjectDetail được export mặc định
 export default function ProjectDetail({ params }: { params: { id: string } }) {
   return (
     <ProtectedRoute>

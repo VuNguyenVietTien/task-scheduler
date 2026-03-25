@@ -366,7 +366,7 @@ export default function TaskDetailsPanel({
             >
               <div className="flex items-center">
                 <span className="mr-2">{displayValue}</span>
-                <PencilIcon className="h-3.5 w-3.5 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                <PencilIcon className="h-3.5 w-3.5 text-slate-400 group-hover:text-blue-500 transition-colors" />
               </div>
               
               {/* Hiển thị số ngày còn lại nếu là due_date */}

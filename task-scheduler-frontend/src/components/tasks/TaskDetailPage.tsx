@@ -784,11 +784,11 @@ export function TaskDetailPage({
               
               <button
                 type="button"
-                className="ml-1.5 p-1 text-gray-400 hover:text-gray-700 bg-gray-100 opacity-0 hover:opacity-100 rounded-full transition-opacity"
-                title={`Chỉnh sửa ${label.toLowerCase()}`}
+                className="ml-1.5 p-1 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-full transition-colors"
+                title={`Chinh sua ${label.toLowerCase()}`}
                 onClick={() => startEditing(fieldName)}
               >
-                <PencilIcon className="h-3 w-3" />
+                <PencilIcon className="h-3.5 w-3.5" />
               </button>
             </div>
           </>
@@ -1556,11 +1556,12 @@ export function TaskDetailPage({
           background-color: #f9fafb;
           position: sticky;
           left: 0;
-          top: 0;
+          top: 80px; /* 64px header + 16px spacing so content isn't hidden behind fixed header */
           border-radius: 0.5rem 0 0 0.5rem;
           box-shadow: 4px 0 10px rgba(0, 0, 0, 0.1);
           z-index: 10;
           height: fit-content;
+          max-height: calc(100vh - 96px); /* viewport minus header and padding */
           overflow-y: auto;
           border: 1px solid #e5e7eb;
           border-right: none;

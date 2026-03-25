@@ -1,76 +1,72 @@
 'use client';
 
-import { useTasks } from '@/hooks/useTasks';
-import { PriorityTaskList } from '@/components/timeline/PriorityTaskList';
+import { useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
+import { useDashboardTasks } from '@/hooks/use-dashboard-tasks';
+import { PMDashboardView } from '@/components/dashboard/pm-dashboard-view';
+import { MemberDashboardView } from '@/components/dashboard/member-dashboard-view';
 import { useRouter } from 'next/navigation';
 
 export default function DashboardPage() {
-  const { data: tasks, isLoading } = useTasks();
   const { user } = useAuth();
   const router = useRouter();
 
-  // This is now handled by middleware, but keeping it as a fallback
-  if (!user) {
-    router.push('/auth');
-    return null;
-  }
+  // Hooks must be called before any early return (React rules of hooks)
+  const dashboardData = useDashboardTasks(user?.id || '', user?.role || '');
+  const { loading, error, isPM, overdueTasks, doingTasks, bugTasks, criticalTasks, activeTasks, tasksByStatus } = dashboardData;
+
+  // Redirect unauthenticated users in useEffect to avoid render-time side effects
+  useEffect(() => {
+    if (!user) router.push('/auth');
+  }, [user, router]);
+
+  if (!user) return null;
 
   return (
-    <div className="p-6">
+    <div className="p-5">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Welcome back, {user.name}!</h1>
-        <p className="text-gray-600">Here's an overview of your tasks</p>
+        <h1 className="text-2xl font-bold text-slate-800">Xin chao, {user.name}!</h1>
+        <p className="text-sm text-slate-500 mt-1">
+          {isPM ? 'Tong quan du an' : 'Tong quan cong viec cua ban'}
+        </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Priority Tasks Section */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-6">
-            <h2 className="text-lg font-semibold mb-4">Priority Tasks</h2>
-            <div className="h-[400px]">
-              <PriorityTaskList tasks={tasks || []} title="Priority Tasks" />
+      {loading ? (
+        <div className="space-y-4">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            {[1, 2, 3, 4].map(i => (
+              <div key={i} className="animate-pulse bg-white rounded-lg border border-slate-200 p-4">
+                <div className="h-4 bg-slate-200 rounded w-1/2 mb-2"></div>
+                <div className="h-8 bg-slate-200 rounded w-1/4"></div>
+              </div>
+            ))}
+          </div>
+          <div className="animate-pulse bg-white rounded-lg border border-slate-200 p-4">
+            <div className="h-4 bg-slate-200 rounded w-1/3 mb-4"></div>
+            <div className="space-y-2">
+              {[1, 2, 3].map(i => (
+                <div key={i} className="h-4 bg-slate-200 rounded"></div>
+              ))}
             </div>
           </div>
         </div>
-
-        {/* Recent Activity Section */}
-        <div className="bg-white rounded-lg shadow">
-          <div className="p-6">
-            <h2 className="text-lg font-semibold mb-4">Recent Activity</h2>
-            {isLoading ? (
-              <div className="space-y-3">
-                {[...Array(5)].map((_, i) => (
-                  <div key={i} className="animate-pulse">
-                    <div className="h-4 bg-slate-200 rounded w-3/4"></div>
-                    <div className="mt-1 h-3 bg-slate-200 rounded w-1/2"></div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {tasks?.slice(0, 5).map(task => (
-                  <div key={task.task_id} className="border-b pb-4 last:border-b-0">
-                    <div className="flex items-center justify-between">
-                      <h3 className="font-medium text-gray-900">{task.title}</h3>
-                      <span className={`
-                        text-xs px-2 py-1 rounded-full
-                        ${task.status === 'done' 
-                          ? 'bg-green-100 text-green-800' 
-                          : 'bg-blue-100 text-blue-800'
-                        }
-                      `}>
-                        {task.status?.replace('_', ' ') || 'pending'}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-500">{task.description}</p>
-                  </div>
-                ))}
-              </div>
-            )}
-          </div>
+      ) : error ? (
+        <div className="bg-red-50 p-4 rounded-lg text-red-700">
+          Khong the tai du lieu dashboard. Vui long thu lai.
         </div>
-      </div>
+      ) : isPM ? (
+        <PMDashboardView
+          overdueTasks={overdueTasks}
+          doingTasks={doingTasks}
+          bugTasks={bugTasks}
+          criticalTasks={criticalTasks}
+        />
+      ) : (
+        <MemberDashboardView
+          activeTasks={activeTasks}
+          tasksByStatus={tasksByStatus}
+        />
+      )}
     </div>
   );
 }

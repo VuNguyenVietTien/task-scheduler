@@ -8,6 +8,7 @@ import { fetchProject, resetProject } from '@/redux/features/projectSlice';
 
 interface ProjectPageProps {
   id: string;
+  initialTab?: string;
 }
 
 function LoadingFallback() {
@@ -27,7 +28,7 @@ function LoadingFallback() {
 }
 
 // Export default component thay vì named export
-export default function ProjectPage({ id }: ProjectPageProps) {
+export default function ProjectPage({ id, initialTab }: ProjectPageProps) {
   // Comment out code cũ
   // const { loading, error, data } = useProject(id);
   const [projectData, setProjectData] = useState<ProjectData | null>(null);
@@ -91,12 +92,12 @@ export default function ProjectPage({ id }: ProjectPageProps) {
         <div className="card">
           <h1 className="text-xl text-red-600">Project not found</h1>
           <p className="text-slate-600">
-            The project you're looking for doesn't exist or has been deleted.
+            The project you&apos;re looking for doesn&apos;t exist or has been deleted.
           </p>
         </div>
       </div>
     );
   }
 
-  return <ProjectDetailView project={projectData} />;
+  return <ProjectDetailView project={projectData} initialTab={initialTab} />;
 } 

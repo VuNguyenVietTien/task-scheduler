@@ -4,6 +4,7 @@ import { User } from '../../contexts/AuthContext';
 import { Dialog } from '../ui/Dialog';
 import clsx from 'clsx';
 import { useUpdateTask } from '@/hooks/useTasks';
+import { InlineEditableField } from './inline-editable-field';
 
 interface TaskDetailProps {
   task: Task;
@@ -25,14 +26,12 @@ interface Comment {
 export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }: TaskDetailProps) {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedTask, setEditedTask] = useState<Task>(task);
   const [isLoading, setIsLoading] = useState(false);
-  const [isSaving, setIsSaving] = useState(false);
+  const [savingField, setSavingField] = useState<string | null>(null);
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const commentRef = useRef<HTMLTextAreaElement>(null);
-  const updateTask = useUpdateTask();
+  const { updateTask } = useUpdateTask();
 
   // Định dạng ngày tháng
   const formatDate = (dateString?: string) => {
@@ -239,46 +238,39 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
     }
   };
 
-  // Xử lý cập nhật task
-  const handleSaveTask = async () => {
+  // Inline save: update a single field immediately
+  const handleFieldSave = async (field: string, value: string | number | undefined) => {
     try {
-      setIsSaving(true);
+      setSavingField(field);
       setError(null);
-      
+
       const taskId = task.task_id || task.id || '';
-      
-      // Chuẩn bị dữ liệu cập nhật
       const updates: Partial<Task> = {};
-      
-      // Chỉ gửi những trường đã thay đổi
-      if (editedTask.title !== task.title) updates.title = editedTask.title;
-      if (editedTask.description !== task.description) updates.description = editedTask.description;
-      if (editedTask.status !== task.status) updates.status = editedTask.status;
-      if (editedTask.priority !== task.priority) updates.priority = editedTask.priority;
-      if (editedTask.start_date !== task.start_date) updates.start_date = editedTask.start_date;
-      if (editedTask.due_date !== task.due_date) updates.due_date = editedTask.due_date;
-      if (editedTask.effort !== task.effort) updates.effort = editedTask.effort;
-      if (editedTask.progress !== task.progress) updates.progress = editedTask.progress;
-      if (editedTask.assignee_id !== task.assignee_id) updates.assignee_id = editedTask.assignee_id;
-      
-      // Gọi GraphQL mutation để cập nhật task
-      const updatedTask = await updateTask(taskId, updates);
-      
-      // Cập nhật UI
-      if (onTaskUpdate) {
-        onTaskUpdate(taskId, updates);
+
+      switch (field) {
+        case 'title': updates.title = value as string; break;
+        case 'description': updates.description = value as string; break;
+        case 'status': updates.status = value as TaskStatus; break;
+        case 'priority': updates.priority = value as Priority; break;
+        case 'start_date': updates.start_date = value ? `${value}T00:00:00Z` : undefined; break;
+        case 'due_date': updates.due_date = value ? `${value}T00:00:00Z` : undefined; break;
+        case 'effort': updates.effort = value ? Number(value) : undefined; break;
+        case 'progress': updates.progress = value ? Number(value) : undefined; break;
+        default: return;
       }
-      
-      // Hiển thị thông báo thành công tạm thời nếu cần
-      console.log('Cập nhật công việc thành công:', updatedTask);
-      
-      // Tắt chế độ chỉnh sửa
-      setIsEditing(false);
-    } catch (error) {
-      console.error('Error updating task:', error);
-      setError('Không thể cập nhật công việc. Vui lòng thử lại sau.');
+
+      await updateTask(taskId, updates);
+      if (onTaskUpdate) onTaskUpdate(taskId, updates);
+
+      // Dispatch event to refresh task data
+      if (typeof window !== 'undefined') {
+        window.dispatchEvent(new CustomEvent('task-status-updated'));
+      }
+    } catch (err) {
+      console.error('Error updating field:', err);
+      setError('Khong the cap nhat. Vui long thu lai.');
     } finally {
-      setIsSaving(false);
+      setSavingField(null);
     }
   };
 
@@ -301,337 +293,228 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
     }
   }, [isOpen, task.task_id, task.id]);
 
-  // Cập nhật editedTask khi task thay đổi
-  useEffect(() => {
-    setEditedTask(task);
-  }, [task]);
+  // Status and priority options for inline select
+  const statusOptions = Object.values(TaskStatuses).map(s => ({
+    value: s, label: s.charAt(0).toUpperCase() + s.slice(1)
+  }));
+  const priorityOptions = Object.values(Priorities).map(p => ({
+    value: p, label: p.charAt(0).toUpperCase() + p.slice(1)
+  }));
 
   return (
-    <Dialog 
-      open={isOpen} 
-      onClose={onClose} 
-      title={isEditing ? "Chỉnh sửa công việc" : "Chi tiết công việc"}
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      title="Chi tiet cong viec"
       className="w-[calc(100%-64px)] max-w-[900px]"
     >
       <div className="p-6 space-y-6">
-        {/* Hiển thị thông báo lỗi nếu có */}
+        {/* Error banner */}
         {error && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4">
-            <div className="flex">
-              <div className="flex-shrink-0">
-                <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                </svg>
-              </div>
-              <div className="ml-3">
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            </div>
+          <div className="bg-red-50 border-l-4 border-red-500 p-3 flex items-center gap-2">
+            <svg className="h-4 w-4 text-red-500 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <p className="text-sm text-red-700">{error}</p>
           </div>
         )}
 
-        {/* Nút quay lại */}
-        <div className="flex justify-between items-center mb-4">
-          <button
-            onClick={onClose}
-            className="flex items-center text-gray-600 hover:text-gray-900 transition-colors"
-          >
-            <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-            </svg>
-            Quay lại
-          </button>
-          
-          {!isEditing && (
-            <button
-              onClick={() => setIsEditing(true)}
-              className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 transition-colors"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-              </svg>
-              Chỉnh sửa
-            </button>
+        {/* Back button */}
+        <button
+          onClick={onClose}
+          className="flex items-center text-slate-500 hover:text-slate-900 transition-colors text-sm"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
+          </svg>
+          Quay lai
+        </button>
+
+        {/* Inline hint */}
+        <p className="text-xs text-slate-400">Click vao gia tri bat ky de chinh sua truc tiep</p>
+
+        {/* Title - inline editable */}
+        <InlineEditableField
+          value={task.title}
+          onSave={(v) => handleFieldSave('title', v)}
+          saving={savingField === 'title'}
+          className="text-xl font-bold"
+          placeholder="Nhap tieu de"
+        />
+
+        {/* Status + Priority badges - inline editable */}
+        <div className="flex flex-wrap gap-3 items-center">
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Trang thai</span>
+            <InlineEditableField
+              value={task.status}
+              onSave={(v) => handleFieldSave('status', v)}
+              type="select"
+              options={statusOptions}
+              saving={savingField === 'status'}
+              renderDisplay={(v) => (
+                <span className={clsx("px-2.5 py-1 rounded-full text-xs font-medium", getStatusColor(v as TaskStatus))}>
+                  {v.charAt(0).toUpperCase() + v.slice(1)}
+                </span>
+              )}
+            />
+          </div>
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Uu tien</span>
+            <InlineEditableField
+              value={task.priority}
+              onSave={(v) => handleFieldSave('priority', v)}
+              type="select"
+              options={priorityOptions}
+              saving={savingField === 'priority'}
+              renderDisplay={(v) => (
+                <span className={clsx("px-2.5 py-1 rounded-full text-xs font-medium", getPriorityColor(v as Priority))}>
+                  {v.charAt(0).toUpperCase() + v.slice(1)}
+                </span>
+              )}
+            />
+          </div>
+          {task.due_date && (
+            <span className={clsx(
+              "px-2.5 py-1 rounded-full text-xs font-medium",
+              new Date(task.due_date) < new Date() ? "bg-red-100 text-red-800" : "bg-blue-100 text-blue-800"
+            )}>
+              {calculateDaysRemaining()}
+            </span>
           )}
         </div>
 
-        {isEditing ? (
-          // Form chỉnh sửa
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* Tiêu đề */}
-            <div className="md:col-span-2">
-              <label htmlFor="title" className="block text-sm font-medium text-gray-700 mb-1">
-                Tiêu đề
-              </label>
-              <input
-                type="text"
-                id="title"
-                value={editedTask.title}
-                onChange={(e) => setEditedTask({...editedTask, title: e.target.value})}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              />
+        {/* Description - inline editable */}
+        <div>
+          <span className="text-xs text-slate-500 block mb-1">Mo ta</span>
+          {task.description ? (
+            <div className="bg-slate-50 p-4 rounded-md">
+              <div className="text-slate-700 rich-text-content text-sm">
+                {renderHTML(task.description)}
+              </div>
             </div>
+          ) : (
+            <InlineEditableField
+              value=""
+              onSave={(v) => handleFieldSave('description', v)}
+              type="textarea"
+              saving={savingField === 'description'}
+              placeholder="Them mo ta..."
+            />
+          )}
+        </div>
 
-            {/* Mô tả */}
-            <div className="md:col-span-2">
-              <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                Mô tả
-              </label>
-              <textarea
-                id="description"
-                rows={5}
-                value={editedTask.description || ''}
-                onChange={(e) => setEditedTask({...editedTask, description: e.target.value})}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              />
-              <p className="mt-1 text-xs text-gray-500">Hỗ trợ định dạng HTML</p>
-            </div>
-
-            {/* Trạng thái */}
-            <div>
-              <label htmlFor="status" className="block text-sm font-medium text-gray-700 mb-1">
-                Trạng thái
-              </label>
-              <select
-                id="status"
-                value={editedTask.status}
-                onChange={(e) => setEditedTask({...editedTask, status: e.target.value as TaskStatus})}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              >
-                {Object.values(TaskStatuses).map((status) => (
-                  <option key={status} value={status}>
-                    {status.charAt(0).toUpperCase() + status.slice(1).replace(/_/g, ' ')}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Mức độ ưu tiên */}
-            <div>
-              <label htmlFor="priority" className="block text-sm font-medium text-gray-700 mb-1">
-                Mức độ ưu tiên
-              </label>
-              <select
-                id="priority"
-                value={editedTask.priority}
-                onChange={(e) => setEditedTask({...editedTask, priority: e.target.value as Priority})}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              >
-                {Object.values(Priorities).map((priority) => (
-                  <option key={priority} value={priority}>
-                    {priority.charAt(0).toUpperCase() + priority.slice(1)}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Ngày bắt đầu */}
-            <div>
-              <label htmlFor="start_date" className="block text-sm font-medium text-gray-700 mb-1">
-                Ngày bắt đầu
-              </label>
-              <input
-                type="date"
-                id="start_date"
-                value={editedTask.start_date?.split('T')[0] || ''}
-                onChange={(e) => setEditedTask({...editedTask, start_date: e.target.value ? `${e.target.value}T00:00:00Z` : undefined})}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              />
-            </div>
-
-            {/* Ngày hết hạn */}
-            <div>
-              <label htmlFor="due_date" className="block text-sm font-medium text-gray-700 mb-1">
-                Ngày hết hạn
-              </label>
-              <input
-                type="date"
-                id="due_date"
-                value={editedTask.due_date?.split('T')[0] || ''}
-                onChange={(e) => setEditedTask({...editedTask, due_date: e.target.value ? `${e.target.value}T00:00:00Z` : undefined})}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              />
-            </div>
-
-            {/* Nỗ lực (Effort) */}
-            <div>
-              <label htmlFor="effort" className="block text-sm font-medium text-gray-700 mb-1">
-                Nỗ lực (giờ)
-              </label>
-              <input
-                type="number"
-                id="effort"
-                min="0"
-                value={editedTask.effort || ''}
-                onChange={(e) => setEditedTask({...editedTask, effort: e.target.value ? Number(e.target.value) : undefined})}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              />
-            </div>
-
-            {/* Tiến độ */}
-            <div>
-              <label htmlFor="progress" className="block text-sm font-medium text-gray-700 mb-1">
-                Tiến độ (%)
-              </label>
-              <input
-                type="number"
-                id="progress"
-                min="0"
-                max="100"
-                value={editedTask.progress || ''}
-                onChange={(e) => setEditedTask({...editedTask, progress: e.target.value ? Number(e.target.value) : undefined})}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              />
-            </div>
-
-            {/* Nút lưu và hủy */}
-            <div className="md:col-span-2 flex justify-end space-x-3 mt-4">
-              <button
-                type="button"
-                onClick={() => {
-                  setEditedTask(task);
-                  setIsEditing(false);
-                }}
-                className="inline-flex justify-center py-2 px-4 border border-gray-300 shadow-sm text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
-              >
-                Hủy
-              </button>
-              <button
-                type="button"
-                onClick={handleSaveTask}
-                disabled={isSaving}
-                className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50"
-              >
-                {isSaving ? (
-                  <>
-                    <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                    </svg>
-                    Đang lưu...
-                  </>
-                ) : 'Lưu thay đổi'}
-              </button>
+        {/* Detail grid - all inline editable */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-md">
+          {/* Assignee (read-only for now) */}
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Nguoi duoc giao</span>
+            <div className="flex items-center gap-2 px-2 py-1 text-sm">
+              {task.assignee ? (
+                <>
+                  <span className="inline-block h-6 w-6 rounded-full overflow-hidden bg-slate-200">
+                    {task.assignee.avatarUrl ? (
+                      <img src={task.assignee.avatarUrl} alt={task.assignee.username} className="h-full w-full object-cover" />
+                    ) : (
+                      <svg className="h-full w-full text-slate-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
+                      </svg>
+                    )}
+                  </span>
+                  <span className="text-slate-900">{task.assignee.username}</span>
+                </>
+              ) : (
+                <span className="text-slate-400 italic">Chua giao</span>
+              )}
             </div>
           </div>
-        ) : (
-          // Hiển thị chi tiết
-          <div className="space-y-6">
-            {/* Tiêu đề và trạng thái */}
-            <div>
-              <h2 className="text-2xl font-bold text-gray-900">{task.title}</h2>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <span className={clsx("px-2.5 py-1 rounded-full text-xs font-medium", getStatusColor(task.status))}>
-                  {task.status.charAt(0).toUpperCase() + task.status.slice(1)}
-                </span>
-                <span className={clsx("px-2.5 py-1 rounded-full text-xs font-medium", getPriorityColor(task.priority))}>
-                  {task.priority.charAt(0).toUpperCase() + task.priority.slice(1)}
-                </span>
-                {task.effort && (
-                  <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                    {formatEffort(task.effort)}
-                  </span>
-                )}
-                {task.due_date && (
-                  <span className={clsx(
-                    "px-2.5 py-1 rounded-full text-xs font-medium",
-                    new Date(task.due_date) < new Date() ? "bg-red-100 text-red-800" : "bg-blue-100 text-blue-800"
-                  )}>
-                    {calculateDaysRemaining()}
-                  </span>
-                )}
-              </div>
-            </div>
 
-            {/* Mô tả */}
-            {task.description && (
-              <div className="bg-gray-50 p-4 rounded-md">
-                <h3 className="text-lg font-medium text-gray-900 mb-2">Mô tả</h3>
-                <div className="text-gray-700 rich-text-content">
-                  {renderHTML(task.description)}
-                </div>
-              </div>
-            )}
+          {/* Người tạo (read-only) */}
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Nguoi tao</span>
+            <p className="px-2 py-1 text-sm text-slate-900">
+              {typeof task.created_by === 'object' ? (task.created_by as any)?.username : task.created_by || '-'}
+            </p>
+          </div>
 
-            {/* Thông tin chi tiết */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 bg-gray-50 p-4 rounded-md">
-              {/* Người được giao */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-500">Người được giao</h4>
-                <div className="mt-1 flex items-center">
-                  {task.assignee ? (
-                    <>
-                      <span className="inline-block h-8 w-8 rounded-full overflow-hidden bg-gray-100">
-                        {task.assignee.avatarUrl ? (
-                          <img src={task.assignee.avatarUrl} alt={task.assignee.username} className="h-full w-full object-cover" />
-                        ) : (
-                          <svg className="h-full w-full text-gray-300" fill="currentColor" viewBox="0 0 24 24">
-                            <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
-                          </svg>
-                        )}
-                      </span>
-                      <span className="ml-2 text-sm font-medium text-gray-900">{task.assignee.username}</span>
-                    </>
-                  ) : (
-                    <span className="text-sm text-gray-500">Chưa giao</span>
-                  )}
-                </div>
-              </div>
+          {/* Start date */}
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Ngay bat dau</span>
+            <InlineEditableField
+              value={task.start_date?.split('T')[0] || ''}
+              onSave={(v) => handleFieldSave('start_date', v)}
+              type="date"
+              saving={savingField === 'start_date'}
+              placeholder="Chon ngay"
+              renderDisplay={(v) => <span>{v ? new Date(v).toLocaleDateString('vi-VN') : <span className="text-slate-400 italic">Chua thiet lap</span>}</span>}
+            />
+          </div>
 
-              {/* Người tạo */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-500">Người tạo</h4>
-                <p className="mt-1 text-sm text-gray-900">{task.created_by || 'Không có thông tin'}</p>
-              </div>
+          {/* Due date */}
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Ngay het han</span>
+            <InlineEditableField
+              value={task.due_date?.split('T')[0] || ''}
+              onSave={(v) => handleFieldSave('due_date', v)}
+              type="date"
+              saving={savingField === 'due_date'}
+              placeholder="Chon ngay"
+              renderDisplay={(v) => <span>{v ? new Date(v).toLocaleDateString('vi-VN') : <span className="text-slate-400 italic">Chua thiet lap</span>}</span>}
+            />
+          </div>
 
-              {/* Ngày bắt đầu */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-500">Ngày bắt đầu</h4>
-                <p className="mt-1 text-sm text-gray-900">{formatDate(task.start_date)}</p>
-              </div>
+          {/* Effort */}
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">No luc (gio)</span>
+            <InlineEditableField
+              value={task.effort?.toString() || ''}
+              onSave={(v) => handleFieldSave('effort', v)}
+              type="number"
+              min={0}
+              step={0.5}
+              saving={savingField === 'effort'}
+              placeholder="0"
+              renderDisplay={(v) => <span>{v ? formatEffort(Number(v)) : <span className="text-slate-400 italic">Chua uoc tinh</span>}</span>}
+            />
+          </div>
 
-              {/* Ngày hết hạn */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-500">Ngày hết hạn</h4>
-                <p className="mt-1 text-sm text-gray-900">{formatDate(task.due_date)}</p>
-              </div>
-
-              {/* Nỗ lực */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-500">Nỗ lực</h4>
-                <p className="mt-1 text-sm text-gray-900">{formatEffort(task.effort)}</p>
-              </div>
-
-              {/* Tiến độ */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-500">Tiến độ</h4>
-                <div className="mt-1">
-                  <div className="w-full bg-gray-200 rounded-full h-2.5">
-                    <div 
-                      className="bg-blue-600 h-2.5 rounded-full" 
-                      style={{ width: `${task.progress || 0}%` }}
-                    ></div>
+          {/* Progress */}
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Tien do (%)</span>
+            <InlineEditableField
+              value={task.progress?.toString() || '0'}
+              onSave={(v) => handleFieldSave('progress', v)}
+              type="number"
+              min={0}
+              max={100}
+              saving={savingField === 'progress'}
+              renderDisplay={(v) => (
+                <div className="flex items-center gap-2">
+                  <div className="w-24 bg-slate-200 rounded-full h-2">
+                    <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${Number(v) || 0}%` }}></div>
                   </div>
-                  <p className="mt-1 text-xs text-gray-700">{task.progress || 0}%</p>
+                  <span className="text-xs text-slate-700">{v || 0}%</span>
                 </div>
-              </div>
+              )}
+            />
+          </div>
 
-              {/* Ngày tạo */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-500">Ngày tạo</h4>
-                <p className="mt-1 text-sm text-gray-900">{formatDate(task.created_at)}</p>
-              </div>
+          {/* Created at (read-only) */}
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Ngay tao</span>
+            <p className="px-2 py-1 text-sm text-slate-900">{formatDate(task.created_at)}</p>
+          </div>
 
-              {/* Cập nhật lần cuối */}
-              <div>
-                <h4 className="text-sm font-medium text-gray-500">Cập nhật lần cuối</h4>
-                <p className="mt-1 text-sm text-gray-900">{formatDate(task.updated_at)}</p>
-              </div>
-            </div>
+          {/* Updated at (read-only) */}
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Cap nhat lan cuoi</span>
+            <p className="px-2 py-1 text-sm text-slate-900">{formatDate(task.updated_at)}</p>
+          </div>
+        </div>
 
-            {/* Phần comments */}
-            <div className="mt-8">
-              <h3 className="text-lg font-medium text-gray-900 mb-4">Bình luận ({comments.length})</h3>
+        {/* Comments section */}
+        <div className="mt-4">
+          <h3 className="text-base font-semibold text-slate-800 mb-3">Binh luan ({comments.length})</h3>
               
               {/* Hiển thị trạng thái loading */}
               {isLoading && (
@@ -724,9 +607,7 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
                   </div>
                 </div>
               )}
-            </div>
-          </div>
-        )}
+        </div>
       </div>
     </Dialog>
   );
