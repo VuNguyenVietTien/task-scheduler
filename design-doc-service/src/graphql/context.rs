@@ -17,11 +17,8 @@ impl GqlContext {
         self.claims.as_ref().ok_or(crate::error::AppError::Unauthorized("Authentication required".into()))
     }
 
-    pub fn user_id(&self) -> Result<i64, crate::error::AppError> {
+    pub fn user_id(&self) -> Result<String, crate::error::AppError> {
         let claims = self.require_auth()?;
-        claims.sub.parse::<i64>().map_err(|_| {
-            // Try parsing as UUID and converting
-            crate::error::AppError::Unauthorized("Invalid user ID in token".into())
-        })
+        Ok(claims.sub.clone())
     }
 }

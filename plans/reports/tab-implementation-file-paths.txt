@@ -1,0 +1,256 @@
+================================================================================
+                    TAB IMPLEMENTATION FILE PATHS REFERENCE
+================================================================================
+
+PROJECT-LEVEL TAB SYSTEM
+========================
+
+Route Entry Point:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/app/projects/[id]/page.tsx
+  - Uses useSearchParams() to extract ?tab= parameter
+  - Wraps content in ProjectPageWrapper
+  - Passes tab as initialTab prop
+
+Layout/Data Provider:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/app/projects/[id]/layout.tsx
+  - Uses Redux dispatch to fetch project data
+  - Fetches both tasks and members at layout level
+  - Skips fetch on task detail pages
+
+Page Wrapper:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/projects/ProjectPage.tsx
+  - Dynamic import of ProjectDetailView
+  - Maps Redux state to ProjectData format
+  - Handles loading/error states
+
+Main Tab Switcher:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/projects/ProjectDetailView.tsx
+  - Contains activeView state management
+  - Syncs with URL tab parameter via useEffect
+  - Implements conditional rendering for 5 views
+  - Transforms and passes data to each view
+
+
+PROJECT-LEVEL TAB VIEW COMPONENTS
+==================================
+
+List View:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/tasks/TaskListView.tsx
+  - Displays tasks in table/list format
+  - Receives tasks, filters, pagination from parent
+  - No tab-specific logic, just view rendering
+
+Kanban View:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/tasks/KanbanBoard.tsx
+  - Drag-and-drop task board by status
+  - Receives tasks, projectId from parent
+  - Handles reordering via onTasksReorder callback
+
+Gantt/Timeline View:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/tasks/GanttChart.tsx
+  - Timeline visualization
+  - Could also be Timeline.tsx
+  - Used when activeView === 'gantt'
+
+Members View:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/projects/MembersView.tsx
+  - Displays project members list
+  - Manages member addition/removal
+  - Uses Redux for member state
+
+Reports View:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/reports/ProjectReportView.tsx
+  - Project analytics and reports
+  - Could be ReportView.tsx (deprecated)
+  - Receives projectId from parent
+
+
+TASK-LEVEL TAB SYSTEM
+=====================
+
+Tab Orchestrator:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/tasks/tabs/TabsLayout.tsx
+  - Hard-coded 4 tabs: description, details, comments, subtasks
+  - Takes activeTab, setActiveTab, tabComponents props
+  - Renders tab buttons and content dynamically
+
+Reusable Tabs UI Components:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/ui/Tabs.tsx
+  - Context-based tab system
+  - Exports: Tabs, TabsList, TabsTrigger, TabsContent
+  - Generic, used in other parts of app
+  - Manages selectedTab state via React Context
+
+
+TASK-LEVEL TAB COMPONENTS
+==========================
+
+Description Tab:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/tasks/tabs/DescriptionTab.tsx
+  - Task description content
+  - Rich text editor integration
+  - Edit/view mode
+
+Details Tab:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/tasks/tabs/DetailsTab.tsx
+  - Task metadata display
+  - Status, priority, dates, effort, progress
+  - Editable fields with click-to-edit pattern
+  - Shows calculated data (days remaining, effort summary)
+
+Comments Tab:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/tasks/tabs/CommentsTab.tsx
+  - Task comments/discussion thread
+  - Comment form with rich text editor
+  - Mentions support (@username)
+  - Comment list with timestamps
+  - Create notification mutation on comment
+
+Subtasks Tab:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/tasks/tabs/SubtasksTab.tsx
+  - Child tasks management
+  - Add/edit/delete subtasks
+  - Shows progress calculation
+  - Nested task structure
+
+
+DATA LAYER / REDUX
+==================
+
+Tasks Slice:
+  /Users/TienVNV/Desktop/ProjectManager/redux/features/tasksSlice.ts
+  - State: tasks[], loading, error
+  - Action: fetchProjectTasks(projectId)
+  - Used by all task-related views
+
+Members Slice:
+  /Users/TienVNV/Desktop/ProjectManager/redux/features/membersSlice.ts
+  - State: members[], loading, error
+  - Action: fetchProjectMembers(projectId)
+  - Used by ProjectDetailView and MembersView
+
+Project Slice:
+  /Users/TienVNV/Desktop/ProjectManager/redux/features/projectSlice.ts
+  - State: project{}, loading, error
+  - Action: fetchProject(projectId)
+  - Used by ProjectPage for project metadata
+
+Plans Slice:
+  /Users/TienVNV/Desktop/ProjectManager/redux/features/plansSlice.ts
+  - State: plans[], latest plan
+  - Actions: fetchProjectPlans, fetchLatestProjectPlan
+  - Used for task scheduling
+
+Task Order Store:
+  /Users/TienVNV/Desktop/ProjectManager/redux/features/taskOrderStore.ts
+  - State: autoSort boolean
+  - Used to manage automatic sorting
+
+
+SIDEBAR & LAYOUT
+================
+
+Main Sidebar:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/layout/Sidebar.tsx
+  - Navigation items: Dashboard, Projects, Calendar, Reports
+  - Uses usePathname for active state
+  - No tab-specific buttons
+  - Links to project pages without tabs (sidebar drives navigation)
+
+Header:
+  /Users/TienVNV/Desktop/ProjectManager/frontend/src/components/layout/Header.tsx
+  - Global header with notifications
+  - User menu
+  - Logo/branding
+  - No tab navigation logic
+
+
+GRAPHQL QUERIES & MUTATIONS
+============================
+
+Project Queries (used in tabs):
+  - GET_PROJECT_OVERVIEW (OverviewTab.tsx)
+  - GET_PROJECT_TASKS (TasksTab.tsx)
+
+Member Mutations:
+  - ADD_PROJECT_MEMBER_BY_EMAIL
+  - UPDATE_PROJECT_MEMBER_ROLE
+  - REMOVE_PROJECT_MEMBER
+  - UPDATE_MULTIPLE_MEMBER_ROLES
+
+Notifications:
+  - CREATE_NOTIFICATION (used in CommentsTab)
+
+
+TYPES & INTERFACES
+==================
+
+ViewType (Project Views):
+  Location: ProjectDetailView.tsx line 21
+  type ViewType = 'list' | 'kanban' | 'gantt' | 'members' | 'report';
+
+ProjectData:
+  Location: types/project.ts
+  Includes: id, name, description, dueDate, members, status
+
+Task:
+  Location: types/task.ts
+  Includes: task_id, title, status, priority, dates, assignee, etc.
+
+TabsLayoutProps:
+  Location: TabsLayout.tsx line 4
+  Props: task, activeTab, setActiveTab, tabComponents
+
+TabsContextValue:
+  Location: Tabs.tsx line 6
+  Context: selectedTab, setSelectedTab
+
+
+DEPRECATED/REMOVED FILES
+========================
+
+Old Project Tab Components (being removed):
+  RM /frontend/src/components/project/MemberRoleSelect.tsx
+  RM /frontend/src/components/project/MembersTab.tsx
+  RM /frontend/src/components/projects/MembersView.tsx (old version)
+  RM /frontend/src/components/projects/ProjectDetailView.tsx (old version)
+
+Old Task Components (being removed):
+  RM /frontend/src/components/tasks/KanbanBoard.tsx (old version)
+  RM /frontend/src/components/tasks/TaskDetail.tsx
+  RM /frontend/src/components/tasks/TaskDetailPage.tsx
+  RM /frontend/src/components/tasks/TaskDetailPage_backup/
+
+Old Report Components (being removed):
+  RM /frontend/src/components/reports/ProjectReportView.tsx (old version)
+  RM /frontend/src/components/reports/ReportView.tsx
+
+Note: Git status shows these as renamed/removed, but files may still exist.
+
+
+IMPORT PATHS REFERENCE
+======================
+
+From ProjectDetailView.tsx:
+  import { TaskListView } from '@/components/tasks/TaskListView';
+  import { KanbanBoard } from '@/components/tasks/KanbanBoard';
+  import { MembersView } from '@/components/projects/MembersView';
+  import { ProjectReportView } from '@/components/reports/ProjectReportView';
+  import { Timeline } from '@/components/timeline/Timeline';
+
+From TabsLayout.tsx:
+  (Uses tabComponents prop, doesn't import directly)
+
+From Tabs.tsx:
+  (Generic component, exports Tabs, TabsList, TabsTrigger, TabsContent)
+
+From page.tsx:
+  import dynamic from 'next/dynamic';
+  import { useSearchParams } from 'next/navigation';
+
+From layout.tsx:
+  import { useParams, usePathname } from 'next/navigation';
+  import { useAppDispatch, useAppSelector } from '@/redux/hooks';
+
+================================================================================
+Generated: 2026-03-26

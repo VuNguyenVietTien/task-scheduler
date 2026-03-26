@@ -14,10 +14,11 @@ The ProjectManager system is a distributed microservice architecture built for t
 - **Purpose**: Core task scheduling, project management, and business logic
 - **Key Features**:
   - Task and project CRUD operations
-  - Team and user management
+  - Team and user management with role-based access control (Manager/Leader/Member/Guest)
   - Notification system with Firebase Cloud Messaging (FCM)
   - Gantt chart data generation
   - Real-time updates via WebSocket
+  - Report generation with period-based metrics tracking
 
 ### 2. Design Document Service (NEW)
 - **Language**: Rust
@@ -58,10 +59,26 @@ The ProjectManager system is a distributed microservice architecture built for t
 - **Port**: 3000
 - **Purpose**: Web UI for task scheduling and project management
 - **Key Features**:
-  - Dashboard and project views
+  - Dashboard and project views with role-based UI rendering
   - Task management interface
   - Gantt chart visualization
   - Real-time notifications
+  - **Dual Apollo Clients**:
+    - Primary client for task-scheduler-backend (port 8080)
+    - Secondary isolated client for design-doc-service (port 8081)
+    - Separate caching layers prevent GraphQL query conflicts
+    - DocumentsTab component manages design-doc-service client lifecycle
+  - **Reports System**:
+    - Daily, weekly, monthly, quarterly report views
+    - Date range picker for flexible report periods
+    - Plan vs. actual comparison with plan selector dropdown
+    - Metrics cards (on-time %, delay %, rejected tasks)
+    - Redux-based metrics calculation from task state
+  - **Documents Tab** (integrated in project detail sidebar):
+    - Accessible from project sidebar navigation
+    - Lists all design systems for current project
+    - Create new design system interface
+    - Uses isolated Apollo client to design-doc-service
   - **Design Document Pages** (integrated under `/designs/` routes):
     - `/designs`: Design document library
     - `/designs/[id]`: Design document detail view with split-pane design viewer
@@ -83,14 +100,18 @@ The ProjectManager system is a distributed microservice architecture built for t
 
 ### Inter-Service Communication
 ```
-task-scheduler-frontend
+task-scheduler-frontend (Apollo 1: Main)
     ↓ (HTTP/REST + GraphQL)
 ├─→ task-scheduler-backend (port 8080)
 │   └─→ PostgreSQL
-│
+
+task-scheduler-frontend (Apollo 2: Design)
+    ↓ (HTTP/REST + GraphQL)
 └─→ design-doc-service (port 8081)
     └─→ PostgreSQL (shared)
 ```
+
+**Note**: Frontend maintains separate Apollo clients to avoid cache conflicts between services. DocumentsTab component instantiates its own ApolloProvider for design-doc-service queries.
 
 ### Authentication
 - **Frontend-to-Backend**: Session cookies + JWT
@@ -125,6 +146,8 @@ task-scheduler-frontend
 - **Host**: postgres (Docker Compose)
 - **Databases**:
   - `task_scheduler`: Main application database (task-scheduler-backend)
+    - Reports table with period_start_date, period_end_date, report_type, metrics
+    - Member role enum: manager, leader, member, guest
   - `design_docs`: Design document schema (design-doc-service)
 - **Connection**: Both services connect via SQLx/PostgreSQL drivers
 - **Backup**: Automated backups to external storage

@@ -49,7 +49,7 @@ pub struct DocumentType {
     pub source_tool: Option<String>,
     pub last_imported_at: Option<DateTime<Utc>>,
     pub metadata: serde_json::Value,
-    pub created_by: i64,
+    pub created_by: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -148,7 +148,8 @@ impl DocumentQuery {
         Ok(docs.into_iter().map(|d| d.into()).collect())
     }
 
-    async fn document(&self, ctx: &Context<'_>, id: Uuid) -> Result<Option<DocumentType>> {
+    #[graphql(name = "designDocument")]
+    async fn design_document(&self, ctx: &Context<'_>, id: Uuid) -> Result<Option<DocumentType>> {
         let gql_ctx = ctx.data::<GqlContext>()?;
         gql_ctx.require_auth().map_err(|e| e.into_graphql_error())?;
         let doc = document_queries::get_document(&gql_ctx.pool, id)
@@ -196,7 +197,7 @@ impl DocumentMutation {
             input.module_id,
             &input.name,
             input.description.as_deref(),
-            user_id,
+            &user_id,
         )
         .await
         .map_err(|e| AppError::Database(e).into_graphql_error())?;

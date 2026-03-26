@@ -13,11 +13,11 @@ use crate::graphql::context::GqlContext;
 #[graphql(complex)]
 pub struct SystemType {
     pub id: Uuid,
-    pub project_id: i64,
+    pub project_id: String,
     pub name: String,
     pub description: Option<String>,
     pub metadata: serde_json::Value,
-    pub created_by: i64,
+    pub created_by: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -58,7 +58,7 @@ impl From<crate::db::models::system::System> for SystemType {
 
 #[derive(InputObject)]
 pub struct CreateSystemInput {
-    pub project_id: i64,
+    pub project_id: String,
     pub name: String,
     pub description: Option<String>,
 }
@@ -75,10 +75,10 @@ pub struct SystemQuery;
 
 #[Object]
 impl SystemQuery {
-    async fn systems(&self, ctx: &Context<'_>, project_id: i64) -> Result<Vec<SystemType>> {
+    async fn systems(&self, ctx: &Context<'_>, project_id: String) -> Result<Vec<SystemType>> {
         let gql_ctx = ctx.data::<GqlContext>()?;
         gql_ctx.require_auth().map_err(|e| e.into_graphql_error())?;
-        let systems = queries::list_systems(&gql_ctx.pool, project_id)
+        let systems = queries::list_systems(&gql_ctx.pool, &project_id)
             .await
             .map_err(|e| AppError::Database(e).into_graphql_error())?;
         Ok(systems.into_iter().map(|s| s.into()).collect())
@@ -107,16 +107,16 @@ impl SystemMutation {
         let gql_ctx = ctx.data::<GqlContext>()?;
         let user_id = gql_ctx.user_id().map_err(|e| e.into_graphql_error())?;
         sqlx::query("SELECT set_config('app.user_id', $1::text, true)")
-            .bind(user_id.to_string())
+            .bind(&user_id)
             .execute(&gql_ctx.pool)
             .await
             .map_err(|e| AppError::Database(e).into_graphql_error())?;
         let system = queries::create_system(
             &gql_ctx.pool,
-            input.project_id,
+            &input.project_id,
             &input.name,
             input.description.as_deref(),
-            user_id,
+            &user_id,
         )
         .await
         .map_err(|e| AppError::Database(e).into_graphql_error())?;

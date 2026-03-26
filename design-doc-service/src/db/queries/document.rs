@@ -24,7 +24,7 @@ pub async fn create_document(
     module_id: Uuid,
     name: &str,
     description: Option<&str>,
-    created_by: i64,
+    created_by: &str,
 ) -> Result<DesignDocument, sqlx::Error> {
     sqlx::query_as::<_, DesignDocument>(
         "INSERT INTO design_documents (module_id, name, description, created_by) VALUES ($1, $2, $3, $4) RETURNING *",

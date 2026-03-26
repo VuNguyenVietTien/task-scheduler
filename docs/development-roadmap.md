@@ -23,11 +23,24 @@ ProjectManager is an integrated platform for task scheduling, project management
   - URL-driven navigation
   - Role-based dashboard with real GraphQL data
   - Gantt responsive buttons and task type column
+- Task Detail Editable Fields + Task Edit Modal
+  - Editable actual_start/actual_end dates in TaskDetail modal
+  - Editable actual dates in full TaskDetailPage
+  - Task edit modal integrated into KanbanBoard
+  - Task edit modal integrated into Timeline/Gantt view
+  - Unified left-click (modal) vs Ctrl+click (navigate) behavior across all views
+- Documents Tab in Project Detail View (v2.30)
+  - "Tai lieu" tab in project sidebar navigation
+  - Design systems list integrated into project context
+  - Create new design system from project view
+  - Isolated Apollo client prevents cache conflicts with main backend
 
 ### In Progress 🔄
 - Design service performance optimization
 - Frontend design pages integration testing
 - External link management features
+- Reports system refinements (metrics validation)
+- Documents tab UI refinements and user testing
 
 ### Not Started ⏳
 - Real-time design collaboration (WebSocket)
@@ -64,10 +77,19 @@ Deliverables:
   - Role-based dashboard (PM vs member views)
   - Gantt responsive button fixes
   - Task type column with color-coded badges
+- [x] Documents Tab Integration (COMPLETE)
+  - Design systems list in project sidebar
+  - Create design system from project view
+  - Isolated Apollo client for design-doc-service
 - [ ] Design service performance tuning
   - Query caching optimization
   - Index performance analysis
   - Connection pooling tuning
+- [x] Report system refactor (COMPLETE)
+  - Role system update (Manager/Leader/Member/Guest)
+  - Modular report components (daily/period/weekly/monthly/quarterly)
+  - Frontend metrics calculation from Redux state
+  - Database schema updates for report tracking
 - [ ] Advanced impact analysis
   - Dependency graph visualization
   - Risk assessment scoring

@@ -1,0 +1,540 @@
+import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '../../types/task';
+import { User } from '../../contexts/AuthContext';
+import { Dialog } from '../ui/Dialog';
+import clsx from 'clsx';
+import { useUpdateTask } from '@/hooks/useTasks';
+import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
+
+interface TaskDetailProps {
+  task: Task;
+  isOpen: boolean;
+  onClose: () => void;
+  onTaskUpdate?: (taskId: string, updates: Partial<Task>) => void;
+  currentUser?: User;
+}
+
+interface Comment {
+  id: string;
+  content: string;
+  user_id: string;
+  username: string;
+  avatar_url?: string;
+  created_at: string;
+}
+
+export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }: TaskDetailProps) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [newComment, setNewComment] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isPostingComment, setIsPostingComment] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const commentRef = useRef<HTMLTextAreaElement>(null);
+  const { updateTask } = useUpdateTask();
+
+  // Local edited state — staged changes before saving
+  const [editedTask, setEditedTask] = useState<Task>(task);
+  const [editingField, setEditingField] = useState<string | null>(null);
+
+  // Sync editedTask only when a DIFFERENT task is opened
+  const currentTaskId = task.task_id || task.id;
+  const prevTaskIdRef = useRef(currentTaskId);
+  useEffect(() => {
+    if (currentTaskId !== prevTaskIdRef.current) {
+      setEditedTask(task);
+      setEditingField(null);
+      prevTaskIdRef.current = currentTaskId;
+    }
+  }, [currentTaskId, task]);
+
+  const formatDate = (dateString?: string) => {
+    if (!dateString) return 'Chua thiet lap';
+    return new Date(dateString).toLocaleDateString('vi-VN', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+  };
+
+  const calculateDaysRemaining = () => {
+    if (!editedTask.due_date) return null;
+    const today = new Date();
+    const dueDate = new Date(editedTask.due_date);
+    const diffTime = dueDate.getTime() - today.getTime();
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+    if (diffDays < 0) return `Qua han ${Math.abs(diffDays)} ngay`;
+    if (diffDays === 0) return 'Den han hom nay';
+    return `Con ${diffDays} ngay`;
+  };
+
+  const formatEffort = (effort?: number) => {
+    if (!effort) return 'Chua uoc tinh';
+    if (effort < 8) return `${effort} gio`;
+    const days = Math.floor(effort / 8);
+    const hours = effort % 8;
+    return hours > 0 ? `${days} ngay ${hours} gio` : `${days} ngay`;
+  };
+
+  const getStatusColor = (status: TaskStatus) => {
+    const colors: Record<string, string> = {
+      'todo': 'bg-gray-100 text-gray-800',
+      'doing': 'bg-blue-100 text-blue-800',
+      'done': 'bg-green-100 text-green-800',
+      'close': 'bg-green-100 text-green-800',
+      'pending': 'bg-yellow-100 text-yellow-800',
+      'review': 'bg-purple-100 text-purple-800',
+      'blocked': 'bg-red-100 text-red-800',
+      'rejected': 'bg-red-100 text-red-800',
+      'archived': 'bg-gray-100 text-gray-800',
+    };
+    return colors[status] || colors.todo;
+  };
+
+  const getPriorityColor = (priority: Priority) => {
+    const colors: Record<string, string> = {
+      'low': 'bg-green-100 text-green-800',
+      'medium': 'bg-yellow-100 text-yellow-800',
+      'high': 'bg-orange-100 text-orange-800',
+      'urgent': 'bg-red-100 text-red-800',
+      'critical': 'bg-red-100 text-red-800 font-bold',
+    };
+    return colors[priority] || colors.medium;
+  };
+
+  // Save a single field to backend
+  const saveField = async (fieldName: string) => {
+    try {
+      setIsSaving(true);
+      setError(null);
+      const taskId = task.task_id || task.id || '';
+      const updates: Partial<Task> = {};
+
+      const val = (editedTask as any)[fieldName];
+      switch (fieldName) {
+        case 'title': updates.title = val; break;
+        case 'description': updates.description = val; break;
+        case 'status': updates.status = val; break;
+        case 'priority': updates.priority = val; break;
+        case 'start_date': updates.start_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : undefined; break;
+        case 'due_date': updates.due_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : undefined; break;
+        case 'effort': updates.effort = val ? Number(val) : undefined; break;
+        case 'progress': updates.progress = val !== undefined ? Number(val) : undefined; break;
+        case 'actual_start_date': updates.actual_start_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : undefined; break;
+        case 'actual_end_date': updates.actual_end_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : undefined; break;
+        default: return;
+      }
+
+      await updateTask(taskId, updates);
+      // Exit edit mode but keep modal open
+      setEditingField(null);
+      if (onTaskUpdate) onTaskUpdate(taskId, updates);
+    } catch (err) {
+      console.error('Error updating field:', err);
+      setError('Khong the cap nhat. Vui long thu lai.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Cancel editing — revert field to original
+  const cancelEdit = () => {
+    setEditedTask(task);
+    setEditingField(null);
+  };
+
+  // Render nội dung HTML an toàn
+  const renderHTML = (html?: string) => {
+    if (!html) return null;
+    return <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: html }} />;
+  };
+
+  // Load comments
+  const fetchComments = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const projectId = task.project_id || task.projectId;
+      if (!projectId) return;
+      const taskId = task.task_id || task.id;
+      const response = await fetch(`/api/projects/${projectId}/tasks/${taskId}/comments`);
+      if (!response.ok) throw new Error('Khong the lay comments');
+      const data = await response.json();
+      setComments(data.map((c: any) => ({
+        id: c.id, content: c.content, user_id: c.user_id,
+        username: c.username || 'Nguoi dung', avatar_url: c.avatar_url, created_at: c.created_at
+      })));
+    } catch (err) {
+      console.error('Error fetching comments:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [task.project_id, task.projectId, task.task_id, task.id]);
+
+  const handleSubmitComment = async () => {
+    if (!newComment.trim() || !currentUser) return;
+    try {
+      setIsPostingComment(true);
+      setError(null);
+      const projectId = task.project_id || task.projectId;
+      const taskId = task.task_id || task.id;
+      if (!projectId || !taskId) throw new Error('Thieu thong tin');
+      const response = await fetch(`/api/projects/${projectId}/tasks/${taskId}/comments`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content: newComment }),
+      });
+      if (!response.ok) throw new Error('Khong the them binh luan');
+      const saved = await response.json();
+      setComments(prev => [...prev, {
+        id: saved.id, content: saved.content, user_id: saved.user_id,
+        username: currentUser.name, avatar_url: currentUser.providerData?.[0]?.photoURL || undefined,
+        created_at: saved.created_at,
+      }]);
+      setNewComment('');
+      commentRef.current?.focus();
+    } catch (err) {
+      console.error('Error posting comment:', err);
+      setError('Khong the them binh luan.');
+    } finally {
+      setIsPostingComment(false);
+    }
+  };
+
+  useEffect(() => {
+    if (isOpen && (task.task_id || task.id)) {
+      fetchComments();
+    }
+  }, [isOpen, task.task_id, task.id, fetchComments]);
+
+  const statusOptions = Object.values(TaskStatuses).map(s => ({
+    value: s, label: s.charAt(0).toUpperCase() + s.slice(1)
+  }));
+  const priorityOptions = Object.values(Priorities).map(p => ({
+    value: p, label: p.charAt(0).toUpperCase() + p.slice(1)
+  }));
+
+  // Reusable editable field renderer — matches TaskDetailPage pattern
+  const renderEditableField = (
+    label: string,
+    fieldName: string,
+    type: 'text' | 'select' | 'date' | 'number' = 'text',
+    options?: { value: string; label: string }[],
+    displayRenderer?: (val: any) => React.ReactNode
+  ) => {
+    const val = (editedTask as any)[fieldName];
+    const originalVal = (task as any)[fieldName];
+
+    // Edit mode for this field
+    if (editingField === fieldName) {
+      return (
+        <div>
+          <span className="text-xs text-slate-500 block mb-1">{label}</span>
+          {type === 'select' && options ? (
+            <select
+              value={val || ''}
+              onChange={(e) => setEditedTask({ ...editedTask, [fieldName]: e.target.value } as Task)}
+              className="w-full text-sm rounded-md border-slate-300 focus:border-blue-500 focus:ring-blue-500 px-2 py-1.5"
+            >
+              {options.map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+          ) : type === 'date' ? (
+            <input
+              type="date"
+              value={val?.split?.('T')?.[0] || val || ''}
+              onChange={(e) => setEditedTask({ ...editedTask, [fieldName]: e.target.value } as Task)}
+              className="w-full text-sm rounded-md border-slate-300 focus:border-blue-500 focus:ring-blue-500 px-2 py-1.5"
+            />
+          ) : type === 'number' ? (
+            <input
+              type="number"
+              value={val ?? ''}
+              onChange={(e) => setEditedTask({ ...editedTask, [fieldName]: e.target.value } as Task)}
+              min={0}
+              max={fieldName === 'progress' ? 100 : undefined}
+              step={fieldName === 'effort' ? 0.5 : 1}
+              className="w-full text-sm rounded-md border-slate-300 focus:border-blue-500 focus:ring-blue-500 px-2 py-1.5"
+            />
+          ) : (
+            <input
+              type="text"
+              value={val || ''}
+              onChange={(e) => setEditedTask({ ...editedTask, [fieldName]: e.target.value } as Task)}
+              className="w-full text-sm rounded-md border-slate-300 focus:border-blue-500 focus:ring-blue-500 px-2 py-1.5"
+            />
+          )}
+          <div className="flex mt-1.5 gap-1">
+            <button
+              onClick={() => saveField(fieldName)}
+              disabled={isSaving}
+              className="p-1 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-full transition-colors disabled:opacity-50"
+              title="Xac nhan"
+            >
+              {isSaving ? (
+                <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+              ) : (
+                <CheckIcon className="h-4 w-4" />
+              )}
+            </button>
+            <button
+              onClick={cancelEdit}
+              className="p-1 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+              title="Huy"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Display mode — click to edit
+    let displayContent: React.ReactNode;
+    if (displayRenderer) {
+      displayContent = displayRenderer(val);
+    } else if (type === 'date') {
+      displayContent = val ? formatDate(val) : <span className="text-slate-400 italic">Chua thiet lap</span>;
+    } else if (type === 'number') {
+      displayContent = val !== undefined && val !== null && val !== '' ? String(val) : <span className="text-slate-400 italic">Chua thiet lap</span>;
+    } else {
+      displayContent = val || <span className="text-slate-400 italic">Chua thiet lap</span>;
+    }
+
+    return (
+      <div>
+        <span className="text-xs text-slate-500 block mb-1">{label}</span>
+        <div
+          onClick={() => setEditingField(fieldName)}
+          className="group cursor-pointer rounded px-2 py-1 -mx-2 transition-colors hover:bg-slate-100 flex items-center gap-1"
+          role="button"
+          tabIndex={0}
+          onKeyDown={e => { if (e.key === 'Enter') setEditingField(fieldName); }}
+        >
+          <span className="flex-1 text-sm text-slate-900">{displayContent}</span>
+          <PencilIcon className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 transition-colors flex-shrink-0" />
+        </div>
+      </div>
+    );
+  };
+
+  return (
+    <Dialog
+      open={isOpen}
+      onClose={onClose}
+      title="Chi tiet cong viec"
+      className="w-[calc(100%-64px)] max-w-[900px]"
+      preventBackdropClose
+    >
+      <div className="relative p-6 space-y-6">
+        {/* Close button (top-right) */}
+        <button
+          onClick={onClose}
+          className="absolute top-4 right-4 p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors z-10"
+          title="Dong"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+
+        {/* Error banner */}
+        {error && (
+          <div className="bg-red-50 border-l-4 border-red-500 p-3 flex items-center gap-2">
+            <svg className="h-4 w-4 text-red-500 flex-shrink-0" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+              <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+            </svg>
+            <p className="text-sm text-red-700">{error}</p>
+          </div>
+        )}
+
+        {/* Inline hint */}
+        <p className="text-xs text-slate-400">Click vao gia tri bat ky de chinh sua</p>
+
+        {/* Title */}
+        {renderEditableField('Tieu de', 'title', 'text')}
+
+        {/* Status + Priority */}
+        <div className="flex flex-wrap gap-4 items-start">
+          {renderEditableField('Trang thai', 'status', 'select', statusOptions, (v: string) => (
+            <span className={clsx("px-2.5 py-1 rounded-full text-xs font-medium", getStatusColor(v as TaskStatus))}>
+              {v ? v.charAt(0).toUpperCase() + v.slice(1) : '-'}
+            </span>
+          ))}
+          {renderEditableField('Uu tien', 'priority', 'select', priorityOptions, (v: string) => (
+            <span className={clsx("px-2.5 py-1 rounded-full text-xs font-medium", getPriorityColor(v as Priority))}>
+              {v ? v.charAt(0).toUpperCase() + v.slice(1) : '-'}
+            </span>
+          ))}
+          {editedTask.due_date && (
+            <div>
+              <span className="text-xs text-slate-500 block mb-1">&nbsp;</span>
+              <span className={clsx(
+                "px-2.5 py-1 rounded-full text-xs font-medium",
+                new Date(editedTask.due_date) < new Date() ? "bg-red-100 text-red-800" : "bg-blue-100 text-blue-800"
+              )}>
+                {calculateDaysRemaining()}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Description (read-only display, editable if empty) */}
+        <div>
+          <span className="text-xs text-slate-500 block mb-1">Mo ta</span>
+          {editedTask.description ? (
+            <div className="bg-slate-50 p-4 rounded-md">
+              <div className="text-slate-700 rich-text-content text-sm">
+                {renderHTML(editedTask.description)}
+              </div>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400 italic px-2 py-1">Chua co mo ta</p>
+          )}
+        </div>
+
+        {/* Detail grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-md">
+          {/* Assignee (read-only) */}
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Nguoi duoc giao</span>
+            <div className="flex items-center gap-2 px-2 py-1 text-sm">
+              {editedTask.assignee ? (
+                <>
+                  <span className="inline-block h-6 w-6 rounded-full overflow-hidden bg-slate-200">
+                    {editedTask.assignee.avatarUrl ? (
+                      <img src={editedTask.assignee.avatarUrl} alt={editedTask.assignee.username} className="h-full w-full object-cover" />
+                    ) : (
+                      <svg className="h-full w-full text-slate-400" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
+                      </svg>
+                    )}
+                  </span>
+                  <span className="text-slate-900">{editedTask.assignee.username}</span>
+                </>
+              ) : (
+                <span className="text-slate-400 italic">Chua giao</span>
+              )}
+            </div>
+          </div>
+
+          {/* Creator (read-only) */}
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Nguoi tao</span>
+            <p className="px-2 py-1 text-sm text-slate-900">
+              {typeof editedTask.created_by === 'object' ? (editedTask.created_by as any)?.username : editedTask.created_by || '-'}
+            </p>
+          </div>
+
+          {renderEditableField('Ngay bat dau', 'start_date', 'date')}
+          {renderEditableField('Ngay het han', 'due_date', 'date')}
+          {renderEditableField('Ngay bat dau thuc te', 'actual_start_date', 'date')}
+          {renderEditableField('Ngay ket thuc thuc te', 'actual_end_date', 'date')}
+          {renderEditableField('No luc (gio)', 'effort', 'number', undefined, (v: any) => (
+            v ? formatEffort(Number(v)) : <span className="text-slate-400 italic">Chua uoc tinh</span>
+          ))}
+          {renderEditableField('Tien do (%)', 'progress', 'number', undefined, (v: any) => (
+            <div className="flex items-center gap-2">
+              <div className="w-24 bg-slate-200 rounded-full h-2">
+                <div className="bg-blue-600 h-2 rounded-full" style={{ width: `${Number(v) || 0}%` }}></div>
+              </div>
+              <span className="text-xs text-slate-700">{v || 0}%</span>
+            </div>
+          ))}
+
+          {/* Created at (read-only) */}
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Ngay tao</span>
+            <p className="px-2 py-1 text-sm text-slate-900">{formatDate(task.created_at)}</p>
+          </div>
+
+          {/* Updated at (read-only) */}
+          <div>
+            <span className="text-xs text-slate-500 block mb-1">Cap nhat lan cuoi</span>
+            <p className="px-2 py-1 text-sm text-slate-900">{formatDate(task.updated_at)}</p>
+          </div>
+        </div>
+
+        {/* Comments section */}
+        <div className="mt-4">
+          <h3 className="text-base font-semibold text-slate-800 mb-3">Binh luan ({comments.length})</h3>
+
+          {isLoading && (
+            <div className="flex justify-center py-4">
+              <svg className="animate-spin h-5 w-5 text-gray-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+            </div>
+          )}
+
+          {!isLoading && (
+            <div className="space-y-4 mb-6">
+              {comments.map((comment) => (
+                <div key={comment.id} className="bg-gray-50 p-4 rounded-md">
+                  <div className="flex items-start">
+                    <div className="flex-shrink-0">
+                      {comment.avatar_url ? (
+                        <img className="h-10 w-10 rounded-full" src={comment.avatar_url} alt={comment.username} />
+                      ) : (
+                        <div className="h-10 w-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-600">
+                          {comment.username.charAt(0).toUpperCase()}
+                        </div>
+                      )}
+                    </div>
+                    <div className="ml-3 flex-1">
+                      <div className="text-sm font-medium text-gray-900">{comment.username}</div>
+                      <div className="text-sm text-gray-500">
+                        {new Date(comment.created_at).toLocaleDateString('vi-VN', {
+                          year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        })}
+                      </div>
+                      <div className="mt-1 text-sm text-gray-700 rich-text-content">
+                        {renderHTML(comment.content)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+              {!isLoading && comments.length === 0 && (
+                <p className="text-gray-500 text-center py-4">Chua co binh luan nao.</p>
+              )}
+            </div>
+          )}
+
+          {currentUser && (
+            <div className="mt-4">
+              <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-2">
+                Them binh luan moi
+              </label>
+              <textarea
+                id="comment"
+                rows={3}
+                ref={commentRef}
+                value={newComment}
+                onChange={(e) => setNewComment(e.target.value)}
+                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                placeholder="Viet binh luan cua ban o day..."
+                disabled={isPostingComment}
+              />
+              <div className="mt-2 flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleSubmitComment}
+                  disabled={!newComment.trim() || isPostingComment}
+                  className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isPostingComment ? 'Dang gui...' : 'Gui binh luan'}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </Dialog>
+  );
+}

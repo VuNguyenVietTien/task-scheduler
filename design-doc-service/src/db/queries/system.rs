@@ -2,7 +2,7 @@ use sqlx::PgPool;
 use uuid::Uuid;
 use crate::db::models::system::System;
 
-pub async fn list_systems(pool: &PgPool, project_id: i64) -> Result<Vec<System>, sqlx::Error> {
+pub async fn list_systems(pool: &PgPool, project_id: &str) -> Result<Vec<System>, sqlx::Error> {
     sqlx::query_as::<_, System>("SELECT * FROM systems WHERE project_id = $1 ORDER BY created_at DESC")
         .bind(project_id)
         .fetch_all(pool)
@@ -18,10 +18,10 @@ pub async fn get_system(pool: &PgPool, id: Uuid) -> Result<Option<System>, sqlx:
 
 pub async fn create_system(
     pool: &PgPool,
-    project_id: i64,
+    project_id: &str,
     name: &str,
     description: Option<&str>,
-    created_by: i64,
+    created_by: &str,
 ) -> Result<System, sqlx::Error> {
     sqlx::query_as::<_, System>(
         "INSERT INTO systems (project_id, name, description, created_by) VALUES ($1, $2, $3, $4) RETURNING *",

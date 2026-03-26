@@ -1,0 +1,169 @@
+================================================================================
+                     FRONTEND TAB ARCHITECTURE SUMMARY
+================================================================================
+
+TWO-LEVEL TAB SYSTEM:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      PROJECT-LEVEL TABS (5 Views)                          │
+│                                                                             │
+│  URL: /projects/[id]?tab=<view>                                           │
+│                                                                             │
+│  ┌──────────┬──────────┬────────┬─────────┬──────────┐                     │
+│  │  list    │  kanban  │ gantt  │ members │  report  │                     │
+│  │(default) │          │        │         │          │                     │
+│  └──────────┴──────────┴────────┴─────────┴──────────┘                     │
+│                                                                             │
+│  Implementation:                                                            │
+│  - State: URL query param + React state (activeView)                       │
+│  - Location: ProjectDetailView.tsx                                         │
+│  - Pattern: Conditional rendering based on activeView                      │
+│  - Data: Redux (shared across all views)                                   │
+│                                                                             │
+│  Navigation Flow:                                                           │
+│  useSearchParams() → ProjectPageWrapper → ProjectPage → ProjectDetailView  │
+│        ↓                                                                     │
+│   ?tab=X extracted                                                          │
+│        ↓                                                                     │
+│   initialTab prop passed down                                              │
+│        ↓                                                                     │
+│   activeView state synced with URL                                         │
+│        ↓                                                                     │
+│   Conditional view renders                                                 │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                      TASK-LEVEL TABS (4 Tabs)                              │
+│                                                                             │
+│  Location: Task detail page                                                │
+│                                                                             │
+│  ┌──────────────┬─────────┬──────────┬──────────┐                         │
+│  │ description  │ details │ comments │ subtasks │                         │
+│  │  (Mô tả)     │ (Chi ti)│(Bình luận)│(Con)    │                         │
+│  └──────────────┴─────────┴──────────┴──────────┘                         │
+│                                                                             │
+│  Implementation:                                                            │
+│  - State: React state (activeTab)                                          │
+│  - Location: TabsLayout.tsx + UI/Tabs.tsx                                  │
+│  - Pattern: Context-based Tabs component                                   │
+│  - Data: Props passed from parent                                          │
+│                                                                             │
+│  Architecture:                                                              │
+│  TabsLayout (orchestrator)                                                 │
+│       ↓                                                                     │
+│  Tabs (Context provider) ← stores selectedTab state                        │
+│       ↓                                                                     │
+│  ├─ TabsList                                                               │
+│  │   ├─ TabsTrigger('description')                                         │
+│  │   ├─ TabsTrigger('details')                                             │
+│  │   ├─ TabsTrigger('comments')                                            │
+│  │   └─ TabsTrigger('subtasks')                                            │
+│  │                                                                          │
+│  └─ TabsContent (renders based on selectedTab)                             │
+│      ├─ DescriptionTab                                                     │
+│      ├─ DetailsTab                                                         │
+│      ├─ CommentsTab                                                        │
+│      └─ SubtasksTab                                                        │
+│                                                                             │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+DATA SHARING ARCHITECTURE:
+
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                                                                             │
+│                            Redux Store (Central)                           │
+│                                                                             │
+│  ┌─────────────────┐  ┌─────────────────┐  ┌──────────────────┐            │
+│  │  tasksSlice     │  │  membersSlice   │  │  projectSlice    │            │
+│  │  ┌───────────┐  │  │  ┌───────────┐  │  │  ┌────────────┐  │            │
+│  │  │ tasks[]   │  │  │  │ members[] │  │  │  │ project{}  │  │            │
+│  │  │ loading   │  │  │  │ loading   │  │  │  │ loading    │  │            │
+│  │  │ error     │  │  │  │ error     │  │  │  │ error      │  │            │
+│  │  └───────────┘  │  │  └───────────┘  │  │  └────────────┘  │            │
+│  └─────────────────┘  └─────────────────┘  └──────────────────┘            │
+│          ↑                    ↑                       ↑                      │
+│          │                    │                       │                      │
+│          └────────────────────┴───────────────────────┘                     │
+│                               ↑                                             │
+│              ProjectDetailView fetches & dispatches                         │
+│                                                                             │
+│              dispatch(fetchProjectTasks())                                 │
+│              dispatch(fetchProjectMembers())                               │
+│              dispatch(fetchProject())                                      │
+│                               ↑                                             │
+└────────────┬──────────────────┼──────────────────────────────────────────────┘
+             │                  │
+    ┌────────┴──────┐  ┌────────┴──────┐
+    │ All Tab Views │  │ Apollo Cache  │
+    └────────┬──────┘  └────────┬──────┘
+             │                  │
+    ┌────────┴──────┐  ┌────────┴──────┐
+    │ TaskListView  │  │ GraphQL Queries│
+    │ KanbanBoard   │  │ (cached)       │
+    │ Timeline      │  │                │
+    │ MembersView   │  │ GET_PROJECT    │
+    │ ReportView    │  │ UPDATE queries │
+    └───────────────┘  └────────────────┘
+
+KEY FILES:
+
+Project-Level:
+  ✓ frontend/src/app/projects/[id]/page.tsx (route entry, useSearchParams)
+  ✓ frontend/src/app/projects/[id]/layout.tsx (data fetch, Redux dispatch)
+  ✓ frontend/src/components/projects/ProjectDetailView.tsx (tab switcher)
+  ✓ frontend/src/components/projects/ProjectPage.tsx (wrapper, Redux hooks)
+
+Task-Level:
+  ✓ frontend/src/components/tasks/tabs/TabsLayout.tsx (tab orchestrator)
+  ✓ frontend/src/components/ui/Tabs.tsx (reusable context-based UI)
+  ✓ frontend/src/components/tasks/tabs/DetailsTab.tsx
+  ✓ frontend/src/components/tasks/tabs/CommentsTab.tsx
+  ✓ frontend/src/components/tasks/tabs/DescriptionTab.tsx
+  ✓ frontend/src/components/tasks/tabs/SubtasksTab.tsx
+
+Views:
+  ✓ frontend/src/components/tasks/TaskListView.tsx
+  ✓ frontend/src/components/tasks/KanbanBoard.tsx
+  ✓ frontend/src/components/tasks/GanttChart.tsx (Timeline)
+  ✓ frontend/src/components/projects/MembersView.tsx
+  ✓ frontend/src/components/reports/ProjectReportView.tsx
+
+Redux:
+  ✓ /redux/features/tasksSlice.ts
+  ✓ /redux/features/membersSlice.ts
+  ✓ /redux/features/projectSlice.ts
+  ✓ /redux/features/plansSlice.ts
+
+NAVIGATION FLOW:
+
+URL: /projects/123?tab=kanban
+  ↓
+useSearchParams() extracts "kanban"
+  ↓
+ProjectPageWrapper receives tab: "kanban"
+  ↓
+ProjectPage receives initialTab: "kanban" prop
+  ↓
+ProjectDetailView receives initialTab: "kanban"
+  ↓
+useState<ViewType>(toViewType("kanban")) → "kanban"
+  ↓
+useEffect syncs if URL changes
+  ↓
+{activeView === 'kanban' && <KanbanBoard ... />}
+  ↓
+KanbanBoard renders with Redux tasks data
+
+TYPE SYSTEM:
+
+Project Views:
+  type ViewType = 'list' | 'kanban' | 'gantt' | 'members' | 'report'
+  const VALID_VIEWS: ViewType[] = ['list', 'kanban', 'gantt', 'members', 'report']
+
+Tab Validation:
+  function toViewType(tab?: string): ViewType {
+    return VALID_VIEWS.includes(tab as ViewType) ? (tab as ViewType) : 'list'
+  }
+
+================================================================================

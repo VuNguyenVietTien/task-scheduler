@@ -13,7 +13,7 @@ pub struct DesignDocument {
     pub source_tool: Option<String>,
     pub last_imported_at: Option<DateTime<Utc>>,
     pub metadata: serde_json::Value,
-    pub created_by: i64,
+    pub created_by: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

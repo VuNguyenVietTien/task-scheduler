@@ -6,11 +6,11 @@ use uuid::Uuid;
 #[derive(Debug, Clone, FromRow, Serialize, Deserialize)]
 pub struct System {
     pub id: Uuid,
-    pub project_id: i64,
+    pub project_id: String,
     pub name: String,
     pub description: Option<String>,
     pub metadata: serde_json::Value,
-    pub created_by: i64,
+    pub created_by: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

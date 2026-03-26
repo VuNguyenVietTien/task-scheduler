@@ -6,6 +6,45 @@ All notable changes to the ProjectManager system are documented here. Format fol
 
 ### Added
 
+#### Documents Tab in Project Detail View (2026-03-26)
+- **Documents Tab**: New "Tai lieu" (Documents) tab in project detail sidebar navigation
+- **Design System List**: Tab integrates existing design system list UI, shows all design systems for current project
+- **Create Design System**: Users can create new design systems directly from Documents tab
+- **Isolated Apollo Client**: Separate Apollo client for design-doc-service (port 8081) prevents cache conflicts with main backend
+  - Frontend maintains two Apollo clients: one for task-scheduler-backend (8080), one for design-doc-service (8081)
+  - DocumentsTab component wraps design system UI and manages its own ApolloProvider
+  - Prevents GraphQL cache pollution between services
+
+#### Task Detail Editable Fields + Task Edit Modal (2026-03-25)
+- **Editable Actual Dates**: Made `actual_start_date` and `actual_end_date` editable as inline date fields in TaskDetail modal
+- **Full Page Support**: Added editable actual date fields to full-page TaskDetailPage component
+- **KanbanBoard Integration**: Integrated TaskDetail modal into KanbanBoard task cards with left-click to open
+- **Gantt/Timeline Integration**: Wired up task click handlers in Timeline component to open TaskDetail modal
+- **Unified Click Behavior**: Standardized left-click (open modal) vs Ctrl+click/middle-click (navigate to full page) across List, Kanban, and Gantt views
+- **Modal Edit Sync**: Task updates in modal reflect immediately in all views (List, Kanban, Gantt, Timeline)
+
+#### Report System Refactor (2025-03-25)
+- **Role System Update**: Member roles extended from Admin/Member/Viewer to Manager/Leader/Member/Guest
+  - Manager: full control (replaces Admin)
+  - Leader: manage tasks and team members (new role)
+  - Member: work on assigned tasks (unchanged)
+  - Guest: view-only access (replaces Viewer)
+- **Reports Component Modularization**: ReportView.tsx split into modular components
+  - `daily-report-view`, `period-report-view`, `report-metrics-card`
+  - `date-range-picker` for flexible report date selection
+  - `plan-selector-dropdown` for plan-vs-actual comparison analysis
+- **Daily Report Fixes**:
+  - Date filtering logic corrections
+  - Proper handling of unassigned members
+  - Accurate startedToday metrics calculation
+- **Extended Report Types**: Weekly, monthly, quarterly reports with date range picker
+- **Frontend Metrics Calculation**: Reports now calculate metrics from Redux tasks (no backend resolvers required)
+- **Database Schema Updates**:
+  - New columns: rejected_tasks, on_schedule_percentage, delay_percentage
+  - Unique constraint: (report_type, period_start_date, period_end_date, project_id)
+  - Member role enum extended with new role values
+- **Redux Reports Reducer**: New reducer added to store for reports state management
+
 #### UI Refactor v2.29 (2025-03-25)
 - **Sidebar Navigation Redesign**: Dark sidebar (w-60, bg-slate-900) with Dashboard link and expandable project tree
   - URL-driven navigation with `/projects/{id}?tab={tabId}` routing
