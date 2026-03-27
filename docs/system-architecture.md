@@ -2,11 +2,38 @@
 
 ## Overview
 
-The ProjectManager system is a distributed microservice architecture built for task scheduling, project management, and design document management. The system consists of multiple independent services communicating via HTTP APIs and WebSocket connections.
+The ProjectManager system is transitioning from a distributed microservice architecture to a unified Next.js serverless architecture on Vercel with Supabase backend. Current production uses multiple independent services (Node.js task-scheduler, Rust design-doc-service); the new `web/` codebase unifies both backends into GraphQL Yoga with Supabase.
+
+**Migration Status**: New `web/` codebase built and tested; `frontend/` + Rust backends remain production until validation complete.
 
 ## System Components
 
-### 1. Task Scheduler Backend
+### CURRENT (Production) — Microservice Architecture
+
+### 0. Unified Backend (NEW - Planned Replacement)
+- **Framework**: Next.js 14+ (TypeScript)
+- **API Layer**: GraphQL Yoga at `/api/graphql`
+- **Database**: Supabase (PostgreSQL)
+- **Deployment**: Vercel (serverless)
+- **Auth**: Supabase Auth with Firebase OAuth bridge
+- **Real-time**: Supabase Realtime (replacing custom WebSocket)
+- **Storage**: Supabase Storage (replacing local file system)
+
+**Key Features**:
+- Unified GraphQL schema merging task-scheduler + design-doc domains
+- 20+ service modules for Supabase queries
+- 14 resolver files implementing both backends
+- Single Apollo client on frontend (dual clients consolidated)
+- Server-side Supabase client with service role key for API routes
+- Middleware-based session refresh for auth
+- FCM push via firebase-admin from serverless functions
+- 10-second Hobby plan timeout (60s available on Pro)
+
+**Status**: Build complete (`npm run build` passes); deployment validation pending
+
+**Note**: This architecture replaces the two Rust microservices below. Existing production remains unchanged until `web/` is fully validated.
+
+### 1. Task Scheduler Backend (CURRENT)
 - **Language**: Node.js (TypeScript)
 - **Framework**: Express.js
 - **Port**: 8080
@@ -20,7 +47,7 @@ The ProjectManager system is a distributed microservice architecture built for t
   - Real-time updates via WebSocket
   - Report generation with period-based metrics tracking
 
-### 2. Design Document Service (NEW)
+### 2. Design Document Service (CURRENT)
 - **Language**: Rust
 - **Framework**: Actix-web
 - **Port**: 8081
@@ -53,7 +80,7 @@ The ProjectManager system is a distributed microservice architecture built for t
 - `external_links`: References to external resources (Figma, wireframes, etc.)
 - `document_audit`: Change history and audit trail
 
-### 3. Task Scheduler Frontend
+### 3. Task Scheduler Frontend (CURRENT)
 - **Language**: React + TypeScript
 - **Framework**: Next.js 13+
 - **Port**: 3000

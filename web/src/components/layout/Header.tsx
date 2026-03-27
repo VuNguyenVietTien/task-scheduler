@@ -1,0 +1,201 @@
+'use client';
+
+import Link from 'next/link';
+import { usePathname } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
+import { useState, useEffect, useRef } from 'react';
+import { BellIcon } from '@heroicons/react/24/outline';
+import { useQuery, useMutation } from '@apollo/client';
+import { gql } from '@apollo/client';
+import { formatDistance } from 'date-fns';
+import { vi } from 'date-fns/locale';
+
+// GraphQL Queries
+const GET_NOTIFICATIONS = gql`
+  query GetNotifications($limit: Int) {
+    notifications(limit: $limit) {
+      notificationId
+      type
+      title
+      message
+      isRead
+      created_at
+      metadata
+    }
+    notification_count
+  }
+`;
+
+const MARK_NOTIFICATION_AS_READ = gql`
+  mutation MarkNotificationAsRead($notificationId: UUID!) {
+    markNotificationAsRead(notificationId: $notificationId)
+  }
+`;
+
+const MARK_ALL_NOTIFICATIONS_AS_READ = gql`
+  mutation MarkAllNotificationsAsRead {
+    markAllNotificationsAsRead
+  }
+`;
+
+export default function Header() {
+  const { user, logout } = useAuth();
+  const pathname = usePathname();
+  const [showNotifications, setShowNotifications] = useState(false);
+  const notificationRef = useRef<HTMLDivElement>(null);
+  
+  // Fetch notifications
+  const { data, loading, refetch } = useQuery(GET_NOTIFICATIONS, {
+    variables: { limit: 10 },
+    pollInterval: 30000, // Poll every 30 seconds
+  });
+  
+  // Mutations
+  const [markAsRead] = useMutation(MARK_NOTIFICATION_AS_READ);
+  const [markAllAsRead] = useMutation(MARK_ALL_NOTIFICATIONS_AS_READ);
+  
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (notificationRef.current && !notificationRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+    }
+    
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
+
+  const isActive = (path: string) => {
+    return pathname === path || pathname?.startsWith(`${path}/`);
+  };
+  
+  const handleNotificationClick = async (notificationId: string) => {
+    try {
+      await markAsRead({ variables: { notificationId: notificationId } });
+      refetch();
+    } catch (error) {
+      console.error('Error marking notification as read:', error);
+    }
+  };
+  
+  const handleMarkAllAsRead = async () => {
+    try {
+      await markAllAsRead();
+      refetch();
+    } catch (error) {
+      console.error('Error marking all notifications as read:', error);
+    }
+  };
+  
+  const navigateToTask = (taskId: string) => {
+    window.location.href = `/tasks/${taskId}`;
+  };
+
+  return (
+    <header className="bg-white shadow-sm">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex justify-between h-16">
+          <div className="flex">
+            <div className="flex-shrink-0 flex items-center">
+              <Link href="/" className="text-xl font-bold text-gray-800">
+                Task Manager
+              </Link>
+            </div>
+          </div>
+          
+          <div className="flex items-center">
+            {user ? (
+              <div className="flex items-center gap-4">
+                {/* Notification Bell */}
+                <div className="relative" ref={notificationRef}>
+                  <button
+                    onClick={() => setShowNotifications(!showNotifications)}
+                    className="relative p-1 rounded-full text-gray-600 hover:text-gray-900 focus:outline-none"
+                  >
+                    <BellIcon className="h-6 w-6" />
+                    {data?.notification_count > 0 && (
+                      <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
+                        {data.notification_count > 9 ? '9+' : data.notification_count}
+                      </span>
+                    )}
+                  </button>
+                  
+                  {/* Notification Dropdown */}
+                  {showNotifications && (
+                    <div className="absolute right-0 mt-2 w-80 bg-white rounded-md shadow-lg py-1 z-10 border border-gray-200">
+                      <div className="px-4 py-2 border-b border-gray-200 flex justify-between items-center">
+                        <h3 className="text-sm font-medium text-gray-900">Notifications</h3>
+                        {data?.notification_count > 0 && (
+                          <button
+                            onClick={handleMarkAllAsRead}
+                            className="text-xs text-blue-600 hover:text-blue-800"
+                          >
+                            Mark all as read
+                          </button>
+                        )}
+                      </div>
+                      
+                      <div className="max-h-96 overflow-y-auto">
+                        {loading ? (
+                          <div className="px-4 py-2 text-sm text-gray-500">Loading...</div>
+                        ) : data?.notifications?.length > 0 ? (
+                          data.notifications.map((notification: any) => (
+                            <div
+                              key={notification.notificationId}
+                              className={`px-4 py-3 hover:bg-gray-50 cursor-pointer ${
+                                !notification.isRead ? 'bg-blue-50' : ''
+                              }`}
+                              onClick={() => {
+                                handleNotificationClick(notification.notificationId);
+                                if (notification.metadata?.taskId) {
+                                  navigateToTask(notification.metadata.taskId);
+                                }
+                              }}
+                            >
+                              <div className="flex justify-between">
+                                <p className="text-sm font-medium text-gray-900">{notification.title}</p>
+                                <p className="text-xs text-gray-500">
+                                  {formatDistance(new Date(notification.created_at), new Date(), {
+                                    addSuffix: true,
+                                    locale: vi
+                                  })}
+                                </p>
+                              </div>
+                              <p className="text-sm text-gray-600 mt-1">{notification.message}</p>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="px-4 py-2 text-sm text-gray-500">No notifications</div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                <span className="text-gray-700">
+                  {user.email}
+                </span>
+                <button
+                  onClick={() => logout()}
+                  className="text-gray-600 hover:text-gray-900"
+                >
+                  Sign out
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/auth"
+                className="text-gray-600 hover:text-gray-900"
+              >
+                Sign in
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}

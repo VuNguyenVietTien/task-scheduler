@@ -36,6 +36,7 @@ ProjectManager is an integrated platform for task scheduling, project management
   - Isolated Apollo client prevents cache conflicts with main backend
 
 ### In Progress 🔄
+- Vercel + Supabase migration validation (web/ codebase built, waiting for deployment testing)
 - Design service performance optimization
 - Frontend design pages integration testing
 - External link management features
@@ -90,6 +91,13 @@ Deliverables:
   - Modular report components (daily/period/weekly/monthly/quarterly)
   - Frontend metrics calculation from Redux state
   - Database schema updates for report tracking
+- [x] Vercel + Supabase migration (BUILD COMPLETE)
+  - Next.js unified backend (`web/` directory) built and tested
+  - GraphQL Yoga server with unified schema from both backends
+  - Supabase JS client with Auth, Realtime, and Storage integration
+  - 20+ service files and 14 resolver files fully implemented
+  - `npm run build` passes without errors
+  - Note: Deployment and production validation pending
 - [ ] Advanced impact analysis
   - Dependency graph visualization
   - Risk assessment scoring

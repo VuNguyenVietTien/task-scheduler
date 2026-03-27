@@ -6,6 +6,21 @@ All notable changes to the ProjectManager system are documented here. Format fol
 
 ### Added
 
+#### Vercel + Supabase Migration (2026-03-27)
+- Created `web/` directory: unified Next.js app replacing 2 Rust microservices (task-scheduler-backend + design-doc-service)
+- Supabase client library with server-side (service role), browser (anon key), and middleware (session refresh) implementations
+- GraphQL Yoga server at `/api/graphql` with unified schema merging both backends (task-scheduler + design-doc domains)
+- 20+ service files implementing Supabase JS queries for all domains (projects, tasks, users, designs, screens, components, etc.)
+- 14 GraphQL resolver files with real service implementations (queries, mutations, nested resolvers)
+- Supabase Realtime integration replacing custom WebSocket notification system
+- Consolidated dual Apollo clients into single `/api/graphql` endpoint for unified GraphQL access
+- Firebase-to-Supabase Auth bridge with create-on-first-login user migration strategy
+- REST API endpoints: comments, attachments, media upload via Supabase Storage
+- Vercel deployment configuration with function timeout settings (10s Hobby / 60s Pro)
+- Build verification: `npm run build` passes successfully with no compilation errors
+- Tested GraphQL queries/mutations against Supabase backend with real data operations
+- Migration note: `web/` is new codebase; `frontend/` + Rust backends remain production system until full validation complete
+
 #### Documents Tab in Project Detail View (2026-03-26)
 - **Documents Tab**: New "Tai lieu" (Documents) tab in project detail sidebar navigation
 - **Design System List**: Tab integrates existing design system list UI, shows all design systems for current project

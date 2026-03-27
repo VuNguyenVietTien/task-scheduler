@@ -1,0 +1,134 @@
+{
+  "users": [
+    {
+      "id": "user1",
+      "name": "John Smith",
+      "email": "john@example.com",
+      "avatar": "https://ui-avatars.com/api/?name=John+Smith",
+      "role": "Project Manager"
+    },
+    {
+      "id": "user2", 
+      "name": "Emma Wilson",
+      "email": "emma@example.com",
+      "avatar": "https://ui-avatars.com/api/?name=Emma+Wilson",
+      "role": "Developer"
+    },
+    {
+      "id": "user3",
+      "name": "Michael Chen",
+      "email": "michael@example.com", 
+      "avatar": "https://ui-avatars.com/api/?name=Michael+Chen",
+      "role": "Designer"
+    }
+  ],
+  "projects": [
+    {
+      "id": "proj1",
+      "name": "E-commerce Platform",
+      "description": "Building a modern e-commerce platform with React and Node.js",
+      "startDate": "2025-02-01",
+      "endDate": "2025-06-30",
+      "status": "doing",
+      "members": ["user1", "user2", "user3"],
+      "owner": "user1"
+    },
+    {
+      "id": "proj2", 
+      "name": "Mobile App Redesign",
+      "description": "Redesigning the mobile app UI/UX for better user engagement",
+      "startDate": "2025-03-01",
+      "endDate": "2025-05-31",
+      "status": "planning",
+      "members": ["user1", "user3"],
+      "owner": "user3"
+    }
+  ],
+  "tasks": [
+    {
+      "id": "task1",
+      "projectId": "proj1",
+      "title": "Setup Project Architecture",
+      "description": "Design and implement the initial project architecture",
+      "assignee": "user2",
+      "reporter": "user1",
+      "priority": "high",
+      "status": "doing",
+      "effort": 16,
+      "startDate": "2025-02-15",
+      "dueDate": "2025-02-28",
+      "progress": "coding",
+      "subtasks": [
+        {
+          "id": "sub1",
+          "title": "Define tech stack",
+          "status": "done"
+        },
+        {
+          "id": "sub2",
+          "title": "Setup development environment",
+          "status": "doing"
+        }
+      ],
+      "comments": [
+        {
+          "id": "com1",
+          "userId": "user1",
+          "content": "Let's use Next.js for the frontend",
+          "timestamp": "2025-02-15T08:00:00Z"
+        },
+        {
+          "id": "com2",
+          "userId": "user2",
+          "content": "Sounds good! I'll start setting up the project structure",
+          "timestamp": "2025-02-15T09:30:00Z"
+        }
+      ]
+    },
+    {
+      "id": "task2",
+      "projectId": "proj1",
+      "title": "User Authentication",
+      "description": "Implement user authentication using Firebase",
+      "assignee": "user2",
+      "reporter": "user1",
+      "priority": "high",
+      "status": "todo",
+      "effort": 24,
+      "startDate": "2025-03-01",
+      "dueDate": "2025-03-15",
+      "progress": "study",
+      "subtasks": [
+        {
+          "id": "sub3",
+          "title": "Research Firebase Auth options",
+          "status": "todo"
+        }
+      ],
+      "comments": []
+    },
+    {
+      "id": "task3",
+      "projectId": "proj2",
+      "title": "Design System",
+      "description": "Create a comprehensive design system for the mobile app",
+      "assignee": "user3",
+      "reporter": "user3",
+      "priority": "medium",
+      "status": "todo",
+      "effort": 32,
+      "startDate": "2025-03-01",
+      "dueDate": "2025-03-31",
+      "progress": "study",
+      "subtasks": [],
+      "comments": [
+        {
+          "id": "com3",
+          "userId": "user3",
+          "content": "Will start with color palette and typography",
+          "timestamp": "2025-02-25T10:00:00Z"
+        }
+      ]
+    }
+  ]
+}
