@@ -1,3 +1,5 @@
+export const maxDuration = 10;
+
 import { createYoga } from 'graphql-yoga';
 import { schema } from '@/lib/graphql/schema';
 import { createContext } from '@/lib/graphql/context';
