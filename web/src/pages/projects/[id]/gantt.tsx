@@ -12,4 +12,6 @@ export default function GanttPage() {
       <Timeline onTaskClick={(taskId) => router.push(`/tasks/${taskId}`)} />
     </div>
   );
-} 
+}
+
+export const getServerSideProps = () => ({ props: {} }); 
