@@ -53,8 +53,8 @@ task-scheduler-backend/config/projectmanager-e13cb-firebase-adminsdk-fbsvc-*.jso
 # Screenshots
 Desktop/mcp browser/ScreenShotDebug/
 
-# Task management
-tasks/
+# Task management (root-level only, not source code)
+/tasks/
 
 # Media files
 media/images/
