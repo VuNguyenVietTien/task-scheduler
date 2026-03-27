@@ -1,6 +1,7 @@
+export const dynamic = 'force-dynamic';
+
 import { NextRequest, NextResponse } from 'next/server';
 import { createAdminClient } from '@/lib/supabase/server';
-import { firebaseAdmin } from '@/lib/firebase-admin';
 
 /**
  * Firebase-to-Supabase auth bridge.
@@ -18,9 +19,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify Firebase token — prevents impersonation
-    const { auth } = firebaseAdmin;
-    const decodedToken = await auth.verifyIdToken(firebaseToken);
+    // Verify Firebase token — prevents impersonation (dynamic import to avoid build-time crash)
+    const { firebaseAdmin } = await import('@/lib/firebase-admin');
+    const decodedToken = await firebaseAdmin.auth.verifyIdToken(firebaseToken);
     if (decodedToken.email !== email) {
       return NextResponse.json(
         { error: 'Token email mismatch' },

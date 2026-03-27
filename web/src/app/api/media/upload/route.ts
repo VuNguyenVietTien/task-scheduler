@@ -1,3 +1,4 @@
+export const dynamic = 'force-dynamic';
 export const maxDuration = 10;
 
 import { NextResponse } from 'next/server';

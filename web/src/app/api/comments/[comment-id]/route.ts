@@ -1,3 +1,5 @@
+export const dynamic = 'force-dynamic';
+
 import { NextResponse } from 'next/server';
 import { createServerClient } from '@/lib/supabase/server';
 import { commentService } from '@/lib/services/comment-service';
