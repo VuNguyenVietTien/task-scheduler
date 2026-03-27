@@ -1,10 +1,10 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "functions": {
-    "src/app/api/graphql/route.ts": {
+    "app/api/graphql/route.ts": {
       "maxDuration": 10
     },
-    "src/app/api/media/upload/route.ts": {
+    "app/api/media/upload/route.ts": {
       "maxDuration": 10
     }
   }
