@@ -1297,38 +1297,35 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                       {/* Task Bars */}
                       {/* Deduplicate filteredTasks to avoid key warnings */}
                       {Array.from(new Map(filteredTasks.map(task => [task.task_id, task])).values()).map((task: Task, rowIndex: number) => {
-                        // Fix: Nếu không có start_date
-                        // Fix: Nếu không có start_date
-                        let taskStartDate: Date | null = null;
+                        let taskStartDate: Date;
 
-                        // Priority 1: Manual Start Date from Task (User set or DB) - EVEN IF DONE
                         if (task.start_date) {
+                          // Plan start date set → use as-is (even if in the past)
                           taskStartDate = new Date(task.start_date);
-                        }
-
-                        if (!taskStartDate) {
-                          if (task.status === 'DONE') {
-                            // Nếu đã xong, ưu tiên dùng ngày thực tế xong > updated_at > due_date > created_at
-                            // Tránh dùng "today" để không chen vào giữa timeline hiện tại
-                            const doneDate = task.actual_end_date || task.updated_at || task.due_date || task.created_at;
-                            taskStartDate = doneDate ? new Date(doneDate) : new Date(today);
-                          } else {
-                            // Task chưa xong, mặc định là hôm nay nếu không có ngày
-                            taskStartDate = new Date(today);
-                          }
-                        }
-
-                        // Normalize start date to midnight to ensure consistent comparison with end date (which is usually midnight)
-                        if (taskStartDate) {
                           taskStartDate.setHours(0, 0, 0, 0);
+                        } else {
+                          // No plan start date → today, but skip weekends to next Monday
+                          const todayDate = new Date(today);
+                          todayDate.setHours(0, 0, 0, 0);
+                          const dayOfWeek = todayDate.getDay(); // 0=Sun, 6=Sat
+                          if (dayOfWeek === 6) todayDate.setDate(todayDate.getDate() + 2); // Sat → Mon
+                          else if (dayOfWeek === 0) todayDate.setDate(todayDate.getDate() + 1); // Sun → Mon
+                          taskStartDate = todayDate;
                         }
 
                         // Tính end_date:
-                        // Nếu Done: LUÔN dùng start + effort để hiển thị độ dài thực tế công việc
-                        // Nếu Active: Ưu tiên due_date (deadline) nếu có, không thì tính theo effort
-                        const taskEndDate = (task.status === 'DONE')
-                          ? calculateTaskSchedule(taskStartDate, task.effort || 0).endDate
-                          : (task.due_date ? new Date(task.due_date) : calculateTaskSchedule(taskStartDate, task.effort || 0).endDate);
+                        // Nếu có effort → tính theo effort (calculateTaskSchedule)
+                        // Nếu không có effort nhưng có due_date → dùng due_date
+                        // Còn lại → same day as start
+                        let taskEndDate: Date;
+                        if (task.effort != null && task.effort > 0) {
+                          taskEndDate = calculateTaskSchedule(taskStartDate, task.effort).endDate;
+                        } else if (task.due_date) {
+                          taskEndDate = new Date(task.due_date);
+                          taskEndDate.setHours(0, 0, 0, 0);
+                        } else {
+                          taskEndDate = new Date(taskStartDate);
+                        }
 
                         // Nếu start > end (do default start=today mà end=quá khứ), swap hoặc skip
                         // Ở đây ta skip render bar nếu data không hợp lệ thay vì vẽ full
@@ -1338,11 +1335,11 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                         }
 
                         // Tính tổng số ngày (kể cả ngày nghỉ) giữa start_date và end_date
-                        const startDayIndex = days.findIndex(day => isSameDay(day, taskStartDate!));
+                        const startDayIndex = days.findIndex(day => isSameDay(day, taskStartDate));
                         let endDayIndex = days.findIndex(day => isSameDay(day, taskEndDate));
 
                         let renderStartDayIndex = startDayIndex;
-                        const totalDaysSpan = Math.ceil((taskEndDate.getTime() - (taskStartDate?.getTime() || 0)) / (1000 * 60 * 60 * 24)) + 1;
+                        const totalDaysSpan = Math.ceil((taskEndDate.getTime() - taskStartDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
                         // Nếu không tìm thấy ngày Start trong view này
                         if (startDayIndex === -1) {
