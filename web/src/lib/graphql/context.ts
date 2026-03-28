@@ -17,10 +17,17 @@ export async function createContext(_request: Request): Promise<GraphQLContext> 
 
   let user: GraphQLContext['user'] = null;
   if (authUser) {
+    // Supabase auth UUID ≠ users.user_id (app FK UUID) — resolve by email
+    const { data: appUser } = await supabaseAdmin
+      .from('users')
+      .select('user_id, email, name')
+      .eq('email', authUser.email!)
+      .single() as { data: AppUser };
+
     user = {
-      id: authUser.id,
+      id: appUser?.user_id ?? authUser.id,
       email: authUser.email!,
-      name: authUser.user_metadata?.name,
+      name: appUser?.name ?? authUser.user_metadata?.name,
     };
   }
 
