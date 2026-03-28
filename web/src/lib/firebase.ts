@@ -19,11 +19,18 @@ const firebaseConfig = {
   measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || '',
 };
 
-// Lazy initialization — only init when actually used (avoids build-time crash)
+// Guard: skip Firebase init entirely if required env vars are absent
+const isFirebaseConfigured = Boolean(
+  process.env.NEXT_PUBLIC_FIREBASE_API_KEY &&
+  process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN &&
+  process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID
+);
+
 let _app: FirebaseApp | null = null;
 let _auth: Auth | null = null;
 
-function getFirebaseApp(): FirebaseApp {
+function getFirebaseApp(): FirebaseApp | null {
+  if (!isFirebaseConfigured) return null;
   if (_app) return _app;
   try {
     _app = getApp();
@@ -33,37 +40,56 @@ function getFirebaseApp(): FirebaseApp {
   return _app;
 }
 
-function getFirebaseAuth(): Auth {
+function getFirebaseAuth(): Auth | null {
+  if (!isFirebaseConfigured) return null;
   if (_auth) return _auth;
-  _auth = getAuth(getFirebaseApp());
+  try {
+    const app = getFirebaseApp();
+    if (!app) return null;
+    _auth = getAuth(app);
+  } catch (e) {
+    console.warn('[Firebase] Auth initialization failed — Firebase env vars may be missing:', e);
+    return null;
+  }
   return _auth;
 }
 
-// Named export — lazy getter
+// Safe lazy getter — returns null when Firebase is not configured
 export const auth = typeof window !== 'undefined' ? getFirebaseAuth() : ({} as Auth);
 
 const googleProvider = new GoogleAuthProvider();
 
 export async function signInWithGoogle() {
-  const result = await signInWithPopup(getFirebaseAuth(), googleProvider);
+  const firebaseAuth = getFirebaseAuth();
+  if (!firebaseAuth) throw new Error('Google login is not configured on this deployment.');
+  const result = await signInWithPopup(firebaseAuth, googleProvider);
   const idToken = await result.user.getIdToken();
   return { token: idToken, user: result.user };
 }
 
 export async function signOutUser() {
-  await signOut(getFirebaseAuth());
+  const firebaseAuth = getFirebaseAuth();
+  if (!firebaseAuth) return; // No-op when Firebase is not configured
+  await signOut(firebaseAuth);
 }
 
 export function onAuthStateChange(
   onChange: (user: FirebaseUser | null) => void
 ) {
-  return onAuthStateChanged(getFirebaseAuth(), onChange);
+  const firebaseAuth = getFirebaseAuth();
+  if (!firebaseAuth) {
+    onChange(null);
+    return () => {};
+  }
+  return onAuthStateChanged(firebaseAuth, onChange);
 }
 
 export async function getCurrentUser() {
   return new Promise<FirebaseUser | null>((resolve, reject) => {
+    const firebaseAuth = getFirebaseAuth();
+    if (!firebaseAuth) return resolve(null);
     const unsubscribe = onAuthStateChanged(
-      getFirebaseAuth(),
+      firebaseAuth,
       (user) => {
         unsubscribe();
         resolve(user);
