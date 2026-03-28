@@ -142,8 +142,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
             id: subtask.taskId,
             title: subtask.title || '',
             description: subtask.description || '',
-            status: (subtask.status?.toLowerCase() || 'todo') as TaskStatus,
-            priority: (subtask.priority?.toLowerCase() || 'medium') as Priority,
+            status: (subtask.status?.toUpperCase() || 'TODO') as TaskStatus,
+            priority: (subtask.priority?.toUpperCase() || 'MEDIUM') as Priority,
             effort: subtask.effort || 0,
             progress: subtask.progress || 0,
             start_date: subtask.startDate || null,
@@ -234,30 +234,30 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
 
   // Màu sắc trạng thái
   const getStatusColor = (status: TaskStatus) => {
-    const colors = {
-      'todo': 'bg-gray-100 text-gray-800',
-      'doing': 'bg-blue-100 text-blue-800',
-      'done': 'bg-green-100 text-green-800',
-      'close': 'bg-green-100 text-green-800',
-      'pending': 'bg-yellow-100 text-yellow-800',
-      'review': 'bg-purple-100 text-purple-800',
-      'blocked': 'bg-red-100 text-red-800',
-      'rejected': 'bg-red-100 text-red-800',
-      'archived': 'bg-gray-100 text-gray-800',
+    const colors: Record<string, string> = {
+      'TODO': 'bg-gray-100 text-gray-800',
+      'DOING': 'bg-blue-100 text-blue-800',
+      'DONE': 'bg-green-100 text-green-800',
+      'CLOSE': 'bg-green-100 text-green-800',
+      'PENDING': 'bg-yellow-100 text-yellow-800',
+      'REVIEW': 'bg-purple-100 text-purple-800',
+      'BLOCKED': 'bg-red-100 text-red-800',
+      'REJECTED': 'bg-red-100 text-red-800',
+      'ARCHIVED': 'bg-gray-100 text-gray-800',
     };
-    return colors[status] || colors.todo;
+    return colors[status] || colors['TODO'];
   };
 
   // Màu sắc ưu tiên
   const getPriorityColor = (priority: Priority) => {
-    const colors = {
-      'low': 'bg-green-100 text-green-800',
-      'medium': 'bg-yellow-100 text-yellow-800',
-      'high': 'bg-orange-100 text-orange-800',
-      'urgent': 'bg-red-100 text-red-800',
-      'critical': 'bg-red-100 text-red-800 font-bold',
+    const colors: Record<string, string> = {
+      'LOW': 'bg-green-100 text-green-800',
+      'MEDIUM': 'bg-yellow-100 text-yellow-800',
+      'HIGH': 'bg-orange-100 text-orange-800',
+      'URGENT': 'bg-red-100 text-red-800',
+      'CRITICAL': 'bg-red-100 text-red-800 font-bold',
     };
-    return colors[priority] || colors.medium;
+    return colors[priority] || colors['MEDIUM'];
   };
   
   // Hiển thị các trường editable
@@ -1103,8 +1103,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
         title: t.title || '',
         description: t.description || '',
         project_id: t.projectId || projectId,
-        status: (t.status?.toLowerCase() || 'todo') as TaskStatus,
-        priority: (t.priority?.toLowerCase() || 'medium') as Priority,
+        status: (t.status?.toUpperCase() || 'TODO') as TaskStatus,
+        priority: (t.priority?.toUpperCase() || 'MEDIUM') as Priority,
         priority_order: t.priorityOrder || 0,
         created_by: t.createdBy || 'system',
         parent_task_id: t.parentTaskId
@@ -1269,8 +1269,8 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
       return task.progress || 0;
     }
     
-    const completedTasks = subtasksList.filter(subtask => 
-      subtask.status === 'done' || subtask.status === 'close'
+    const completedTasks = subtasksList.filter(subtask =>
+      subtask.status === 'DONE' || subtask.status === 'CLOSE'
     ).length;
     
     return Math.round((completedTasks / subtasksList.length) * 100);
@@ -1284,7 +1284,7 @@ export function TaskDetailPage({ task, projectId, currentUser, onTaskUpdate, isL
     
     const totalEffort = calculateTotalEffort(subtasksList);
     const completedEffort = subtasksList
-      .filter(subtask => subtask.status === 'done' || subtask.status === 'close')
+      .filter(subtask => subtask.status === 'DONE' || subtask.status === 'CLOSE')
       .reduce((total, subtask) => total + (subtask.effort || 0), 0);
     
     return totalEffort - completedEffort;

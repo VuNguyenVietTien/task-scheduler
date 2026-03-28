@@ -8,7 +8,7 @@ interface ActiveTasksTableProps {
 
 export function ActiveTasksTable({ tasks }: ActiveTasksTableProps) {
   const activeTasks = tasks.filter(
-    task => task.status === 'doing' || task.status === 'review'
+    task => task.status === 'DOING' || task.status === 'REVIEW'
   );
   if (activeTasks.length === 0) return null;
 
@@ -42,7 +42,7 @@ export function ActiveTasksTable({ tasks }: ActiveTasksTableProps) {
                     <div className="relative pt-1">
                       <div className="overflow-hidden h-2 text-xs flex rounded bg-gray-200">
                         <div
-                          style={{ width: `${task.status === 'review' ? 90 : 50}%` }}
+                          style={{ width: `${task.status === 'REVIEW' ? 90 : 50}%` }}
                           className={`shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center ${
                             task.isDelayed ? 'bg-red-500' : 'bg-green-500'
                           }`}

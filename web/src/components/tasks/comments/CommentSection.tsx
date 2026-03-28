@@ -35,7 +35,7 @@ interface CreateCommentInput {
 
 // Định nghĩa kiểu dữ liệu cho response của CREATE_COMMENT
 interface CreateCommentData {
-  createComment: ApiComment;
+  create_comment: ApiComment;
 }
 
 // Định nghĩa kiểu dữ liệu cho local comment
@@ -244,11 +244,11 @@ export default function CommentSection({ taskId, currentUser }: CommentSectionPr
           }
         });
         
-        if (data?.createComment) {
+        if (data?.create_comment) {
           // Cập nhật state localComments, đánh dấu comment là đã lưu
           setLocalComments(prev => prev.map(c => 
             c.id === tempId 
-              ? mapApiToComment(data.createComment)
+              ? mapApiToComment(data.create_comment)
               : c
           ));
           
@@ -384,11 +384,11 @@ export default function CommentSection({ taskId, currentUser }: CommentSectionPr
           }
         });
         
-        if (data?.createComment) {
+        if (data?.create_comment) {
           // Cập nhật state localComments, đánh dấu comment là đã lưu
           setLocalComments(prev => prev.map(c => 
             c.id === tempId 
-              ? mapApiToComment(data.createComment) 
+              ? mapApiToComment(data.create_comment) 
               : c
           ));
           
@@ -519,11 +519,11 @@ export default function CommentSection({ taskId, currentUser }: CommentSectionPr
           }
         });
         
-        if (data?.createComment) {
+        if (data?.create_comment) {
           // Cập nhật state localComments, đánh dấu comment là đã lưu
           setLocalComments(prev => prev.map(c => 
             c.id === commentId 
-              ? mapApiToComment(data.createComment) 
+              ? mapApiToComment(data.create_comment) 
               : c
           ));
           

@@ -367,15 +367,15 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
   };
 
   const getPriorityColor = (priority: string) => {
-    switch (priority.toLowerCase()) {
-      case 'urgent':
-      case 'critical':
+    switch (priority.toUpperCase()) {
+      case 'URGENT':
+      case 'CRITICAL':
         return 'text-red-600 bg-red-50';
-      case 'high':
+      case 'HIGH':
         return 'text-orange-600 bg-orange-50';
-      case 'medium':
+      case 'MEDIUM':
         return 'text-amber-600 bg-amber-50';
-      case 'low':
+      case 'LOW':
         return 'text-green-600 bg-green-50';
       default:
         return 'text-slate-600 bg-slate-50';

@@ -36,16 +36,16 @@ export interface TaskFormInputs {
   tags: string[];
   parentTaskId?: string;
   status:
-  | "todo"
-  | "doing"
-  | "done"
-  | "close"
-  | "pending"
-  | "review"
-  | "blocked"
-  | "rejected"
-  | "archived";
-  priority: "low" | "medium" | "high" | "urgent" | "critical";
+  | "TODO"
+  | "DOING"
+  | "DONE"
+  | "CLOSE"
+  | "PENDING"
+  | "REVIEW"
+  | "BLOCKED"
+  | "REJECTED"
+  | "ARCHIVED";
+  priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT" | "CRITICAL";
   priorityOrder: number;
 }
 
@@ -196,8 +196,8 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
       category: "",
       progressType: "study", // Default to first progress type
       effort: 0,
-      status: "todo", // Default to first status
-      priority: "medium",
+      status: "TODO", // Default to first status
+      priority: "MEDIUM",
       priorityOrder: 0,
     },
   });
@@ -267,26 +267,26 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
 
   const priorityOpts = useMemo(
     () => [
-      { value: "low", label: "Low" },
-      { value: "medium", label: "Medium" },
-      { value: "high", label: "High" },
-      { value: "urgent", label: "Urgent" },
-      { value: "critical", label: "Critical" },
+      { value: "LOW", label: "Low" },
+      { value: "MEDIUM", label: "Medium" },
+      { value: "HIGH", label: "High" },
+      { value: "URGENT", label: "Urgent" },
+      { value: "CRITICAL", label: "Critical" },
     ],
     []
   );
 
   const statusOpts = useMemo(
     () => [
-      { value: "todo", label: "Todo" },
-      { value: "doing", label: "Doing" },
-      { value: "done", label: "Done" },
-      { value: "close", label: "Close" },
-      { value: "pending", label: "Pending" },
-      { value: "review", label: "Review" },
-      { value: "blocked", label: "Blocked" },
-      { value: "rejected", label: "Rejected" },
-      { value: "archived", label: "Archived" },
+      { value: "TODO", label: "Todo" },
+      { value: "DOING", label: "Doing" },
+      { value: "DONE", label: "Done" },
+      { value: "CLOSE", label: "Close" },
+      { value: "PENDING", label: "Pending" },
+      { value: "REVIEW", label: "Review" },
+      { value: "BLOCKED", label: "Blocked" },
+      { value: "REJECTED", label: "Rejected" },
+      { value: "ARCHIVED", label: "Archived" },
     ],
     []
   );
@@ -314,18 +314,17 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
       const createTaskInput = {
         title: data.title,
         description: data.description || '',
-        projectId: projectId,
-        parentTaskId: parentTaskId || data.parentTaskId || null,
+        project_id: projectId,
+        parent_task_id: parentTaskId || data.parentTaskId || null,
         status: data.status,
         priority: data.priority,
-        priorityOrder: data.priorityOrder || 0,
-        startDate: data.startDate ? new Date().toISOString() : null,
-        dueDate: data.dueDate ? new Date(data.dueDate).toISOString() : null,
-        assigneeId: data.assignee || null,
+        start_date: data.startDate ? new Date().toISOString() : null,
+        due_date: data.dueDate ? new Date(data.dueDate).toISOString() : null,
+        assignee_id: data.assignee || null,
         effort: data.effort || 0,
-        type: data.type || null,
+        type_: data.type || null,
         category: data.category || null,
-        progressType: data.progressType || null,
+        progress_type: data.progressType || null,
         tags: data.tags || [],
       };
 
@@ -336,8 +335,8 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
         }
       });
 
-      if (result.data?.createTask) {
-        console.log('Task created successfully:', result.data.createTask);
+      if (result.data?.create_task) {
+        console.log('Task created successfully:', result.data.create_task);
 
         // Hiển thị thông báo thành công
         alert('Tạo công việc thành công!');

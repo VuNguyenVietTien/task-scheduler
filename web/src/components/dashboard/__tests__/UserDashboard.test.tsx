@@ -8,8 +8,8 @@ const mockTasks = [
     id: '1',
     title: 'Urgent Task',
     description: 'High priority task',
-    status: 'doing' as TaskStatus,
-    priority: 'high' as Priority,
+    status: 'DOING' as TaskStatus,
+    priority: 'HIGH' as Priority,
     effortHours: 4,
     startDate: '2025-03-01T00:00:00Z',
     deadline: '2025-03-02T00:00:00Z',
@@ -41,8 +41,8 @@ const mockStats = {
   upcomingDeadlines: 3,
   averageCompletionTime: 2.5, // days
   tasksByStatus: {
-    ['todo' as TaskStatus]: 3,
-    ['doing' as TaskStatus]: 3,
+    ['TODO' as TaskStatus]: 3,
+    ['DOING' as TaskStatus]: 3,
     [TaskStatus.DONE]: 4
   }
 };
@@ -125,7 +125,7 @@ describe('UserDashboard Component', () => {
     );
 
     fireEvent.click(screen.getByText(/in progress/i));
-    expect(mockOnFilter).toHaveBeenCalledWith({ status: 'doing' as TaskStatus });
+    expect(mockOnFilter).toHaveBeenCalledWith({ status: 'DOING' as TaskStatus });
   });
 
   it('displays task status distribution chart', () => {

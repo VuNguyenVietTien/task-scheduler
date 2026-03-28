@@ -5,24 +5,24 @@
 
 // Task status labels
 export const STATUS_LABELS: Record<string, string> = {
-  todo: 'Cần làm',
-  doing: 'Đang làm',
-  done: 'Hoàn thành',
-  close: 'Đóng',
-  pending: 'Chờ xử lý',
-  review: 'Đang review',
-  blocked: 'Bị chặn',
-  rejected: 'Từ chối',
-  archived: 'Lưu trữ',
+  TODO: 'Cần làm',
+  DOING: 'Đang làm',
+  DONE: 'Hoàn thành',
+  CLOSE: 'Đóng',
+  PENDING: 'Chờ xử lý',
+  REVIEW: 'Đang review',
+  BLOCKED: 'Bị chặn',
+  REJECTED: 'Từ chối',
+  ARCHIVED: 'Lưu trữ',
 };
 
 // Priority labels
 export const PRIORITY_LABELS: Record<string, string> = {
-  low: 'Thấp',
-  medium: 'Trung bình',
-  high: 'Cao',
-  urgent: 'Khẩn cấp',
-  critical: 'Nghiêm trọng',
+  LOW: 'Thấp',
+  MEDIUM: 'Trung bình',
+  HIGH: 'Cao',
+  URGENT: 'Khẩn cấp',
+  CRITICAL: 'Nghiêm trọng',
 };
 
 // Task type labels

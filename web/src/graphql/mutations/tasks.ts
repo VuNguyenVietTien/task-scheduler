@@ -27,7 +27,7 @@ export const UPDATE_TASK_STATUS = gql`
       is_deleted
       status
       priority
-      type
+      type_
       category
       tags
       progress_type
@@ -62,7 +62,7 @@ export const UPDATE_TASK_EFFORT = gql`
       is_deleted
       status
       priority
-      type
+      type_
       category
       tags
       progress_type
@@ -97,7 +97,7 @@ export const UPDATE_TASK = gql`
       is_deleted
       status
       priority
-      type
+      type_
       category
       tags
       progress_type

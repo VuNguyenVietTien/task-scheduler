@@ -1,39 +1,39 @@
 import { gql } from '@apollo/client';
 
 export const ADD_PROJECT_MEMBER_BY_EMAIL = gql`
-  mutation AddProjectMemberByEmail($projectId: ID!, $email: String!, $role: MemberRole!) {
-    addProjectMemberByEmail(projectId: $projectId, email: $email, role: $role) {
+  mutation AddProjectMemberByEmail($input: AddProjectMemberInput!) {
+    add_project_member(input: $input) {
       user {
-        userId
+        user_id
         email
-        fullName
+        full_name
         username
-        avatarUrl
+        avatar_url
       }
       role
-      joinedAt
+      joined_at
     }
   }
 `;
 
 export const UPDATE_PROJECT_MEMBER_ROLE = gql`
-  mutation UpdateProjectMemberRole($projectId: ID!, $userId: ID!, $role: MemberRole!) {
-    updateProjectMember(projectId: $projectId, userId: $userId, role: $role) {
+  mutation UpdateProjectMemberRole($input: UpdateProjectMemberInput!) {
+    update_project_member(input: $input) {
       user {
-        userId
+        user_id
         email
-        fullName
+        full_name
         username
-        avatarUrl
+        avatar_url
       }
       role
-      joinedAt
+      joined_at
     }
   }
 `;
 
 export const REMOVE_PROJECT_MEMBER = gql`
-  mutation RemoveProjectMember($projectId: ID!, $userId: ID!) {
-    removeProjectMember(projectId: $projectId, userId: $userId)
+  mutation RemoveProjectMember($project_id: ID!, $user_id: ID!) {
+    remove_project_member(project_id: $project_id, user_id: $user_id)
   }
-`; 
+`;

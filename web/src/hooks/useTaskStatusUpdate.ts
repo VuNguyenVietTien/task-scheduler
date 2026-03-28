@@ -27,7 +27,7 @@ export function useTaskStatusUpdate() {
 
         console.log('Calling updateTaskStatus API with:', {
           taskId: variables.taskId,
-          status: variables.newStatus.toLowerCase()
+          status: variables.newStatus
         });
 
         // Gọi API GraphQL để cập nhật task status
@@ -35,7 +35,7 @@ export function useTaskStatusUpdate() {
           variables: {
             input: {
               task_id: variables.taskId,
-              status: variables.newStatus.toLowerCase()
+              status: variables.newStatus
             }
           }
         });

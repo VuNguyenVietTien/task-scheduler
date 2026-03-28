@@ -12,17 +12,17 @@ export const taskFormSchema = z.object({
   tags: z.array(z.string()).optional(),
   parentTaskId: z.string().optional(),
   status: z.enum([
-    'todo',
-    'doing',
-    'done',
-    'close',
-    'pending',
-    'review',
-    'blocked',
-    'rejected',
-    'archived'
+    'TODO',
+    'DOING',
+    'DONE',
+    'CLOSE',
+    'PENDING',
+    'REVIEW',
+    'BLOCKED',
+    'REJECTED',
+    'ARCHIVED'
   ]),
-  priority: z.enum(['low', 'medium', 'high', 'urgent', 'critical']),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']),
   priorityOrder: z.number()
 });
 

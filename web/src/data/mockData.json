@@ -8,7 +8,7 @@
       "role": "Project Manager"
     },
     {
-      "id": "user2", 
+      "id": "user2",
       "name": "Emma Wilson",
       "email": "emma@example.com",
       "avatar": "https://ui-avatars.com/api/?name=Emma+Wilson",
@@ -17,7 +17,7 @@
     {
       "id": "user3",
       "name": "Michael Chen",
-      "email": "michael@example.com", 
+      "email": "michael@example.com",
       "avatar": "https://ui-avatars.com/api/?name=Michael+Chen",
       "role": "Designer"
     }
@@ -29,12 +29,12 @@
       "description": "Building a modern e-commerce platform with React and Node.js",
       "startDate": "2025-02-01",
       "endDate": "2025-06-30",
-      "status": "doing",
+      "status": "DOING",
       "members": ["user1", "user2", "user3"],
       "owner": "user1"
     },
     {
-      "id": "proj2", 
+      "id": "proj2",
       "name": "Mobile App Redesign",
       "description": "Redesigning the mobile app UI/UX for better user engagement",
       "startDate": "2025-03-01",
@@ -52,8 +52,8 @@
       "description": "Design and implement the initial project architecture",
       "assignee": "user2",
       "reporter": "user1",
-      "priority": "high",
-      "status": "doing",
+      "priority": "HIGH",
+      "status": "DOING",
       "effort": 16,
       "startDate": "2025-02-15",
       "dueDate": "2025-02-28",
@@ -62,12 +62,12 @@
         {
           "id": "sub1",
           "title": "Define tech stack",
-          "status": "done"
+          "status": "DONE"
         },
         {
           "id": "sub2",
           "title": "Setup development environment",
-          "status": "doing"
+          "status": "DOING"
         }
       ],
       "comments": [
@@ -92,8 +92,8 @@
       "description": "Implement user authentication using Firebase",
       "assignee": "user2",
       "reporter": "user1",
-      "priority": "high",
-      "status": "todo",
+      "priority": "HIGH",
+      "status": "TODO",
       "effort": 24,
       "startDate": "2025-03-01",
       "dueDate": "2025-03-15",
@@ -102,7 +102,7 @@
         {
           "id": "sub3",
           "title": "Research Firebase Auth options",
-          "status": "todo"
+          "status": "TODO"
         }
       ],
       "comments": []
@@ -114,8 +114,8 @@
       "description": "Create a comprehensive design system for the mobile app",
       "assignee": "user3",
       "reporter": "user3",
-      "priority": "medium",
-      "status": "todo",
+      "priority": "MEDIUM",
+      "status": "TODO",
       "effort": 32,
       "startDate": "2025-03-01",
       "dueDate": "2025-03-31",

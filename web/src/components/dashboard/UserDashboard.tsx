@@ -26,27 +26,27 @@ type ChartData = {
 };
 
 const STATUS_COLORS: Record<TaskStatus, string> = {
-  'todo': '#9ca3af',
-  'pending': '#6366f1',
-  'doing': '#eab308',
-  'review': '#8b5cf6',
-  'done': '#22c55e',
-  'close': '#6b7280',
-  'blocked': '#ff0000',
-  'rejected': '#ff6b00',
-  'archived': '#cccccc'
+  'TODO': '#9ca3af',
+  'PENDING': '#6366f1',
+  'DOING': '#eab308',
+  'REVIEW': '#8b5cf6',
+  'DONE': '#22c55e',
+  'CLOSE': '#6b7280',
+  'BLOCKED': '#ff0000',
+  'REJECTED': '#ff6b00',
+  'ARCHIVED': '#cccccc'
 };
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
-  'todo': 'To Do',
-  'pending': 'Pending',
-  'doing': 'In Progress',
-  'review': 'In Review',
-  'done': 'Done',
-  'close': 'Closed',
-  'blocked': 'Blocked',
-  'rejected': 'Rejected',
-  'archived': 'Archived'
+  'TODO': 'To Do',
+  'PENDING': 'Pending',
+  'DOING': 'In Progress',
+  'REVIEW': 'In Review',
+  'DONE': 'Done',
+  'CLOSE': 'Closed',
+  'BLOCKED': 'Blocked',
+  'REJECTED': 'Rejected',
+  'ARCHIVED': 'Archived'
 };
 
 export const UserDashboard: React.FC<UserDashboardProps> = ({

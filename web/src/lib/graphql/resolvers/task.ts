@@ -21,21 +21,26 @@ export const taskResolvers = {
   Mutation: {
     create_task: async (_: unknown, args: { input: Record<string, unknown> }, ctx: GraphQLContext) => {
       requireAuth(ctx.user);
+      const { type_: typeField, ...rest } = args.input;
       const input = {
-        ...args.input,
+        ...rest,
         created_by: ctx.user.id,
+        // Map GraphQL 'type_' alias back to DB column 'type'
+        ...(typeField !== undefined && { type: typeField }),
         // DB enums are lowercase
-        ...(args.input.status && { status: (args.input.status as string).toLowerCase() }),
-        ...(args.input.priority && { priority: (args.input.priority as string).toLowerCase() }),
-        ...(args.input.progress_type && { progress_type: (args.input.progress_type as string).toLowerCase() }),
+        ...(rest.status && { status: (rest.status as string).toLowerCase() }),
+        ...(rest.priority && { priority: (rest.priority as string).toLowerCase() }),
+        ...(rest.progress_type && { progress_type: (rest.progress_type as string).toLowerCase() }),
       };
       return taskService.createTask(ctx.supabaseAdmin, input);
     },
     update_task: async (_: unknown, args: { input: Record<string, unknown> }, ctx: GraphQLContext) => {
       requireAuth(ctx.user);
-      const { task_id, ...rest } = args.input;
+      const { task_id, type_: typeField, ...rest } = args.input;
       const input = {
         ...rest,
+        // Map GraphQL 'type_' alias back to DB column 'type'
+        ...(typeField !== undefined && { type: typeField }),
         ...(rest.status && { status: (rest.status as string).toLowerCase() }),
         ...(rest.priority && { priority: (rest.priority as string).toLowerCase() }),
         ...(rest.progress_type && { progress_type: (rest.progress_type as string).toLowerCase() }),

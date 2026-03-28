@@ -12,11 +12,11 @@ type DailySubTab = 'yesterday' | 'today';
 
 // Status colors for pie chart
 const STATUS_COLORS: Record<string, string> = {
-  'todo': '#6366f1',
+  'TODO': '#6366f1',
   'in-progress': '#f59e0b',
-  'pending': '#94a3b8',
+  'PENDING': '#94a3b8',
   'completed': '#10b981',
-  'blocked': '#ef4444',
+  'BLOCKED': '#ef4444',
   'cancelled': '#6b7280',
 };
 
@@ -28,7 +28,7 @@ const determineTaskScheduleStatus = (task: any, planData: any[]) => {
   // Tìm planTask tương ứng
   const planTask = planData.find((pt: any) => (pt.task_id || pt.taskId) === task.task_id);
   
-  if (task.status.toLowerCase() === 'done') {
+  if (task.status.toUpperCase() === 'DONE') {
     // Kiểm tra hoàn thành đúng hạn
     if ((planTask && task.actual_end_date && new Date(task.actual_end_date) <= new Date(planTask.end_date)) ||
         (!planTask && task.actual_end_date && task.due_date && new Date(task.actual_end_date) <= new Date(task.due_date))) {
@@ -36,7 +36,7 @@ const determineTaskScheduleStatus = (task: any, planData: any[]) => {
     } else {
       return { status: 'late', label: 'Trễ tiến độ', color: 'text-red-600' };
     }
-  } else if (task.status.toLowerCase() === 'todo') {
+  } else if (task.status.toUpperCase() === 'TODO') {
     // Kiểm tra chưa đến thời gian bắt đầu
     const startDate = planTask?.start_date ? new Date(planTask.start_date) : (task.start_date ? new Date(task.start_date) : null);
     if (startDate) {
@@ -49,7 +49,7 @@ const determineTaskScheduleStatus = (task: any, planData: any[]) => {
         return { status: 'late', label: 'Trễ bắt đầu', color: 'text-red-600' };
       }
     }
-  } else if (['doing', 'review', 'pending', 'blocked'].includes(task.status.toLowerCase())) {
+  } else if (['DOING', 'REVIEW', 'PENDING', 'BLOCKED'].includes(task.status.toUpperCase())) {
     // Kiểm tra đang làm và chưa đến deadline
     const dueDate = planTask?.end_date ? new Date(planTask.end_date) : (task.due_date ? new Date(task.due_date) : null);
     if (dueDate) {
@@ -60,9 +60,9 @@ const determineTaskScheduleStatus = (task: any, planData: any[]) => {
         return { status: 'late', label: 'Đang làm trễ tiến độ', color: 'text-red-600' };
       }
     }
-  } else if (['done', 'close', 'archived'].includes(task.status.toLowerCase())) {
+  } else if (['DONE', 'CLOSE', 'ARCHIVED'].includes(task.status.toUpperCase())) {
     return { status: 'on-schedule', label: 'Đã hoàn thành', color: 'text-green-600' };
-  } else if (task.status.toLowerCase() === 'rejected') {
+  } else if (task.status.toUpperCase() === 'REJECTED') {
     return { status: 'on-schedule', label: 'Đã bị từ chối', color: 'text-gray-600' };
   }
   
@@ -130,7 +130,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     // Group tasks by status for pie chart
     const statusCounts: Record<string, number> = {};
     tasks.forEach(task => {
-      const status = task.status.toLowerCase();
+      const status = task.status.toUpperCase();
       statusCounts[status] = (statusCounts[status] || 0) + 1;
     });
     
@@ -154,16 +154,16 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
 
     // Group tasks by priority for bar chart (bugs) - chỉ count bug chưa done/close
     const priorityCounts: Record<string, number> = {
-      low: 0,
-      medium: 0,
-      high: 0,
-      critical: 0
+      LOW: 0,
+      MEDIUM: 0,
+      HIGH: 0,
+      CRITICAL: 0
     };
 
     tasks.forEach(task => {
-      const status = task.status.toLowerCase();
-      if (task.type?.toLowerCase() === 'bug' && !['done', 'close', 'archived'].includes(status)) {
-        const priority = task.priority?.toLowerCase() || 'medium';
+      const status = task.status.toUpperCase();
+      if (task.type?.toLowerCase() === 'bug' && !['DONE', 'CLOSE', 'ARCHIVED'].includes(status)) {
+        const priority = task.priority?.toUpperCase() || 'MEDIUM';
         priorityCounts[priority] = (priorityCounts[priority] || 0) + 1;
       }
     });
@@ -178,7 +178,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const delayedByAssignee: Record<string, number> = {};
-    const completedStatuses = ['done', 'close', 'archived', 'rejected'];
+    const completedStatuses = ['DONE', 'CLOSE', 'ARCHIVED', 'REJECTED'];
 
     // Đếm task trễ và đúng tiến độ cho overview cards
     let overdueCount = 0;
@@ -186,7 +186,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     const currentPlanTasksForOverview = activePlan?.planData?.tasks || [];
 
     tasks.forEach(task => {
-      const status = task.status.toLowerCase();
+      const status = task.status.toUpperCase();
 
       // Tính overdue/on-schedule cho tất cả task chưa hoàn thành
       if (!completedStatuses.includes(status)) {
@@ -248,7 +248,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
     // 1. Các task đã hoàn thành hôm qua
     // Lọc các task có status="done" và actual_end_date là ngày hôm qua
     const completedYesterday = tasks.filter(task => {
-      if (task.status.toLowerCase() !== 'done') return false;
+      if (task.status.toUpperCase() !== 'DONE') return false;
       if (!task.actual_end_date) return false;
       
       const endDate = new Date(task.actual_end_date);
@@ -267,34 +267,34 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
       if (planTask && planTask.start_date) {
         const planStartDate = new Date(planTask.start_date);
         planStartDate.setHours(0, 0, 0, 0);
-        if (planStartDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() === 'todo') {
+        if (planStartDate.getTime() <= yesterday.getTime() && task.status.toUpperCase() === 'TODO') {
           return true; // Trễ, lẽ ra phải ở trạng thái doing trở lên
         }
       }
-      
+
       // Trường hợp 2: Theo plan - task phải hoàn thành hôm qua hoặc trước đó mà chưa done
       if (planTask && planTask.end_date) {
         const planEndDate = new Date(planTask.end_date);
         planEndDate.setHours(0, 0, 0, 0);
-        if (planEndDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() !== 'done') {
+        if (planEndDate.getTime() <= yesterday.getTime() && task.status.toUpperCase() !== 'DONE') {
           return true; // Trễ, lẽ ra phải ở trạng thái done
         }
       }
-      
+
       // Trường hợp 3: Nếu không có plan, kiểm tra theo start_date - task phải bắt đầu hôm qua hoặc trước đó mà vẫn là todo
       if (!planTask && task.start_date) {
         const startDate = new Date(task.start_date);
         startDate.setHours(0, 0, 0, 0);
-        if (startDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() === 'todo') {
+        if (startDate.getTime() <= yesterday.getTime() && task.status.toUpperCase() === 'TODO') {
           return true; // Trễ, lẽ ra phải ở trạng thái doing trở lên
         }
       }
-      
+
       // Trường hợp 4: Nếu không có plan, kiểm tra theo due_date - task phải hoàn thành hôm qua hoặc trước đó mà chưa done
       if (!planTask && task.due_date) {
         const dueDate = new Date(task.due_date);
         dueDate.setHours(0, 0, 0, 0);
-        if (dueDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() !== 'done') {
+        if (dueDate.getTime() <= yesterday.getTime() && task.status.toUpperCase() !== 'DONE') {
           return true; // Trễ, lẽ ra phải ở trạng thái done
         }
       }
@@ -334,9 +334,9 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
         
         memberSummary[memberName].total += 1;
         
-        if (task.status.toLowerCase() === 'done') {
+        if (task.status.toUpperCase() === 'DONE') {
           memberSummary[memberName].completed += 1;
-        } else if (['doing', 'review'].includes(task.status.toLowerCase())) {
+        } else if (['DOING', 'REVIEW'].includes(task.status.toUpperCase())) {
           memberSummary[memberName].inProgress += 1;
         }
         
@@ -349,16 +349,16 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
           if (planTask.start_date) {
             const planStartDate = new Date(planTask.start_date);
             planStartDate.setHours(0, 0, 0, 0);
-            if (planStartDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() === 'todo') {
+            if (planStartDate.getTime() <= yesterday.getTime() && task.status.toUpperCase() === 'TODO') {
               memberSummary[memberName].delayed += 1;
             }
           }
-          
+
           // Trễ kết thúc theo plan
           if (planTask.end_date) {
             const planEndDate = new Date(planTask.end_date);
             planEndDate.setHours(0, 0, 0, 0);
-            if (planEndDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() !== 'done') {
+            if (planEndDate.getTime() <= yesterday.getTime() && task.status.toUpperCase() !== 'DONE') {
               memberSummary[memberName].delayed += 1;
             }
           }
@@ -369,7 +369,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
           if (task.start_date) {
             const startDate = new Date(task.start_date);
             startDate.setHours(0, 0, 0, 0);
-            if (startDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() === 'todo') {
+            if (startDate.getTime() <= yesterday.getTime() && task.status.toUpperCase() === 'TODO') {
               memberSummary[memberName].delayed += 1;
             }
           }
@@ -378,7 +378,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
           if (task.due_date) {
             const dueDate = new Date(task.due_date);
             dueDate.setHours(0, 0, 0, 0);
-            if (dueDate.getTime() <= yesterday.getTime() && task.status.toLowerCase() !== 'done') {
+            if (dueDate.getTime() <= yesterday.getTime() && task.status.toUpperCase() !== 'DONE') {
               memberSummary[memberName].delayed += 1;
             }
           }
@@ -396,16 +396,16 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
       if (planTask && planTask.start_date) {
         const planStartDate = new Date(planTask.start_date);
         planStartDate.setHours(0, 0, 0, 0);
-        return planStartDate.getTime() === today.getTime() && 
-               task.status.toLowerCase() === 'todo';
+        return planStartDate.getTime() === today.getTime() &&
+               task.status.toUpperCase() === 'TODO';
       }
-      
+
       // Kiểm tra start_date của task nếu không có trong plan
       if (task.start_date) {
         const startDate = new Date(task.start_date);
         startDate.setHours(0, 0, 0, 0);
-        return startDate.getTime() === today.getTime() && 
-               task.status.toLowerCase() === 'todo';
+        return startDate.getTime() === today.getTime() &&
+               task.status.toUpperCase() === 'TODO';
       }
       
       return false;
@@ -419,16 +419,16 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
       if (planTask && planTask.end_date) {
         const planEndDate = new Date(planTask.end_date);
         planEndDate.setHours(0, 0, 0, 0);
-        return planEndDate.getTime() === today.getTime() && 
-               task.status.toLowerCase() !== 'done';
+        return planEndDate.getTime() === today.getTime() &&
+               task.status.toUpperCase() !== 'DONE';
       }
-      
+
       // Kiểm tra due_date của task nếu không có trong plan
       if (task.due_date) {
         const dueDate = new Date(task.due_date);
         dueDate.setHours(0, 0, 0, 0);
-        return dueDate.getTime() === today.getTime() && 
-               task.status.toLowerCase() !== 'done';
+        return dueDate.getTime() === today.getTime() &&
+               task.status.toUpperCase() !== 'DONE';
       }
       
       return false;
@@ -450,17 +450,17 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
           const hasTaskToday = 
             (planTask.start_date && new Date(planTask.start_date).toDateString() === today.toDateString()) ||
             (planTask.end_date && new Date(planTask.end_date).toDateString() === today.toDateString()) ||
-            (planTask.status === 'doing' || planTask.status === 'review');
-            
+            (planTask.status === 'DOING' || planTask.status === 'REVIEW');
+
           if (hasTaskToday) {
             membersWithTasksToday.add(task.assignee.userId);
           }
-        } 
+        }
         // 2. Kiểm tra trong dữ liệu task nếu không có trong plan
         else if (
           (task.start_date && new Date(task.start_date).toDateString() === today.toDateString()) ||
           (task.due_date && new Date(task.due_date).toDateString() === today.toDateString()) ||
-          (task.status.toLowerCase() === 'doing' || task.status.toLowerCase() === 'review')
+          (task.status.toUpperCase() === 'DOING' || task.status.toUpperCase() === 'REVIEW')
         ) {
           membersWithTasksToday.add(task.assignee.userId);
         }
@@ -565,7 +565,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
               <div className="card p-4 shadow-sm text-center">
                 <p className="text-sm text-slate-500">Hoàn thành</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {tasks.filter(t => ['done', 'close'].includes(t.status.toLowerCase())).length}
+                  {tasks.filter(t => ['DONE', 'CLOSE'].includes(t.status.toUpperCase())).length}
                 </p>
               </div>
               <div className="card p-4 shadow-sm text-center">
@@ -830,8 +830,8 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                               </td>
                               <td className="px-6 py-4 text-sm">
                                 <span className={`px-2 py-0.5 rounded text-xs text-white ${
-                                  task.status === 'blocked' ? 'bg-red-500' :
-                                  task.status === 'pending' ? 'bg-yellow-500' : 'bg-slate-400'
+                                  task.status === 'BLOCKED' ? 'bg-red-500' :
+                                  task.status === 'PENDING' ? 'bg-yellow-500' : 'bg-slate-400'
                                 }`}>{task.status}</span>
                               </td>
                               <td className="px-6 py-4 text-sm text-red-600 font-medium">{task.daysBehind}</td>

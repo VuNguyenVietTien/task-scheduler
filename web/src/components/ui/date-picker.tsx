@@ -17,21 +17,34 @@ export function DatePicker({ date, onChange, placeholder }: DatePickerProps) {
 
   return (
     <div className="relative">
-      <div className="relative">
+      <div className="relative flex items-center">
         <input
           type="text"
           placeholder={placeholder}
           value={date ? format(date, 'PPP') : ''}
           readOnly
-          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
+          className="w-full px-3 py-2 pr-16 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer"
           onClick={() => setIsOpen(true)}
           aria-label={placeholder || "Select date"}
         />
-        <Calendar className="absolute right-3 top-2.5 h-4 w-4 text-gray-500" />
+        <div className="absolute right-2 flex items-center gap-1">
+          {date && (
+            <button
+              type="button"
+              onClick={(e) => { e.stopPropagation(); onChange(null); }}
+              className="text-gray-400 hover:text-gray-600"
+              title="Clear date"
+              aria-label="Clear date"
+            >
+              <span className="text-sm">✕</span>
+            </button>
+          )}
+          <Calendar className="h-4 w-4 text-gray-500 cursor-pointer" onClick={() => setIsOpen(true)} />
+        </div>
       </div>
-      
+
       {isOpen && (
-        <div 
+        <div
           className="absolute z-50 mt-2 bg-white rounded-md shadow-lg border border-gray-200"
           role="dialog"
           aria-modal="true"

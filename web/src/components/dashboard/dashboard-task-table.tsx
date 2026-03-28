@@ -19,25 +19,25 @@ interface DashboardTaskTableProps {
 
 // Badge color maps
 const STATUS_COLORS: Record<string, string> = {
-  todo: 'bg-slate-100 text-slate-700',
-  doing: 'bg-blue-100 text-blue-700',
-  review: 'bg-purple-100 text-purple-700',
-  done: 'bg-emerald-100 text-emerald-700',
-  close: 'bg-slate-100 text-slate-500',
-  blocked: 'bg-red-100 text-red-700',
-  pending: 'bg-amber-100 text-amber-700',
+  TODO: 'bg-slate-100 text-slate-700',
+  DOING: 'bg-blue-100 text-blue-700',
+  REVIEW: 'bg-purple-100 text-purple-700',
+  DONE: 'bg-emerald-100 text-emerald-700',
+  CLOSE: 'bg-slate-100 text-slate-500',
+  BLOCKED: 'bg-red-100 text-red-700',
+  PENDING: 'bg-amber-100 text-amber-700',
 };
 
 const PRIORITY_COLORS: Record<string, string> = {
-  critical: 'bg-red-600 text-white',
-  urgent: 'bg-orange-500 text-white',
-  high: 'bg-amber-100 text-amber-800',
-  medium: 'bg-blue-100 text-blue-700',
-  low: 'bg-slate-100 text-slate-600',
+  CRITICAL: 'bg-red-600 text-white',
+  URGENT: 'bg-orange-500 text-white',
+  HIGH: 'bg-amber-100 text-amber-800',
+  MEDIUM: 'bg-blue-100 text-blue-700',
+  LOW: 'bg-slate-100 text-slate-600',
 };
 
 export function renderStatusBadge(status: string) {
-  const s = status?.toLowerCase() || '';
+  const s = status?.toUpperCase() || '';
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${STATUS_COLORS[s] || 'bg-slate-100 text-slate-600'}`}>
       {status}
@@ -46,7 +46,7 @@ export function renderStatusBadge(status: string) {
 }
 
 export function renderPriorityBadge(priority: string) {
-  const p = priority?.toLowerCase() || '';
+  const p = priority?.toUpperCase() || '';
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${PRIORITY_COLORS[p] || 'bg-slate-100 text-slate-600'}`}>
       {priority}

@@ -73,12 +73,12 @@ function SortableTaskItem({
 
   // Lấy màu cho task status
   const getStatusColor = (status: string | undefined) => {
-    switch (status?.toLowerCase()) {
-      case 'done':
+    switch (status?.toUpperCase()) {
+      case 'DONE':
         return 'border-l-green-500';
-      case 'doing':
+      case 'DOING':
         return 'border-l-blue-500';
-      case 'blocked':
+      case 'BLOCKED':
         return 'border-l-red-500';
       default:
         return 'border-l-gray-400';
@@ -210,7 +210,7 @@ export function PriorityTaskList({
       }
 
       // Lọc tasks đã hoàn thành
-      const filteredTasks = tasks.filter(task => task.status !== 'done');
+      const filteredTasks = tasks.filter(task => task.status !== 'DONE');
 
       console.log(`PriorityTaskList updating - activePlanId: ${activePlanId}, autoSort: ${autoSort}, tasks: ${filteredTasks.length}`);
 

@@ -78,28 +78,28 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
 
   const getStatusColor = (status: TaskStatus) => {
     const colors: Record<string, string> = {
-      'todo': 'bg-gray-100 text-gray-800',
-      'doing': 'bg-blue-100 text-blue-800',
-      'done': 'bg-green-100 text-green-800',
-      'close': 'bg-green-100 text-green-800',
-      'pending': 'bg-yellow-100 text-yellow-800',
-      'review': 'bg-purple-100 text-purple-800',
-      'blocked': 'bg-red-100 text-red-800',
-      'rejected': 'bg-red-100 text-red-800',
-      'archived': 'bg-gray-100 text-gray-800',
+      'TODO': 'bg-gray-100 text-gray-800',
+      'DOING': 'bg-blue-100 text-blue-800',
+      'DONE': 'bg-green-100 text-green-800',
+      'CLOSE': 'bg-green-100 text-green-800',
+      'PENDING': 'bg-yellow-100 text-yellow-800',
+      'REVIEW': 'bg-purple-100 text-purple-800',
+      'BLOCKED': 'bg-red-100 text-red-800',
+      'REJECTED': 'bg-red-100 text-red-800',
+      'ARCHIVED': 'bg-gray-100 text-gray-800',
     };
-    return colors[status] || colors.todo;
+    return colors[status] || colors.TODO;
   };
 
   const getPriorityColor = (priority: Priority) => {
     const colors: Record<string, string> = {
-      'low': 'bg-green-100 text-green-800',
-      'medium': 'bg-yellow-100 text-yellow-800',
-      'high': 'bg-orange-100 text-orange-800',
-      'urgent': 'bg-red-100 text-red-800',
-      'critical': 'bg-red-100 text-red-800 font-bold',
+      'LOW': 'bg-green-100 text-green-800',
+      'MEDIUM': 'bg-yellow-100 text-yellow-800',
+      'HIGH': 'bg-orange-100 text-orange-800',
+      'URGENT': 'bg-red-100 text-red-800',
+      'CRITICAL': 'bg-red-100 text-red-800 font-bold',
     };
-    return colors[priority] || colors.medium;
+    return colors[priority] || colors.MEDIUM;
   };
 
   // Save a single field to backend
@@ -116,12 +116,12 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
         case 'description': updates.description = val; break;
         case 'status': updates.status = val; break;
         case 'priority': updates.priority = val; break;
-        case 'start_date': updates.start_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : undefined; break;
-        case 'due_date': updates.due_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : undefined; break;
+        case 'start_date': updates.start_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : null; break;
+        case 'due_date': updates.due_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : null; break;
         case 'effort': updates.effort = val ? Number(val) : undefined; break;
         case 'progress': updates.progress = val !== undefined ? Number(val) : undefined; break;
-        case 'actual_start_date': updates.actual_start_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : undefined; break;
-        case 'actual_end_date': updates.actual_end_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : undefined; break;
+        case 'actual_start_date': updates.actual_start_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : null; break;
+        case 'actual_end_date': updates.actual_end_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : null; break;
         default: return;
       }
 
@@ -241,12 +241,24 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
               ))}
             </select>
           ) : type === 'date' ? (
-            <input
-              type="date"
-              value={val?.split?.('T')?.[0] || val || ''}
-              onChange={(e) => setEditedTask({ ...editedTask, [fieldName]: e.target.value } as Task)}
-              className="w-full text-sm rounded-md border-slate-300 focus:border-blue-500 focus:ring-blue-500 px-2 py-1.5"
-            />
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                value={val?.split?.('T')?.[0] || val || ''}
+                onChange={(e) => setEditedTask({ ...editedTask, [fieldName]: e.target.value || null } as Task)}
+                className="flex-1 text-sm rounded-md border-slate-300 focus:border-blue-500 focus:ring-blue-500 px-2 py-1.5"
+              />
+              {val && (
+                <button
+                  type="button"
+                  onClick={() => setEditedTask({ ...editedTask, [fieldName]: null } as Task)}
+                  className="text-gray-400 hover:text-gray-600 text-xs"
+                  title="Xóa ngày"
+                >
+                  ✕
+                </button>
+              )}
+            </div>
           ) : type === 'number' ? (
             <input
               type="number"

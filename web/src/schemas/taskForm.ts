@@ -32,24 +32,24 @@ export const taskFormSchema = z.object({
     required_error: 'Progress type is required',
   }),
   status: z.enum([
-    'todo',
-    'doing',
-    'done',
-    'close',
-    'pending',
-    'review',
-    'blocked',
-    'rejected',
-    'archived'
+    'TODO',
+    'DOING',
+    'DONE',
+    'CLOSE',
+    'PENDING',
+    'REVIEW',
+    'BLOCKED',
+    'REJECTED',
+    'ARCHIVED'
   ], {
     required_error: 'Status is required',
   }),
   priority: z.enum([
-    'low',
-    'medium',
-    'high',
-    'urgent',
-    'critical'
+    'LOW',
+    'MEDIUM',
+    'HIGH',
+    'URGENT',
+    'CRITICAL'
   ], {
     required_error: 'Priority is required',
   }),
@@ -99,21 +99,21 @@ export const progressTypeOptions = [
 ] as const;
 
 export const statusOptions = [
-  'todo',
-  'doing',
-  'done',
-  'close',
-  'pending',
-  'review',
-  'blocked',
-  'rejected',
-  'archived'
+  'TODO',
+  'DOING',
+  'DONE',
+  'CLOSE',
+  'PENDING',
+  'REVIEW',
+  'BLOCKED',
+  'REJECTED',
+  'ARCHIVED'
 ] as const;
 
 export const priorityOptions = [
-  'low',
-  'medium',
-  'high',
-  'urgent',
-  'critical'
+  'LOW',
+  'MEDIUM',
+  'HIGH',
+  'URGENT',
+  'CRITICAL'
 ] as const;

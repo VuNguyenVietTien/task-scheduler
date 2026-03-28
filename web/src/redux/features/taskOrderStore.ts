@@ -367,16 +367,16 @@ function updateTaskOrderFromPlan(state: TaskOrderState, plan: Plan) {
       let taskPriority: string | undefined = planTask.priority;
       
       // Nếu không có priority từ plan hoặc priority không hợp lệ, lấy từ currentTask hoặc dùng giá trị mặc định
-      if (!taskPriority || !['low', 'medium', 'high', 'urgent', 'critical'].includes(taskPriority)) {
-        taskPriority = currentTask?.priority || 'medium';
+      if (!taskPriority || !['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL'].includes(taskPriority)) {
+        taskPriority = currentTask?.priority || 'MEDIUM';
       }
-      
+
       // Xử lý status tương tự như priority
       let taskStatus: string | undefined = planTask.status;
-      
+
       // Nếu không có status từ plan, lấy từ currentTask hoặc dùng giá trị mặc định
       if (!taskStatus) {
-        taskStatus = currentTask?.status || 'todo';
+        taskStatus = currentTask?.status || 'TODO';
       }
       
       // Thêm vào danh sách với đầy đủ thông tin

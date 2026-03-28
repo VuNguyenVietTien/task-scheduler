@@ -85,7 +85,7 @@ export function PeriodReportView({ projectId, reportType, planId }: PeriodReport
       if (!task.actual_end_date) return false;
       const endD = new Date(task.actual_end_date);
       return endD >= start && endD <= end &&
-        (task.status === 'done' || task.status === 'close');
+        (task.status === 'DONE' || task.status === 'CLOSE');
     });
 
     // Delayed: due in period but not done
@@ -93,7 +93,7 @@ export function PeriodReportView({ projectId, reportType, planId }: PeriodReport
       if (!task.due_date) return false;
       const dueD = new Date(task.due_date);
       return dueD >= start && dueD <= end &&
-        task.status !== 'done' && task.status !== 'close' &&
+        task.status !== 'DONE' && task.status !== 'CLOSE' &&
         dueD < new Date();
     });
 
@@ -134,7 +134,7 @@ export function PeriodReportView({ projectId, reportType, planId }: PeriodReport
         }
       } else if (plannedEnd && !actualEnd) {
         const dueD = new Date(plannedEnd);
-        if (dueD < new Date() && task.status !== 'done' && task.status !== 'close') {
+        if (dueD < new Date() && task.status !== 'DONE' && task.status !== 'CLOSE') {
           lateCount++;
           const diff = Math.ceil((new Date().getTime() - dueD.getTime()) / (1000 * 60 * 60 * 24));
           variance = `Trễ ${diff} ngày (đang làm)`;
@@ -158,7 +158,7 @@ export function PeriodReportView({ projectId, reportType, planId }: PeriodReport
     });
 
     // Rejected tasks in period
-    const rejectedCount = periodTasks.filter(t => t.status === 'rejected').length;
+    const rejectedCount = periodTasks.filter(t => t.status === 'REJECTED').length;
 
     // Bug count: tasks with type='Bug' in period
     const bugCount = periodTasks.filter(
@@ -340,10 +340,10 @@ export function PeriodReportView({ projectId, reportType, planId }: PeriodReport
                           <td>{row.actualEnd ? new Date(row.actualEnd).toLocaleDateString('vi-VN') : '-'}</td>
                           <td>
                             <span className={`px-2 py-0.5 rounded text-xs text-white ${
-                              row.status === 'done' || row.status === 'close' ? 'bg-green-500' :
-                              row.status === 'doing' || row.status === 'review' ? 'bg-blue-500' :
-                              row.status === 'blocked' ? 'bg-red-500' :
-                              row.status === 'rejected' ? 'bg-gray-500' :
+                              row.status === 'DONE' || row.status === 'CLOSE' ? 'bg-green-500' :
+                              row.status === 'DOING' || row.status === 'REVIEW' ? 'bg-blue-500' :
+                              row.status === 'BLOCKED' ? 'bg-red-500' :
+                              row.status === 'REJECTED' ? 'bg-gray-500' :
                               'bg-slate-400'
                             }`}>
                               {row.status}

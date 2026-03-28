@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, forwardRef, useMemo } from 'react';
 import { Task, TaskStatus, Priority, TaskStatuses, Priorities, UserBasic, TaskComment } from '@/types/task';
+import { STATUS_LABELS, PRIORITY_LABELS } from '@/constants/task-display-labels';
 import { User } from '@/contexts/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { Card } from '@/components/ui/Card';
@@ -92,7 +93,7 @@ interface CreateCommentInput {
 }
 
 interface CreateCommentData {
-  createComment: LocalTaskComment;
+  create_comment: LocalTaskComment;
 }
 
 export function TaskDetailPage({ 
@@ -430,8 +431,8 @@ export function TaskDetailPage({
             id: subtask.taskId,
             title: subtask.title || '',
             description: subtask.description || '',
-            status: (subtask.status?.toLowerCase() || 'todo') as TaskStatus,
-            priority: (subtask.priority?.toLowerCase() || 'medium') as Priority,
+            status: (subtask.status?.toUpperCase() || 'TODO') as TaskStatus,
+            priority: (subtask.priority?.toUpperCase() || 'MEDIUM') as Priority,
             effort: subtask.effort || 0,
             progress: subtask.progress || 0,
             start_date: subtask.startDate || null,
@@ -522,30 +523,30 @@ export function TaskDetailPage({
 
   // Màu sắc trạng thái
   const getStatusColor = (status: TaskStatus) => {
-    const colors = {
-      'todo': 'bg-gray-100 text-gray-800',
-      'doing': 'bg-blue-100 text-blue-800',
-      'done': 'bg-green-100 text-green-800',
-      'close': 'bg-green-100 text-green-800',
-      'pending': 'bg-yellow-100 text-yellow-800',
-      'review': 'bg-purple-100 text-purple-800',
-      'blocked': 'bg-red-100 text-red-800',
-      'rejected': 'bg-red-100 text-red-800',
-      'archived': 'bg-gray-100 text-gray-800',
+    const colors: Record<string, string> = {
+      'TODO': 'bg-gray-100 text-gray-800',
+      'DOING': 'bg-blue-100 text-blue-800',
+      'DONE': 'bg-green-100 text-green-800',
+      'CLOSE': 'bg-green-100 text-green-800',
+      'PENDING': 'bg-yellow-100 text-yellow-800',
+      'REVIEW': 'bg-purple-100 text-purple-800',
+      'BLOCKED': 'bg-red-100 text-red-800',
+      'REJECTED': 'bg-red-100 text-red-800',
+      'ARCHIVED': 'bg-gray-100 text-gray-800',
     };
-    return colors[status] || colors.todo;
+    return colors[status] || colors['TODO'];
   };
 
   // Màu sắc ưu tiên
   const getPriorityColor = (priority: Priority) => {
-    const colors = {
-      'low': 'bg-green-100 text-green-800',
-      'medium': 'bg-yellow-100 text-yellow-800',
-      'high': 'bg-orange-100 text-orange-800',
-      'urgent': 'bg-red-100 text-red-800',
-      'critical': 'bg-red-100 text-red-800 font-bold',
+    const colors: Record<string, string> = {
+      'LOW': 'bg-green-100 text-green-800',
+      'MEDIUM': 'bg-yellow-100 text-yellow-800',
+      'HIGH': 'bg-orange-100 text-orange-800',
+      'URGENT': 'bg-red-100 text-red-800',
+      'CRITICAL': 'bg-red-100 text-red-800 font-bold',
     };
-    return colors[priority] || colors.medium;
+    return colors[priority] || colors['MEDIUM'];
   };
   
   // Hiển thị các trường editable
@@ -555,7 +556,11 @@ export function TaskDetailPage({
     const value = (editedTask as any)[fieldName];
     
     // Xác định giá trị hiển thị dựa trên loại trường
-    if (type === 'date') {
+    if (fieldName === 'status') {
+      displayValue = STATUS_LABELS[value as TaskStatus] || value || 'Chưa thiết lập';
+    } else if (fieldName === 'priority') {
+      displayValue = PRIORITY_LABELS[value as Priority] || value || 'Chưa thiết lập';
+    } else if (type === 'date') {
       displayValue = value ? formatDate(value) : 'Chưa thiết lập';
     } else if (fieldName === 'assignee') {
       // Xử lý đặc biệt cho assignee vì có thể là object hoặc id
@@ -714,16 +719,28 @@ export function TaskDetailPage({
                   ))}
                 </select>
               ) : type === 'date' ? (
-                <input
-                id={`field-${fieldName}`}
-                  type="date"
-                  title={`Chọn ${label.toLowerCase()}`}
-                  placeholder={`Nhập ${label.toLowerCase()}`}
-                value={value || ''}
-                onChange={(e) => setEditedTask({...editedTask, [fieldName]: e.target.value})}
-                className="block w-full max-w-md rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2.5"
-                style={{ height: "42px", fontSize: "15px" }}
-                />
+                <div className="flex items-center gap-2 max-w-md">
+                  <input
+                    id={`field-${fieldName}`}
+                    type="date"
+                    title={`Chọn ${label.toLowerCase()}`}
+                    placeholder={`Nhập ${label.toLowerCase()}`}
+                    value={value || ''}
+                    onChange={(e) => setEditedTask({...editedTask, [fieldName]: e.target.value || null})}
+                    className="block flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 text-sm py-2.5"
+                    style={{ height: "42px", fontSize: "15px" }}
+                  />
+                  {value && (
+                    <button
+                      type="button"
+                      onClick={() => setEditedTask({...editedTask, [fieldName]: null})}
+                      className="text-gray-400 hover:text-gray-600 text-sm px-2"
+                      title="Xóa ngày"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
               ) : type === 'number' ? (
                 <input
                 id={`field-${fieldName}`}
@@ -899,15 +916,15 @@ export function TaskDetailPage({
           }
         });
         
-        if (data && data.createComment) {
+        if (data && data.create_comment) {
           // Nếu API thành công, cập nhật comment tạm thời với dữ liệu thực
           const updatedComment: TaskComment = {
-                    id: data.createComment.id,
-                    content: data.createComment.content,
-                    user_id: data.createComment.authorId,
-            username: data.createComment.username,
+                    id: data.create_comment.id,
+                    content: data.create_comment.content,
+                    user_id: data.create_comment.author_id,
+            username: data.create_comment.username,
             avatar_url: currentUser?.providerData?.[0]?.photoURL || undefined,
-                    created_at: data.createComment.createdAt,
+                    created_at: data.create_comment.created_at,
                     status: 'saved'
           };
           
@@ -1012,15 +1029,15 @@ export function TaskDetailPage({
           }
         });
         
-        if (data && data.createComment) {
+        if (data && data.create_comment) {
           // Nếu API thành công, cập nhật comment với dữ liệu thực
           const updatedComment: TaskComment = {
-                    id: data.createComment.id,
-                    content: data.createComment.content,
-                    user_id: data.createComment.authorId,
+                    id: data.create_comment.id,
+                    content: data.create_comment.content,
+                    user_id: data.create_comment.author_id,
                     username: currentUser?.name || 'Người dùng',
                     avatar_url: currentUser?.providerData?.[0]?.photoURL || undefined,
-                    created_at: data.createComment.createdAt,
+                    created_at: data.create_comment.created_at,
                     status: 'saved'
           };
           
@@ -1166,6 +1183,18 @@ export function TaskDetailPage({
             break;
           case 'actual_end_date':
             updates.actual_end_date = editedTask.actual_end_date;
+            break;
+          case 'type':
+            updates.type = editedTask.type;
+            break;
+          case 'category':
+            updates.category = editedTask.category;
+            break;
+          case 'progress_type':
+            updates.progress_type = editedTask.progress_type;
+            break;
+          case 'tags':
+            updates.tags = editedTask.tags;
             break;
           default:
             break;
@@ -1360,27 +1389,27 @@ export function TaskDetailPage({
       const effort = task.effort || 0;
       totalEffort += effort;
       
-      if (task.status === 'done') {
+      if (task.status === 'DONE') {
         completedEffort += effort;
       }
     });
-    
+
     return `${completedEffort}/${totalEffort} giờ`;
   };
-  
+
   const calculateProgress = (tasks: Task[]) => {
     if (!tasks || tasks.length === 0) return 0;
-    
+
     let totalEffort = 0;
     let completedEffort = 0;
-    
+
     tasks.forEach(task => {
       const effort = task.effort || 0;
       totalEffort += effort;
-      
-      if (task.status === 'done') {
+
+      if (task.status === 'DONE') {
         completedEffort += effort;
-      } else if (task.status === 'doing' && task.progress) { // Change 'in_progress' to 'doing'
+      } else if (task.status === 'DOING' && task.progress) {
         completedEffort += (effort * (task.progress / 100));
       }
     });
@@ -1924,17 +1953,17 @@ export function TaskDetailPage({
                 
                 <div className="grid grid-cols-1 gap-2">
                   {/* Trạng thái */}
-                  {renderEditableField('Trạng thái', 'status', 'select', 
-                    Object.entries(TaskStatuses).map(([_, value]) => ({ 
-                      value, 
-                      label: value.charAt(0).toUpperCase() + value.slice(1) 
+                  {renderEditableField('Trạng thái', 'status', 'select',
+                    Object.values(TaskStatuses).map(value => ({
+                      value,
+                      label: STATUS_LABELS[value] || value
                     })))}
-                  
+
                   {/* Mức độ ưu tiên */}
-                  {renderEditableField('Mức độ ưu tiên', 'priority', 'select', 
-                    Object.entries(Priorities).map(([_, value]) => ({ 
-                      value, 
-                      label: value.charAt(0).toUpperCase() + value.slice(1) 
+                  {renderEditableField('Mức độ ưu tiên', 'priority', 'select',
+                    Object.values(Priorities).map(value => ({
+                      value,
+                      label: PRIORITY_LABELS[value] || value
                     })))}
                   
                   {/* Thời gian */}

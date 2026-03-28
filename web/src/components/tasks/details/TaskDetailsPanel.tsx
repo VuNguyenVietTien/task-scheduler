@@ -2,6 +2,7 @@
 
 import React, { useState } from 'react';
 import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
+import { STATUS_LABELS, PRIORITY_LABELS } from '@/constants/task-display-labels';
 import { User } from '@/contexts/AuthContext';
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Spinner } from '@/components/ui/Spinner';
@@ -83,30 +84,30 @@ export default function TaskDetailsPanel({
 
   // Màu sắc trạng thái
   const getStatusColor = (status: TaskStatus) => {
-    const colors = {
-      'todo': 'bg-gray-100 text-gray-800',
-      'doing': 'bg-blue-100 text-blue-800',
-      'done': 'bg-green-100 text-green-800',
-      'close': 'bg-green-100 text-green-800',
-      'pending': 'bg-yellow-100 text-yellow-800',
-      'review': 'bg-purple-100 text-purple-800',
-      'blocked': 'bg-red-100 text-red-800',
-      'rejected': 'bg-red-100 text-red-800',
-      'archived': 'bg-gray-100 text-gray-800',
+    const colors: Record<string, string> = {
+      'TODO': 'bg-gray-100 text-gray-800',
+      'DOING': 'bg-blue-100 text-blue-800',
+      'DONE': 'bg-green-100 text-green-800',
+      'CLOSE': 'bg-green-100 text-green-800',
+      'PENDING': 'bg-yellow-100 text-yellow-800',
+      'REVIEW': 'bg-purple-100 text-purple-800',
+      'BLOCKED': 'bg-red-100 text-red-800',
+      'REJECTED': 'bg-red-100 text-red-800',
+      'ARCHIVED': 'bg-gray-100 text-gray-800',
     };
-    return colors[status] || colors.todo;
+    return colors[status] || colors['TODO'];
   };
 
   // Màu sắc ưu tiên
   const getPriorityColor = (priority: Priority) => {
-    const colors = {
-      'low': 'bg-green-100 text-green-800',
-      'medium': 'bg-yellow-100 text-yellow-800',
-      'high': 'bg-orange-100 text-orange-800',
-      'urgent': 'bg-red-100 text-red-800',
-      'critical': 'bg-red-100 text-red-800 font-bold',
+    const colors: Record<string, string> = {
+      'LOW': 'bg-green-100 text-green-800',
+      'MEDIUM': 'bg-yellow-100 text-yellow-800',
+      'HIGH': 'bg-orange-100 text-orange-800',
+      'URGENT': 'bg-red-100 text-red-800',
+      'CRITICAL': 'bg-red-100 text-red-800 font-bold',
     };
-    return colors[priority] || colors.medium;
+    return colors[priority] || colors['MEDIUM'];
   };
 
   // Bắt đầu chỉnh sửa trường
@@ -182,7 +183,7 @@ export default function TaskDetailsPanel({
         fieldValue = editedTask.status;
         displayValue = (
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-            {task.status}
+            {STATUS_LABELS[task.status] || task.status}
           </span>
         );
         break;
@@ -190,7 +191,7 @@ export default function TaskDetailsPanel({
         fieldValue = editedTask.priority;
         displayValue = (
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
-            {task.priority}
+            {PRIORITY_LABELS[task.priority] || task.priority}
           </span>
         );
         break;
@@ -290,18 +291,34 @@ export default function TaskDetailsPanel({
                   ))}
                 </select>
               ) : type === 'date' ? (
-                <input
-                  type="date"
-                  title={`Chọn ${label.toLowerCase()}`}
-                  placeholder={`Nhập ${label.toLowerCase()}`}
-                  value={fieldValue}
-                  onChange={(e) => {
-                    const newEditedTask = {...editedTask};
-                    (newEditedTask as any)[fieldName] = e.target.value ? `${e.target.value}T00:00:00Z` : undefined;
-                    setEditedTask(newEditedTask);
-                  }}
-                  className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-                />
+                <div className="flex items-center gap-2">
+                  <input
+                    type="date"
+                    title={`Chọn ${label.toLowerCase()}`}
+                    placeholder={`Nhập ${label.toLowerCase()}`}
+                    value={fieldValue}
+                    onChange={(e) => {
+                      const newEditedTask = {...editedTask};
+                      (newEditedTask as any)[fieldName] = e.target.value ? `${e.target.value}T00:00:00Z` : null;
+                      setEditedTask(newEditedTask);
+                    }}
+                    className="block flex-1 rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                  />
+                  {fieldValue && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const newEditedTask = {...editedTask};
+                        (newEditedTask as any)[fieldName] = null;
+                        setEditedTask(newEditedTask);
+                      }}
+                      className="text-gray-400 hover:text-gray-600 text-sm"
+                      title="Xóa ngày"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </div>
               ) : type === 'number' ? (
                 <input
                   type="number"
@@ -427,13 +444,13 @@ export default function TaskDetailsPanel({
           <div className="p-4 bg-white rounded-lg border border-gray-200 shadow-sm">
             <h3 className="text-base font-medium text-gray-900 mb-3">Thông tin cơ bản</h3>
             
-            {renderEditableField('Trạng thái', 'status', 'select', 
-              Object.values(TaskStatuses).map(status => ({ value: status, label: status })))}
-            
+            {renderEditableField('Trạng thái', 'status', 'select',
+              Object.values(TaskStatuses).map(status => ({ value: status, label: STATUS_LABELS[status] || status })))}
+
             {renderEditableField('Người được giao', 'assignee', 'select')}
-            
+
             {renderEditableField('Mức ưu tiên', 'priority', 'select',
-              Object.values(Priorities).map(priority => ({ value: priority, label: priority })))}
+              Object.values(Priorities).map(priority => ({ value: priority, label: PRIORITY_LABELS[priority] || priority })))}
           </div>
         </div>
         

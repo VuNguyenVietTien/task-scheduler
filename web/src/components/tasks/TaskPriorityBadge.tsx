@@ -8,15 +8,15 @@ interface TaskPriorityBadgeProps {
 export default function TaskPriorityBadge({ priority }: TaskPriorityBadgeProps) {
   const getPriorityColor = (priority: Priority) => {
     switch (priority) {
-      case 'low':
+      case 'LOW':
         return 'bg-green-100 text-green-800';
-      case 'medium':
+      case 'MEDIUM':
         return 'bg-blue-100 text-blue-800';
-      case 'high':
+      case 'HIGH':
         return 'bg-orange-100 text-orange-800';
-      case 'urgent':
+      case 'URGENT':
         return 'bg-red-100 text-red-800';
-      case 'critical':
+      case 'CRITICAL':
         return 'bg-red-500 text-white';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -25,19 +25,19 @@ export default function TaskPriorityBadge({ priority }: TaskPriorityBadgeProps) 
 
   const getPriorityLabel = (priority: Priority) => {
     switch (priority) {
-      case 'low':
+      case 'LOW':
         return 'Thấp';
-      case 'medium':
+      case 'MEDIUM':
         return 'Trung bình';
-      case 'high':
+      case 'HIGH':
         return 'Cao';
-      case 'urgent':
+      case 'URGENT':
         return 'Khẩn cấp';
-      case 'critical':
+      case 'CRITICAL':
         return 'Rất khẩn cấp';
       default:
         // Trong trường hợp mở rộng type nhưng chưa xử lý tất cả các case
-        return String(priority).charAt(0).toUpperCase() + String(priority).slice(1);
+        return String(priority).charAt(0).toUpperCase() + String(priority).slice(1).toLowerCase();
     }
   };
 
@@ -46,4 +46,4 @@ export default function TaskPriorityBadge({ priority }: TaskPriorityBadgeProps) 
       {getPriorityLabel(priority)}
     </span>
   );
-} 
+}

@@ -33,11 +33,11 @@ export function TaskDetails({ task }: TaskDetailsProps) {
   // Calculate status color
   const getStatusColor = (status: Task['status']) => {
     switch (status) {
-      case 'done':
+      case 'DONE':
         return 'bg-green-100 text-green-800';
-      case 'doing':
+      case 'DOING':
         return 'bg-blue-100 text-blue-800';
-      case 'blocked':
+      case 'BLOCKED':
         return 'bg-red-100 text-red-800';
       default:
         return 'bg-gray-100 text-gray-800';

@@ -48,7 +48,7 @@ interface TaskCommentsData {
 }
 
 interface CreateCommentResponse {
-  createComment: Comment;
+  create_comment: Comment;
 }
 
 // Dynamically import editor
@@ -166,7 +166,7 @@ const Comments: React.FC<{
   // Create comment mutation
   const [createComment, { loading: isSubmitting }] = useMutation<CreateCommentResponse>(CREATE_TASK_COMMENT, {
     update(cache, { data }) {
-      if (!data?.createComment || !taskId) return;
+      if (!data?.create_comment || !taskId) return;
 
       const existingData = cache.readQuery<TaskCommentsData>({
         query: GET_TASK_COMMENTS,
@@ -179,7 +179,7 @@ const Comments: React.FC<{
         query: GET_TASK_COMMENTS,
         variables: { taskId },
         data: {
-          taskComments: [...existingComments, data.createComment]
+          taskComments: [...existingComments, data.create_comment]
         }
       });
     },

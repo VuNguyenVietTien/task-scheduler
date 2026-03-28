@@ -42,9 +42,9 @@ const initialState: TasksState = {
 // Thêm query để lấy thông tin tối thiểu của task
 export const GET_TASK_MINIMAL = gql`
   query GetTaskMinimal($taskId: ID!) {
-    task(taskId: $taskId) {
-      taskId
-      parentTaskId
+    task(task_id: $taskId) {
+      task_id
+      parent_task_id
     }
   }
 `;
@@ -76,25 +76,11 @@ export const updateTaskStatus = createAsyncThunk(
   'tasks/updateTaskStatus',
   async ({ taskId, status }: { taskId: string, status: TaskStatus }, { getState, rejectWithValue }) => {
     try {
-      // Lấy thông tin hiện tại của task từ API để lấy parentTaskId
-      const { data: taskData } = await client.query({
-        query: GET_TASK_MINIMAL,
-        variables: { taskId },
-        fetchPolicy: 'network-only'
-      });
-      
-      // Duy trì parentTaskId từ dữ liệu hiện tại
-      const parentTaskId = taskData?.task?.parentTaskId || null;
-      
-      // Sửa lại định dạng input đúng với API backend mong đợi
       const input = {
-        taskId: taskId,
-        status: String(status).toLowerCase(),
-        parentTaskId: parentTaskId  // Giữ nguyên parentTaskId
+        task_id: taskId,
+        status: status
       };
-      
-      console.log('Gửi request cập nhật trạng thái với parentTaskId:', parentTaskId);
-      
+
       // Cập nhật cách gọi API
       const response = await client.mutate({
         mutation: UPDATE_TASK,
@@ -102,21 +88,21 @@ export const updateTaskStatus = createAsyncThunk(
         errorPolicy: 'all',
         fetchPolicy: 'no-cache' // Đảm bảo không sử dụng cache
       });
-      
+
       if (response.errors) {
         console.error('Lỗi GraphQL:', response.errors);
         return rejectWithValue(response.errors[0].message);
       }
-      
+
       if (!response.data) {
         console.error('Không có dữ liệu trả về từ server');
         return rejectWithValue('Không có dữ liệu trả về từ server');
       }
-      
-      console.log('Response từ server:', response.data.updateTask);
-      
+
+      console.log('Response từ server:', response.data.update_task);
+
       // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
-      const transformedTask = transformTaskFromAPI(response.data.updateTask);
+      const transformedTask = transformTaskFromAPI(response.data.update_task);
       
       return {
         taskId,
@@ -135,51 +121,37 @@ export const updateTaskAssignee = createAsyncThunk(
   'tasks/updateTaskAssignee',
   async ({ taskId, assigneeId }: { taskId: string, assigneeId: string | null }, { getState, rejectWithValue }) => {
     try {
-      // Lấy thông tin hiện tại của task từ API để lấy parentTaskId
-      const { data: taskData } = await client.query({
-        query: GET_TASK_MINIMAL,
-        variables: { taskId },
-        fetchPolicy: 'network-only'
-      });
-      
-      // Duy trì parentTaskId từ dữ liệu hiện tại
-      const parentTaskId = taskData?.task?.parentTaskId || null;
-      
-      // Sửa lại định dạng input đúng với API backend mong đợi
       const input = {
-        taskId: taskId,
-        assigneeId: assigneeId,
-        parentTaskId: parentTaskId  // Giữ nguyên parentTaskId
+        task_id: taskId,
+        assignee_id: assigneeId
       };
-      
-      console.log('Gửi request cập nhật người được giao với parentTaskId:', parentTaskId);
-      
+
       const response = await client.mutate({
         mutation: UPDATE_TASK,
         variables: { input },
         errorPolicy: 'all',
         fetchPolicy: 'no-cache' // Đảm bảo không sử dụng cache
       });
-      
+
       if (response.errors) {
         console.error('Lỗi GraphQL:', response.errors);
         return rejectWithValue(response.errors[0].message);
       }
-      
+
       if (!response.data) {
         console.error('Không có dữ liệu trả về từ server');
         return rejectWithValue('Không có dữ liệu trả về từ server');
       }
 
-      console.log('Response từ server:', response.data.updateTask);
-      
+      console.log('Response từ server:', response.data.update_task);
+
       // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
-      const transformedTask = transformTaskFromAPI(response.data.updateTask);
+      const transformedTask = transformTaskFromAPI(response.data.update_task);
       
       return {
         taskId,
         assigneeId,
-        assignee: response.data.updateTask.assignee,
+        assignee: response.data.update_task.assignee,
         task: transformedTask
       };
     } catch (error) {
@@ -194,25 +166,11 @@ export const updateTaskPriority = createAsyncThunk(
   'tasks/updateTaskPriority',
   async ({ taskId, priority }: { taskId: string, priority: Priority }, { getState, rejectWithValue }) => {
     try {
-      // Lấy thông tin hiện tại của task từ API để lấy parentTaskId
-      const { data: taskData } = await client.query({
-        query: GET_TASK_MINIMAL,
-        variables: { taskId },
-        fetchPolicy: 'network-only'
-      });
-      
-      // Duy trì parentTaskId từ dữ liệu hiện tại
-      const parentTaskId = taskData?.task?.parentTaskId || null;
-      
-      // Sửa lại định dạng input đúng với API backend mong đợi
       const input = {
-        taskId: taskId,
-        priority: String(priority).toLowerCase(),
-        parentTaskId: parentTaskId  // Giữ nguyên parentTaskId
+        task_id: taskId,
+        priority: priority
       };
-      
-      console.log('Gửi request cập nhật ưu tiên với parentTaskId:', parentTaskId);
-      
+
       // Cập nhật cách gọi API
       const response = await client.mutate({
         mutation: UPDATE_TASK,
@@ -220,21 +178,21 @@ export const updateTaskPriority = createAsyncThunk(
         errorPolicy: 'all',
         fetchPolicy: 'no-cache' // Đảm bảo không sử dụng cache
       });
-      
+
       if (response.errors) {
         console.error('Lỗi GraphQL:', response.errors);
         return rejectWithValue(response.errors[0].message);
       }
-      
+
       if (!response.data) {
         console.error('Không có dữ liệu trả về từ server');
         return rejectWithValue('Không có dữ liệu trả về từ server');
       }
 
-      console.log('Response từ server:', response.data.updateTask);
-      
+      console.log('Response từ server:', response.data.update_task);
+
       // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
-      const transformedTask = transformTaskFromAPI(response.data.updateTask);
+      const transformedTask = transformTaskFromAPI(response.data.update_task);
       
       return {
         taskId,
@@ -253,25 +211,11 @@ export const updateTaskEffort = createAsyncThunk(
   'tasks/updateTaskEffort',
   async ({ taskId, effort }: { taskId: string, effort: number }, { getState, rejectWithValue }) => {
     try {
-      // Lấy thông tin hiện tại của task từ API để lấy parentTaskId
-      const { data: taskData } = await client.query({
-        query: GET_TASK_MINIMAL,
-        variables: { taskId },
-        fetchPolicy: 'network-only'
-      });
-      
-      // Duy trì parentTaskId từ dữ liệu hiện tại
-      const parentTaskId = taskData?.task?.parentTaskId || null;
-      
-      // Sửa lại định dạng input đúng với API backend mong đợi
       const input = {
-        taskId: taskId,
-        effort: Number(effort),
-        parentTaskId: parentTaskId  // Giữ nguyên parentTaskId
+        task_id: taskId,
+        effort: Number(effort)
       };
-      
-      console.log('Gửi request cập nhật công sức với parentTaskId:', parentTaskId);
-      
+
       // Cập nhật cách gọi API
       const response = await client.mutate({
         mutation: UPDATE_TASK,
@@ -279,21 +223,21 @@ export const updateTaskEffort = createAsyncThunk(
         errorPolicy: 'all',
         fetchPolicy: 'no-cache' // Đảm bảo không sử dụng cache
       });
-      
+
       if (response.errors) {
         console.error('Lỗi GraphQL:', response.errors);
         return rejectWithValue(response.errors[0].message);
       }
-      
+
       if (!response.data) {
         console.error('Không có dữ liệu trả về từ server');
         return rejectWithValue('Không có dữ liệu trả về từ server');
       }
 
-      console.log('Response từ server:', response.data.updateTask);
-      
+      console.log('Response từ server:', response.data.update_task);
+
       // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
-      const transformedTask = transformTaskFromAPI(response.data.updateTask);
+      const transformedTask = transformTaskFromAPI(response.data.update_task);
       
       return {
         taskId,
@@ -312,31 +256,12 @@ export const updateTaskDueDate = createAsyncThunk(
   'tasks/updateTaskDueDate',
   async ({ taskId, dueDate }: { taskId: string, dueDate: string }, { getState, rejectWithValue }) => {
     try {
-      // Lấy thông tin hiện tại của task từ API để lấy parentTaskId
-      const { data: taskData } = await client.query({
-        query: GET_TASK_MINIMAL,
-        variables: { taskId },
-        fetchPolicy: 'network-only'
-      });
-      
-      // Duy trì parentTaskId từ dữ liệu hiện tại
-      const parentTaskId = taskData?.task?.parentTaskId || null;
-      
-      // Đảm bảo định dạng ISO đầy đủ cho datetime
-      let formattedDueDate = null;
-      if (dueDate) {
-        formattedDueDate = new Date(dueDate).toISOString();
-      }
-      
-      // Sửa lại định dạng input đúng với API backend mong đợi
+      const formattedDueDate = dueDate ? new Date(dueDate).toISOString() : null;
       const input = {
-        taskId: taskId,
-        dueDate: formattedDueDate,
-        parentTaskId: parentTaskId  // Giữ nguyên parentTaskId
+        task_id: taskId,
+        due_date: formattedDueDate
       };
-      
-      console.log('Gửi request cập nhật hạn với parentTaskId:', parentTaskId);
-      
+
       // Cập nhật cách gọi API
       const response = await client.mutate({
         mutation: UPDATE_TASK,
@@ -344,21 +269,21 @@ export const updateTaskDueDate = createAsyncThunk(
         errorPolicy: 'all',
         fetchPolicy: 'no-cache' // Đảm bảo không sử dụng cache
       });
-      
+
       if (response.errors) {
         console.error('Lỗi GraphQL:', response.errors);
         return rejectWithValue(response.errors[0].message);
       }
-      
+
       if (!response.data) {
         console.error('Không có dữ liệu trả về từ server');
         return rejectWithValue('Không có dữ liệu trả về từ server');
       }
 
-      console.log('Response từ server:', response.data.updateTask);
-      
+      console.log('Response từ server:', response.data.update_task);
+
       // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
-      const transformedTask = transformTaskFromAPI(response.data.updateTask);
+      const transformedTask = transformTaskFromAPI(response.data.update_task);
       
       return {
         taskId,
@@ -372,42 +297,42 @@ export const updateTaskDueDate = createAsyncThunk(
   }
 );
 
-// Hàm tiện ích để chuyển đổi task từ camelCase (API) sang snake_case (UI)
+// Hàm tiện ích để chuyển đổi task từ snake_case (API) sang dạng dùng trong UI
 const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
   if (!apiTask) return {};
 
   return {
-    task_id: apiTask.taskId,
-    id: apiTask.taskId,
-    project_id: apiTask.projectId,
-    projectId: apiTask.projectId,
-    parent_task_id: apiTask.parentTaskId,
+    task_id: apiTask.task_id,
+    id: apiTask.task_id,
+    project_id: apiTask.project_id,
+    projectId: apiTask.project_id,
+    parent_task_id: apiTask.parent_task_id,
     title: apiTask.title,
     description: apiTask.description,
     assignee: apiTask.assignee ? {
-      userId: apiTask.assignee.userId,
+      userId: apiTask.assignee.user_id,
       username: apiTask.assignee.username,
-      avatarUrl: apiTask.assignee.avatarUrl || "",
+      avatarUrl: apiTask.assignee.avatar_url || "",
       role: apiTask.assignee.role || ""
     } : undefined,
-    priority_order: apiTask.priorityOrder,
-    start_date: apiTask.startDate,
-    due_date: apiTask.dueDate,
-    actual_start_date: apiTask.actualStartDate,
-    actual_end_date: apiTask.actualEndDate,
+    priority_order: apiTask.priority_order,
+    start_date: apiTask.start_date,
+    due_date: apiTask.due_date,
+    actual_start_date: apiTask.actual_start_date,
+    actual_end_date: apiTask.actual_end_date,
     effort: apiTask.effort,
     progress: apiTask.progress,
-    created_by: apiTask.createdBy,
-    created_at: apiTask.createdAt,
-    updated_at: apiTask.updatedAt,
-    is_deleted: apiTask.isDeleted,
-    status: apiTask.status,
-    priority: apiTask.priority,
+    created_by: apiTask.created_by,
+    created_at: apiTask.created_at,
+    updated_at: apiTask.updated_at,
+    is_deleted: apiTask.is_deleted,
+    status: apiTask.status as TaskStatus,
+    priority: apiTask.priority as Priority,
     type: apiTask.type,
     category: apiTask.category,
-    progress_type: apiTask.progressType,
+    progress_type: apiTask.progress_type,
     tags: apiTask.tags,
-    child_tasks: apiTask.childTasks ? apiTask.childTasks.map(transformTaskFromAPI) : undefined
+    child_tasks: apiTask.child_tasks ? apiTask.child_tasks.map(transformTaskFromAPI) : undefined
   };
 };
 

@@ -14,12 +14,12 @@ interface TaskBarProps {
 }
 
 const getPriorityColor = (priority: string | undefined) => {
-  switch (priority?.toLowerCase()) {
-    case 'high':
+  switch (priority?.toUpperCase()) {
+    case 'HIGH':
       return 'bg-red-500 hover:bg-red-600';
-    case 'medium':
+    case 'MEDIUM':
       return 'bg-orange-400 hover:bg-orange-500';
-    case 'low':
+    case 'LOW':
       return 'bg-blue-400 hover:bg-blue-500';
     default:
       return 'bg-gray-400 hover:bg-gray-500';
@@ -30,26 +30,26 @@ const getPriorityColor = (priority: string | undefined) => {
 const getStatusColor = (status: string | number): string => {
   if (!status) return 'bg-gray-300';
 
-  switch (String(status).toLowerCase()) {
-    case 'todo':
+  switch (String(status).toUpperCase()) {
+    case 'TODO':
       return 'bg-gray-100 text-gray-800 border border-gray-200';
-    case 'doing':
+    case 'DOING':
       return 'bg-blue-100 text-blue-800 border border-blue-200';
-    case 'done':
+    case 'DONE':
       return 'bg-green-100 text-green-800 border border-green-200';
-    case 'close':
+    case 'CLOSE':
       return 'bg-purple-100 text-purple-800 border border-purple-200';
-    case 'pending':
+    case 'PENDING':
       return 'bg-yellow-100 text-yellow-800 border border-yellow-200';
-    case 'review':
+    case 'REVIEW':
       return 'bg-indigo-100 text-indigo-800 border border-indigo-200';
-    case 'blocked':
+    case 'BLOCKED':
       return 'bg-red-100 text-red-800 border border-red-200';
-    case 'rejected':
+    case 'REJECTED':
       return 'bg-pink-100 text-pink-800 border border-pink-200';
-    case 'archived':
+    case 'ARCHIVED':
       return 'bg-gray-300 text-gray-900 border border-gray-400';
-    case 'cancelled':
+    case 'CANCELLED':
       return 'bg-red-100 text-red-800 border border-red-200';
     default:
       return 'bg-gray-100 text-gray-800 border border-gray-200';

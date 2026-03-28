@@ -277,9 +277,9 @@ export const convertTaskOrderToTask = (item: TaskOrderItem, projectId: string): 
     task_id: item.taskId,
     id: item.taskId,
     title: item.title || 'Unknown',
-    priority: item.priority || 'medium',
+    priority: item.priority || 'MEDIUM',
     priority_order: item.priorityOrder,
-    status: item.status || 'todo',
+    status: item.status || 'TODO',
     effort: item.effort || 0,
     assignee: item.assigneeId ? {
       userId: item.assigneeId,
@@ -301,23 +301,23 @@ export const convertTaskOrderToTask = (item: TaskOrderItem, projectId: string): 
 // Hàm sắp xếp tasks theo priority
 export const sortTasksByPriority = (tasks: Task[]): Task[] => {
   const priorityOrder: Record<string, number> = {
-    critical: 0,
-    urgent: 1,  // Ưu tiên cao nhất
-    high: 2,
-    medium: 3,
-    low: 4
+    CRITICAL: 0,
+    URGENT: 1,  // Ưu tiên cao nhất
+    HIGH: 2,
+    MEDIUM: 3,
+    LOW: 4
   };
 
   return [...tasks].sort((a, b) => {
     // 1. Sort by status: Active first, Done last
-    const isDoneA = a.status === 'done';
-    const isDoneB = b.status === 'done';
+    const isDoneA = a.status === 'DONE';
+    const isDoneB = b.status === 'DONE';
     if (isDoneA && !isDoneB) return 1;
     if (!isDoneA && isDoneB) return -1;
 
     // 2. Sort by priority
-    const aPriority = priorityOrder[a.priority?.toLowerCase() || 'medium'] ?? 3;
-    const bPriority = priorityOrder[b.priority?.toLowerCase() || 'medium'] ?? 3;
+    const aPriority = priorityOrder[a.priority?.toUpperCase() || 'MEDIUM'] ?? 3;
+    const bPriority = priorityOrder[b.priority?.toUpperCase() || 'MEDIUM'] ?? 3;
     return aPriority - bPriority;
   });
 };
@@ -395,7 +395,7 @@ export const processTasksAndUpdateStore = (
 
   // Lọc các task đã hoàn thành và chưa hoàn thành
   tasksToProcess.forEach(task => {
-    if (task.status === 'done') {
+    if (task.status === 'DONE') {
       completedTasks.push(task);
     } else {
       activeTasks.push(task);

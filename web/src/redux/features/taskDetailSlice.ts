@@ -132,8 +132,8 @@ export const updateTaskParent = createAsyncThunk(
         return rejectWithValue(response.errors[0].message);
       }
       
-      console.log('Kết quả cập nhật parent task:', response.data.updateTask);
-      return response.data.updateTask;
+      console.log('Kết quả cập nhật parent task:', response.data.update_task);
+      return response.data.update_task;
     } catch (error) {
       console.error('Exception khi cập nhật task cha:', error);
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi cập nhật task cha');
@@ -169,36 +169,39 @@ export const searchParentTaskById = createAsyncThunk(
 );
 
 // Hàm chuyển đổi dữ liệu từ API sang định dạng local
+// GET_TASK_BY_ID returns snake_case fields matching the GraphQL schema
 const transformTaskFromAPI = (apiTask: any): Task => {
+  // Support both snake_case (from GET_TASK_BY_ID) and camelCase (legacy)
+  const taskId = apiTask.task_id || apiTask.taskId;
   return {
-    task_id: apiTask.taskId,
-    id: apiTask.taskId,
-    project_id: apiTask.projectId,
-    parent_task_id: apiTask.parentTaskId,
+    task_id: taskId,
+    id: taskId,
+    project_id: apiTask.project_id || apiTask.projectId,
+    parent_task_id: (apiTask.parent_task_id ?? apiTask.parentTaskId) ?? null,
     title: apiTask.title,
     description: apiTask.description,
     assignee: apiTask.assignee ? {
-      userId: apiTask.assignee.userId,
+      userId: apiTask.assignee.user_id || apiTask.assignee.userId,
       username: apiTask.assignee.username,
-      avatarUrl: apiTask.assignee.avatarUrl || "",
+      avatarUrl: apiTask.assignee.avatar_url || apiTask.assignee.avatarUrl || "",
       role: apiTask.assignee.role || ""
     } : undefined,
-    priority_order: apiTask.priorityOrder || 0,
-    start_date: apiTask.startDate,
-    due_date: apiTask.dueDate,
-    actual_start_date: apiTask.actualStartDate,
-    actual_end_date: apiTask.actualEndDate,
+    priority_order: apiTask.priority_order || apiTask.priorityOrder || 0,
+    start_date: apiTask.start_date || apiTask.startDate,
+    due_date: apiTask.due_date || apiTask.dueDate,
+    actual_start_date: apiTask.actual_start_date || apiTask.actualStartDate,
+    actual_end_date: apiTask.actual_end_date || apiTask.actualEndDate,
     effort: apiTask.effort,
     progress: apiTask.progress,
-    created_by: apiTask.createdBy,
-    created_at: apiTask.createdAt,
-    updated_at: apiTask.updatedAt,
-    is_deleted: apiTask.isDeleted,
-    status: apiTask.status || 'todo',
-    priority: apiTask.priority || 'medium',
-    type: apiTask.type,
+    created_by: apiTask.created_by || apiTask.createdBy,
+    created_at: apiTask.created_at || apiTask.createdAt,
+    updated_at: apiTask.updated_at || apiTask.updatedAt,
+    is_deleted: apiTask.is_deleted || apiTask.isDeleted,
+    status: apiTask.status || 'TODO',
+    priority: apiTask.priority || 'MEDIUM',
+    type: apiTask.type_ || apiTask.type,
     category: apiTask.category,
-    progress_type: apiTask.progressType,
+    progress_type: apiTask.progress_type || apiTask.progressType,
     tags: apiTask.tags
   };
 };

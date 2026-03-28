@@ -15,16 +15,13 @@ export function useUpdateTaskStatus() {
     setError(null);
     
     try {
-      // Chuyển đổi status sang dạng lowercase cho API (backend)
-      const statusKey = String(status).toLowerCase();
-      
       // Input chỉ chứa taskId và status
       const input = {
         task_id: taskId,
-        status: statusKey
+        status: status
       };
-      
-      console.log(`Đang cập nhật trạng thái: ${statusKey} (gốc: ${status})`);
+
+      console.log(`Đang cập nhật trạng thái: ${status}`);
       
       // Gọi API GraphQL
       const response = await client.mutate({
@@ -35,26 +32,26 @@ export function useUpdateTaskStatus() {
           update_task: {
             __typename: 'Task',
             task_id: taskId,
-            status: statusKey,
+            status: status,
           }
         }
       });
-      
+
       if (response.errors) {
         console.warn("GraphQL errors:", response.errors);
         if (!response.data) {
           throw new Error(response.errors[0].message);
         }
       }
-      
+
       // Xử lý kết quả
       const result = response.data?.update_task;
-      
+
       // Thông báo cập nhật thành công
       if (result) {
         const formattedResult = {
           task_id: result.task_id,
-          status: result.status?.toLowerCase() as TaskStatus,
+          status: (result.status?.toUpperCase() || status) as TaskStatus,
         };
         
         // Broadcast event cập nhật
@@ -100,16 +97,13 @@ export function useUpdateTaskPriority() {
     setError(null);
     
     try {
-      // Chuyển đổi priority sang dạng lowercase cho API (backend)
-      const priorityKey = String(priority).toLowerCase();
-      
       // Input chỉ chứa taskId và priority
       const input = {
         task_id: taskId,
-        priority: priorityKey
+        priority: priority
       };
-      
-      console.log(`Đang cập nhật ưu tiên: ${priorityKey} (gốc: ${priority})`);
+
+      console.log(`Đang cập nhật ưu tiên: ${priority}`);
       
       // Gọi API GraphQL
       const response = await client.mutate({
@@ -120,7 +114,7 @@ export function useUpdateTaskPriority() {
           update_task: {
             __typename: 'Task',
             task_id: taskId,
-            priority: priorityKey,
+            priority: priority,
           }
         }
       });
@@ -139,7 +133,7 @@ export function useUpdateTaskPriority() {
       if (result) {
         const formattedResult = {
           task_id: result.task_id,
-          priority: result.priority?.toLowerCase() as Priority,
+          priority: (result.priority?.toUpperCase() || priority) as Priority,
         };
         
         // Broadcast event cập nhật

@@ -4,11 +4,11 @@ import { GET_PROJECT_TASKS } from '@/graphql/queries/tasks';
 import { Task } from '@/types/task';
 
 const UPDATE_TASK_PRIORITY_ORDER = gql`
-  mutation UpdateTaskPriorityOrder($taskId: ID!, $priorityOrder: Int!) {
-    updateTaskPriorityOrder(taskId: $taskId, priorityOrder: $priorityOrder) {
-      taskId
-      projectId
-      priorityOrder
+  mutation UpdateTaskPriorityOrder($input: UpdateTaskInput!) {
+    update_task(input: $input) {
+      task_id
+      project_id
+      priority_order
       priority
       status
     }
@@ -16,18 +16,20 @@ const UPDATE_TASK_PRIORITY_ORDER = gql`
 `;
 
 interface UpdateTaskPriorityOrderResponse {
-  updateTaskPriorityOrder: {
-    taskId: string;
-    projectId: string;
-    priorityOrder: number;
+  update_task: {
+    task_id: string;
+    project_id: string;
+    priority_order: number;
     priority: string;
     status: string;
   };
 }
 
 interface UpdateTaskPriorityOrderVars {
-  taskId: string;
-  priorityOrder: number;
+  input: {
+    task_id: string;
+    priority_order: number;
+  };
 }
 
 export function useTaskPriorityOrder() {
@@ -38,23 +40,23 @@ export function useTaskPriorityOrder() {
         console.error('Error updating task priority order:', error);
       },
       update: (cache, { data }) => {
-        if (!data?.updateTaskPriorityOrder) return;
+        if (!data?.update_task) return;
 
         try {
-          const { taskId, projectId, priorityOrder } = data.updateTaskPriorityOrder;
+          const { task_id, project_id, priority_order } = data.update_task;
 
           const existingData = cache.readQuery<{ tasks: Task[] }>({
             query: GET_PROJECT_TASKS,
-            variables: { projectId }
+            variables: { projectId: project_id }
           });
 
           if (!existingData?.tasks) return;
 
           const updatedTasks = existingData.tasks.map(task => {
-            if (task.task_id === taskId) {
+            if (task.task_id === task_id) {
               return {
                 ...task,
-                priority_order: priorityOrder
+                priority_order
               };
             }
             return task;
@@ -62,7 +64,7 @@ export function useTaskPriorityOrder() {
 
           cache.writeQuery({
             query: GET_PROJECT_TASKS,
-            variables: { projectId },
+            variables: { projectId: project_id },
             data: {
               tasks: updatedTasks
             }
@@ -78,8 +80,10 @@ export function useTaskPriorityOrder() {
     try {
       await updatePriorityOrder({
         variables: {
-          taskId,
-          priorityOrder: newPriorityOrder
+          input: {
+            task_id: taskId,
+            priority_order: newPriorityOrder
+          }
         }
       });
     } catch (error) {

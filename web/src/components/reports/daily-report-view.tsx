@@ -61,7 +61,7 @@ export function useDailyReportData(projectId: string) {
       if (!task.due_date) return false;
       const dueDate = new Date(task.due_date);
       dueDate.setHours(0, 0, 0, 0);
-      return dueDate < today && task.status !== 'done' && task.status !== 'close';
+      return dueDate < today && task.status !== 'DONE' && task.status !== 'CLOSE';
     });
 
     // onScheduleTasks = active tasks with due_date >= today
@@ -70,7 +70,7 @@ export function useDailyReportData(projectId: string) {
       const dueDate = new Date(task.due_date);
       dueDate.setHours(0, 0, 0, 0);
       return dueDate >= today &&
-        task.status !== 'done' && task.status !== 'close' && task.status !== 'blocked';
+        task.status !== 'DONE' && task.status !== 'CLOSE' && task.status !== 'BLOCKED';
     });
 
     // FIX: scheduledToStartToday = tasks with plan start_date = today
@@ -95,7 +95,7 @@ export function useDailyReportData(projectId: string) {
       const planStart = new Date(planTask.start_date);
       planStart.setHours(0, 0, 0, 0);
       // Past plan start date but not yet actively being worked on
-      if (planStart < today && ['todo', 'pending', 'blocked'].includes(task.status)) {
+      if (planStart < today && ['TODO', 'PENDING', 'BLOCKED'].includes(task.status)) {
         const daysBehind = Math.ceil((today.getTime() - planStart.getTime()) / (1000 * 60 * 60 * 24));
         overduePlanTasks.push({
           taskId: task.task_id,
@@ -111,7 +111,7 @@ export function useDailyReportData(projectId: string) {
     // Unassigned members
     const assignedUserIds = new Set(
       tasks
-        .filter(task => task.assignee && task.status !== 'done' && task.status !== 'close')
+        .filter(task => task.assignee && task.status !== 'DONE' && task.status !== 'CLOSE')
         .map(task => task.assignee?.userId)
         .filter(Boolean)
     );
@@ -121,7 +121,7 @@ export function useDailyReportData(projectId: string) {
 
     // Bug count
     const bugTasks = tasks.filter(
-      task => task.type?.toLowerCase() === 'bug' && task.status !== 'done' && task.status !== 'close'
+      task => task.type?.toLowerCase() === 'bug' && task.status !== 'DONE' && task.status !== 'CLOSE'
     );
 
     const reportTasks: ReportTask[] = tasks.map(task => ({
@@ -137,7 +137,7 @@ export function useDailyReportData(projectId: string) {
         if (!task.due_date) return false;
         const dd = new Date(task.due_date);
         dd.setHours(0, 0, 0, 0);
-        return dd < today && task.status !== 'done' && task.status !== 'close';
+        return dd < today && task.status !== 'DONE' && task.status !== 'CLOSE';
       })(),
       delayReason: undefined,
     }));
@@ -249,8 +249,8 @@ export function DailyReportView({ projectId, onSummaryChange }: DailyReportViewP
                       <td>{new Date(task.planStartDate).toLocaleDateString('vi-VN')}</td>
                       <td>
                         <span className={`px-2 py-0.5 rounded text-xs text-white ${
-                          task.status === 'blocked' ? 'bg-red-500' :
-                          task.status === 'pending' ? 'bg-yellow-500' : 'bg-slate-400'
+                          task.status === 'BLOCKED' ? 'bg-red-500' :
+                          task.status === 'PENDING' ? 'bg-yellow-500' : 'bg-slate-400'
                         }`}>{task.status}</span>
                       </td>
                       <td className="text-red-600 font-medium">{task.daysBehind}</td>
@@ -292,8 +292,8 @@ export function DailyReportView({ projectId, onSummaryChange }: DailyReportViewP
                       </td>
                       <td>
                         <span className={`px-2 py-0.5 rounded text-xs text-white ${
-                          task.status === 'doing' ? 'bg-blue-500' :
-                          task.status === 'todo' ? 'bg-slate-400' : 'bg-gray-500'
+                          task.status === 'DOING' ? 'bg-blue-500' :
+                          task.status === 'TODO' ? 'bg-slate-400' : 'bg-gray-500'
                         }`}>{task.status}</span>
                       </td>
                     </tr>

@@ -138,18 +138,18 @@ export const addMemberByEmail = createAsyncThunk(
       }
       
       // Chuyển đổi dữ liệu từ API sang định dạng Member
-      const addedMember = response.data.addProjectMemberByEmail;
+      const addedMember = response.data.add_project_member;
       const newMember: Member = {
-        memberId: `member-${addedMember.user.userId}`,
-        userId: addedMember.user.userId,
+        memberId: `member-${addedMember.user.user_id}`,
+        userId: addedMember.user.user_id,
         role: toFrontendRole(addedMember.role),
-        joinedAt: addedMember.joinedAt,
+        joinedAt: addedMember.joined_at,
         user: {
-          userId: addedMember.user.userId,
+          userId: addedMember.user.user_id,
           email: addedMember.user.email,
           username: addedMember.user.username,
-          fullName: addedMember.user.fullName,
-          avatarUrl: addedMember.user.avatarUrl
+          fullName: addedMember.user.full_name,
+          avatarUrl: addedMember.user.avatar_url
         }
       };
       
@@ -173,9 +173,9 @@ export const removeMember = createAsyncThunk(
     try {
       const response = await client.mutate({
         mutation: REMOVE_PROJECT_MEMBER,
-        variables: { 
-          projectId, 
-          userId 
+        variables: {
+          project_id: projectId,
+          user_id: userId
         }
       });
       
@@ -215,13 +215,13 @@ export const removeMultipleProjectMembers = createAsyncThunk(
       }
       
       // Trích xuất thông tin từ response
-      const result = response.data.removeMultipleProjectMembers;
-      
+      const result = response.data.remove_multiple_project_members;
+
       // Trả về kết quả để cập nhật store
       return {
         userIds: memberIds.map(memberId => memberId.replace('member-', '')),
-        successCount: result.successCount,
-        failedCount: result.failedCount
+        successCount: result.success_count,
+        failedCount: result.failed_count
       };
     } catch (error: any) {
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi xóa nhiều thành viên');
@@ -244,19 +244,17 @@ export const updateProjectMemberRole = createAsyncThunk(
     try {
       const response = await client.mutate({
         mutation: UPDATE_PROJECT_MEMBER_ROLE,
-        variables: { 
-          projectId, 
-          userId, 
-          role 
+        variables: {
+          input: { project_id: projectId, user_id: userId, role }
         }
       });
-      
+
       if (response.errors) {
         return rejectWithValue(response.errors[0].message);
       }
-      
+
       // Lấy thông tin từ response
-      const updatedMember = response.data.updateProjectMember;
+      const updatedMember = response.data.update_project_member;
       
       // Trả về đối tượng cập nhật để cập nhật store
       return {
@@ -295,24 +293,20 @@ export const updateMultipleProjectMemberRoles = createAsyncThunk(
       }
       
       // Lấy thông tin từ response
-      const result = response.data.updateMultipleMembers;
-      
-      console.log('API Response:', result); // Debug log
-      
+      const result = response.data.update_multiple_members;
+
       // Chuyển đổi dữ liệu từ response, giữ nguyên cấu trúc như updates gửi đi
       const updatedMembers = updates.map(update => ({
         userId: update.userId,
         role: toFrontendRole(
-          result.members.find((m: any) => m.user.userId === update.userId)?.role || update.role
+          result.members.find((m: any) => m.user.user_id === update.userId)?.role || update.role
         )
       }));
-      
-      console.log('Processed updates for store:', updatedMembers); // Debug log
-      
+
       // Trả về kết quả để cập nhật store
       return {
         members: updatedMembers,
-        successCount: result.successCount
+        successCount: result.success_count
       };
     } catch (error: any) {
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi cập nhật vai trò nhiều thành viên');

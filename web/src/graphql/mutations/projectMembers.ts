@@ -8,7 +8,7 @@ export const ADD_PROJECT_MEMBER = gql`
       role
       joined_at
       user {
-        id
+        user_id
         email
         username
         full_name
@@ -26,7 +26,7 @@ export const UPDATE_MEMBER_ROLE = gql`
       role
       joined_at
       user {
-        id
+        user_id
         email
         username
         full_name
@@ -37,8 +37,8 @@ export const UPDATE_MEMBER_ROLE = gql`
 `;
 
 export const UPDATE_PROJECT_MEMBER_ROLE = gql`
-  mutation UpdateProjectMemberRole($projectId: ID!, $userId: ID!, $role: MemberRole!) {
-    update_project_member(project_id: $projectId, user_id: $userId, role: $role) {
+  mutation UpdateProjectMemberRole($input: UpdateProjectMemberInput!) {
+    update_project_member(input: $input) {
       user {
         user_id
         email
@@ -63,7 +63,7 @@ export const UPDATE_MULTIPLE_MEMBER_ROLES = gql`
         role
         joined_at
         user {
-          id
+          user_id
           email
           username
           full_name

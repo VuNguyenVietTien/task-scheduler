@@ -33,7 +33,7 @@ export function useDashboardTasks(userId: string, role: string) {
     now.setHours(0, 0, 0, 0);
 
     const activeTasks = tasks.filter(
-      t => !['done', 'close', 'archived'].includes(t.status?.toLowerCase())
+      t => !['DONE', 'CLOSE', 'ARCHIVED'].includes(t.status?.toUpperCase())
     );
 
     const overdueTasks = activeTasks.filter(t => {
@@ -42,7 +42,7 @@ export function useDashboardTasks(userId: string, role: string) {
     });
 
     const doingTasks = activeTasks.filter(
-      t => t.status?.toLowerCase() === 'doing'
+      t => t.status?.toUpperCase() === 'DOING'
     );
 
     const bugTasks = activeTasks.filter(
@@ -50,13 +50,13 @@ export function useDashboardTasks(userId: string, role: string) {
     );
 
     const criticalTasks = activeTasks.filter(
-      t => ['critical', 'urgent'].includes(t.priority?.toLowerCase())
+      t => ['CRITICAL', 'URGENT'].includes(t.priority?.toUpperCase())
     );
 
     // Status breakdown for member view
     const tasksByStatus: Record<string, DashboardTask[]> = {};
     for (const t of activeTasks) {
-      const s = t.status?.toLowerCase() || 'unknown';
+      const s = t.status?.toUpperCase() || 'unknown';
       if (!tasksByStatus[s]) tasksByStatus[s] = [];
       tasksByStatus[s].push(t);
     }

@@ -114,19 +114,12 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
     if (updates.title !== undefined) input.title = updates.title;
     if (updates.description !== undefined) input.description = updates.description;
     
-    // Xử lý đặc biệt cho các trường enum - cần chuyển thành lowercase cho backend
     if (updates.status !== undefined) {
-      // Đảm bảo status là lowercase để backend nhận
-      const statusKey = String(updates.status).toLowerCase();
-      input.status = statusKey;
-      console.log(`Status đã chuyển đổi thành: ${input.status} (gốc: ${updates.status})`);
+      input.status = updates.status;
     }
-    
+
     if (updates.priority !== undefined) {
-      // Chuyển priority thành lowercase cho backend
-      const priorityKey = String(updates.priority).toLowerCase();
-      input.priority = priorityKey;
-      console.log(`Priority đã chuyển đổi thành: ${input.priority} (gốc: ${updates.priority})`);
+      input.priority = updates.priority;
     }
     
     if (updates.effort !== undefined) input.effort = Number(updates.effort);
@@ -153,7 +146,7 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
     }
 
     if (updates.priority_order !== undefined) input.priority_order = Number(updates.priority_order);
-    if (updates.type !== undefined) input.type = updates.type;
+    if (updates.type !== undefined) input.type_ = updates.type;
     if (updates.category !== undefined) input.category = updates.category;
 
     if (updates.progress_type !== undefined) {
@@ -207,8 +200,8 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
       parent_task_id: result.parent_task_id,
       title: result.title,
       description: result.description,
-      status: result.status?.toLowerCase() as TaskStatus,
-      priority: result.priority?.toLowerCase() as Priority,
+      status: result.status?.toUpperCase() as TaskStatus,
+      priority: result.priority?.toUpperCase() as Priority,
       priority_order: result.priority_order,
       start_date: result.start_date,
       due_date: result.due_date,
@@ -226,7 +219,7 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
       created_at: result.created_at,
       updated_at: result.updated_at,
       is_deleted: result.is_deleted,
-      type: result.type,
+      type: result.type_,
       category: result.category,
       progress_type: result.progress_type?.toLowerCase() as any,
       tags: result.tags,

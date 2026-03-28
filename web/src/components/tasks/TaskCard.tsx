@@ -26,22 +26,22 @@ export const TaskCard = ({ task, onClick, onStatusChange }: TaskCardProps) => {
     new Date(task.deadline).getTime() - Date.now() < 24 * 60 * 60 * 1000;
 
   const statusColors: Record<string, string> = {
-    'todo': 'bg-gray-100 text-gray-800',
-    'doing': 'bg-blue-100 text-blue-800',
-    'done': 'bg-green-100 text-green-800',
-    'close': 'bg-green-100 text-green-800',
-    'pending': 'bg-yellow-100 text-yellow-800',
-    'review': 'bg-purple-100 text-purple-800',
-    'blocked': 'bg-red-100 text-red-800',
-    'rejected': 'bg-red-100 text-red-800'
+    'TODO': 'bg-gray-100 text-gray-800',
+    'DOING': 'bg-blue-100 text-blue-800',
+    'DONE': 'bg-green-100 text-green-800',
+    'CLOSE': 'bg-green-100 text-green-800',
+    'PENDING': 'bg-yellow-100 text-yellow-800',
+    'REVIEW': 'bg-purple-100 text-purple-800',
+    'BLOCKED': 'bg-red-100 text-red-800',
+    'REJECTED': 'bg-red-100 text-red-800'
   };
 
   const priorityColors: Record<string, string> = {
-    'low': 'bg-green-100 text-green-800',
-    'medium': 'bg-yellow-100 text-yellow-800',
-    'high': 'bg-orange-100 text-orange-800',
-    'urgent': 'bg-red-100 text-red-800',
-    'critical': 'bg-red-100 text-red-800 font-bold'
+    'LOW': 'bg-green-100 text-green-800',
+    'MEDIUM': 'bg-yellow-100 text-yellow-800',
+    'HIGH': 'bg-orange-100 text-orange-800',
+    'URGENT': 'bg-red-100 text-red-800',
+    'CRITICAL': 'bg-red-100 text-red-800 font-bold'
   };
 
   return (
@@ -65,14 +65,14 @@ export const TaskCard = ({ task, onClick, onStatusChange }: TaskCardProps) => {
             'text-xs px-2 py-0.5 rounded-full',
             statusColors[task.status] || 'bg-gray-100'
           )}>
-            {task.status === 'todo' ? 'Chưa làm' : 
-             task.status === 'doing' ? 'Đang làm' : 
-             task.status === 'done' ? 'Hoàn thành' : 
-             task.status === 'pending' ? 'Chờ xử lý' : 
-             task.status === 'review' ? 'Đang xem xét' : 
-             task.status === 'blocked' ? 'Bị chặn' : 
-             task.status === 'rejected' ? 'Từ chối' : 
-             task.status === 'close' ? 'Đã đóng' : 
+            {task.status === 'TODO' ? 'Chưa làm' :
+             task.status === 'DOING' ? 'Đang làm' :
+             task.status === 'DONE' ? 'Hoàn thành' :
+             task.status === 'PENDING' ? 'Chờ xử lý' :
+             task.status === 'REVIEW' ? 'Đang xem xét' :
+             task.status === 'BLOCKED' ? 'Bị chặn' :
+             task.status === 'REJECTED' ? 'Từ chối' :
+             task.status === 'CLOSE' ? 'Đã đóng' :
              task.status}
           </span>
           
@@ -80,11 +80,11 @@ export const TaskCard = ({ task, onClick, onStatusChange }: TaskCardProps) => {
             'text-xs px-2 py-0.5 rounded-full',
             priorityColors[task.priority] || 'bg-gray-100'
           )}>
-            {task.priority === 'low' ? 'Thấp' : 
-             task.priority === 'medium' ? 'Trung bình' : 
-             task.priority === 'high' ? 'Cao' : 
-             task.priority === 'urgent' ? 'Khẩn cấp' : 
-             task.priority === 'critical' ? 'Nghiêm trọng' : 
+            {task.priority === 'LOW' ? 'Thấp' :
+             task.priority === 'MEDIUM' ? 'Trung bình' :
+             task.priority === 'HIGH' ? 'Cao' :
+             task.priority === 'URGENT' ? 'Khẩn cấp' :
+             task.priority === 'CRITICAL' ? 'Nghiêm trọng' :
              task.priority}
           </span>
         </div>

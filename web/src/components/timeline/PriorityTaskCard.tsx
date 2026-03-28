@@ -56,9 +56,9 @@ export function PriorityTaskCard({ task, onClick }: PriorityTaskCardProps) {
         {/* Priority Indicator */}
         <div className="shrink-0">
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize
-            ${task.priority === 'urgent' ? 'bg-red-100 text-red-800' :
-              task.priority === 'high' ? 'bg-orange-100 text-orange-800' :
-              task.priority === 'medium' ? 'bg-yellow-100 text-yellow-800' :
+            ${task.priority === 'URGENT' ? 'bg-red-100 text-red-800' :
+              task.priority === 'HIGH' ? 'bg-orange-100 text-orange-800' :
+              task.priority === 'MEDIUM' ? 'bg-yellow-100 text-yellow-800' :
               'bg-green-100 text-green-800'
             }`}
           >

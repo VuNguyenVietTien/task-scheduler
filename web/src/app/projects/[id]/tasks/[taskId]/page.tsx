@@ -68,46 +68,47 @@ export default function TaskDetailsPage() {
     fetchPolicy: 'network-only',
     onCompleted: (data) => {
       if (data && data.task) {
-        console.log('[TaskDetailsPage] Task data từ GraphQL:', data.task.taskId);
-        
-        // Chuyển đổi dữ liệu từ camelCase sang snake_case
+        // GET_TASK_BY_ID returns snake_case fields matching GraphQL schema
+        const t = data.task;
+        console.log('[TaskDetailsPage] Task data từ GraphQL:', t.task_id);
+
         const formattedTask: Task = {
-          task_id: data.task.taskId,
-          id: data.task.taskId,
-          title: data.task.title || '',
-          description: data.task.description || '',
-          status: data.task.status?.toLowerCase() || 'todo',
-          priority: data.task.priority?.toLowerCase() || 'medium',
-          project_id: data.task.projectId || projectId,
-          parent_task_id: data.task.parentTaskId || null,
-          assignee: data.task.assignee ? {
-            userId: data.task.assignee.userId,
-            username: data.task.assignee.username,
-            avatarUrl: data.task.assignee.avatarUrl || '',
-            role: data.task.assignee.role || ''
+          task_id: t.task_id,
+          id: t.task_id,
+          title: t.title || '',
+          description: t.description || '',
+          status: t.status?.toUpperCase() || 'TODO',
+          priority: t.priority?.toUpperCase() || 'MEDIUM',
+          project_id: t.project_id || projectId,
+          parent_task_id: t.parent_task_id ?? null,
+          assignee: t.assignee ? {
+            userId: t.assignee.user_id,
+            username: t.assignee.username,
+            avatarUrl: t.assignee.avatar_url || '',
+            role: t.assignee.role || ''
           } : undefined,
-          priority_order: data.task.priorityOrder || 0,
-          start_date: data.task.startDate || null,
-          due_date: data.task.dueDate || null,
-          created_at: data.task.createdAt || new Date().toISOString(),
-          updated_at: data.task.updatedAt || new Date().toISOString(),
-          effort: data.task.effort || 0,
-          progress: data.task.progress || 0,
-          created_by: data.task.creator ? {
-            userId: data.task.creator.userId,
-            username: data.task.creator.username,
-            avatarUrl: data.task.creator.avatarUrl || '',
-            role: data.task.creator.role || ''
-          } : (data.task.createdBy || 'system'),
-          type: data.task.type || null,
-          category: data.task.category || null,
-          progress_type: data.task.progressType?.toLowerCase() || null,
-          tags: data.task.tags || [],
-          is_deleted: data.task.isDeleted || false
+          priority_order: t.priority_order || 0,
+          start_date: t.start_date || null,
+          due_date: t.due_date || null,
+          created_at: t.created_at || new Date().toISOString(),
+          updated_at: t.updated_at || new Date().toISOString(),
+          effort: t.effort || 0,
+          progress: t.progress || 0,
+          created_by: t.creator ? {
+            userId: t.creator.user_id,
+            username: t.creator.username,
+            avatarUrl: t.creator.avatar_url || '',
+            role: t.creator.role || ''
+          } : (t.created_by || 'system'),
+          type: t.type_ || t.type || null,
+          category: t.category || null,
+          progress_type: t.progress_type?.toLowerCase() || null,
+          tags: t.tags || [],
+          is_deleted: t.is_deleted || false
         };
         
         console.log('[TaskDetailsPage] Setting task from GraphQL:', {
-          id: formattedTask.task_id,
+          id: formattedTask.task_id, status: formattedTask.status,
           parent_id: formattedTask.parent_task_id
         });
         setTask(formattedTask);
@@ -127,8 +128,8 @@ export default function TaskDetailsPage() {
           id: taskId,
           title: 'Test Task: ' + taskId.substring(0, 8),
           description: '<p>Đây là dữ liệu <strong>tạm thời</strong> để testing.</p>',
-          status: 'todo',
-          priority: 'medium',
+          status: 'TODO',
+          priority: 'MEDIUM',
           project_id: projectId,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
@@ -193,7 +194,7 @@ export default function TaskDetailsPage() {
     });
     
     if (reduxTask) {
-      if (!task || task.task_id !== reduxTask.task_id || task.parent_task_id !== reduxTask.parent_task_id) {
+      if (!task || task.task_id !== reduxTask.task_id || (task.parent_task_id ?? null) !== (reduxTask.parent_task_id ?? null)) {
         console.log('[TaskDetailsPage] Setting task from Redux store:', {
           id: reduxTask.task_id,
           parent_id: reduxTask.parent_task_id

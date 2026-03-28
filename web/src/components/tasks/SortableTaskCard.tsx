@@ -10,14 +10,14 @@ interface SortableTaskCardProps {
 
 export function SortableTaskCard({ task }: SortableTaskCardProps) {
   const getPriorityColor = (priority: string) => {
-    switch (priority.toLowerCase()) {
-      case 'urgent':
+    switch (priority.toUpperCase()) {
+      case 'URGENT':
         return 'border-l-4 border-l-red-600';
-      case 'high':
+      case 'HIGH':
         return 'border-l-4 border-l-orange-600';
-      case 'medium':
+      case 'MEDIUM':
         return 'border-l-4 border-l-amber-600';
-      case 'low':
+      case 'LOW':
         return 'border-l-4 border-l-green-600';
       default:
         return 'border-l-4 border-l-slate-600';

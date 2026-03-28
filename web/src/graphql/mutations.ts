@@ -2,77 +2,54 @@ import { gql } from '@apollo/client';
 
 export const CREATE_TASK = gql`
   mutation CreateTask($input: CreateTaskInput!) {
-    createTask(input: $input) {
-      taskId
+    create_task(input: $input) {
+      task_id
       title
       description
       status
       priority
-      priorityOrder
+      priority_order
       assignee {
-        userId
+        user_id
         username
-        avatarUrl
+        avatar_url
         role
       }
       effort
-      startDate
-      dueDate
-      createdBy
-      projectId
-      type
+      start_date
+      due_date
+      created_by
+      project_id
+      type_
       category
-      progressType
+      progress_type
       tags
-      parentTaskId
+      parent_task_id
     }
   }
 `;
 
 export const UPDATE_TASK = gql`
-  mutation UpdateTask(
-    $taskId: ID!
-    $title: String
-    $description: String
-    $status: TaskStatus
-    $priority: TaskPriority
-    $startDate: DateTime
-    $deadline: DateTime
-    $assigneeId: ID
-    $priorityOrder: Int
-    $type: String
-    $category: String
-    $progressType: TaskProgressType
-    $tags: [String!]
-  ) {
-    updateTask(
-      taskId: $taskId
-      title: $title
-      description: $description
-      status: $status
-      priority: $priority
-      startDate: $startDate
-      deadline: $deadline
-      assigneeId: $assigneeId
-      priorityOrder: $priorityOrder
-      type: $type
-      category: $category
-      progressType: $progressType
-      tags: $tags
-    ) {
-      taskId
+  mutation UpdateTask($input: UpdateTaskInput!) {
+    update_task(input: $input) {
+      task_id
       title
       description
       status
-      priority  
-      priorityOrder
-      assigneeId
+      priority
+      priority_order
+      assignee {
+        user_id
+        username
+        avatar_url
+        role
+      }
       effort
-      startDate
-      dueDate
-      type
+      start_date
+      due_date
+      type_
       category
-      progressType
+      progress_type
       tags
     }
   }

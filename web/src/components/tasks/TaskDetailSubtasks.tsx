@@ -127,8 +127,8 @@ export default function TaskDetailSubtasks({ taskId, projectId }: TaskDetailSubt
             id: subtask.taskId,
             title: subtask.title || '',
             description: subtask.description || '',
-            status: (subtask.status?.toLowerCase() || 'todo') as TaskStatus,
-            priority: (subtask.priority?.toLowerCase() || 'medium') as Priority,
+            status: (subtask.status?.toUpperCase() || 'TODO') as TaskStatus,
+            priority: (subtask.priority?.toUpperCase() || 'MEDIUM') as Priority,
             effort: subtask.effort || 0,
             progress: subtask.progress || 0,
             start_date: subtask.startDate || null,
@@ -273,30 +273,30 @@ export default function TaskDetailSubtasks({ taskId, projectId }: TaskDetailSubt
 
   // Màu sắc trạng thái
   const getStatusColor = useCallback((status: TaskStatus) => {
-    const colors = {
-      'todo': 'bg-gray-100 text-gray-800',
-      'doing': 'bg-blue-100 text-blue-800',
-      'done': 'bg-green-100 text-green-800',
-      'close': 'bg-green-100 text-green-800',
-      'pending': 'bg-yellow-100 text-yellow-800',
-      'review': 'bg-purple-100 text-purple-800',
-      'blocked': 'bg-red-100 text-red-800',
-      'rejected': 'bg-red-100 text-red-800',
-      'archived': 'bg-gray-100 text-gray-800',
+    const colors: Record<string, string> = {
+      'TODO': 'bg-gray-100 text-gray-800',
+      'DOING': 'bg-blue-100 text-blue-800',
+      'DONE': 'bg-green-100 text-green-800',
+      'CLOSE': 'bg-green-100 text-green-800',
+      'PENDING': 'bg-yellow-100 text-yellow-800',
+      'REVIEW': 'bg-purple-100 text-purple-800',
+      'BLOCKED': 'bg-red-100 text-red-800',
+      'REJECTED': 'bg-red-100 text-red-800',
+      'ARCHIVED': 'bg-gray-100 text-gray-800',
     };
-    return colors[status] || colors.todo;
+    return colors[status] || colors['TODO'];
   }, []);
 
   // Màu sắc ưu tiên
   const getPriorityColor = useCallback((priority: Priority) => {
-    const colors = {
-      'low': 'bg-green-100 text-green-800',
-      'medium': 'bg-yellow-100 text-yellow-800',
-      'high': 'bg-orange-100 text-orange-800',
-      'urgent': 'bg-red-100 text-red-800',
-      'critical': 'bg-red-100 text-red-800 font-bold',
+    const colors: Record<string, string> = {
+      'LOW': 'bg-green-100 text-green-800',
+      'MEDIUM': 'bg-yellow-100 text-yellow-800',
+      'HIGH': 'bg-orange-100 text-orange-800',
+      'URGENT': 'bg-red-100 text-red-800',
+      'CRITICAL': 'bg-red-100 text-red-800 font-bold',
     };
-    return colors[priority] || colors.medium;
+    return colors[priority] || colors['MEDIUM'];
   }, []);
 
   // Handler cho việc edit subtask
@@ -576,16 +576,16 @@ export default function TaskDetailSubtasks({ taskId, projectId }: TaskDetailSubt
                     ) : (
                       <div className="flex items-center">
                         <span className={`inline-block h-2 w-2 rounded-full mr-2 ${
-                          subtask.status === 'todo' ? 'bg-gray-400' :
-                          subtask.status === 'doing' ? 'bg-blue-400' :
-                          subtask.status === 'review' ? 'bg-yellow-400' :
-                          subtask.status === 'done' ? 'bg-green-400' : 'bg-gray-400'
+                          subtask.status === 'TODO' ? 'bg-gray-400' :
+                          subtask.status === 'DOING' ? 'bg-blue-400' :
+                          subtask.status === 'REVIEW' ? 'bg-yellow-400' :
+                          subtask.status === 'DONE' ? 'bg-green-400' : 'bg-gray-400'
                         }`}></span>
                         <span>
-                          {subtask.status === 'todo' ? 'Todo' :
-                          subtask.status === 'doing' ? 'In Progress' :
-                          subtask.status === 'review' ? 'In Review' :
-                          subtask.status === 'done' ? 'Done' : subtask.status}
+                          {subtask.status === 'TODO' ? 'Todo' :
+                          subtask.status === 'DOING' ? 'In Progress' :
+                          subtask.status === 'REVIEW' ? 'In Review' :
+                          subtask.status === 'DONE' ? 'Done' : subtask.status}
                     </span>
                     <button 
                           onClick={(e) => {
@@ -627,13 +627,13 @@ export default function TaskDetailSubtasks({ taskId, projectId }: TaskDetailSubt
                     ) : (
                       <div className="flex items-center">
                         <span className={`text-sm ${
-                          subtask.priority === 'high' ? 'text-red-600' :
-                          subtask.priority === 'medium' ? 'text-yellow-600' :
-                          subtask.priority === 'low' ? 'text-green-600' : 'text-gray-600'
+                          subtask.priority === 'HIGH' ? 'text-red-600' :
+                          subtask.priority === 'MEDIUM' ? 'text-yellow-600' :
+                          subtask.priority === 'LOW' ? 'text-green-600' : 'text-gray-600'
                         }`}>
-                          {subtask.priority === 'high' ? 'High' :
-                          subtask.priority === 'medium' ? 'Medium' :
-                          subtask.priority === 'low' ? 'Low' : subtask.priority}
+                          {subtask.priority === 'HIGH' ? 'High' :
+                          subtask.priority === 'MEDIUM' ? 'Medium' :
+                          subtask.priority === 'LOW' ? 'Low' : subtask.priority}
                     </span>
                     <button 
                           onClick={(e) => {

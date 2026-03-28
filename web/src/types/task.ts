@@ -1,28 +1,28 @@
-export type TaskStatus = 'todo' | 'doing' | 'done' | 'close' | 'pending' | 'review' | 'blocked' | 'rejected' | 'archived';
-export type Priority = 'low' | 'medium' | 'high' | 'urgent' | 'critical';
+export type TaskStatus = 'TODO' | 'DOING' | 'DONE' | 'CLOSE' | 'PENDING' | 'REVIEW' | 'BLOCKED' | 'REJECTED' | 'ARCHIVED';
+export type Priority = 'LOW' | 'MEDIUM' | 'HIGH' | 'URGENT' | 'CRITICAL';
 export type ProgressType = 'study' | 'investigate' | 'code' | 'test' | 'review_code' | 'review_test_report' | 'release';
 export type TaskType = 'Feature' | 'Bug' | 'Enhancement' | 'Documentation';
 export type TaskCategory = 'Frontend' | 'Backend' | 'Design' | 'Testing' | 'DevOps';
 export type TaskTag = 'Urgent' | 'High Priority' | 'Low Priority' | 'In Progress' | 'Blocked';
 
 export const TaskStatuses = {
-  TODO: 'todo' as TaskStatus,
-  DOING: 'doing' as TaskStatus,
-  DONE: 'done' as TaskStatus,
-  CLOSE: 'close' as TaskStatus,
-  PENDING: 'pending' as TaskStatus,
-  REVIEW: 'review' as TaskStatus,
-  BLOCKED: 'blocked' as TaskStatus,
-  REJECTED: 'rejected' as TaskStatus,
-  ARCHIVED: 'archived' as TaskStatus
+  TODO: 'TODO' as TaskStatus,
+  DOING: 'DOING' as TaskStatus,
+  DONE: 'DONE' as TaskStatus,
+  CLOSE: 'CLOSE' as TaskStatus,
+  PENDING: 'PENDING' as TaskStatus,
+  REVIEW: 'REVIEW' as TaskStatus,
+  BLOCKED: 'BLOCKED' as TaskStatus,
+  REJECTED: 'REJECTED' as TaskStatus,
+  ARCHIVED: 'ARCHIVED' as TaskStatus
 };
 
 export const Priorities = {
-  LOW: 'low' as Priority,
-  MEDIUM: 'medium' as Priority,
-  HIGH: 'high' as Priority,
-  URGENT: 'urgent' as Priority,
-  CRITICAL: 'critical' as Priority
+  LOW: 'LOW' as Priority,
+  MEDIUM: 'MEDIUM' as Priority,
+  HIGH: 'HIGH' as Priority,
+  URGENT: 'URGENT' as Priority,
+  CRITICAL: 'CRITICAL' as Priority
 };
 
 export const ProgressTypes = {

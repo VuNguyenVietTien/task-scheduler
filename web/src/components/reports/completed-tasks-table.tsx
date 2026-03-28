@@ -8,7 +8,7 @@ interface CompletedTasksTableProps {
 
 export function CompletedTasksTable({ tasks }: CompletedTasksTableProps) {
   const completedTasks = tasks.filter(
-    task => task.status === 'done' || task.status === 'close'
+    task => task.status === 'DONE' || task.status === 'CLOSE'
   );
   if (completedTasks.length === 0) return null;
 

@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { Task, TaskStatus, Priority, TaskFilter, TaskStatuses, Priorities, UserBasic } from '@/types/task';
+import { STATUS_LABELS, PRIORITY_LABELS } from '@/constants/task-display-labels';
 import { ProjectData } from '@/types/project';
 import { TaskFilterBar } from './TaskFilterBar';
 import { TaskBulkActions } from './TaskBulkActions';
@@ -457,7 +458,7 @@ export function TaskListView({
                   >
                     {Object.values(TaskStatuses).map((status) => (
                       <option key={status} value={status}>
-                        {status.replace(/_/g, ' ')}
+                        {STATUS_LABELS[status] || status}
                       </option>
                     ))}
                   </select>
@@ -488,7 +489,7 @@ export function TaskListView({
                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(childTask.status)} cursor-pointer hover:opacity-75`}
                 onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'status', childTask.status); }}
               >
-                {childTask.status.replace(/_/g, ' ')}
+                {STATUS_LABELS[childTask.status] || childTask.status}
               </span>
             )}
           </td>
@@ -506,7 +507,7 @@ export function TaskListView({
                   >
                     {Object.values(Priorities).map((priority) => (
                       <option key={priority} value={priority}>
-                        {priority}
+                        {PRIORITY_LABELS[priority] || priority}
                       </option>
                     ))}
                   </select>
@@ -537,7 +538,7 @@ export function TaskListView({
                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(childTask.priority)} cursor-pointer hover:opacity-75`}
                 onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'priority', childTask.priority); }}
               >
-                {childTask.priority}
+                {PRIORITY_LABELS[childTask.priority] || childTask.priority}
               </span>
             )}
           </td>
@@ -1020,17 +1021,17 @@ export function TaskListView({
         }
       }
       else if (field === 'due_date') {
-        const dueDate = editValue;
-        
+        const dueDate = editValue || null;
+
         // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
         const originalTasks = [...tasks];
-        
+
         // Optimistic update cho UI - Chỉ cập nhật task được chọn
         updateSingleTaskInState(taskId, { due_date: dueDate });
-        
+
         try {
           // CÁCH MỚI: Sử dụng Redux dispatch
-          await dispatch(updateTaskDueDate({ taskId, dueDate })).unwrap();
+          await dispatch(updateTaskDueDate({ taskId, dueDate: dueDate || '' })).unwrap();
           console.log(`Đã cập nhật hạn thành: ${dueDate} (qua Redux)`);
           
           /* CÁCH CŨ: Sử dụng hook mutation (giữ lại để tham khảo)
@@ -1121,7 +1122,7 @@ export function TaskListView({
                 key={status} 
                 className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${getStatusColor(status as TaskStatus)}`}
               >
-                {status.replace(/_/g, ' ')}: {count}
+                {STATUS_LABELS[status] || status}: {count}
               </span>
             ))}
         </div>
@@ -1237,7 +1238,7 @@ export function TaskListView({
                             >
                               {Object.values(TaskStatuses).map((status) => (
                                 <option key={status} value={status}>
-                                  {status.replace(/_/g, ' ')}
+                                  {STATUS_LABELS[status] || status}
                                 </option>
                               ))}
                             </select>
@@ -1268,7 +1269,7 @@ export function TaskListView({
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)} cursor-pointer hover:opacity-75`}
                           onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'status', task.status); }}
                         >
-                          {task.status.replace(/_/g, ' ')}
+                          {STATUS_LABELS[task.status] || task.status}
                         </span>
                       )}
                     </td>
@@ -1286,7 +1287,7 @@ export function TaskListView({
                             >
                               {Object.values(Priorities).map((priority) => (
                                 <option key={priority} value={priority}>
-                                  {priority}
+                                  {PRIORITY_LABELS[priority] || priority}
                                 </option>
                               ))}
                             </select>
@@ -1317,7 +1318,7 @@ export function TaskListView({
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)} cursor-pointer hover:opacity-75`}
                           onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'priority', task.priority); }}
                         >
-                          {task.priority}
+                          {PRIORITY_LABELS[task.priority] || task.priority}
                         </span>
                       )}
                     </td>

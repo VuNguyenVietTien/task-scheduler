@@ -50,14 +50,14 @@ interface GraphQLTask {
 }
 
 const validateTaskStatus = (status: string): TaskStatus => {
-  const normalizedStatus = status.toLowerCase() as TaskStatus;
-  return Object.values(TaskStatuses).includes(normalizedStatus) 
-    ? normalizedStatus 
+  const normalizedStatus = status.toUpperCase() as TaskStatus;
+  return Object.values(TaskStatuses).includes(normalizedStatus)
+    ? normalizedStatus
     : TaskStatuses.TODO;
 };
 
 const validatePriority = (priority: string): Priority => {
-  const normalizedPriority = priority.toLowerCase() as Priority;
+  const normalizedPriority = priority.toUpperCase() as Priority;
   return Object.values(Priorities).includes(normalizedPriority)
     ? normalizedPriority
     : Priorities.LOW;

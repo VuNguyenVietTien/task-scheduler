@@ -3,28 +3,34 @@ import { gql } from '@apollo/client';
 export const GET_PROJECTS = gql`
   query GetProjects {
     projects {
-      projectId
-      name 
+      project_id
+      name
       description
-      owner
-      createdBy
       priority
       visibility
       tags
       progress
       category
       metadata
-      startDate
-      endDate
-      iconUrl
-      isPublic
+      start_date
+      end_date
+      icon_url
+      is_public
       status
-      memberCount
+      member_count
       owner {
-        userId
+        user_id
         email
-        name
-        avatarUrl
+        username
+        full_name
+        avatar_url
+      }
+      created_by {
+        user_id
+        email
+        username
+        full_name
+        avatar_url
       }
     }
   }
@@ -33,36 +39,39 @@ export const GET_PROJECTS = gql`
 export const GET_PROJECT_BY_ID = gql`
   query GetProjectById($projectId: UUID!) {
     project(project_id: $projectId) {
-      projectId
+      project_id
       name
-      description 
-      owner
-      createdBy
+      description
       priority
       visibility
       tags
       progress
       category
       metadata
-      startDate
-      endDate
-      iconUrl
-      isPublic
+      start_date
+      end_date
+      icon_url
+      is_public
       status
-      memberCount
+      member_count
+      user_role
       owner {
-        userId
+        user_id
         email
-        name
-        avatarUrl
+        username
+        full_name
+        avatar_url
       }
       members {
-        userId
-        email
-        name
-        avatarUrl
         role
-        joinedAt
+        joined_at
+        user {
+          user_id
+          email
+          username
+          full_name
+          avatar_url
+        }
       }
     }
   }

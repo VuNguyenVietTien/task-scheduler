@@ -34,9 +34,9 @@ export function MemberDashboardView({ activeTasks, tasksByStatus }: MemberDashbo
       {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <DashboardSummaryCard title="Tong cong viec" count={activeTasks.length} color="text-slate-800" />
-        <DashboardSummaryCard title="Dang lam" count={tasksByStatus['doing']?.length || 0} color="text-blue-600" />
-        <DashboardSummaryCard title="Cho xu ly" count={(tasksByStatus['todo']?.length || 0) + (tasksByStatus['pending']?.length || 0)} color="text-amber-600" />
-        <DashboardSummaryCard title="Can review" count={tasksByStatus['review']?.length || 0} color="text-purple-600" />
+        <DashboardSummaryCard title="Dang lam" count={tasksByStatus['DOING']?.length || 0} color="text-blue-600" />
+        <DashboardSummaryCard title="Cho xu ly" count={(tasksByStatus['TODO']?.length || 0) + (tasksByStatus['PENDING']?.length || 0)} color="text-amber-600" />
+        <DashboardSummaryCard title="Can review" count={tasksByStatus['REVIEW']?.length || 0} color="text-purple-600" />
       </div>
 
       {/* Task table */}

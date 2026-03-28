@@ -5,7 +5,7 @@
     "effort": 16,
     "priority_order": 1,
     "employee_id": "user1",
-    "status": "doing"
+    "status": "DOING"
   },
   {
     "task_id": 2,
@@ -13,7 +13,7 @@
     "effort": 32,
     "priority_order": 2,
     "employee_id": "user1",
-    "status": "todo"
+    "status": "TODO"
   },
   {
     "task_id": 3,
@@ -21,6 +21,6 @@
     "effort": 24,
     "priority_order": 3,
     "employee_id": "user1",
-    "status": "todo"
+    "status": "TODO"
   }
 ]

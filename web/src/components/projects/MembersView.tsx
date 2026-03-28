@@ -314,9 +314,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
       // Chuyển đổi role sang lowercase cho backend
       updateRole({
         variables: {
-          projectId,
-          userId,
-          role: toBackendRole(newRole) // Sử dụng hàm chuyển đổi
+          input: { project_id: projectId, user_id: userId, role: toBackendRole(newRole) }
         }
       });
     }
@@ -413,9 +411,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
     try {
       const { data } = await updateRole({
         variables: {
-          projectId,
-          userId,
-          role: toBackendRole(newRole) // Chuyển đổi sang lowercase trước khi gửi đi
+          input: { project_id: projectId, user_id: userId, role: toBackendRole(newRole) }
         },
         onError: (error) => {
           console.error('Error updating role:', error);
@@ -428,7 +424,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
         // Cập nhật redux store
         dispatch(updateMemberRoleInStore({
           userId,
-          role: toFrontendRole(data.updateProjectMember.role) // Chuyển đổi về định dạng frontend
+          role: toFrontendRole(data.update_project_member.role) // Chuyển đổi về định dạng frontend
         }));
         // Khi cập nhật thành công, xóa khỏi pending changes
         const newChanges = new Map(pendingChanges);
@@ -459,11 +455,11 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
       });
 
       if (data) {
-        setSuccess(`Đã cập nhật ${data.updateMultipleMembers.successCount} thành viên`);
-        
+        setSuccess(`Đã cập nhật ${data.update_multiple_members.success_count} thành viên`);
+
         // Chuyển đổi dữ liệu từ API và đưa vào Redux
-        const updatedRoles = data.updateMultipleMembers.members.map((member: any) => ({
-          userId: member.user.userId,
+        const updatedRoles = data.update_multiple_members.members.map((member: any) => ({
+          userId: member.user.user_id,
           role: toFrontendRole(member.role) // Chuyển từ backend về frontend
         }));
         
@@ -494,17 +490,15 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
       // Gọi mutation GraphQL để cập nhật vai trò
       const { data } = await updateRole({
         variables: {
-          projectId,
-          userId,
-          role: toBackendRole(newRole) // Chuyển đổi role thành lowercase
+          input: { project_id: projectId, user_id: userId, role: toBackendRole(newRole) }
         }
       });
-      
+
       if (data) {
         // Cập nhật Redux store
         dispatch(updateMemberRoleInStore({
           userId,
-          role: toFrontendRole(data.updateProjectMember.role) // Chuyển đổi dữ liệu trả về
+          role: toFrontendRole(data.update_project_member.role) // Chuyển đổi dữ liệu trả về
         }));
         
         // Xóa khỏi pendingChanges
@@ -548,18 +542,18 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
       
       if (data) {
         // Cập nhật Redux store
-        const processedUpdates = data.updateMultipleMembers.members.map((member: any) => ({
-          userId: member.user.userId,
+        const processedUpdates = data.update_multiple_members.members.map((member: any) => ({
+          userId: member.user.user_id,
           role: toFrontendRole(member.role) // Chuyển đổi dữ liệu trả về
         }));
-        
+
         dispatch(updateMultipleMemberRolesInStore(processedUpdates));
-        
+
         // Xóa tất cả pendingChanges
         setPendingChanges(new Map());
-        
+
         // Thông báo thành công
-        setSuccess(`Đã cập nhật ${data.updateMultipleMembers.successCount} thành viên`);
+        setSuccess(`Đã cập nhật ${data.update_multiple_members.success_count} thành viên`);
         
         // Không cần refetch, UI sẽ tự động cập nhật từ redux state
       }

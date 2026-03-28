@@ -210,7 +210,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
         let effectiveStartDate: Date | null = null;
         if (task.start_date) {
           effectiveStartDate = new Date(task.start_date);
-        } else if (task.status === 'done') {
+        } else if (task.status === 'DONE') {
           const doneDate = task.actual_end_date || task.updated_at || task.due_date || task.created_at;
           effectiveStartDate = doneDate ? new Date(doneDate) : new Date(today);
         } else {
@@ -220,7 +220,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
         if (effectiveStartDate < minDate) minDate = new Date(effectiveStartDate);
 
         // Determine effective end date (logic mirrors render loop)
-        const effectiveEndDate = (task.status === 'done')
+        const effectiveEndDate = (task.status === 'DONE')
           ? calculateTaskSchedule(effectiveStartDate, task.effort || 0).endDate
           : (task.due_date ? new Date(task.due_date) : calculateTaskSchedule(effectiveStartDate, task.effort || 0).endDate);
 
@@ -493,23 +493,23 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     if (autoSort) {
       console.log('Sắp xếp tasks theo priority vì autoSort=true và không có plan');
       const priorityOrder: Record<string, number> = {
-        critical: 0,
-        urgent: 1,
-        high: 2,
-        medium: 3,
-        low: 4
+        CRITICAL: 0,
+        URGENT: 1,
+        HIGH: 2,
+        MEDIUM: 3,
+        LOW: 4
       };
 
       result = [...result].sort((a, b) => {
         // 1. Sort by status: Active first, Done last
-        const isDoneA = a.status === 'done';
-        const isDoneB = b.status === 'done';
+        const isDoneA = a.status === 'DONE';
+        const isDoneB = b.status === 'DONE';
         if (isDoneA && !isDoneB) return 1;
         if (!isDoneA && isDoneB) return -1;
 
         // 2. Sort by priority
-        const aPriority = priorityOrder[a.priority?.toLowerCase() || 'medium'] ?? 3;
-        const bPriority = priorityOrder[b.priority?.toLowerCase() || 'medium'] ?? 3;
+        const aPriority = priorityOrder[a.priority?.toUpperCase() || 'MEDIUM'] ?? 3;
+        const bPriority = priorityOrder[b.priority?.toUpperCase() || 'MEDIUM'] ?? 3;
         return aPriority - bPriority;
       });
 
@@ -810,7 +810,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     }
 
     // Tạo dữ liệu cho kế hoạch mới - loại bỏ task done/close
-    const activeOrderedItems = orderedTaskItems.filter(item => !['done', 'close'].includes(item.status?.toLowerCase() || ''));
+    const activeOrderedItems = orderedTaskItems.filter(item => !['DONE', 'CLOSE'].includes(item.status?.toUpperCase() || ''));
     const planTasks: CreatePlanTaskDataInput[] = activeOrderedItems.map((item, index) => {
       // Kiểm tra nếu calculatedTaskDates là object và có thuộc tính cho taskId này
       const calculatedDates = typeof calculatedTaskDates === 'object' && calculatedTaskDates !== null
@@ -827,9 +827,9 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
 
       // Chuyển đổi priority thành đúng kiểu Priority nếu cần
       let taskPriority = item.priority as Priority | undefined;
-      // Đảm bảo priority hợp lệ (low, medium, high, urgent, critical)
-      if (taskPriority && !['low', 'medium', 'high', 'urgent', 'critical'].includes(taskPriority)) {
-        taskPriority = 'medium'; // Giá trị mặc định nếu không hợp lệ
+      // Đảm bảo priority hợp lệ (LOW, MEDIUM, HIGH, URGENT, CRITICAL)
+      if (taskPriority && !['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL'].includes(taskPriority)) {
+        taskPriority = 'MEDIUM'; // Giá trị mặc định nếu không hợp lệ
       }
 
       // Tạo dữ liệu theo kiểu yêu cầu của API (CreatePlanTaskDataInput) - camelCase cho GraphQL
@@ -960,7 +960,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     dispatch(updateAutoSort(true));
 
     // 2. Lọc bỏ task đã done/close, chỉ sắp xếp task chưa hoàn thành
-    const activeTasks = tasks.filter(task => !['done', 'close'].includes(task.status.toLowerCase()));
+    const activeTasks = tasks.filter(task => !['DONE', 'CLOSE'].includes(task.status.toUpperCase()));
     console.log(`Bắt đầu sắp xếp tự động cho ${activeTasks.length} tasks (bỏ ${tasks.length - activeTasks.length} task done/close)`);
     const sortedTasks = sortTasksByPriority(activeTasks);
 
@@ -1307,7 +1307,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                         }
 
                         if (!taskStartDate) {
-                          if (task.status === 'done') {
+                          if (task.status === 'DONE') {
                             // Nếu đã xong, ưu tiên dùng ngày thực tế xong > updated_at > due_date > created_at
                             // Tránh dùng "today" để không chen vào giữa timeline hiện tại
                             const doneDate = task.actual_end_date || task.updated_at || task.due_date || task.created_at;
@@ -1326,14 +1326,14 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                         // Tính end_date:
                         // Nếu Done: LUÔN dùng start + effort để hiển thị độ dài thực tế công việc
                         // Nếu Active: Ưu tiên due_date (deadline) nếu có, không thì tính theo effort
-                        const taskEndDate = (task.status === 'done')
+                        const taskEndDate = (task.status === 'DONE')
                           ? calculateTaskSchedule(taskStartDate, task.effort || 0).endDate
                           : (task.due_date ? new Date(task.due_date) : calculateTaskSchedule(taskStartDate, task.effort || 0).endDate);
 
                         // Nếu start > end (do default start=today mà end=quá khứ), swap hoặc skip
                         // Ở đây ta skip render bar nếu data không hợp lệ thay vì vẽ full
                         if (taskStartDate > taskEndDate) {
-                          if (task.status === 'done') console.warn(`Skipping Done Task ${task.title}: Start ${taskStartDate} > End ${taskEndDate}`);
+                          if (task.status === 'DONE') console.warn(`Skipping Done Task ${task.title}: Start ${taskStartDate} > End ${taskEndDate}`);
                           return null;
                         }
 

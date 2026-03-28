@@ -4,7 +4,7 @@ export const CREATE_NOTIFICATION = gql`
   mutation CreateNotification($input: CreateNotificationInput!) {
     create_notification(input: $input) {
       notification_id
-      type
+      type_
       message
       is_read
       created_at

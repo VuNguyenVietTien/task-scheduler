@@ -57,8 +57,8 @@ export default function TaskDescriptionPanel({
         variables,
         // Chỉ cập nhật cache nếu cần thiết, không làm refetch
         update: (cache, { data }) => {
-          if (data?.updateTask) {
-            console.log('Mutation trả về data thành công:', data.updateTask);
+          if (data?.update_task) {
+            console.log('Mutation trả về data thành công:', data.update_task);
             // Cập nhật state local
             const updatedTask = {
               ...currentTask,
@@ -78,7 +78,7 @@ export default function TaskDescriptionPanel({
       
       console.log('Kết quả mutation:', data);
       
-      if (data?.updateTask) {
+      if (data?.update_task) {
         toast.success('Cập nhật mô tả thành công!');
         return true;
       } else {

@@ -8,23 +8,23 @@ interface TaskStatusBadgeProps {
 export default function TaskStatusBadge({ status }: TaskStatusBadgeProps) {
   const getStatusColor = (status: TaskStatus) => {
     switch (status) {
-      case 'todo':
+      case 'TODO':
         return 'bg-gray-100 text-gray-800';
-      case 'doing':
+      case 'DOING':
         return 'bg-blue-100 text-blue-800';
-      case 'done':
+      case 'DONE':
         return 'bg-green-100 text-green-800';
-      case 'close':
+      case 'CLOSE':
         return 'bg-purple-100 text-purple-800';
-      case 'pending':
+      case 'PENDING':
         return 'bg-yellow-100 text-yellow-800';
-      case 'review':
+      case 'REVIEW':
         return 'bg-indigo-100 text-indigo-800';
-      case 'blocked':
+      case 'BLOCKED':
         return 'bg-red-100 text-red-800';
-      case 'rejected':
+      case 'REJECTED':
         return 'bg-pink-100 text-pink-800';
-      case 'archived':
+      case 'ARCHIVED':
         return 'bg-gray-300 text-gray-900';
       default:
         return 'bg-gray-100 text-gray-800';
@@ -33,27 +33,27 @@ export default function TaskStatusBadge({ status }: TaskStatusBadgeProps) {
 
   const getStatusLabel = (status: TaskStatus) => {
     switch (status) {
-      case 'todo':
+      case 'TODO':
         return 'Cần làm';
-      case 'doing':
+      case 'DOING':
         return 'Đang làm';
-      case 'done':
+      case 'DONE':
         return 'Hoàn thành';
-      case 'close':
+      case 'CLOSE':
         return 'Đóng';
-      case 'pending':
+      case 'PENDING':
         return 'Chờ xử lý';
-      case 'review':
+      case 'REVIEW':
         return 'Đang kiểm tra';
-      case 'blocked':
+      case 'BLOCKED':
         return 'Bị chặn';
-      case 'rejected':
+      case 'REJECTED':
         return 'Từ chối';
-      case 'archived':
+      case 'ARCHIVED':
         return 'Đã lưu trữ';
       default:
         // Trong trường hợp mở rộng type nhưng chưa xử lý tất cả các case
-        return String(status).charAt(0).toUpperCase() + String(status).slice(1);
+        return String(status).charAt(0).toUpperCase() + String(status).slice(1).toLowerCase();
     }
   };
 
@@ -62,4 +62,4 @@ export default function TaskStatusBadge({ status }: TaskStatusBadgeProps) {
       {getStatusLabel(status)}
     </span>
   );
-} 
+}
