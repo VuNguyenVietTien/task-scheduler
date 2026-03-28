@@ -15,13 +15,14 @@ export default function DocumentDetailPage() {
   const systemId = params?.systemId ?? '';
   const moduleId = params?.moduleId ?? '';
   const documentId = params?.documentId ?? '';
-  const { data, loading, refetch } = useQuery(GET_DOCUMENT, { variables: { id: documentId } });
+  const { data, loading, error, refetch } = useQuery(GET_DOCUMENT, { variables: { id: documentId } });
   const [createScreen] = useMutation(CREATE_SCREEN);
   const [showScreenForm, setShowScreenForm] = useState(false);
   const [screenName, setScreenName] = useState('');
   const [breakpoint, setBreakpoint] = useState('pc');
 
   if (loading) return <div className="p-6">Loading...</div>;
+  if (error) return <div className="p-6 text-red-500">Error: {error.message}</div>;
   const doc = data?.designDocument;
   if (!doc) return <div className="p-6">Document not found</div>;
 

@@ -4,7 +4,7 @@ import { GET_PROJECT_TASKS } from '@/graphql/queries/tasks';
 import { Task } from '@/types/task';
 
 interface UpdateTaskStatusResponse {
-  updateTaskStatus: {
+  update_task_status: {
     task_id: string;
     project_id: string;
     status: string;
@@ -14,7 +14,7 @@ interface UpdateTaskStatusResponse {
 
 interface UpdateTaskStatusVars {
   input: {
-    taskId: string;
+    task_id: string;
     status: string;
   };
 }
@@ -26,23 +26,23 @@ export function useUpdateTaskStatus() {
     },
     onCompleted: (data) => {
       console.log('Task status updated:', data);
-      
+
       // Broadcast an event to notify other components about the status change
       if (typeof window !== 'undefined') {
-        const event = new CustomEvent('task-status-updated', { 
-          detail: { 
-            taskId: data.updateTaskStatus.task_id,
-            newStatus: data.updateTaskStatus.status,
-            projectId: data.updateTaskStatus.project_id 
-          } 
+        const event = new CustomEvent('task-status-updated', {
+          detail: {
+            taskId: data.update_task_status.task_id,
+            newStatus: data.update_task_status.status,
+            projectId: data.update_task_status.project_id
+          }
         });
         window.dispatchEvent(event);
       }
     },
     update: (cache: ApolloCache<any>, { data }) => {
-      if (!data?.updateTaskStatus) return;
-      
-      const updatedTask = data.updateTaskStatus;
+      if (!data?.update_task_status) return;
+
+      const updatedTask = data.update_task_status;
       const projectId = updatedTask.project_id;
       
       try {
@@ -96,8 +96,8 @@ export function useUpdateTaskStatus() {
       }
     },
     refetchQueries: (result) => {
-      if (result.data?.updateTaskStatus) {
-        const projectId = result.data.updateTaskStatus.project_id;
+      if (result.data?.update_task_status) {
+        const projectId = result.data.update_task_status.project_id;
         if (projectId) {
           return [
             {

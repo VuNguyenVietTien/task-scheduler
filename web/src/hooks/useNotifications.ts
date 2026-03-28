@@ -16,9 +16,9 @@ export default function useNotifications() {
   const apolloClient = useApolloClient();
   
   // Fetch notifications
-  const { 
-    data: notificationsData, 
-    loading: notificationsLoading, 
+  const {
+    data: notificationsData,
+    loading: notificationsLoading,
     error: notificationsError,
     refetch: refetchNotifications
   } = useQuery(GET_NOTIFICATIONS, {
@@ -27,7 +27,7 @@ export default function useNotifications() {
       console.log('[useNotifications] Fetched notifications:', data?.notifications?.length || 0);
     }
   });
-  
+
   // Fetch notification count
   const {
     data: countData,
@@ -37,9 +37,9 @@ export default function useNotifications() {
   } = useQuery(GET_NOTIFICATION_COUNT, {
     fetchPolicy: 'network-only',
     onCompleted: (data) => {
-      if (data?.notificationCount) {
-        setUnreadCount(data.notificationCount.unread || 0);
-        console.log('[useNotifications] Unread count updated:', data.notificationCount.unread);
+      if (data?.notification_count) {
+        setUnreadCount(data.notification_count.unread || 0);
+        console.log('[useNotifications] Unread count updated:', data.notification_count.unread);
       }
     }
   });
@@ -78,7 +78,7 @@ export default function useNotifications() {
         if (existingData?.notifications) {
           // Check if this notification already exists to prevent duplicates
           const exists = existingData.notifications.some(
-            (n: BackendNotification) => n.notificationId === newNotification.notificationId
+            (n: BackendNotification) => n.notification_id === newNotification.notification_id
           );
           
           if (!exists) {
@@ -89,20 +89,20 @@ export default function useNotifications() {
                 notifications: [newNotification, ...existingData.notifications]
               }
             });
-            console.log('[useNotifications] Added new notification to cache:', newNotification.notificationId);
-            
+            console.log('[useNotifications] Added new notification to cache:', newNotification.notification_id);
+
             // Update the notification count
-            const countData = apolloClient.readQuery({ 
-              query: GET_NOTIFICATION_COUNT 
+            const countData = apolloClient.readQuery({
+              query: GET_NOTIFICATION_COUNT
             });
-            
-            if (countData?.notificationCount) {
-              const newUnreadCount = (countData.notificationCount.unread || 0) + 1;
+
+            if (countData?.notification_count) {
+              const newUnreadCount = (countData.notification_count.unread || 0) + 1;
               apolloClient.writeQuery({
                 query: GET_NOTIFICATION_COUNT,
                 data: {
-                  notificationCount: {
-                    ...countData.notificationCount,
+                  notification_count: {
+                    ...countData.notification_count,
                     unread: newUnreadCount
                   }
                 }
@@ -176,8 +176,8 @@ export default function useNotifications() {
       
       if (cachedData?.notifications) {
         const updatedNotifications = cachedData.notifications.map((notification: any) => {
-          if (notification.notificationId === notificationId) {
-            return { ...notification, isRead: true };
+          if (notification.notification_id === notificationId) {
+            return { ...notification, is_read: true };
           }
           return notification;
         });
@@ -208,17 +208,17 @@ export default function useNotifications() {
   // Convert backend notifications to frontend format
   const convertBackendNotification = (notification: BackendNotification): Notification => {
     return {
-      id: notification.notificationId || '',
-      userId: notification.userId,
+      id: notification.notification_id || '',
+      userId: notification.user_id,
       message: notification.message,
       type: notification.type as NotificationType,
-      isRead: notification.isRead,
-      createdAt: notification.createdAt,
-      projectId: notification.projectId,
-      taskId: notification.referenceType === 'TASK' ? notification.referenceId : undefined,
-      commentId: notification.referenceType === 'COMMENT' ? notification.referenceId : undefined,
-      senderId: notification.senderId,
-      link: notification.action ? notification.action : undefined
+      isRead: notification.is_read,
+      createdAt: notification.created_at,
+      projectId: notification.project_id,
+      taskId: notification.reference_type === 'TASK' ? notification.reference_id : undefined,
+      commentId: notification.reference_type === 'COMMENT' ? notification.reference_id : undefined,
+      senderId: notification.sender_id,
+      metadata: notification.metadata
     };
   };
   

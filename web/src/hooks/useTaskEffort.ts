@@ -6,8 +6,8 @@ import { Task } from '@/types/task';
 // Định nghĩa mutation riêng cho việc cập nhật effort
 const UPDATE_TASK_EFFORT = gql`
   mutation UpdateTaskEffort($input: UpdateTaskEffortInput!) {
-    updateTaskEffort(input: $input) {
-      taskId
+    update_task_effort(input: $input) {
+      task_id
       effort
     }
   }
@@ -28,7 +28,7 @@ export function useUpdateTaskEffort() {
       
       // Chuẩn bị input chỉ chứa taskId và effort
       const input = {
-        taskId,
+        task_id: taskId,
         effort: Number(effort)
       };
       
@@ -40,13 +40,12 @@ export function useUpdateTaskEffort() {
         variables: { input },
         errorPolicy: 'all',
         optimisticResponse: {
-          updateTask: {
+          update_task: {
             __typename: 'Task',
-            taskId: taskId,
+            task_id: taskId,
             effort: Number(effort),
-            // Giữ nguyên assignee từ cache để tránh bị null
             assignee: taskFromCache?.assignee,
-            assigneeId: taskFromCache?.assignee_id
+            // no assignee_id needed
           }
         }
       });
@@ -59,15 +58,15 @@ export function useUpdateTaskEffort() {
       }
       
       // Xử lý kết quả
-      const result = response.data?.updateTask;
-      
+      const result = response.data?.update_task;
+
       if (result) {
         const formattedResult = {
-          task_id: result.taskId,
+          task_id: result.task_id,
           effort: result.effort,
           // Đảm bảo giữ nguyên thông tin assignee
           assignee: result.assignee || taskFromCache?.assignee,
-          assignee_id: result.assignee?.userId || taskFromCache?.assignee_id
+          // assignee_id derived from assignee.user_id if needed
         };
         
         // Broadcast event để thông báo cập nhật
@@ -78,7 +77,7 @@ export function useUpdateTaskEffort() {
               effort: formattedResult.effort,
               // Thêm thông tin của assignee để các component khác có thể giữ nguyên
               assignee: formattedResult.assignee,
-              assigneeId: formattedResult.assignee_id
+              assigneeId: (formattedResult.assignee as any)?.user_id
             } 
           });
           window.dispatchEvent(event);
@@ -94,7 +93,7 @@ export function useUpdateTaskEffort() {
         effort,
         // Giữ nguyên thông tin assignee từ cache
         assignee: taskFromCache?.assignee, 
-        assignee_id: taskFromCache?.assignee_id 
+        // no assignee_id needed 
       };
     } catch (err) {
       console.error('Lỗi khi cập nhật công sức task:', err);
@@ -140,13 +139,13 @@ export function useUpdateTaskEffort() {
 // Định nghĩa lại mutation UPDATE_TASK
 const UPDATE_TASK = gql`
   mutation UpdateTask($input: UpdateTaskInput!) {
-    updateTask(input: $input) {
-      taskId
+    update_task(input: $input) {
+      task_id
       effort
       assignee {
-        userId
+        user_id
         username
-        avatarUrl
+        avatar_url
         role
       }
     }

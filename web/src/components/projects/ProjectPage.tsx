@@ -53,15 +53,16 @@ export default function ProjectPage({ id, initialTab }: ProjectPageProps) {
   useEffect(() => {
     if (project) {
       // Map dữ liệu từ Redux store sang ProjectData
+      const statusLower = project.status?.toLowerCase() ?? 'active';
       const mapped: ProjectData = {
         id: id,
         name: project.name,
         description: project.description || '',
-        dueDate: project.endDate,
-        members: project.memberCount,
-        status: project.status.toLowerCase() === 'completed' ? 'completed' :
-               project.status.toLowerCase() === 'on_hold' ? 'on-hold' :
-               'active'
+        dueDate: project.end_date,
+        members: project.member_count,
+        status: statusLower === 'completed' ? 'completed' :
+                statusLower === 'on_hold' ? 'on-hold' :
+                'active',
       };
       
       setProjectData(mapped);

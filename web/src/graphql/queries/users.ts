@@ -3,10 +3,10 @@ import { gql } from '@apollo/client';
 export const GET_USERS = gql`
   query GetUsers {
     users {
-      id
-      fullName
+      user_id
+      full_name
       email
-      avatarUrl
+      avatar_url
       role
     }
   }
@@ -14,12 +14,12 @@ export const GET_USERS = gql`
 
 export const GET_USER_BY_ID = gql`
   query GetUserById($userId: ID!) {
-    user(userId: $userId) {
-      id
+    user(user_id: $userId) {
+      user_id
       username
-      fullName
+      full_name
       email
-      avatarUrl
+      avatar_url
       role
     }
   }

@@ -6,24 +6,24 @@ import { PlusCircle, FolderPlus, Loader2, Users, Calendar } from 'lucide-react';
 import { GET_USER_PROJECTS } from '@/graphql/queries/project';
 
 interface Project {
-  projectId: string;
+  project_id: string;
   name: string;
   description?: string;
-  startDate?: string;
-  endDate?: string;
+  start_date?: string;
+  end_date?: string;
   status: string;
-  memberCount: number;
+  member_count: number;
   progress: number;
   category?: string;
   priority: string;
   visibility: string;
-  iconUrl?: string;
+  icon_url?: string;
   owner: {
-    userId: string;
+    user_id: string;
     email: string;
     username: string;
-    fullName: string;
-    avatarUrl?: string;
+    full_name: string;
+    avatar_url?: string;
   };
 }
 
@@ -118,8 +118,8 @@ export default function ProjectList() {
 
       {projects.map((project: Project) => (
         <Link
-          key={project.projectId}
-          href={`/projects/${project.projectId}`}
+          key={project.project_id}
+          href={`/projects/${project.project_id}`}
           className="group block p-6 bg-white rounded-xl border border-gray-200 hover:shadow-xl hover:border-blue-100 transition-all duration-300 transform hover:-translate-y-1"
         >
           {/* Project Header */}
@@ -157,11 +157,11 @@ export default function ProjectList() {
             <div className="flex items-center gap-4">
               <div className="flex items-center gap-1">
                 <Users className="w-4 h-4" />
-                <span>{project.memberCount}</span>
+                <span>{project.member_count}</span>
               </div>
               <div className="flex items-center gap-1">
                 <Calendar className="w-4 h-4" />
-                <span>{project.startDate ? new Date(project.startDate).toLocaleDateString() : 'Not set'}</span>
+                <span>{project.start_date ? new Date(project.start_date).toLocaleDateString() : 'Not set'}</span>
               </div>
             </div>
             <span className={`px-2.5 py-1 rounded-full text-xs font-medium ${project.visibility.toLowerCase() === 'private' ? 'bg-gray-100 text-gray-700' : 'bg-green-100 text-green-700'}`}>

@@ -3,44 +3,44 @@ import { GET_PROJECT_BY_ID } from '@/graphql/queries/project';
 
 export interface ProjectMember {
   role: string;
-  joinedAt: string;
+  joined_at: string;
   user: {
-    userId: string;
+    user_id: string;
     email: string;
     username: string;
-    fullName: string | null;
-    avatarUrl: string | null;
+    full_name: string | null;
+    avatar_url: string | null;
   };
 }
 
 export interface ProjectOwner {
-  userId: string;
+  user_id: string;
   email: string;
   username: string;
-  fullName: string | null;
-  avatarUrl: string | null;
+  full_name: string | null;
+  avatar_url: string | null;
 }
 
 export interface Project {
-  projectId: string;
+  project_id: string;
   name: string;
   description: string | null;
-  createdAt: string;
+  created_at: string;
   priority: string;
   visibility: string;
   tags: string[];
   progress: number;
   category: string;
   metadata: any;
-  startDate: string;
-  endDate: string;
-  iconUrl: string | null;
-  isPublic: boolean;
+  start_date: string;
+  end_date: string;
+  icon_url: string | null;
+  is_public: boolean;
   status: string;
-  memberCount: number;
+  member_count: number;
   owner: ProjectOwner;
   members: ProjectMember[];
-  userRole?: string; // Vai trò của người dùng hiện tại trong project (Admin, Member, Viewer, Guest, null)
+  user_role?: string;
 }
 
 export const useProject = (projectId: string) => {

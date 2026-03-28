@@ -2,39 +2,39 @@ import { gql } from '@apollo/client';
 
 export const GET_PROJECT_MEMBERS = gql`
   query GetProjectMembers($projectId: ID!) {
-    projectMembers(projectId: $projectId) {
+    project_members(project_id: $projectId) {
       user {
-        userId
+        user_id
         email
         username
-        fullName
-        avatarUrl
+        full_name
+        avatar_url
       }
       role
-      joinedAt
+      joined_at
     }
   }
 `;
 
 export const GET_PROJECT_TASKS = gql`
   query GetProjectTasks($projectId: ID!) {
-    projectTasks(projectId: $projectId) {
-      taskId
+    tasks(project_id: $projectId) {
+      task_id
       title
       description
       status
       priority
-      startDate
-      dueDate
+      start_date
+      due_date
       progress
       assignee {
-        id
+        user_id
         username
-        fullName
-        avatarUrl
+        full_name
+        avatar_url
       }
-      createdAt
-      updatedAt
+      created_at
+      updated_at
     }
   }
-`; 
+`;

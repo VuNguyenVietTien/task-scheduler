@@ -59,8 +59,8 @@ export function DashboardTaskTable({ title, tasks, columns, maxRows = 10, emptyM
   const displayed = tasks.slice(0, maxRows);
 
   const handleRowClick = (task: any) => {
-    if (task.projectId) {
-      router.push(`/projects/${task.projectId}?tab=list`);
+    if (task.project_id) {
+      router.push(`/projects/${task.project_id}?tab=list`);
     }
   };
 
@@ -87,7 +87,7 @@ export function DashboardTaskTable({ title, tasks, columns, maxRows = 10, emptyM
             <tbody className="divide-y divide-slate-100">
               {displayed.map((task, idx) => (
                 <tr
-                  key={task.taskId || idx}
+                  key={task.task_id || idx}
                   className="hover:bg-slate-50 cursor-pointer text-sm"
                   onClick={() => handleRowClick(task)}
                 >

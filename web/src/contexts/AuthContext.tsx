@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithGoogle, signOutUser } from '@/lib/firebase';
 import { loginUser, registerUser } from '@/lib/authApi';
+import { createBrowserClient } from '@/lib/supabase/client';
 
 interface ProviderData {
   providerId: string;
@@ -66,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         
         // Redirect to dashboard if on auth page
         if (window.location.pathname === '/auth') {
-          window.location.href = '/dashboard';
+          router.replace('/dashboard');
         }
       } else {
         console.log('[Auth] No authenticated user found');
@@ -119,6 +120,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       console.log('[Auth] Backend sync successful. User data:', data.user);
+
+      // Establish a Supabase session so middleware can validate the user
+      if (data.session?.properties?.email_otp) {
+        const supabase = createBrowserClient();
+        const { error: otpError } = await supabase.auth.verifyOtp({
+          email: firebaseUser.email!,
+          token: data.session.properties.email_otp,
+          type: 'email',
+        });
+        if (otpError) {
+          console.error('[Auth] Supabase OTP verification failed:', otpError.message);
+          throw new Error('Session establishment failed');
+        }
+      }
 
       // Update local state
       setUser(data.user);

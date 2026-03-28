@@ -2,11 +2,10 @@ import { ApolloClient, InMemoryCache, createHttpLink } from '@apollo/client';
 import { setContext } from '@apollo/client/link/context';
 import { getAuthToken } from './get-auth-token';
 
-const DESIGN_DOC_API_URL =
-  process.env.NEXT_PUBLIC_DESIGN_DOC_API_URL || 'http://localhost:8081';
-
+// Use the Next.js proxy route to avoid CORS and NEXT_PUBLIC URL issues.
+// The proxy forwards server-side to DESIGN_DOC_API_URL (see /api/design-doc/route.ts).
 const httpLink = createHttpLink({
-  uri: `${DESIGN_DOC_API_URL}/graphql`,
+  uri: '/api/design-doc',
 });
 
 const authLink = setContext(async (_, { headers }) => {

@@ -1,166 +1,163 @@
 import { gql } from '@apollo/client';
 
-// Query lấy tasks trong project
 export const GET_PROJECT_TASKS = gql`
   query GetTasks($projectId: ID!) {
-    tasks(projectId: $projectId) {
-      taskId
-      projectId
-      parentTaskId
+    tasks(project_id: $projectId) {
+      task_id
+      project_id
+      parent_task_id
       title
       assignee {
-        userId
+        user_id
         username
-        avatarUrl
+        avatar_url
         role
       }
-      startDate
-      dueDate
-      actualStartDate
-      actualEndDate
+      start_date
+      due_date
+      actual_start_date
+      actual_end_date
       effort
       progress
-      createdBy
-      createdAt
-      updatedAt
-      isDeleted
+      created_by
+      created_at
+      updated_at
+      is_deleted
       status
       priority
-      type
+      type_
       category
       tags
-      progressType
-      childTasks {
-        taskId
-        projectId
-        parentTaskId
+      progress_type
+      child_tasks {
+        task_id
+        project_id
+        parent_task_id
         title
         assignee {
-          userId
+          user_id
           username
-          avatarUrl
+          avatar_url
           role
         }
-        startDate
-        dueDate
+        start_date
+        due_date
         effort
         progress
         status
         priority
-        type
+        type_
         category
       }
     }
   }
 `;
 
-// Query để lấy chi tiết của một task theo ID
 export const GET_TASK_BY_ID = gql`
   query GetTaskById($taskId: ID!) {
-    task(taskId: $taskId) {
-      taskId
+    task(task_id: $taskId) {
+      task_id
       title
       description
       status
       priority
       effort
       progress
-      startDate
-      dueDate
-      actualStartDate
-      actualEndDate
-      createdAt
-      updatedAt
-      projectId
-      parentTaskId
+      start_date
+      due_date
+      actual_start_date
+      actual_end_date
+      created_at
+      updated_at
+      project_id
+      parent_task_id
       assignee {
-        userId
+        user_id
         username
-        avatarUrl
+        avatar_url
         role
       }
       creator {
-        userId
+        user_id
         username
-        avatarUrl
+        avatar_url
         role
       }
-      priorityOrder
-      type
+      priority_order
+      type_
       category
-      progressType
+      progress_type
       tags
     }
   }
 `;
 
-// Query mới: lấy tasks có phân trang và lọc
 export const GET_PROJECT_TASKS_PAGINATED = gql`
   query GetTasksPaginated(
-    $projectId: ID!, 
-    $page: Int, 
-    $pageSize: Int, 
+    $projectId: ID!
+    $page: Int
+    $pageSize: Int
     $filters: TaskFiltersInput
   ) {
-    tasksPaginated(
-      projectId: $projectId, 
-      page: $page, 
-      pageSize: $pageSize, 
+    tasks_paginated(
+      project_id: $projectId
+      page: $page
+      page_size: $pageSize
       filters: $filters
     ) {
       tasks {
-        taskId
-        projectId
-        parentTaskId
+        task_id
+        project_id
+        parent_task_id
         title
         assignee {
-          userId
+          user_id
           username
-          avatarUrl
+          avatar_url
           role
         }
-        startDate
-        dueDate
-        actualStartDate
-        actualEndDate
+        start_date
+        due_date
+        actual_start_date
+        actual_end_date
         effort
         progress
-        createdBy
-        createdAt
-        updatedAt
-        isDeleted
+        created_by
+        created_at
+        updated_at
+        is_deleted
         status
         priority
-        type
+        type_
         category
         tags
-        progressType
-        childTasks {
-          taskId
-          projectId
-          parentTaskId
+        progress_type
+        child_tasks {
+          task_id
+          project_id
+          parent_task_id
           title
           assignee {
-            userId
+            user_id
             username
-            avatarUrl
+            avatar_url
             role
           }
-          startDate
-          dueDate
+          start_date
+          due_date
           effort
           progress
           status
           priority
-          type
+          type_
           category
         }
       }
       pagination {
-        totalItems
-        totalPages
-        currentPage
-        pageSize
+        total_items
+        total_pages
+        current_page
+        page_size
       }
     }
   }
@@ -168,50 +165,48 @@ export const GET_PROJECT_TASKS_PAGINATED = gql`
 
 export const GET_TASK_COMMENTS = gql`
   query GetTaskComments($taskId: ID!) {
-    taskComments(taskId: $taskId) {
+    task_comments(task_id: $taskId) {
       id
       content
-      authorId
+      author_id
       username
-      createdAt
-      updatedAt
+      created_at
+      updated_at
     }
   }
 `;
 
-// Query lấy danh sách subtasks của một task
 export const GET_TASK_SUBTASKS = gql`
   query GetTaskSubtasks($taskId: ID!) {
-    taskSubtasks(taskId: $taskId) {
-      taskId
+    task_subtasks(task_id: $taskId) {
+      task_id
       title
       description
       status
       priority
       effort
       progress
-      startDate
-      dueDate
+      start_date
+      due_date
       assignee {
-        userId
+        user_id
         username
-        avatarUrl
+        avatar_url
         role
       }
-      priorityOrder
-      type
+      priority_order
+      type_
       category
     }
   }
 `;
 
-// Query để lấy thông tin cơ bản của task (chỉ ID và title)
 export const GET_TASK_BASIC_INFO = gql`
   query GetTaskBasicInfo($taskId: ID!) {
-    task(taskId: $taskId) {
-      taskId
+    task(task_id: $taskId) {
+      task_id
       title
-      projectId
+      project_id
     }
   }
 `;

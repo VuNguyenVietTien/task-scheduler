@@ -1,8 +1,8 @@
 'use client';
 import { useCallback } from 'react';
 import { useMutation } from '@apollo/client';
-import { PASTE_DESIGN } from '@/graphql/mutations/designs';
-import { useClipboardSvgPaste, SVGPasteResult } from '@/hooks/use-clipboard-svg-paste';
+import { PASTE_DESIGN, UPDATE_DESIGN_FROM_PASTE } from '@/graphql/mutations/designs';
+import { useClipboardPaste, PasteResult } from '@/hooks/use-clipboard-paste';
 
 interface Props {
   screenId: string;
@@ -10,28 +10,43 @@ interface Props {
   onPasted: () => void;
 }
 
-export default function PasteDesignZone({ screenId: _screenId, documentId, onPasted }: Props) {
+export default function PasteDesignZone({ screenId, documentId, onPasted }: Props) {
   const [pasteDesign] = useMutation(PASTE_DESIGN);
+  const [updateDesign] = useMutation(UPDATE_DESIGN_FROM_PASTE);
 
   const handlePaste = useCallback(
-    async (result: SVGPasteResult) => {
-      await pasteDesign({
-        variables: {
-          input: {
-            documentId,
-            screenName: 'Pasted Screen',
-            svgContent: result.svgContent,
+    async (result: PasteResult) => {
+      if (screenId) {
+        await updateDesign({
+          variables: {
+            screenId,
+            svgContent: result.content,
             svgLayers: result.layers,
-            breakpoint: 'pc',
+            contentType: result.contentType,
           },
-        },
-      });
+        });
+      } else {
+        await pasteDesign({
+          variables: {
+            input: {
+              documentId,
+              screenName: 'Pasted Screen',
+              svgContent: result.content,
+              svgLayers: result.layers,
+              breakpoint: 'pc',
+              frameWidth: result.width || null,
+              frameHeight: result.height || null,
+              contentType: result.contentType,
+            },
+          },
+        });
+      }
       onPasted();
     },
-    [pasteDesign, documentId, onPasted],
+    [screenId, pasteDesign, updateDesign, documentId, onPasted],
   );
 
-  const { isPasting, error, handlePaste: onClipboardPaste } = useClipboardSvgPaste(handlePaste);
+  const { isPasting, error, handlePaste: onClipboardPaste } = useClipboardPaste(handlePaste);
 
   return (
     <div
@@ -43,10 +58,10 @@ export default function PasteDesignZone({ screenId: _screenId, documentId, onPas
         <div className="text-6xl mb-4">📋</div>
         <h2 className="text-xl font-semibold mb-2">Paste Design Here</h2>
         <p className="text-gray-500 mb-4">
-          Copy a frame from Figma or Google Stitch, then press{' '}
+          Copy a frame from Figma, or paste a PNG/JPG screenshot, then press{' '}
           <kbd className="px-2 py-1 bg-gray-100 rounded font-mono text-sm">Ctrl+V</kbd>
         </p>
-        {isPasting && <p className="text-blue-600">Processing SVG...</p>}
+        {isPasting && <p className="text-blue-600">Processing paste...</p>}
         {error && <p className="text-red-600 text-sm">{error}</p>}
       </div>
     </div>

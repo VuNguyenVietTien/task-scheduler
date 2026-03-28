@@ -29,14 +29,6 @@ async fn main() -> std::io::Result<()> {
 
     tracing::info!("Database connected");
 
-    // Run migrations
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .expect("Failed to run migrations");
-
-    tracing::info!("Migrations applied");
-
     let schema = web::Data::new(create_schema(pool.clone(), config.clone()));
     let pool_data = web::Data::new(pool);
     let config_data = web::Data::new(config.clone());

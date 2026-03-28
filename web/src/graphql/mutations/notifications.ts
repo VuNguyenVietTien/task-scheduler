@@ -2,28 +2,28 @@ import { gql } from '@apollo/client';
 
 export const CREATE_NOTIFICATION = gql`
   mutation CreateNotification($input: CreateNotificationInput!) {
-    createNotification(input: $input) {
-      notificationId
+    create_notification(input: $input) {
+      notification_id
       type
       message
-      isRead
-      createdAt
+      is_read
+      created_at
       metadata
     }
   }
 `;
 
 export const MARK_NOTIFICATION_AS_READ = gql`
-  mutation MarkNotificationAsRead($notificationId: UUID!) {
-    markNotificationAsRead(notificationId: $notificationId) {
-      notificationId
-      isRead
+  mutation MarkNotificationAsRead($notificationId: ID!) {
+    mark_notification_as_read(notification_id: $notificationId) {
+      notification_id
+      is_read
     }
   }
 `;
 
 export const MARK_ALL_NOTIFICATIONS_AS_READ = gql`
   mutation MarkAllNotificationsAsRead {
-    markAllNotificationsAsRead
+    mark_all_notifications_as_read
   }
-`; 
+`;

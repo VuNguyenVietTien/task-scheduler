@@ -10,6 +10,7 @@ const yoga = createYoga({
   graphqlEndpoint: '/api/graphql',
   context: ({ request }) => createContext(request),
   fetchAPI: { Response },
+  maskedErrors: process.env.NODE_ENV === 'production',
 });
 
 export const GET = yoga;

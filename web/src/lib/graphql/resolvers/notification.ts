@@ -3,6 +3,10 @@ import { requireAuth } from '../utils/error-handler';
 import type { GraphQLContext } from '../context';
 
 export const notificationResolvers = {
+  Notification: {
+    // Map DB column 'type' to schema field 'type_'
+    type_: (parent: { type?: string | null }) => parent.type ?? null,
+  },
   Query: {
     notifications: async (_: unknown, _args: unknown, ctx: GraphQLContext) => {
       requireAuth(ctx.user);
@@ -22,6 +26,11 @@ export const notificationResolvers = {
     mark_all_notifications_read: async (_: unknown, _args: unknown, ctx: GraphQLContext) => {
       requireAuth(ctx.user);
       return notificationService.markAllAsRead(ctx.supabaseAdmin, ctx.user.id);
+    },
+    register_fcm_token: async (_: unknown, args: { token: string }, ctx: GraphQLContext) => {
+      requireAuth(ctx.user);
+      // FCM token storage not yet implemented — silently succeed
+      return true;
     },
   },
 };

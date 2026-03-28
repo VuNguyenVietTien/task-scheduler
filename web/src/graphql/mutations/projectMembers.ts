@@ -2,17 +2,17 @@ import { gql } from '@apollo/client';
 
 export const ADD_PROJECT_MEMBER = gql`
   mutation AddProjectMember($projectId: ID!, $input: AddMemberInput!) {
-    addProjectMember(projectId: $projectId, input: $input) {
-      memberId
-      userId
+    add_project_member(project_id: $projectId, input: $input) {
+      member_id
+      user_id
       role
-      joinedAt
+      joined_at
       user {
         id
         email
         username
-        fullName
-        avatarUrl
+        full_name
+        avatar_url
       }
     }
   }
@@ -20,17 +20,17 @@ export const ADD_PROJECT_MEMBER = gql`
 
 export const UPDATE_MEMBER_ROLE = gql`
   mutation UpdateMemberRole($projectId: ID!, $input: UpdateMemberRoleInput!) {
-    updateMemberRole(projectId: $projectId, input: $input) {
-      memberId
-      userId
+    update_member_role(project_id: $projectId, input: $input) {
+      member_id
+      user_id
       role
-      joinedAt
+      joined_at
       user {
         id
         email
         username
-        fullName
-        avatarUrl
+        full_name
+        avatar_url
       }
     }
   }
@@ -38,36 +38,36 @@ export const UPDATE_MEMBER_ROLE = gql`
 
 export const UPDATE_PROJECT_MEMBER_ROLE = gql`
   mutation UpdateProjectMemberRole($projectId: ID!, $userId: ID!, $role: MemberRole!) {
-    updateProjectMember(projectId: $projectId, userId: $userId, role: $role) {
+    update_project_member(project_id: $projectId, user_id: $userId, role: $role) {
       user {
-        userId
+        user_id
         email
-        fullName
+        full_name
         username
-        avatarUrl
+        avatar_url
       }
       role
-      joinedAt
+      joined_at
     }
   }
 `;
 
 export const UPDATE_MULTIPLE_MEMBER_ROLES = gql`
   mutation UpdateMultipleMemberRoles($projectId: ID!, $updates: [MemberRoleUpdate!]!) {
-    updateMultipleMembers(projectId: $projectId, updates: $updates) {
-      successCount
+    update_multiple_members(project_id: $projectId, updates: $updates) {
+      success_count
       members {
-        memberId
-        projectId
-        userId
+        member_id
+        project_id
+        user_id
         role
-        joinedAt
+        joined_at
         user {
           id
           email
           username
-          fullName
-          avatarUrl
+          full_name
+          avatar_url
         }
       }
     }
@@ -76,16 +76,15 @@ export const UPDATE_MULTIPLE_MEMBER_ROLES = gql`
 
 export const REMOVE_PROJECT_MEMBER = gql`
   mutation RemoveProjectMember($projectId: ID!, $userId: ID!) {
-    removeProjectMember(projectId: $projectId, userId: $userId)
+    remove_project_member(project_id: $projectId, user_id: $userId)
   }
 `;
 
-// New mutation for bulk member removal
 export const REMOVE_MULTIPLE_PROJECT_MEMBERS = gql`
   mutation RemoveMultipleProjectMembers($projectId: ID!, $memberIds: [ID!]!) {
-    removeMultipleProjectMembers(projectId: $projectId, memberIds: $memberIds) {
-      successCount
-      failedCount
+    remove_multiple_project_members(project_id: $projectId, member_ids: $memberIds) {
+      success_count
+      failed_count
     }
   }
-`; 
+`;

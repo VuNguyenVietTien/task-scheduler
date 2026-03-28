@@ -1,14 +1,13 @@
 import { useQuery } from '@apollo/client';
 import { useState, useEffect } from 'react';
-import { 
-  Task, 
-  TaskStatus, 
-  Priority, 
-  TaskType, 
-  TaskCategory, 
-  ProgressType, 
-  TaskTag, 
-  TaskAssignee,
+import {
+  Task,
+  TaskStatus,
+  Priority,
+  TaskType,
+  TaskCategory,
+  ProgressType,
+  TaskTag,
   TaskStatuses,
   Priorities,
   TaskFilter,
@@ -17,37 +16,37 @@ import {
 import { GET_PROJECT_TASKS, GET_PROJECT_TASKS_PAGINATED } from '@/graphql/queries/tasks';
 
 interface GraphQLTaskAssignee {
-  userId: string;
+  user_id: string;
   username: string;
-  avatarUrl?: string;
+  avatar_url?: string;
   role?: string;
 }
 
 interface GraphQLTask {
-  taskId: string;
-  projectId: string;
-  parentTaskId?: string;
+  task_id: string;
+  project_id: string;
+  parent_task_id?: string;
   title: string;
   description?: string;
   assignee?: GraphQLTaskAssignee;
-  priorityOrder: number;
-  startDate?: string;
-  dueDate?: string;
-  actualStartDate?: string;
-  actualEndDate?: string;
+  priority_order: number;
+  start_date?: string;
+  due_date?: string;
+  actual_start_date?: string;
+  actual_end_date?: string;
   effort?: number;
   progress?: number;
-  createdBy: string;
-  createdAt?: string;
-  updatedAt?: string;
-  isDeleted?: boolean;
+  created_by: string;
+  created_at?: string;
+  updated_at?: string;
+  is_deleted?: boolean;
   status: string;
   priority: string;
   type?: string;
   category?: string;
   tags?: string[];
-  progressType?: string;
-  childTasks?: GraphQLTask[];
+  progress_type?: string;
+  child_tasks?: GraphQLTask[];
 }
 
 const validateTaskStatus = (status: string): TaskStatus => {
@@ -92,45 +91,44 @@ const validateTaskTags = (tags: string[]): TaskTag[] => {
   }) as TaskTag[];
 };
 
-const transformAssignee = (assignee: GraphQLTaskAssignee | undefined): TaskAssignee | undefined => {
+const transformAssignee = (assignee: GraphQLTaskAssignee | undefined) => {
   if (!assignee) return undefined;
-  
+
   return {
-    userId: assignee.userId,
+    userId: assignee.user_id,
     username: assignee.username,
-    avatarUrl: assignee.avatarUrl,
+    avatarUrl: assignee.avatar_url,
     role: assignee.role
   };
 };
 
 const transformGraphQLTask = (graphqlTask: GraphQLTask): Task => {
   return {
-    task_id: graphqlTask.taskId,
-    project_id: graphqlTask.projectId,
-    parent_task_id: graphqlTask.parentTaskId,
+    task_id: graphqlTask.task_id,
+    project_id: graphqlTask.project_id,
+    parent_task_id: graphqlTask.parent_task_id,
     title: graphqlTask.title,
     description: graphqlTask.description,
-    assignee_id: graphqlTask.assignee?.userId,
-    assignee: transformAssignee(graphqlTask.assignee),
-    priority_order: graphqlTask.priorityOrder,
-    start_date: graphqlTask.startDate,
-    due_date: graphqlTask.dueDate,
-    actual_start_date: graphqlTask.actualStartDate,
-    actual_end_date: graphqlTask.actualEndDate,
+    assignee: transformAssignee(graphqlTask.assignee) as any,
+    priority_order: graphqlTask.priority_order,
+    start_date: graphqlTask.start_date,
+    due_date: graphqlTask.due_date,
+    actual_start_date: graphqlTask.actual_start_date,
+    actual_end_date: graphqlTask.actual_end_date,
     effort: graphqlTask.effort,
     progress: graphqlTask.progress,
-    created_by: graphqlTask.createdBy,
-    created_at: graphqlTask.createdAt,
-    updated_at: graphqlTask.updatedAt,
-    is_deleted: graphqlTask.isDeleted,
+    created_by: graphqlTask.created_by,
+    created_at: graphqlTask.created_at,
+    updated_at: graphqlTask.updated_at,
+    is_deleted: graphqlTask.is_deleted,
     status: validateTaskStatus(graphqlTask.status),
     priority: validatePriority(graphqlTask.priority),
     type: graphqlTask.type ? validateTaskType(graphqlTask.type) : undefined,
     category: graphqlTask.category ? validateTaskCategory(graphqlTask.category) : undefined,
-    progress_type: graphqlTask.progressType ? validateProgressType(graphqlTask.progressType) : undefined,
+    progress_type: graphqlTask.progress_type ? validateProgressType(graphqlTask.progress_type) : undefined,
     tags: graphqlTask.tags ? validateTaskTags(graphqlTask.tags) : undefined,
-    child_tasks: graphqlTask.childTasks 
-      ? graphqlTask.childTasks.map(transformGraphQLTask)
+    child_tasks: graphqlTask.child_tasks
+      ? graphqlTask.child_tasks.map(transformGraphQLTask)
       : undefined
   };
 };

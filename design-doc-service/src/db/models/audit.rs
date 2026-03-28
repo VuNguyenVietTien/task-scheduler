@@ -11,6 +11,6 @@ pub struct DocumentAudit {
     pub action: String,
     pub old_data: Option<serde_json::Value>,
     pub new_data: Option<serde_json::Value>,
-    pub changed_by: i64,
+    pub changed_by: String,
     pub changed_at: DateTime<Utc>,
 }

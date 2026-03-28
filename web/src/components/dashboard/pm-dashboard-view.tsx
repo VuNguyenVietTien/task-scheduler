@@ -5,14 +5,14 @@ import { DashboardSummaryCard } from './dashboard-summary-card';
 import { DashboardTaskTable, renderStatusBadge, renderPriorityBadge } from './dashboard-task-table';
 
 interface DashboardTask {
-  taskId: string;
+  task_id: string;
   title: string;
-  projectId: string;
+  project_id: string;
   status: string;
   priority: string;
   type: string | null;
-  dueDate: string | null;
-  assignee: { userId: string; username: string } | null;
+  due_date: string | null;
+  assignee: { user_id: string; username: string } | null;
 }
 
 interface PMDashboardViewProps {
@@ -48,8 +48,8 @@ export function PMDashboardView({ overdueTasks, doingTasks, bugTasks, criticalTa
         columns={[
           { key: 'title', label: 'Task' },
           { key: 'assignee', label: 'Nguoi thuc hien', render: (v: any) => v?.username || '-' },
-          { key: 'dueDate', label: 'Han', render: (v: string) => v ? new Date(v).toLocaleDateString('vi-VN') : '-' },
-          { key: 'daysOverdue', label: 'Tre (ngay)', render: (_v: any, row: any) => row.dueDate ? daysOverdue(row.dueDate) : '-' },
+          { key: 'due_date', label: 'Han', render: (v: string) => v ? new Date(v).toLocaleDateString('vi-VN') : '-' },
+          { key: 'daysOverdue', label: 'Tre (ngay)', render: (_v: any, row: any) => row.due_date ? daysOverdue(row.due_date) : '-' },
           { key: 'status', label: 'Trang thai', render: (v: string) => renderStatusBadge(v) },
         ]}
         emptyMessage="Khong co task tre han"
@@ -75,7 +75,7 @@ export function PMDashboardView({ overdueTasks, doingTasks, bugTasks, criticalTa
         columns={[
           { key: 'title', label: 'Task' },
           { key: 'assignee', label: 'Nguoi thuc hien', render: (v: any) => v?.username || '-' },
-          { key: 'dueDate', label: 'Han', render: (v: string) => v ? new Date(v).toLocaleDateString('vi-VN') : '-' },
+          { key: 'due_date', label: 'Han', render: (v: string) => v ? new Date(v).toLocaleDateString('vi-VN') : '-' },
           { key: 'priority', label: 'Uu tien', render: (v: string) => renderPriorityBadge(v) },
           { key: 'status', label: 'Trang thai', render: (v: string) => renderStatusBadge(v) },
         ]}

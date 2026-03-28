@@ -7,7 +7,7 @@ export const memberService = {
   async getMembers(supabase: Supabase, projectId: string) {
     const { data, error } = await supabase
       .from('project_members')
-      .select('*, user:users(*)')
+      .select('*, user:users!project_members_user_id_fkey(*)')
       .eq('project_id', projectId);
     if (error) throw error;
     return data;
@@ -33,6 +33,16 @@ export const memberService = {
       .single();
     if (error) throw error;
     return data;
+  },
+
+  async getMemberRole(supabase: Supabase, projectId: string, userId: string): Promise<string | null> {
+    const { data } = await supabase
+      .from('project_members')
+      .select('role')
+      .eq('project_id', projectId)
+      .eq('user_id', userId)
+      .single();
+    return data ? (data as { role: string }).role?.toUpperCase() ?? null : null;
   },
 
   async removeMember(supabase: Supabase, projectId: string, userId: string) {

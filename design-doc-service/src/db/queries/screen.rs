@@ -44,9 +44,10 @@ pub async fn update_screen(
     svg_layers: Option<&serde_json::Value>,
     frame_width: Option<i32>,
     frame_height: Option<i32>,
+    content_type: Option<&str>,
 ) -> Result<Screen, sqlx::Error> {
     sqlx::query_as::<_, Screen>(
-        "UPDATE screens SET name = COALESCE($2, name), svg_content = COALESCE($3, svg_content), svg_layers = COALESCE($4, svg_layers), frame_width = COALESCE($5, frame_width), frame_height = COALESCE($6, frame_height), updated_at = NOW() WHERE id = $1 RETURNING *",
+        "UPDATE screens SET name = COALESCE($2, name), svg_content = COALESCE($3, svg_content), svg_layers = COALESCE($4, svg_layers), frame_width = COALESCE($5, frame_width), frame_height = COALESCE($6, frame_height), content_type = COALESCE($7, content_type), updated_at = NOW() WHERE id = $1 RETURNING *",
     )
     .bind(id)
     .bind(name)
@@ -54,6 +55,21 @@ pub async fn update_screen(
     .bind(svg_layers)
     .bind(frame_width)
     .bind(frame_height)
+    .bind(content_type)
+    .fetch_one(pool)
+    .await
+}
+
+pub async fn clear_screen_design(pool: &PgPool, id: Uuid) -> Result<Screen, sqlx::Error> {
+    // Delete associated components so user starts fresh
+    sqlx::query("DELETE FROM components WHERE screen_id = $1")
+        .bind(id)
+        .execute(pool)
+        .await?;
+    sqlx::query_as::<_, Screen>(
+        "UPDATE screens SET svg_content = NULL, svg_layers = NULL, frame_width = NULL, frame_height = NULL, content_type = 'svg', updated_at = NOW() WHERE id = $1 RETURNING *",
+    )
+    .bind(id)
     .fetch_one(pool)
     .await
 }

@@ -1,126 +1,125 @@
 import { gql } from '@apollo/client';
-import { TaskStatus } from '@/types/task';
 
 export const UPDATE_TASK_STATUS = gql`
   mutation UpdateTaskStatus($input: UpdateTaskStatusInput!) {
-    updateTaskStatus(input: $input) {
-      taskId
-      projectId
-      parentTaskId
+    update_task_status(input: $input) {
+      task_id
+      project_id
+      parent_task_id
       title
       description
       assignee {
-        userId
+        user_id
         username
-        avatarUrl
+        avatar_url
         role
       }
-      priorityOrder
-      startDate
-      dueDate
-      actualStartDate
-      actualEndDate
+      priority_order
+      start_date
+      due_date
+      actual_start_date
+      actual_end_date
       effort
       progress
-      createdBy
-      createdAt
-      updatedAt
-      isDeleted
+      created_by
+      created_at
+      updated_at
+      is_deleted
       status
       priority
       type
       category
       tags
-      progressType
+      progress_type
     }
   }
 `;
 
 export const UPDATE_TASK_EFFORT = gql`
   mutation UpdateTaskEffort($input: UpdateTaskEffortInput!) {
-    updateTaskEffort(input: $input) {
-      taskId
-      projectId
-      parentTaskId
+    update_task_effort(input: $input) {
+      task_id
+      project_id
+      parent_task_id
       title
       description
       assignee {
-        userId
+        user_id
         username
-        avatarUrl
+        avatar_url
         role
       }
-      priorityOrder
-      startDate
-      dueDate
-      actualStartDate
-      actualEndDate
+      priority_order
+      start_date
+      due_date
+      actual_start_date
+      actual_end_date
       effort
       progress
-      createdBy
-      createdAt
-      updatedAt
-      isDeleted
+      created_by
+      created_at
+      updated_at
+      is_deleted
       status
       priority
       type
       category
       tags
-      progressType
+      progress_type
     }
   }
 `;
 
 export const UPDATE_TASK = gql`
   mutation UpdateTask($input: UpdateTaskInput!) {
-    updateTask(input: $input) {
-      taskId
-      projectId
-      parentTaskId
+    update_task(input: $input) {
+      task_id
+      project_id
+      parent_task_id
       title
       description
       assignee {
-        userId
+        user_id
         username
-        avatarUrl
+        avatar_url
         role
       }
-      priorityOrder
-      startDate
-      dueDate
-      actualStartDate
-      actualEndDate
+      priority_order
+      start_date
+      due_date
+      actual_start_date
+      actual_end_date
       effort
       progress
-      createdBy
-      createdAt
-      updatedAt
-      isDeleted
+      created_by
+      created_at
+      updated_at
+      is_deleted
       status
       priority
       type
       category
       tags
-      progressType
+      progress_type
     }
   }
 `;
 
 export const CREATE_TASK_COMMENT = gql`
   mutation CreateTaskComment($input: CreateCommentInput!) {
-    createComment(input: $input) {
+    create_comment(input: $input) {
       id
       content
-      authorId
+      author_id
       username
-      createdAt
-      updatedAt
+      created_at
+      updated_at
     }
   }
 `;
 
 export const DELETE_TASK_COMMENT = gql`
   mutation DeleteTaskComment($commentId: ID!) {
-    deleteComment(commentId: $commentId)
+    delete_comment(comment_id: $commentId)
   }
 `;

@@ -1,7 +1,8 @@
 'use client';
-import { useQuery } from '@apollo/client';
+import { useQuery, useMutation } from '@apollo/client';
 import { useParams } from 'next/navigation';
 import { GET_SCREEN } from '@/graphql/queries/designs';
+import { CLEAR_SCREEN_DESIGN } from '@/graphql/mutations/designs';
 import DesignViewerSplitPane from '@/components/designs/design-viewer-split-pane';
 import PasteDesignZone from '@/components/designs/paste-design-zone';
 import Link from 'next/link';
@@ -18,6 +19,13 @@ export default function ScreenViewerPage() {
   const documentId = params?.documentId ?? '';
   const screenId = params?.screenId ?? '';
   const { data, loading, refetch } = useQuery(GET_SCREEN, { variables: { id: screenId } });
+  const [clearDesign, { loading: clearing }] = useMutation(CLEAR_SCREEN_DESIGN);
+
+  const handleClearDesign = async () => {
+    if (!confirm('Clear this design? You can paste a new one after.')) return;
+    await clearDesign({ variables: { id: screenId } });
+    refetch();
+  };
 
   if (loading) return <div className="p-6">Loading screen...</div>;
   const screen = data?.screen;
@@ -36,6 +44,15 @@ export default function ScreenViewerPage() {
         <span className="text-xs px-2 py-1 rounded bg-gray-100">
           {screen.breakpoint?.toUpperCase()}
         </span>
+        {screen.svgContent && (
+          <button
+            onClick={handleClearDesign}
+            disabled={clearing}
+            className="ml-auto px-3 py-1 text-xs bg-red-50 text-red-600 border border-red-200 rounded hover:bg-red-100 transition-colors disabled:opacity-50"
+          >
+            {clearing ? 'Clearing...' : 'Replace Design'}
+          </button>
+        )}
       </div>
       {screen.svgContent ? (
         <DesignViewerSplitPane screen={screen} onRefresh={refetch} />

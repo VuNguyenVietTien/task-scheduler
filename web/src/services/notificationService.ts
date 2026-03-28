@@ -5,7 +5,7 @@ import { gql } from '@apollo/client';
 // FCM token registration mutation
 const SAVE_FCM_TOKEN = gql`
   mutation RegisterFcmToken($token: String!) {
-    registerFcmToken(token: $token)
+    register_fcm_token(token: $token)
   }
 `;
 
@@ -254,7 +254,7 @@ export class NotificationService {
       
       console.log('[NotificationService] Token saved to server response:', response);
       
-      if (response.data?.registerFcmToken) {
+      if (response.data?.register_fcm_token) {
         console.log('[NotificationService] Token saved successfully to server');
         return true;
       } else {

@@ -34,13 +34,13 @@ export function useTaskStatusUpdate() {
         const response = await updateTaskStatusMutation({
           variables: {
             input: {
-              taskId: variables.taskId,
+              task_id: variables.taskId,
               status: variables.newStatus.toLowerCase()
             }
           }
         });
 
-        const updatedTask = response.data?.updateTaskStatus;
+        const updatedTask = response.data?.update_task_status;
         
         if (!updatedTask) {
           throw new Error('Failed to update task status');

@@ -25,6 +25,13 @@ export async function middleware(request: NextRequest) {
     const { user, supabaseResponse } = await updateSession(request);
 
     if (!user) {
+      // Fallback: accept custom auth cookies from Firebase/Google login
+      const authToken = request.cookies.get('auth-token');
+      const userSession = request.cookies.get('user-session');
+      if (authToken && userSession) {
+        return NextResponse.next();
+      }
+
       const redirectUrl = new URL('/auth', request.url);
       return NextResponse.redirect(redirectUrl);
     }

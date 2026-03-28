@@ -5,14 +5,14 @@ import { DashboardSummaryCard } from './dashboard-summary-card';
 import { DashboardTaskTable, renderStatusBadge, renderPriorityBadge } from './dashboard-task-table';
 
 interface DashboardTask {
-  taskId: string;
+  task_id: string;
   title: string;
-  projectId: string;
+  project_id: string;
   status: string;
   priority: string;
   type: string | null;
-  dueDate: string | null;
-  assignee: { userId: string; username: string } | null;
+  due_date: string | null;
+  assignee: { user_id: string; username: string } | null;
 }
 
 interface MemberDashboardViewProps {
@@ -23,10 +23,10 @@ interface MemberDashboardViewProps {
 export function MemberDashboardView({ activeTasks, tasksByStatus }: MemberDashboardViewProps) {
   // Sort by due date ascending (soonest first), nulls at end
   const sortedTasks = [...activeTasks].sort((a, b) => {
-    if (!a.dueDate && !b.dueDate) return 0;
-    if (!a.dueDate) return 1;
-    if (!b.dueDate) return -1;
-    return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    if (!a.due_date && !b.due_date) return 0;
+    if (!a.due_date) return 1;
+    if (!b.due_date) return -1;
+    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
   });
 
   return (

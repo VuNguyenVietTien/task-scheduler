@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use crate::db::queries::document as document_queries;
 use crate::db::queries::external_link as external_link_queries;
+use crate::db::queries::flow as flow_queries;
 use crate::db::queries::screen as screen_queries;
 use crate::db::queries::tag as tag_queries;
 use crate::error::AppError;
@@ -18,7 +19,7 @@ pub struct DocumentVersionType {
     pub action: String,
     pub old_data: Option<serde_json::Value>,
     pub new_data: Option<serde_json::Value>,
-    pub changed_by: i64,
+    pub changed_by: String,
     pub changed_at: DateTime<Utc>,
 }
 
@@ -70,6 +71,14 @@ impl DocumentType {
             .await
             .map_err(|e| AppError::Database(e).into_graphql_error())?;
         Ok(tags.into_iter().map(|t| t.into()).collect())
+    }
+
+    async fn flows(&self, ctx: &Context<'_>) -> Result<Vec<super::flow::FlowType>> {
+        let gql_ctx = ctx.data::<GqlContext>()?;
+        let flows = flow_queries::list_flows(&gql_ctx.pool, self.id)
+            .await
+            .map_err(|e| AppError::Database(e).into_graphql_error())?;
+        Ok(flows.into_iter().map(|f| f.into()).collect())
     }
 
     /// Audit trail / version history for this document

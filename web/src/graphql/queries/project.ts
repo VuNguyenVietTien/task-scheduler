@@ -3,23 +3,23 @@ import { gql } from '@apollo/client';
 export const GET_USER_PROJECTS = gql`
   query GetUserProjects {
     projects {
-      projectId
+      project_id
       name
-      startDate
-      endDate 
+      start_date
+      end_date
       status
-      memberCount
+      member_count
       progress
       category
       priority
       visibility
-      iconUrl
+      icon_url
       owner {
-        userId
+        user_id
         email
         username
-        fullName
-        avatarUrl
+        full_name
+        avatar_url
       }
     }
   }
@@ -27,40 +27,40 @@ export const GET_USER_PROJECTS = gql`
 
 export const GET_PROJECT_BY_ID = gql`
   query GetProjectById($projectId: ID!) {
-    project(projectId: $projectId) {
-      projectId
+    project(project_id: $projectId) {
+      project_id
       name
       description
-      createdAt
+      created_at
       priority
       visibility
       tags
       progress
       category
       metadata
-      startDate
-      endDate
-      iconUrl
-      isPublic
+      start_date
+      end_date
+      icon_url
+      is_public
       status
-      memberCount
-      userRole
+      member_count
+      user_role
       owner {
-        userId
+        user_id
         email
         username
-        fullName
-        avatarUrl
+        full_name
+        avatar_url
       }
       members {
         role
-        joinedAt
+        joined_at
         user {
-          userId
+          user_id
           email
-          fullName
+          full_name
           username
-          avatarUrl
+          avatar_url
         }
       }
     }
@@ -69,27 +69,27 @@ export const GET_PROJECT_BY_ID = gql`
 
 export const CREATE_PROJECT = gql`
   mutation CreateProject($input: CreateProjectInput!) {
-    createProject(input: $input) {
-      projectId
+    create_project(input: $input) {
+      project_id
       name
       description
-      startDate
-      endDate 
+      start_date
+      end_date
       status
       priority
       visibility
       tags
       category
       metadata
-      iconUrl
-      isPublic
-      createdAt
+      icon_url
+      is_public
+      created_at
       owner {
-        userId
-        email 
+        user_id
+        email
         username
-        fullName
-        avatarUrl
+        full_name
+        avatar_url
       }
     }
   }

@@ -54,7 +54,7 @@ export const CREATE_SCREEN = gql`
   }
 `;
 
-/** Paste a new SVG design into a screen (creates or replaces svg_content + svg_layers). */
+/** Paste a new SVG or image design into a screen. */
 export const PASTE_DESIGN = gql`
   mutation PasteDesign($input: PasteDesignInput!) {
     pasteDesign(input: $input) {
@@ -64,25 +64,39 @@ export const PASTE_DESIGN = gql`
       svgLayers
       frameWidth
       frameHeight
+      contentType
     }
   }
 `;
 
-/** Update an existing screen's SVG content and layer tree in-place. */
+/** Update an existing screen's content and layer tree in-place. */
 export const UPDATE_DESIGN_FROM_PASTE = gql`
   mutation UpdateDesignFromPaste(
     $screenId: UUID!
     $svgContent: String!
     $svgLayers: JSON!
+    $contentType: String
   ) {
     updateDesignFromPaste(
       screenId: $screenId
       svgContent: $svgContent
       svgLayers: $svgLayers
+      contentType: $contentType
     ) {
       id
       svgContent
       svgLayers
+      contentType
+    }
+  }
+`;
+
+/** Clear SVG content from a screen, allowing a new design to be pasted. */
+export const CLEAR_SCREEN_DESIGN = gql`
+  mutation ClearScreenDesign($id: UUID!) {
+    clearScreenDesign(id: $id) {
+      id
+      svgContent
     }
   }
 `;
@@ -93,6 +107,7 @@ export const CREATE_COMPONENT = gql`
       id
       customId
       name
+      position
     }
   }
 `;
@@ -104,6 +119,7 @@ export const UPDATE_COMPONENT = gql`
       customId
       name
       descriptions
+      position
     }
   }
 `;

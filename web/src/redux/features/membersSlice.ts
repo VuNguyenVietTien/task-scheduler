@@ -37,8 +37,21 @@ export const fetchProjectMembers = createAsyncThunk(
       if (response.errors) {
         return rejectWithValue(response.errors[0].message);
       }
-      
-      return response.data.projectMembers;
+
+      const rawMembers = response.data.project_members ?? [];
+      return rawMembers.map((m: any) => ({
+        memberId: `member-${m.user.user_id}`,
+        userId: m.user.user_id,
+        role: toFrontendRole(m.role),
+        joinedAt: m.joined_at,
+        user: {
+          userId: m.user.user_id,
+          email: m.user.email,
+          username: m.user.username,
+          fullName: m.user.full_name,
+          avatarUrl: m.user.avatar_url,
+        },
+      }));
     } catch (error: any) {
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi tải danh sách thành viên');
     }

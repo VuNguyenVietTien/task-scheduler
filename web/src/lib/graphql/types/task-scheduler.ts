@@ -326,15 +326,17 @@ export const taskSchedulerTypeDefs = `
     project(project_id: ID!): Project
     projects: [Project!]!
     task(task_id: ID!): Task
-    tasks(project_id: ID!): [Task!]!
+    tasks(project_id: ID, assignee_id: ID, status: String): [Task!]!
     task_subtasks(task_id: ID!): [Task!]!
     comment(id: ID!): CommentResponse
     task_comments(task_id: ID!): [CommentResponse!]!
     get_project_plans(project_id: String!): [Plan!]!
     get_latest_project_plan(project_id: String!): Plan
     get_plan(id: String!): Plan
-    notifications(user_id: ID!): [Notification!]!
-    notification_count(user_id: ID!): NotificationCount!
+    project_members(project_id: ID!): [ProjectMember!]!
+    my_project_role(project_id: ID!): String
+    notifications: [Notification!]!
+    notification_count: NotificationCount!
   }
 
   extend type Mutation {
@@ -357,5 +359,6 @@ export const taskSchedulerTypeDefs = `
     login(input: LoginInput!): AuthResponse!
     mark_notification_read(notification_id: ID!): Boolean!
     mark_all_notifications_read(user_id: ID!): Boolean!
+    register_fcm_token(token: String!): Boolean!
   }
 `;

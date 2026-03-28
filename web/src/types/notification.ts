@@ -14,16 +14,16 @@ export type NotificationType = 'TASK_ASSIGNED' | 'TASK_REASSIGNED' | 'TASK_COMPL
 // action                    |
 // metadata                  |
 export interface BackendNotification {
-  notificationId?: string;
-  userId: string;
+  notification_id?: string;
+  user_id: string;
   message: string;
   type: string;
-  referenceType: string;
-  referenceId: string;
-  isRead: boolean;
-  createdAt: string;
-  projectId?: string;
-  senderId?: string;
+  reference_type: string;
+  reference_id: string;
+  is_read: boolean;
+  created_at: string;
+  project_id?: string;
+  sender_id?: string;
   action: string;
   metadata?: {
     project_id: string;

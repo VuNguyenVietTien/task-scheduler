@@ -20,7 +20,7 @@ export function useUpdateTaskStatus() {
       
       // Input chỉ chứa taskId và status
       const input = {
-        taskId,
+        task_id: taskId,
         status: statusKey
       };
       
@@ -32,9 +32,9 @@ export function useUpdateTaskStatus() {
         variables: { input },
         errorPolicy: 'all',
         optimisticResponse: {
-          updateTask: {
+          update_task: {
             __typename: 'Task',
-            taskId: taskId,
+            task_id: taskId,
             status: statusKey,
           }
         }
@@ -48,12 +48,12 @@ export function useUpdateTaskStatus() {
       }
       
       // Xử lý kết quả
-      const result = response.data?.updateTask;
+      const result = response.data?.update_task;
       
       // Thông báo cập nhật thành công
       if (result) {
         const formattedResult = {
-          task_id: result.taskId,
+          task_id: result.task_id,
           status: result.status?.toLowerCase() as TaskStatus,
         };
         
@@ -61,7 +61,7 @@ export function useUpdateTaskStatus() {
         if (typeof window !== 'undefined') {
           const event = new CustomEvent('task-status-updated', { 
             detail: { 
-              taskId,
+              task_id: taskId,
               status: formattedResult.status
             } 
           });
@@ -105,7 +105,7 @@ export function useUpdateTaskPriority() {
       
       // Input chỉ chứa taskId và priority
       const input = {
-        taskId,
+        task_id: taskId,
         priority: priorityKey
       };
       
@@ -117,9 +117,9 @@ export function useUpdateTaskPriority() {
         variables: { input },
         errorPolicy: 'all',
         optimisticResponse: {
-          updateTask: {
+          update_task: {
             __typename: 'Task',
-            taskId: taskId,
+            task_id: taskId,
             priority: priorityKey,
           }
         }
@@ -133,12 +133,12 @@ export function useUpdateTaskPriority() {
       }
       
       // Xử lý kết quả
-      const result = response.data?.updateTask;
+      const result = response.data?.update_task;
       
       // Thông báo cập nhật thành công
       if (result) {
         const formattedResult = {
-          task_id: result.taskId,
+          task_id: result.task_id,
           priority: result.priority?.toLowerCase() as Priority,
         };
         
@@ -146,7 +146,7 @@ export function useUpdateTaskPriority() {
         if (typeof window !== 'undefined') {
           const event = new CustomEvent('task-priority-updated', { 
             detail: { 
-              taskId,
+              task_id: taskId,
               priority: formattedResult.priority
             } 
           });
@@ -221,7 +221,7 @@ export function useUpdateTaskEffort() {
       
       // Input chỉ chứa taskId và effort, sử dụng mutation chuyên biệt
       const input = {
-        taskId,
+        task_id: taskId,
         effort: Number(effort)
       };
       
@@ -233,9 +233,9 @@ export function useUpdateTaskEffort() {
         variables: { input },
         errorPolicy: 'all',
         optimisticResponse: {
-          updateTaskEffort: { // Cập nhật response type
+          update_task_effort: { // Cập nhật response type
             __typename: 'Task',
-            taskId: taskId,
+            task_id: taskId,
             effort: Number(effort),
             // Giữ nguyên thông tin assignee trong phản hồi tối ưu
             assignee: assigneeFromCache
@@ -251,12 +251,12 @@ export function useUpdateTaskEffort() {
       }
       
       // Xử lý kết quả - Chú ý đổi sang updateTaskEffort
-      const result = response.data?.updateTaskEffort;
+      const result = response.data?.update_task_effort;
       
       // Thông báo cập nhật thành công
       if (result) {
         const formattedResult = {
-          task_id: result.taskId,
+          task_id: result.task_id,
           effort: result.effort,
           // Đảm bảo giữ nguyên thông tin assignee nếu không có từ API
           assignee: result.assignee || assigneeFromCache
@@ -266,7 +266,7 @@ export function useUpdateTaskEffort() {
         if (typeof window !== 'undefined') {
           const event = new CustomEvent('task-effort-updated', { 
             detail: { 
-              taskId,
+              task_id: taskId,
               effort: formattedResult.effort,
               // Thêm thông tin assignee vào event
               assignee: formattedResult.assignee
@@ -320,8 +320,8 @@ export function useUpdateTaskDueDate() {
       
       // Input chỉ chứa taskId và dueDate
       const input = {
-        taskId,
-        dueDate: formattedDueDate
+        task_id: taskId,
+        due_date: formattedDueDate
       };
       
       console.log(`Đang cập nhật hạn: ${formattedDueDate} (gốc: ${dueDate})`);
@@ -332,10 +332,10 @@ export function useUpdateTaskDueDate() {
         variables: { input },
         errorPolicy: 'all',
         optimisticResponse: {
-          updateTask: {
+          update_task: {
             __typename: 'Task',
-            taskId: taskId,
-            dueDate: formattedDueDate,
+            task_id: taskId,
+            due_date: formattedDueDate,
           }
         }
       });
@@ -348,20 +348,20 @@ export function useUpdateTaskDueDate() {
       }
       
       // Xử lý kết quả
-      const result = response.data?.updateTask;
+      const result = response.data?.update_task;
       
       // Thông báo cập nhật thành công
       if (result) {
         const formattedResult = {
-          task_id: result.taskId,
-          due_date: result.dueDate,
+          task_id: result.task_id,
+          due_date: result.due_date,
         };
         
         // Broadcast event cập nhật
         if (typeof window !== 'undefined') {
           const event = new CustomEvent('task-due-date-updated', { 
             detail: { 
-              taskId,
+              task_id: taskId,
               dueDate: formattedResult.due_date
             } 
           });
@@ -402,8 +402,8 @@ export function useUpdateTaskAssignee() {
     try {
       // Input chỉ chứa taskId và assigneeId
       const input = {
-        taskId,
-        assigneeId: assigneeId === '' ? null : assigneeId
+        task_id: taskId,
+        assignee_id: assigneeId === '' ? null : assigneeId
       };
       
       console.log(`Đang cập nhật người được giao: ${assigneeId}`);
@@ -414,10 +414,10 @@ export function useUpdateTaskAssignee() {
         variables: { input },
         errorPolicy: 'all',
         optimisticResponse: {
-          updateTask: {
+          update_task: {
             __typename: 'Task',
-            taskId: taskId,
-            assigneeId: input.assigneeId,
+            task_id: taskId,
+            assignee_id: input.assignee_id,
           }
         }
       });
@@ -430,20 +430,18 @@ export function useUpdateTaskAssignee() {
       }
       
       // Xử lý kết quả
-      const result = response.data?.updateTask;
+      const result = response.data?.update_task;
       
       // Thông báo cập nhật thành công
       if (result) {
         // Đảm bảo TypeScript nhận assignee có định dạng đúng (undefined thay vì null)
         const formattedResult: Partial<Task> = {
-          task_id: result.taskId,
-          // Chuyển null thành undefined để phù hợp với kiểu dữ liệu Task
-          assignee_id: result.assignee?.userId || undefined,
+          task_id: result.task_id,
           // Chuyển assignee từ null thành undefined để phù hợp với Task type
           assignee: result.assignee ? {
-            userId: result.assignee.userId,
+            userId: result.assignee.user_id,
             username: result.assignee.username,
-            avatarUrl: result.assignee.avatarUrl,
+            avatarUrl: result.assignee.avatar_url,
             role: result.assignee.role,
           } : undefined // Dùng undefined thay vì null
         };
@@ -452,8 +450,8 @@ export function useUpdateTaskAssignee() {
         if (typeof window !== 'undefined') {
           const event = new CustomEvent('task-assignee-updated', { 
             detail: { 
-              taskId,
-              assigneeId: formattedResult.assignee_id,
+              task_id: taskId,
+              assigneeId: assigneeId,
               assignee: formattedResult.assignee
             } 
           });
@@ -466,7 +464,7 @@ export function useUpdateTaskAssignee() {
       
       setIsUpdating(false);
       // Trả về đúng kiểu dữ liệu cho Task interface
-      return { task_id: taskId, assignee_id: undefined, assignee: undefined };
+      return { task_id: taskId, assignee: undefined };
     } catch (err) {
       console.error('Lỗi khi cập nhật người được giao task:', err);
       setError(err instanceof Error ? err : new Error(String(err)));

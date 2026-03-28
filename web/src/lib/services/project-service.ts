@@ -30,6 +30,16 @@ export const projectService = {
       .select()
       .single();
     if (error) throw error;
+
+    // Auto-add creator as manager member
+    if (data && input.owner_id) {
+      await supabase.from('project_members').insert({
+        project_id: (data as any).project_id,
+        user_id: input.owner_id,
+        role: 'manager',
+      } as never);
+    }
+
     return data;
   },
 

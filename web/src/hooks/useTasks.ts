@@ -105,9 +105,9 @@ export const useReorderTasks = () => {
 // API interface for updating task
 const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
   try {
-    // Chuyển đổi các khóa từ snake_case sang camelCase cho GraphQL API và đảm bảo kiểu dữ liệu đúng
+    // Input uses snake_case to match backend schema
     const input: Record<string, any> = {
-      taskId,
+      task_id: taskId,
     };
 
     // Thêm các trường cập nhật nếu có - CHỈ khi chúng thực sự tồn tại và khác undefined
@@ -132,72 +132,43 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
     if (updates.effort !== undefined) input.effort = Number(updates.effort);
     if (updates.progress !== undefined) input.progress = Number(updates.progress);
     
-    // Chuyển đổi các trường date từ snake_case sang camelCase và đảm bảo định dạng ISO chuẩn
     if (updates.start_date !== undefined) {
-      // Đảm bảo định dạng ISO đầy đủ cho datetime
-      if (updates.start_date) {
-        input.startDate = new Date(updates.start_date).toISOString();
-      } else {
-        input.startDate = null;
-      }
+      input.start_date = updates.start_date ? new Date(updates.start_date).toISOString() : null;
     }
 
     if (updates.due_date !== undefined) {
-      // Đảm bảo định dạng ISO đầy đủ cho datetime
-      if (updates.due_date) {
-        input.dueDate = new Date(updates.due_date).toISOString();
-      } else {
-        input.dueDate = null;
-      }
+      input.due_date = updates.due_date ? new Date(updates.due_date).toISOString() : null;
     }
 
     if (updates.actual_start_date !== undefined) {
-      // Đảm bảo định dạng ISO đầy đủ cho datetime
-      if (updates.actual_start_date) {
-        input.actualStartDate = new Date(updates.actual_start_date).toISOString();
-      } else {
-        input.actualStartDate = null;
-      }
+      input.actual_start_date = updates.actual_start_date ? new Date(updates.actual_start_date).toISOString() : null;
     }
 
     if (updates.actual_end_date !== undefined) {
-      // Đảm bảo định dạng ISO đầy đủ cho datetime
-      if (updates.actual_end_date) {
-        input.actualEndDate = new Date(updates.actual_end_date).toISOString();
-      } else {
-        input.actualEndDate = null;
-      }
+      input.actual_end_date = updates.actual_end_date ? new Date(updates.actual_end_date).toISOString() : null;
     }
-    
-    // Đối với assignee, CHỈ gửi khi nó được cung cấp trong updates
+
     if (updates.assignee !== undefined) {
-      // Nếu assignee là undefined, chuyển thành null để xóa assignee hiện tại
-      input.assigneeId = updates.assignee?.userId || null;
+      input.assignee_id = updates.assignee?.userId || null;
     }
-    
-    if (updates.priority_order !== undefined) input.priorityOrder = Number(updates.priority_order);
+
+    if (updates.priority_order !== undefined) input.priority_order = Number(updates.priority_order);
     if (updates.type !== undefined) input.type = updates.type;
     if (updates.category !== undefined) input.category = updates.category;
-    
-    // Xử lý đặc biệt cho progress_type - chuyển thành lowercase 
+
     if (updates.progress_type !== undefined) {
-      const progressTypeKey = String(updates.progress_type).toLowerCase();
-      input.progressType = progressTypeKey;
-      console.log(`ProgressType đã chuyển đổi thành: ${input.progressType} (gốc: ${updates.progress_type})`);
+      input.progress_type = String(updates.progress_type).toLowerCase();
     }
     
     if (updates.tags !== undefined) input.tags = updates.tags;
 
     console.log("Input gửi đến GraphQL:", input);
 
-    // Chuẩn bị optimistic response để cập nhật UI ngay lập tức
     const optimisticResponse = {
-      updateTask: {
+      update_task: {
         __typename: 'Task',
         ...input,
-        // Thêm các trường cần thiết từ task hiện tại
-        taskId: taskId,
-        // Các trường khác không thay đổi
+        task_id: taskId,
       }
     };
 
@@ -218,7 +189,7 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
     }
 
     // Dự phòng nếu không nhận được dữ liệu từ API
-    if (!response.data || !response.data.updateTask) {
+    if (!response.data || !response.data.update_task) {
       // Trả về dữ liệu cục bộ đã được cập nhật
       console.warn("Không nhận được dữ liệu từ API, sử dụng dữ liệu cục bộ");
       return {
@@ -227,39 +198,37 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
       } as Task;
     }
 
-    // Kết quả từ API đã được chuyển đổi từ dạng enum thành string trong backend
-    const result = response.data.updateTask;
-    
-    // Chuyển đổi từ camelCase về snake_case cho phù hợp với frontend
+    // Result is already snake_case from backend
+    const result = response.data.update_task;
+
     const formattedResult: Partial<Task> = {
-      task_id: result.taskId,
-      project_id: result.projectId,
-      parent_task_id: result.parentTaskId,
+      task_id: result.task_id,
+      project_id: result.project_id,
+      parent_task_id: result.parent_task_id,
       title: result.title,
       description: result.description,
-      // Đảm bảo status và priority được chuyển đổi đúng - chuyển về lowercase để khớp với enum ở frontend
       status: result.status?.toLowerCase() as TaskStatus,
       priority: result.priority?.toLowerCase() as Priority,
-      priority_order: result.priorityOrder,
-      start_date: result.startDate,
-      due_date: result.dueDate,
-      actual_start_date: result.actualStartDate,
-      actual_end_date: result.actualEndDate,
+      priority_order: result.priority_order,
+      start_date: result.start_date,
+      due_date: result.due_date,
+      actual_start_date: result.actual_start_date,
+      actual_end_date: result.actual_end_date,
       effort: result.effort,
       progress: result.progress,
       assignee: result.assignee ? {
-        userId: result.assignee.userId,
+        userId: result.assignee.user_id,
         username: result.assignee.username,
-        avatarUrl: result.assignee.avatarUrl,
+        avatarUrl: result.assignee.avatar_url,
         role: result.assignee.role,
       } : undefined,
-      created_by: result.createdBy,
-      created_at: result.createdAt,
-      updated_at: result.updatedAt,
-      is_deleted: result.isDeleted,
+      created_by: result.created_by,
+      created_at: result.created_at,
+      updated_at: result.updated_at,
+      is_deleted: result.is_deleted,
       type: result.type,
       category: result.category,
-      progress_type: result.progressType?.toLowerCase() as any,
+      progress_type: result.progress_type?.toLowerCase() as any,
       tags: result.tags,
     };
 

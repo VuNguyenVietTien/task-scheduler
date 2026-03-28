@@ -14,12 +14,28 @@ export const taskService = {
     return data;
   },
 
+  async getTasks(supabase: Supabase, filters: { project_id?: string; assignee_id?: string; status?: string }) {
+    let query = supabase
+      .from('tasks')
+      .select('*')
+      .eq('is_deleted', false)
+      .order('created_at', { ascending: false });
+
+    if (filters.project_id) query = query.eq('project_id', filters.project_id);
+    if (filters.assignee_id) query = query.eq('assignee_id', filters.assignee_id);
+    if (filters.status) query = query.eq('status', filters.status);
+
+    const { data, error } = await query;
+    if (error) throw error;
+    return data;
+  },
+
   async getTasksForProject(supabase: Supabase, projectId: string) {
     const { data, error } = await supabase
       .from('tasks')
       .select('*')
       .eq('project_id', projectId)
-      .order('position', { ascending: true });
+      .order('priority_order', { ascending: true });
     if (error) throw error;
     return data;
   },
@@ -29,7 +45,7 @@ export const taskService = {
       .from('tasks')
       .select('*')
       .eq('parent_task_id', taskId)
-      .order('position', { ascending: true });
+      .order('priority_order', { ascending: true });
     if (error) throw error;
     return data;
   },
@@ -90,7 +106,7 @@ export const taskService = {
     const updates = tasks.map(({ task_id, priority_order }) =>
       supabase
         .from('tasks')
-        .update({ position: priority_order } as never)
+        .update({ priority_order } as never)
         .eq('task_id', task_id)
     );
     await Promise.all(updates);

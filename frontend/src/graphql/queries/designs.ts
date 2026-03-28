@@ -77,6 +77,7 @@ export const GET_SCREEN = gql`
       svgLayers
       frameWidth
       frameHeight
+      contentType
       breakpoint
       components {
         id

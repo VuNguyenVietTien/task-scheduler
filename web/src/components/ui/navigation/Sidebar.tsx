@@ -1,22 +1,24 @@
 'use client';
 
-import React from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useQuery } from '@apollo/client';
 import { GET_USER_PROJECTS } from '@/graphql/queries/project';
 import { useSidebarState } from '@/hooks/use-sidebar-state';
 import { SidebarProjectTreeItem } from './sidebar-project-tree-item';
+import CreateProjectModal from '@/components/projects/create-project-modal';
 
 interface ProjectNode {
-  projectId: string;
+  project_id: string;
   name: string;
-  iconUrl?: string;
+  icon_url?: string;
   status?: string;
 }
 
 const Sidebar = () => {
   const pathname = usePathname();
+  const [modalOpen, setModalOpen] = useState(false);
   const { data, loading } = useQuery(GET_USER_PROJECTS, { fetchPolicy: 'cache-first' });
   const { toggleProject, isExpanded } = useSidebarState();
 
@@ -24,7 +26,9 @@ const Sidebar = () => {
   const isDashboardActive = pathname === '/' || pathname === '/dashboard';
 
   return (
-    <aside className="fixed top-16 left-0 h-[calc(100vh-64px)] w-60 bg-slate-900 text-slate-300 flex flex-col overflow-y-auto">
+    <>
+      <CreateProjectModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <aside className="fixed top-16 left-0 h-[calc(100vh-64px)] w-60 bg-slate-900 text-slate-300 flex flex-col overflow-y-auto">
       <nav className="flex-1 px-3 py-4 space-y-1">
         {/* Dashboard link */}
         <Link
@@ -43,8 +47,17 @@ const Sidebar = () => {
 
         {/* Projects section */}
         <div className="pt-4">
-          <div className="px-3 py-1 text-xs font-semibold text-slate-500 uppercase tracking-wider">
-            Du an
+          <div className="flex items-center justify-between px-3 py-1">
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Du an</span>
+            <button
+              onClick={() => setModalOpen(true)}
+              title="Tao du an moi"
+              className="text-slate-500 hover:text-slate-300 transition-colors"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+            </button>
           </div>
 
           {loading ? (
@@ -64,9 +77,9 @@ const Sidebar = () => {
             <div className="mt-1 space-y-0.5">
               {projects.map(project => (
                 <SidebarProjectTreeItem
-                  key={project.projectId}
+                  key={project.project_id}
                   project={project}
-                  isExpanded={isExpanded(project.projectId)}
+                  isExpanded={isExpanded(project.project_id)}
                   onToggle={toggleProject}
                 />
               ))}
@@ -74,7 +87,8 @@ const Sidebar = () => {
           )}
         </div>
       </nav>
-    </aside>
+      </aside>
+    </>
   );
 };
 

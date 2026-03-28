@@ -2,23 +2,23 @@ import { gql } from '@apollo/client';
 
 export const GET_PROJECT_MEMBERS = gql`
   query ProjectMembers($projectId: ID!) {
-    projectMembers(projectId: $projectId) {
+    project_members(project_id: $projectId) {
       role
-      joinedAt
+      joined_at
       user {
-        userId
+        user_id
         email
-        fullName
+        full_name
         username
-        avatarUrl
+        avatar_url
       }
     }
-    myProjectRole(projectId: $projectId)
+    my_project_role(project_id: $projectId)
   }
 `;
 
 export const GET_MY_PROJECT_ROLE = gql`
   query MyProjectRole($projectId: ID!) {
-    myProjectRole(projectId: $projectId)
+    my_project_role(project_id: $projectId)
   }
-`; 
+`;

@@ -1,9 +1,11 @@
 'use client';
 
+import { useState } from 'react';
 import { useQuery } from '@apollo/client';
 import Link from 'next/link';
 import { PlusCircle, FolderPlus, Loader2, Users, Calendar } from 'lucide-react';
 import { GET_USER_PROJECTS } from '@/graphql/queries/project';
+import CreateProjectModal from '@/components/projects/create-project-modal';
 
 interface Project {
   projectId: string;
@@ -48,6 +50,7 @@ const getStatusColor = (status: string) => {
 };
 
 export default function ProjectList() {
+  const [modalOpen, setModalOpen] = useState(false);
   const { data, loading, error, refetch } = useQuery(GET_USER_PROJECTS, {
     onError: (error) => {
       console.group('❌ GraphQL Query Error');
@@ -82,39 +85,44 @@ export default function ProjectList() {
 
   if (projects.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center min-h-[400px] text-center px-4">
-        <div className="relative">
-          <FolderPlus className="w-20 h-20 text-blue-500 mb-6 transform transition-transform hover:scale-110" />
-          <div className="absolute -top-2 -right-2 w-8 h-8 bg-blue-100 rounded-full animate-pulse" />
+      <>
+        <CreateProjectModal open={modalOpen} onClose={() => setModalOpen(false)} />
+        <div className="flex flex-col items-center justify-center min-h-[400px] text-center px-4">
+          <div className="relative">
+            <FolderPlus className="w-20 h-20 text-blue-500 mb-6 transform transition-transform hover:scale-110" />
+            <div className="absolute -top-2 -right-2 w-8 h-8 bg-blue-100 rounded-full animate-pulse" />
+          </div>
+          <h3 className="text-2xl font-bold text-gray-800 mb-3">
+            Start Your First Project
+          </h3>
+          <p className="text-gray-600 mb-8 max-w-md leading-relaxed">
+            Create a project to organize tasks, collaborate with your team, and track progress all in one place.
+          </p>
+          <button
+            onClick={() => setModalOpen(true)}
+            className="group relative inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-blue-200 transition-all duration-300 hover:-translate-y-0.5"
+          >
+            <PlusCircle className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
+            Create Project
+            <span className="absolute inset-0 rounded-xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+          </button>
         </div>
-        <h3 className="text-2xl font-bold text-gray-800 mb-3">
-          Start Your First Project
-        </h3>
-        <p className="text-gray-600 mb-8 max-w-md leading-relaxed">
-          Create a project to organize tasks, collaborate with your team, and track progress all in one place.
-        </p>
-        <Link
-          href="/projects/new"
-          className="group relative inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-xl font-semibold shadow-lg hover:shadow-blue-200 transition-all duration-300 hover:-translate-y-0.5"
-        >
-          <PlusCircle className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300" />
-          Create Project
-          <span className="absolute inset-0 rounded-xl bg-white/20 opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-        </Link>
-      </div>
+      </>
     );
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
-      <Link
-        href="/projects/new"
-        className="relative flex flex-col items-center justify-center p-6 bg-gradient-to-b from-blue-50 to-white border border-blue-100 rounded-xl hover:shadow-xl transition-all duration-300 group min-h-[200px] overflow-hidden"
-      >
-        <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/5 to-blue-500/0 transform -skew-y-12 group-hover:animate-shine" />
-        <PlusCircle className="w-12 h-12 text-blue-500 group-hover:scale-110 transition-transform duration-300 mb-4" />
-        <span className="font-medium text-blue-600 group-hover:text-blue-700">Create New Project</span>
-      </Link>
+    <>
+      <CreateProjectModal open={modalOpen} onClose={() => setModalOpen(false)} />
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 p-6">
+        <button
+          onClick={() => setModalOpen(true)}
+          className="relative flex flex-col items-center justify-center p-6 bg-gradient-to-b from-blue-50 to-white border border-blue-100 rounded-xl hover:shadow-xl transition-all duration-300 group min-h-[200px] overflow-hidden"
+        >
+          <div className="absolute inset-0 bg-gradient-to-r from-blue-500/0 via-blue-500/5 to-blue-500/0 transform -skew-y-12 group-hover:animate-shine" />
+          <PlusCircle className="w-12 h-12 text-blue-500 group-hover:scale-110 transition-transform duration-300 mb-4" />
+          <span className="font-medium text-blue-600 group-hover:text-blue-700">Create New Project</span>
+        </button>
 
       {projects.map((project: Project) => (
         <Link
@@ -170,6 +178,7 @@ export default function ProjectList() {
           </div>
         </Link>
       ))}
-    </div>
+      </div>
+    </>
   );
 }

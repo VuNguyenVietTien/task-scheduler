@@ -3,13 +3,13 @@ use uuid::Uuid;
 use crate::db::models::tag::{Tag, EntityTag};
 
 pub async fn list_tags(pool: &PgPool) -> Result<Vec<Tag>, sqlx::Error> {
-    sqlx::query_as::<_, Tag>("SELECT * FROM tags ORDER BY name")
+    sqlx::query_as::<_, Tag>("SELECT * FROM design_tags ORDER BY name")
         .fetch_all(pool)
         .await
 }
 
 pub async fn create_tag(pool: &PgPool, name: &str, color: Option<&str>) -> Result<Tag, sqlx::Error> {
-    sqlx::query_as::<_, Tag>("INSERT INTO tags (name, color) VALUES ($1, $2) RETURNING *")
+    sqlx::query_as::<_, Tag>("INSERT INTO design_tags (name, color) VALUES ($1, $2) RETURNING *")
         .bind(name)
         .bind(color)
         .fetch_one(pool)
@@ -17,7 +17,7 @@ pub async fn create_tag(pool: &PgPool, name: &str, color: Option<&str>) -> Resul
 }
 
 pub async fn delete_tag(pool: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
-    let result = sqlx::query("DELETE FROM tags WHERE id = $1")
+    let result = sqlx::query("DELETE FROM design_tags WHERE id = $1")
         .bind(id)
         .execute(pool)
         .await?;
@@ -30,7 +30,7 @@ pub async fn get_entity_tags(
     entity_id: Uuid,
 ) -> Result<Vec<Tag>, sqlx::Error> {
     sqlx::query_as::<_, Tag>(
-        "SELECT t.* FROM tags t JOIN entity_tags et ON t.id = et.tag_id WHERE et.entity_type = $1 AND et.entity_id = $2 ORDER BY t.name",
+        "SELECT t.* FROM design_tags t JOIN entity_tags et ON t.id = et.tag_id WHERE et.entity_type = $1 AND et.entity_id = $2 ORDER BY t.name",
     )
     .bind(entity_type)
     .bind(entity_id)

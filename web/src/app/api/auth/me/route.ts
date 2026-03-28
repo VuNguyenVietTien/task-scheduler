@@ -25,7 +25,7 @@ export async function GET() {
       const user = {
         id: sessionData.userId,
         email: sessionData.email,
-        name: sessionData.email.split('@')[0],
+        name: sessionData.name || sessionData.email.split('@')[0],
         emailVerified: true
       };
 

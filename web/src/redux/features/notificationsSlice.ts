@@ -24,16 +24,16 @@ interface NotificationsState {
 // Convert backend notification format to frontend format
 const convertBackendNotification = (notification: BackendNotification): Notification => {
   return {
-    id: notification.notificationId || '',
-    userId: notification.userId,
+    id: notification.notification_id || '',
+    userId: notification.user_id,
     message: notification.message,
-    type: notification.type as any,
-    isRead: notification.isRead,
-    createdAt: notification.createdAt,
-    projectId: notification.projectId,
-    taskId: notification.referenceType === 'TASK' ? notification.referenceId : undefined,
-    commentId: notification.referenceType === 'COMMENT' ? notification.referenceId : undefined,
-    senderId: notification.senderId,
+    type: ((notification as any).type_ || notification.type) as any,
+    isRead: notification.is_read,
+    createdAt: notification.created_at,
+    projectId: notification.project_id,
+    taskId: notification.reference_type === 'TASK' ? notification.reference_id : undefined,
+    commentId: notification.reference_type === 'COMMENT' ? notification.reference_id : undefined,
+    senderId: notification.sender_id,
     metadata: notification.metadata
   };
 };
@@ -77,7 +77,7 @@ export const fetchNotificationCount = createAsyncThunk(
         fetchPolicy: 'network-only'
       });
       
-      return data.notificationCount || { total: 0, unread: 0 };
+      return data.notification_count || { total: 0, unread: 0 };
     } catch (error: any) {
       console.error('[Redux] Error fetching notification count:', error);
       return rejectWithValue(error.message || 'Failed to fetch notification count');

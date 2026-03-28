@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 
 interface Project {
-  projectId: string;
+  project_id: string;
   name: string;
-  iconUrl?: string;
+  icon_url?: string;
   status?: string;
 }
 
@@ -30,14 +30,14 @@ export function SidebarProjectTreeItem({ project, isExpanded, onToggle }: Sideba
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const isActiveProject = pathname === `/projects/${project.projectId}`;
+  const isActiveProject = pathname === `/projects/${project.project_id}`;
   const activeTab = isActiveProject ? (searchParams.get('tab') || 'list') : null;
 
   return (
     <div className={isExpanded ? 'bg-slate-800/50 rounded-md' : ''}>
       {/* Project header */}
       <button
-        onClick={() => onToggle(project.projectId)}
+        onClick={() => onToggle(project.project_id)}
         className={`w-full flex items-center gap-2 px-3 py-2 rounded-md text-sm transition-colors duration-200 hover:bg-slate-800 ${
           isActiveProject && !isExpanded ? 'text-blue-400' : 'text-slate-300'
         }`}
@@ -71,7 +71,7 @@ export function SidebarProjectTreeItem({ project, isExpanded, onToggle }: Sideba
             return (
               <Link
                 key={tab.id}
-                href={`/projects/${project.projectId}?tab=${tab.id}`}
+                href={`/projects/${project.project_id}?tab=${tab.id}`}
                 className={`flex items-center gap-2 py-1.5 px-2 rounded text-sm transition-colors duration-200 ${
                   isActive
                     ? 'text-blue-400 bg-blue-500/10'

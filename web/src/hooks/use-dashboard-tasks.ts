@@ -5,18 +5,13 @@ import { useQuery } from '@apollo/client';
 import { GET_DASHBOARD_TASKS } from '@/graphql/queries/dashboard';
 
 interface DashboardTask {
-  taskId: string;
+  task_id: string;
   title: string;
-  projectId: string;
+  project_id: string;
   status: string;
   priority: string;
-  type: string | null;
-  dueDate: string | null;
-  assignee: {
-    userId: string;
-    username: string;
-    avatarUrl?: string;
-  } | null;
+  type_: string | null;
+  due_date: string | null;
 }
 
 /**
@@ -42,8 +37,8 @@ export function useDashboardTasks(userId: string, role: string) {
     );
 
     const overdueTasks = activeTasks.filter(t => {
-      if (!t.dueDate) return false;
-      return new Date(t.dueDate) < now;
+      if (!t.due_date) return false;
+      return new Date(t.due_date) < now;
     });
 
     const doingTasks = activeTasks.filter(
@@ -51,7 +46,7 @@ export function useDashboardTasks(userId: string, role: string) {
     );
 
     const bugTasks = activeTasks.filter(
-      t => t.type?.toLowerCase() === 'bug'
+      t => t.type_?.toLowerCase() === 'bug'
     );
 
     const criticalTasks = activeTasks.filter(
