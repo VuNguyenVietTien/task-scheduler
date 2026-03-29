@@ -354,6 +354,14 @@ const tasksSlice = createSlice({
       state.tasks = [];
       state.pagination = initialState.pagination;
       state.filters = {};
+    },
+    // Sync a single task's fields locally without refetching
+    updateTaskLocally: (state, action: PayloadAction<{ taskId: string; updates: Partial<Task> }>) => {
+      const { taskId, updates } = action.payload;
+      const idx = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
+      if (idx >= 0) {
+        state.tasks[idx] = { ...state.tasks[idx], ...updates };
+      }
     }
   },
   extraReducers: (builder) => {
@@ -485,5 +493,5 @@ const tasksSlice = createSlice({
   }
 });
 
-export const { setFilter, setPage, setPageSize, resetTasks } = tasksSlice.actions;
+export const { setFilter, setPage, setPageSize, resetTasks, updateTaskLocally } = tasksSlice.actions;
 export default tasksSlice.reducer; 

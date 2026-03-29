@@ -262,6 +262,14 @@ const taskOrderSlice = createSlice({
     updateAutoSort: (state, action: PayloadAction<boolean>) => {
       state.autoSort = action.payload;
     },
+    // Update a single task's fields in orderedTasks (for modal edits with active plan)
+    updateOrderedTaskItem: (state, action: PayloadAction<{ taskId: string; updates: Partial<TaskOrderItem> }>) => {
+      const { taskId, updates } = action.payload;
+      const idx = state.orderedTasks.findIndex(t => t.taskId === taskId);
+      if (idx >= 0) {
+        state.orderedTasks[idx] = { ...state.orderedTasks[idx], ...updates };
+      }
+    },
   },
   extraReducers: (builder) => {
     // Xử lý khi load plan từ server
@@ -468,7 +476,8 @@ export const {
   initializeFromTasks,
   updateCalculatedDates,
   updateTaskOrderAndDates,
-  updateAutoSort
+  updateAutoSort,
+  updateOrderedTaskItem
 } = taskOrderSlice.actions;
 
 // Selectors

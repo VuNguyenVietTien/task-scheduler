@@ -54,21 +54,9 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
   const { members: reduxMembers, loading: loadingMembers } = useAppSelector(state => state.members);
   const { plans } = useAppSelector(state => state.plans);
 
-  const handleTasksUpdated = useCallback(() => {
-    dispatch(fetchProjectTasks(project.id));
-  }, [dispatch, project.id]);
-
-  useEffect(() => {
-    const handleTaskStatusUpdate = () => {
-      dispatch(fetchProjectTasks(project.id));
-    };
-
-    window.addEventListener('task-status-updated', handleTaskStatusUpdate);
-
-    return () => {
-      window.removeEventListener('task-status-updated', handleTaskStatusUpdate);
-    };
-  }, [dispatch, project.id]);
+  // No-op: Redux store is already updated by thunk/updateTaskLocally after drag-drop or modal edits.
+  // A full refetch here causes an unnecessary page reload effect.
+  const handleTasksUpdated = useCallback(() => {}, []);
 
   useEffect(() => {
     // Skip if we've already fetched for this project

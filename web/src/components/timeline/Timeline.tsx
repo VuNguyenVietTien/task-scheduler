@@ -52,7 +52,8 @@ import {
   selectCalculatedTaskDates,
   selectIsPlanLoaded,
   updateAutoSort,
-  selectAutoSort
+  selectAutoSort,
+  updateOrderedTaskItem
 } from '@/redux/features/taskOrderStore';
 import { convertTaskOrderToTask, isWeekend, getNextWorkDay, findNextAvailableStartDate, calculateTaskSchedule, WorkSchedule, processTasksAndUpdateStore, processTasksBasedOnPlan } from '@/utils/taskScheduler';
 import { useParams } from 'next/navigation';
@@ -543,10 +544,22 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     onTaskClick?.(taskId);
   }, [tasks, onTaskClick]);
 
-  // Sync modal changes back
+  // Sync modal changes back to timeline state + taskOrderStore (for Gantt bars)
+  // Note: TaskDetail already dispatches updateTaskLocally to tasksSlice
   const handleTaskDetailUpdate = useCallback((taskId: string, updates: Partial<Task>) => {
     setSelectedTaskForDetail(prev => prev ? { ...prev, ...updates } : null);
-  }, []);
+    // Update taskOrderStore directly so Gantt bars reflect changes (especially with active plan)
+    const orderUpdates: Record<string, unknown> = {};
+    if (updates.status) orderUpdates.status = updates.status;
+    if (updates.priority) orderUpdates.priority = updates.priority;
+    if (updates.effort !== undefined) orderUpdates.effort = updates.effort;
+    if (updates.start_date !== undefined) orderUpdates.startDate = updates.start_date;
+    if (updates.due_date !== undefined) orderUpdates.endDate = updates.due_date;
+    if (updates.title !== undefined) orderUpdates.title = updates.title;
+    if (Object.keys(orderUpdates).length > 0) {
+      dispatch(updateOrderedTaskItem({ taskId, updates: orderUpdates }));
+    }
+  }, [dispatch]);
 
   // Tối ưu lại filteredTasks để chỉ thực hiện lọc theo user/project
   const filteredTasks = useMemo(() => {

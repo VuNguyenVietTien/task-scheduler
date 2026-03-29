@@ -4,6 +4,8 @@ import { User } from '../../contexts/AuthContext';
 import { Dialog } from '../ui/Dialog';
 import clsx from 'clsx';
 import { useUpdateTask } from '@/hooks/useTasks';
+import { useAppDispatch } from '@/redux/hooks';
+import { updateTaskLocally } from '@/redux/features/tasksSlice';
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface TaskDetailProps {
@@ -32,6 +34,7 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
   const [error, setError] = useState<string | null>(null);
   const commentRef = useRef<HTMLTextAreaElement>(null);
   const { updateTask } = useUpdateTask();
+  const dispatch = useAppDispatch();
 
   // Local edited state — staged changes before saving
   const [editedTask, setEditedTask] = useState<Task>(task);
@@ -128,6 +131,8 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
       await updateTask(taskId, updates);
       // Exit edit mode but keep modal open
       setEditingField(null);
+      // Sync Redux so all views (Kanban, Gantt, TaskList) reflect the change
+      dispatch(updateTaskLocally({ taskId, updates }));
       if (onTaskUpdate) onTaskUpdate(taskId, updates);
     } catch (err) {
       console.error('Error updating field:', err);

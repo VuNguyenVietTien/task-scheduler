@@ -59,9 +59,9 @@ const formatNotificationType = (type: string) => {
     case 'TASK_COMMENT':
       return 'Task Comment';
     default:
-      return type.split('_').map(word => 
+      return type ? type.split('_').map(word =>
         word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()
-      ).join(' ');
+      ).join(' ') : 'Notification';
   }
 };
 
