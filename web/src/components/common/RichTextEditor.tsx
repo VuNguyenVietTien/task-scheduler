@@ -439,6 +439,8 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
 ) => {
   const [editorKey, setEditorKey] = useState(Date.now())
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const [showImageUrlInput, setShowImageUrlInput] = useState(false)
+  const [imageUrlValue, setImageUrlValue] = useState('')
   const [mentionPopup, setMentionPopup] = useState<{
     show: boolean;
     query: string;
@@ -691,11 +693,21 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
     }
   }
 
-  // Add image via button click
+  // Add image via file upload
   const addImage = () => {
     if (fileInputRef.current) {
       fileInputRef.current.click()
     }
+  }
+
+  // Add image via URL — only allow http/https to prevent javascript:/data: injection
+  const addImageFromUrl = () => {
+    const trimmed = imageUrlValue.trim()
+    if (!trimmed || !editor) return
+    if (!/^https?:\/\//i.test(trimmed)) return
+    editor.chain().focus().setImage({ src: trimmed }).run()
+    setImageUrlValue('')
+    setShowImageUrlInput(false)
   }
 
   // Handle file selection for image upload
@@ -1104,8 +1116,18 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
 
           <div className="separator" />
 
-          <button type="button" onClick={addImage} className="toolbar-item" title="Add image">
+          {/* Image: file upload */}
+          <button type="button" onClick={addImage} className="toolbar-item" title="Upload ảnh từ máy">
             <ImageIcon size={16} />
+          </button>
+          {/* Image: from URL toggle */}
+          <button
+            type="button"
+            onClick={() => { setShowImageUrlInput(v => !v); setImageUrlValue(''); }}
+            className={`toolbar-item ${showImageUrlInput ? 'is-active' : ''}`}
+            title="Chèn ảnh từ URL"
+          >
+            <span className="text-xs font-medium">URL</span>
           </button>
           <input
             type="file"
@@ -1132,11 +1154,27 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
               </button>
               <button
                 type="button"
+                onClick={() => editor?.chain().focus().deleteRow().run()}
+                className="toolbar-item"
+                title="Xóa hàng"
+              >
+                <span className="flex items-center justify-center w-full h-full text-xs font-medium">-H</span>
+              </button>
+              <button
+                type="button"
                 onClick={addColumnToTable}
                 className="toolbar-item"
                 title="Thêm cột"
               >
                 <span className="flex items-center justify-center w-full h-full text-xs font-medium">+C</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => editor?.chain().focus().deleteColumn().run()}
+                className="toolbar-item"
+                title="Xóa cột"
+              >
+                <span className="flex items-center justify-center w-full h-full text-xs font-medium">-C</span>
               </button>
               <button
                 type="button"
@@ -1191,6 +1229,38 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
               </button>
             </>
           )}
+        </div>
+      )}
+
+      {/* Inline image URL input panel — rendered outside toolbar to avoid flex layout issues */}
+      {showImageUrlInput && (
+        <div className="flex items-center gap-2 px-3 py-2 border-b border-gray-200 bg-gray-50">
+          <input
+            type="url"
+            value={imageUrlValue}
+            onChange={e => setImageUrlValue(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') { e.preventDefault(); addImageFromUrl(); }
+              if (e.key === 'Escape') { setShowImageUrlInput(false); setImageUrlValue(''); }
+            }}
+            placeholder="https://example.com/image.png"
+            className="flex-1 text-sm px-2 py-1 border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-300"
+            autoFocus
+          />
+          <button
+            type="button"
+            onClick={addImageFromUrl}
+            className="px-2 py-1 text-xs bg-blue-600 text-white rounded hover:bg-blue-700"
+          >
+            Chèn
+          </button>
+          <button
+            type="button"
+            onClick={() => { setShowImageUrlInput(false); setImageUrlValue(''); }}
+            className="px-2 py-1 text-xs bg-gray-200 text-gray-700 rounded hover:bg-gray-300"
+          >
+            Hủy
+          </button>
         </div>
       )}
 

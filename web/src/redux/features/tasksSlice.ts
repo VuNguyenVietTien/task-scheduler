@@ -328,10 +328,14 @@ const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
     is_deleted: apiTask.is_deleted,
     status: apiTask.status as TaskStatus,
     priority: apiTask.priority as Priority,
-    type: apiTask.type,
+    // GraphQL exposes DB column 'type' as 'type_' to avoid keyword conflict
+    type: apiTask.type_ ?? apiTask.type,
     category: apiTask.category,
     progress_type: apiTask.progress_type,
-    tags: apiTask.tags,
+    // Normalize JSONB tags to string[] (handles null, array, or legacy object shapes)
+    tags: Array.isArray(apiTask.tags)
+      ? apiTask.tags.filter((t: unknown): t is string => typeof t === 'string')
+      : [],
     child_tasks: apiTask.child_tasks ? apiTask.child_tasks.map(transformTaskFromAPI) : undefined
   };
 };

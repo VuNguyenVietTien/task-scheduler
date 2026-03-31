@@ -167,9 +167,11 @@ export const GET_TASK_COMMENTS = gql`
   query GetTaskComments($taskId: ID!) {
     task_comments(task_id: $taskId) {
       id
+      task_id
+      user_id
       content
-      author_id
       username
+      avatar_url
       created_at
       updated_at
     }

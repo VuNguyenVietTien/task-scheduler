@@ -156,6 +156,8 @@ export const taskSchedulerTypeDefs = `
     task_id: ID!
     user_id: ID!
     content: String!
+    username: String
+    avatar_url: String
     parent_comment_id: ID
     created_at: String
     updated_at: String

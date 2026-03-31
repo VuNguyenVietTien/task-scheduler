@@ -61,45 +61,5 @@ declare global {
   }
 }
 
-// Định nghĩa module quill-table
-declare module 'quill-table' {
-  const QuillTable: any;
-  export default QuillTable;
-}
-
-// Định nghĩa module quill-blot-formatter
-declare module 'quill-blot-formatter' {
-  const BlotFormatter: any;
-  export default BlotFormatter;
-}
-
-// Định nghĩa module quill-image-resize-module-react
-declare module 'quill-image-resize-module-react' {
-  const ImageResize: any;
-  export default ImageResize;
-}
-
-// Định nghĩa module quill-better-table
-declare module 'quill-better-table' {
-  export interface BetterTableStatic {
-    TableBlot: any;
-    TableCellBlot: any;
-    TableRowBlot: any;
-    keyboardBindings: any;
-  }
-  
-  const BetterTable: {
-    default: BetterTableStatic;
-  };
-  
-  export default BetterTable;
-}
-
-// Định nghĩa module quill-magic-url
-declare module 'quill-magic-url' {
-  const MagicUrl: any;
-  export default MagicUrl;
-}
-
 // This empty export is needed to make this a module
 export {};

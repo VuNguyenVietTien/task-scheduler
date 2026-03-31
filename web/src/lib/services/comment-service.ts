@@ -17,21 +17,49 @@ export const commentService = {
   async getTaskComments(supabase: Supabase, taskId: string) {
     const { data, error } = await supabase
       .from('comments')
-      .select('*')
+      .select('*, user:users(full_name, avatar_url)')
       .eq('task_id', taskId)
+      .eq('is_deleted', false)
       .order('created_at', { ascending: true });
     if (error) throw error;
-    return data;
+    return (data || []).map((c: Record<string, unknown>) => {
+      const user = c.user as { full_name?: string; avatar_url?: string } | null;
+      return {
+        id: c.comment_id,
+        task_id: c.task_id,
+        user_id: c.user_id,
+        content: c.content,
+        username: user?.full_name || '',
+        avatar_url: user?.avatar_url || null,
+        parent_comment_id: c.parent_comment_id || null,
+        created_at: c.created_at,
+        updated_at: c.updated_at,
+        is_deleted: c.is_deleted,
+      };
+    });
   },
 
   async createComment(supabase: Supabase, input: Record<string, unknown>) {
     const { data, error } = await supabase
       .from('comments')
       .insert(input as never)
-      .select()
+      .select('*, user:users(full_name, avatar_url)')
       .single();
     if (error) throw error;
-    return data;
+    const c = data as Record<string, unknown>;
+    const user = c.user as { full_name?: string; avatar_url?: string } | null;
+    return {
+      id: c.comment_id,
+      task_id: c.task_id,
+      user_id: c.user_id,
+      content: c.content,
+      username: user?.full_name || '',
+      avatar_url: user?.avatar_url || null,
+      parent_comment_id: c.parent_comment_id || null,
+      created_at: c.created_at,
+      updated_at: c.updated_at,
+      is_deleted: c.is_deleted,
+    };
   },
 
   async deleteComment(supabase: Supabase, id: string) {

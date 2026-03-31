@@ -86,7 +86,7 @@ export interface Task {
   // Additional info
   created_by: string | UserBasic;
   is_deleted?: boolean;
-  tags?: TaskTag[];
+  tags?: string[];
   child_tasks?: Task[];
   attachments?: any[];
   comments?: any[];
@@ -103,6 +103,14 @@ export interface TaskFilter {
   projectId?: string;
   startDate?: string;
   endDate?: string;
+}
+
+export interface GanttFilter {
+  searchQuery?: string;
+  status?: TaskStatus;
+  priority?: Priority;
+  type?: TaskType;
+  tags?: string[];
 }
 
 export interface TaskFiltersInput {

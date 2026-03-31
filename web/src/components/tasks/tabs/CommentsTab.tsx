@@ -1,15 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { Task, TaskComment } from '@/types/task';
 import { User } from '@/contexts/AuthContext';
-import dynamic from 'next/dynamic';
 import Image from 'next/image';
 import { FiSend } from 'react-icons/fi';
-import { detectMentions } from '@/utils/mentionUtils';
+import { detectMentions, isTiptapContentEmpty } from '@/utils/mentionUtils';
 import { useMutation } from '@apollo/client';
 import { CREATE_NOTIFICATION } from '@/graphql/mutations/notifications';
 
-const ReactQuill = dynamic(() => import('react-quill'), { ssr: false });
-import 'react-quill/dist/quill.snow.css';
+import { AdvancedEditor } from '@/components/common/AdvancedEditor';
 
 // Mở rộng interface TaskComment để phù hợp với thực tế dữ liệu
 interface ExtendedTaskComment extends TaskComment {
@@ -73,7 +71,7 @@ export default function CommentsTab({
 
   // Detect mentions when comment text changes
   useEffect(() => {
-    if (commentText) {
+    if (!isTiptapContentEmpty(commentText)) {
       const mentions = detectMentions(commentText);
       setMentionedUsers(mentions);
     } else {
@@ -213,19 +211,13 @@ export default function CommentsTab({
       {/* Form thêm bình luận mới */}
       <div className="mt-6">
         <div className="mb-3">
-          <ReactQuill
+          <AdvancedEditor
             value={commentText}
             onChange={setCommentText}
             placeholder="Thêm bình luận của bạn... (Sử dụng @ để nhắc đến người dùng)"
-            modules={{
-              toolbar: [
-                ['bold', 'italic', 'underline', 'strike'],
-                [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-                ['link', 'code-block'],
-                ['clean']
-              ],
-            }}
-            className="bg-white rounded border border-gray-300 h-32 mb-1"
+            mode="compact"
+            minHeight="128px"
+            projectMembers={projectMembers}
           />
         </div>
         {mentionedUsers.length > 0 && (
@@ -237,12 +229,12 @@ export default function CommentsTab({
           <button
             type="button"
             className={`inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white ${
-              isSubmittingComment || !commentText
+              isSubmittingComment || isTiptapContentEmpty(commentText)
                 ? 'bg-blue-300 cursor-not-allowed'
                 : 'bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500'
             }`}
             onClick={handleCommentWithMentions}
-            disabled={isSubmittingComment || !commentText}
+            disabled={isSubmittingComment || isTiptapContentEmpty(commentText)}
           >
             <FiSend className="mr-2" />
             {isSubmittingComment ? 'Đang gửi...' : 'Gửi bình luận'}

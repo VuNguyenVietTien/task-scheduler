@@ -6,6 +6,19 @@ All notable changes to the ProjectManager system are documented here. Format fol
 
 ### Added
 
+#### Gantt Chart Filter Bar (2026-03-30)
+- Created `GanttFilter` interface in `web/src/types/task.ts` for filter state management
+- Implemented `gantt-filter-bar.tsx` component with compact filter UI supporting:
+  - Search by task name
+  - Status filtering (all task statuses)
+  - Priority filtering (all priority levels)
+  - Type filtering (Bug, Feature, Enhancement, Documentation)
+  - Tag filtering (multi-select)
+- Integrated `GanttFilterBar` into Timeline component Gantt toolbar
+- Updated Timeline component to compute `visibleTasks` from `filteredTasks` with Gantt-specific filter applied
+- Modified `handleSavePlan` to save only currently visible (filtered) tasks to prevent unintended data loss
+- Preserves existing filter context when switching between view modes
+
 #### Vercel + Supabase Migration (2026-03-27)
 - Created `web/` directory: unified Next.js app replacing 2 Rust microservices (task-scheduler-backend + design-doc-service)
 - Supabase client library with server-side (service role), browser (anon key), and middleware (session refresh) implementations

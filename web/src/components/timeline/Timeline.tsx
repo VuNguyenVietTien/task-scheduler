@@ -1,6 +1,7 @@
 'use client';
 
-import { Task, Priority } from '@/types/task';
+import { Task, Priority, GanttFilter } from '@/types/task';
+import { GanttFilterBar } from './gantt-filter-bar';
 import { AssignedUser } from '@/types/user';
 import { TaskBar } from './TaskBar';
 import { TimelineSkeleton } from './TimelineSkeleton';
@@ -93,6 +94,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
   const [selectedUserId, setSelectedUserId] = useState<string>('');
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
+  const [ganttFilter, setGanttFilter] = useState<GanttFilter>({});
   const { user } = useAuth();
 
   // Lấy redux store tasks
@@ -586,6 +588,35 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     selectedUserId  // Hoặc khi user được chọn thay đổi
   ]);
 
+  // Apply gantt-specific filters on top of filteredTasks (type/tags require full task data lookup)
+  const visibleTasks = useMemo(() => {
+    const { searchQuery, status, priority, type, tags } = ganttFilter;
+    const hasFilter = searchQuery || status || priority || type || tags?.length;
+    if (!hasFilter) return filteredTasks;
+
+    return filteredTasks.filter(task => {
+      if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      if (status && task.status !== status) return false;
+      if (priority && task.priority !== priority) return false;
+
+      // type/tags are not in taskOrderStore — look up full task data
+      if (type || tags?.length) {
+        // Match by task_id or id to handle different ID formats
+        const fullTask = tasks.find(t => t.task_id === task.task_id || t.id === task.task_id);
+        if (!fullTask) return false; // exclude tasks not yet in Redux state
+        if (type && fullTask.type !== type) return false;
+        // Case-insensitive OR match: task must have at least one of the filter tags
+        if (tags?.length) {
+          const taskTags = fullTask.tags || [];
+          const lowerTaskTags = taskTags.map(t => t.toLowerCase());
+          if (!tags.some(tag => lowerTaskTags.includes(tag.toLowerCase()))) return false;
+        }
+      }
+
+      return true;
+    });
+  }, [filteredTasks, ganttFilter, tasks]);
+
   // Điều chỉnh onDragStart để đánh dấu bắt đầu kéo thả
   const onDragStart = useCallback(() => {
     setIsDragging(true);
@@ -822,40 +853,43 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
       return;
     }
 
-    // Tạo dữ liệu cho kế hoạch mới - loại bỏ task done/close
-    const activeOrderedItems = orderedTaskItems.filter(item => !['DONE', 'CLOSE'].includes(item.status?.toUpperCase() || ''));
-    const planTasks: CreatePlanTaskDataInput[] = activeOrderedItems.map((item, index) => {
-      // Kiểm tra nếu calculatedTaskDates là object và có thuộc tính cho taskId này
+    // Use visibleTasks (currently displayed after filters) — exclude DONE/CLOSE
+    const activeVisibleTasks = visibleTasks.filter(
+      task => !['DONE', 'CLOSE'].includes(task.status?.toUpperCase() || '')
+    );
+
+    if (activeVisibleTasks.length === 0) {
+      toast.error('Không có task nào để lưu vào kế hoạch');
+      return;
+    }
+
+    const planTasks: CreatePlanTaskDataInput[] = activeVisibleTasks.map(task => {
       const calculatedDates = typeof calculatedTaskDates === 'object' && calculatedTaskDates !== null
-        ? calculatedTaskDates[item.taskId]
+        ? calculatedTaskDates[task.task_id]
         : undefined;
 
-      // Lấy ngày bắt đầu/kết thúc từ nhiều nguồn theo thứ tự ưu tiên
-      const startDate = item.startDate ||
+      const startDate = task.start_date ||
         (calculatedDates && calculatedDates.startDate) ||
         '';
-      const endDate = item.endDate ||
+      const endDate = task.due_date ||
         (calculatedDates && calculatedDates.endDate) ||
         '';
 
-      // Chuyển đổi priority thành đúng kiểu Priority nếu cần
-      let taskPriority = item.priority as Priority | undefined;
-      // Đảm bảo priority hợp lệ (LOW, MEDIUM, HIGH, URGENT, CRITICAL)
+      let taskPriority = task.priority as Priority | undefined;
       if (taskPriority && !['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL'].includes(taskPriority)) {
-        taskPriority = 'MEDIUM'; // Giá trị mặc định nếu không hợp lệ
+        taskPriority = 'MEDIUM';
       }
 
-      // Tạo dữ liệu theo kiểu yêu cầu của API (CreatePlanTaskDataInput) - camelCase cho GraphQL
       return {
-        taskId: item.taskId,
-        title: item.title,
-        priorityOrder: item.priorityOrder,
-        startDate: startDate,
-        endDate: endDate,
-        effort: item.effort,
-        assigneeId: item.assigneeId,
+        taskId: task.task_id,
+        title: task.title,
+        priorityOrder: task.priority_order,
+        startDate,
+        endDate,
+        effort: task.effort,
+        assigneeId: task.assignee?.userId,
         priority: taskPriority,
-        status: item.status
+        status: task.status,
       };
     });
 
@@ -884,7 +918,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
         console.error('Lỗi khi tạo plan:', error);
         toast.error(`Lỗi khi lưu kế hoạch: ${error.message || 'Lỗi không xác định'}`);
       });
-  }, [planName, currentProjectId, orderedTaskItems, calculatedTaskDates, dispatch]);
+  }, [planName, currentProjectId, visibleTasks, calculatedTaskDates, dispatch]);
 
   // Thêm hàm xử lý để xóa kế hoạch
   const handleDeletePlan = useCallback(() => {
@@ -1060,7 +1094,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
             <button
               onClick={handleSavePlan}
               className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-blue-100 hover:bg-blue-200 whitespace-nowrap"
-              title="Lưu kế hoạch hiện tại"
+              title={`Lưu kế hoạch (${visibleTasks.filter(t => !['DONE', 'CLOSE'].includes(t.status)).length} tasks hiển thị)`}
             >
               <span>Lưu kế hoạch</span>
             </button>
@@ -1154,6 +1188,11 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                 title="Ngày kết thúc hiển thị"
               />
             </div>
+
+            <div className="h-6 w-px bg-slate-200 mx-2"></div>
+
+            {/* Gantt task filters */}
+            <GanttFilterBar filter={ganttFilter} onFilterChange={setGanttFilter} />
           </div>
         </div>
 
@@ -1168,7 +1207,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
             {viewMode === 'project' ? (
               <PriorityTaskList
                 title="Danh sách task"
-                tasks={orderedTasks}
+                tasks={visibleTasks}
                 onTaskClick={onTaskClick}
                 onTaskReorder={(taskId, newIndex) => {
                   // Xử lý sắp xếp lại task dựa trên kéo thả
@@ -1182,7 +1221,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                 {selectedUserId ? (
                   <PriorityTaskList
                     title="Danh sách task"
-                    tasks={filteredTasks}
+                    tasks={visibleTasks}
                     onTaskClick={onTaskClick}
                     onTaskReorder={(taskId, newIndex) => {
                       // Xử lý sắp xếp lại task dựa trên kéo thả
@@ -1250,7 +1289,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                 {/* Phần grid và task bars */}
                 <div
                   style={{
-                    height: `${Math.max(filteredTasks.length, orderedTaskItems.length) * rowHeight}px`,
+                    height: `${Math.max(visibleTasks.length, 6) * rowHeight}px`,
                     minHeight: `${6 * rowHeight}px`
                   }}
                 >
@@ -1293,13 +1332,13 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                         className="grid relative"
                         style={{
                           gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
-                          gridTemplateRows: `repeat(${Math.max(filteredTasks.length, orderedTaskItems.length, 6)}, ${rowHeight}px)`,
+                          gridTemplateRows: `repeat(${Math.max(visibleTasks.length, 6)}, ${rowHeight}px)`,
                           gridAutoFlow: 'row',
                           height: '100%',
                           zIndex: 10
                         }}
                       >
-                        {Array.from({ length: days.length * Math.max(filteredTasks.length, orderedTaskItems.length, 6) }).map((_, index) => (
+                        {Array.from({ length: days.length * Math.max(visibleTasks.length, 6) }).map((_, index) => (
                           <div
                             key={`grid-cell-${index}`}
                             className="border-r border-b border-slate-200 relative"
@@ -1308,8 +1347,8 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                       </div>
 
                       {/* Task Bars */}
-                      {/* Deduplicate filteredTasks to avoid key warnings */}
-                      {Array.from(new Map(filteredTasks.map(task => [task.task_id, task])).values()).map((task: Task, rowIndex: number) => {
+                      {/* Deduplicate visibleTasks to avoid key warnings */}
+                      {Array.from(new Map(visibleTasks.map(task => [task.task_id, task])).values()).map((task: Task, rowIndex: number) => {
                         let taskStartDate: Date;
 
                         if (task.start_date) {

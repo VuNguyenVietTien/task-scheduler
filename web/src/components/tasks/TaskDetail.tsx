@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '../../types/task';
 import { User } from '../../contexts/AuthContext';
 import { Dialog } from '../ui/Dialog';
@@ -7,6 +7,13 @@ import { useUpdateTask } from '@/hooks/useTasks';
 import { useAppDispatch } from '@/redux/hooks';
 import { updateTaskLocally } from '@/redux/features/tasksSlice';
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
+import { TagInput } from '@/components/ui/tag-input';
+import { useMutation, useQuery } from '@apollo/client';
+import { CREATE_TASK_COMMENT } from '@/graphql/mutations/tasks';
+import { GET_TASK_COMMENTS } from '@/graphql/queries/tasks';
+import { AdvancedEditor } from '@/components/common/AdvancedEditor';
+import { isTiptapContentEmpty } from '@/utils/mentionUtils';
+import { imageService } from '@/services/imageService';
 
 interface TaskDetailProps {
   task: Task;
@@ -23,18 +30,25 @@ interface Comment {
   username: string;
   avatar_url?: string;
   created_at: string;
+  status?: 'pending' | 'saved' | 'failed';
 }
 
 export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }: TaskDetailProps) {
+  const taskId = task.task_id || task.id || '';
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isPostingComment, setIsPostingComment] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const commentRef = useRef<HTMLTextAreaElement>(null);
+
+  const { data: commentsData, loading: isLoading } = useQuery(GET_TASK_COMMENTS, {
+    variables: { taskId },
+    skip: !isOpen || !taskId,
+  });
+  const commentEditorRef = useRef<{ focus: () => void } | null>(null);
   const { updateTask } = useUpdateTask();
   const dispatch = useAppDispatch();
+  const [createComment] = useMutation(CREATE_TASK_COMMENT);
 
   // Local edited state — staged changes before saving
   const [editedTask, setEditedTask] = useState<Task>(task);
@@ -125,6 +139,7 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
         case 'progress': updates.progress = val !== undefined ? Number(val) : undefined; break;
         case 'actual_start_date': updates.actual_start_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : null; break;
         case 'actual_end_date': updates.actual_end_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : null; break;
+        case 'tags': updates.tags = Array.isArray(val) ? val : []; break;
         default: return;
       }
 
@@ -154,63 +169,88 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
     return <div className="prose max-w-none" dangerouslySetInnerHTML={{ __html: html }} />;
   };
 
-  // Load comments
-  const fetchComments = useCallback(async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      const projectId = task.project_id || task.projectId;
-      if (!projectId) return;
-      const taskId = task.task_id || task.id;
-      const response = await fetch(`/api/projects/${projectId}/tasks/${taskId}/comments`);
-      if (!response.ok) throw new Error('Khong the lay comments');
-      const data = await response.json();
-      setComments(data.map((c: any) => ({
-        id: c.id, content: c.content, user_id: c.user_id,
-        username: c.username || 'Nguoi dung', avatar_url: c.avatar_url, created_at: c.created_at
-      })));
-    } catch (err) {
-      console.error('Error fetching comments:', err);
-    } finally {
-      setIsLoading(false);
+  // Sync saved comments from GraphQL query (exclude optimistic/failed local ones)
+  useEffect(() => {
+    if (commentsData?.task_comments) {
+      setComments(prev => {
+        const localPending = prev.filter(c => c.status === 'pending' || c.status === 'failed');
+        const fromApi: Comment[] = commentsData.task_comments.map((c: any) => ({
+          id: c.id,
+          content: c.content,
+          user_id: c.user_id,
+          username: c.username || '',
+          avatar_url: c.avatar_url || undefined,
+          created_at: c.created_at,
+          status: 'saved' as const,
+        }));
+        // Merge: API comments + any still-pending local ones not yet in API response
+        const apiIds = new Set(fromApi.map(c => c.id));
+        const pendingNotYetSaved = localPending.filter(c => !apiIds.has(c.id));
+        return [...fromApi, ...pendingNotYetSaved];
+      });
     }
-  }, [task.project_id, task.projectId, task.task_id, task.id]);
+  }, [commentsData]);
 
   const handleSubmitComment = async () => {
-    if (!newComment.trim() || !currentUser) return;
+    if (isTiptapContentEmpty(newComment) || !currentUser) return;
+    const taskId = task.task_id || task.id;
+    if (!taskId) return;
+
+    // Process blob image URLs before submitting
+    let processedContent = newComment;
+    const hasImages = newComment.includes('<img');
+    const containsBlob = newComment.includes('blob:');
+    if (hasImages && containsBlob) {
+      try {
+        processedContent = await imageService.processHtmlContent(newComment);
+      } catch (err) {
+        console.error('Error processing images:', err);
+      }
+    }
+
+    // Clear input and add optimistic comment immediately
+    setNewComment('');
+    const tempId = `temp-${Date.now()}`;
+    const tempComment: Comment = {
+      id: tempId,
+      content: processedContent,
+      user_id: currentUser.id || '',
+      username: currentUser.name || '',
+      avatar_url: currentUser.providerData?.[0]?.photoURL || undefined,
+      created_at: new Date().toISOString(),
+      status: 'pending',
+    };
+    setComments(prev => [...prev, tempComment]);
+    commentEditorRef.current?.focus();
+
     try {
       setIsPostingComment(true);
       setError(null);
-      const projectId = task.project_id || task.projectId;
-      const taskId = task.task_id || task.id;
-      if (!projectId || !taskId) throw new Error('Thieu thong tin');
-      const response = await fetch(`/api/projects/${projectId}/tasks/${taskId}/comments`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: newComment }),
+      const { data } = await createComment({
+        variables: { input: { task_id: taskId, content: processedContent } }
       });
-      if (!response.ok) throw new Error('Khong the them binh luan');
-      const saved = await response.json();
-      setComments(prev => [...prev, {
-        id: saved.id, content: saved.content, user_id: saved.user_id,
-        username: currentUser.name, avatar_url: currentUser.providerData?.[0]?.photoURL || undefined,
-        created_at: saved.created_at,
-      }]);
-      setNewComment('');
-      commentRef.current?.focus();
+      if (data?.create_comment) {
+        const saved = data.create_comment;
+        setComments(prev => prev.map(c => c.id === tempId ? {
+          id: saved.id,
+          content: saved.content,
+          user_id: saved.user_id,
+          username: saved.username || currentUser.name || '',
+          avatar_url: saved.avatar_url || currentUser.providerData?.[0]?.photoURL || undefined,
+          created_at: saved.created_at,
+          status: 'saved',
+        } : c));
+        imageService.cleanupUnusedImages?.();
+      }
     } catch (err) {
       console.error('Error posting comment:', err);
       setError('Khong the them binh luan.');
+      setComments(prev => prev.map(c => c.id === tempId ? { ...c, status: 'failed' } : c));
     } finally {
       setIsPostingComment(false);
     }
   };
 
-  useEffect(() => {
-    if (isOpen && (task.task_id || task.id)) {
-      fetchComments();
-    }
-  }, [isOpen, task.task_id, task.id, fetchComments]);
 
   const statusOptions = Object.values(TaskStatuses).map(s => ({
     value: s, label: s.charAt(0).toUpperCase() + s.slice(1)
@@ -474,6 +514,60 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
             <span className="text-xs text-slate-500 block mb-1">Cap nhat lan cuoi</span>
             <p className="px-2 py-1 text-sm text-slate-900">{formatDate(task.updated_at)}</p>
           </div>
+
+          {/* Tags — editable chip input, full width */}
+          <div className="col-span-2">
+            <span className="text-xs text-slate-500 block mb-1">Tags</span>
+            {editingField === 'tags' ? (
+              <div>
+                <TagInput
+                  value={Array.isArray(editedTask.tags) ? editedTask.tags : []}
+                  onChange={(tags) => setEditedTask({ ...editedTask, tags })}
+                  placeholder="Nhap tag, Enter hoac dau phay de them..."
+                  className="border-slate-300"
+                />
+                <div className="flex mt-1.5 gap-1">
+                  <button
+                    onClick={() => saveField('tags')}
+                    disabled={isSaving}
+                    className="p-1 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-full transition-colors disabled:opacity-50"
+                    title="Xac nhan"
+                  >
+                    {isSaving ? (
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                    ) : (
+                      <CheckIcon className="h-4 w-4" />
+                    )}
+                  </button>
+                  <button
+                    onClick={cancelEdit}
+                    className="p-1 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                    title="Huy"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                className="flex flex-wrap gap-1 cursor-pointer min-h-[32px] px-2 py-1.5 rounded-md border border-transparent hover:border-slate-200 hover:bg-slate-50 transition-colors"
+                onClick={() => setEditingField('tags')}
+              >
+                {Array.isArray(editedTask.tags) && editedTask.tags.length > 0 ? (
+                  editedTask.tags.map((tag, i) => (
+                    <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {tag}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-xs text-slate-400 italic">Chua co tag — click de them</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Comments section */}
@@ -492,7 +586,7 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
           {!isLoading && (
             <div className="space-y-4 mb-6">
               {comments.map((comment) => (
-                <div key={comment.id} className="bg-gray-50 p-4 rounded-md">
+                <div key={comment.id} className={`p-4 rounded-md ${comment.status === 'failed' ? 'bg-red-50 border border-red-200' : comment.status === 'pending' ? 'bg-gray-50 opacity-70' : 'bg-gray-50'}`}>
                   <div className="flex items-start">
                     <div className="flex-shrink-0">
                       {comment.avatar_url ? (
@@ -504,7 +598,11 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
                       )}
                     </div>
                     <div className="ml-3 flex-1">
-                      <div className="text-sm font-medium text-gray-900">{comment.username}</div>
+                      <div className="flex items-center gap-2">
+                        <div className="text-sm font-medium text-gray-900">{comment.username}</div>
+                        {comment.status === 'pending' && <span className="text-xs text-gray-400">Dang gui...</span>}
+                        {comment.status === 'failed' && <span className="text-xs text-red-500">Gui that bai</span>}
+                      </div>
                       <div className="text-sm text-gray-500">
                         {new Date(comment.created_at).toLocaleDateString('vi-VN', {
                           year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
@@ -525,24 +623,22 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
 
           {currentUser && (
             <div className="mt-4">
-              <label htmlFor="comment" className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-sm font-medium text-gray-700 mb-2">
                 Them binh luan moi
               </label>
-              <textarea
-                id="comment"
-                rows={3}
-                ref={commentRef}
+              <AdvancedEditor
+                ref={commentEditorRef}
                 value={newComment}
-                onChange={(e) => setNewComment(e.target.value)}
-                className="block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+                onChange={setNewComment}
                 placeholder="Viet binh luan cua ban o day..."
-                disabled={isPostingComment}
+                mode="compact"
+                minHeight="100px"
               />
               <div className="mt-2 flex justify-end">
                 <button
                   type="button"
                   onClick={handleSubmitComment}
-                  disabled={!newComment.trim() || isPostingComment}
+                  disabled={isTiptapContentEmpty(newComment) || isPostingComment}
                   className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isPostingComment ? 'Dang gui...' : 'Gui binh luan'}

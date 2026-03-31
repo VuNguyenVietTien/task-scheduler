@@ -5,6 +5,7 @@ import { Task, TaskStatus, Priority, TaskStatuses, Priorities, UserBasic, TaskCo
 import { STATUS_LABELS, PRIORITY_LABELS } from '@/constants/task-display-labels';
 import { User } from '@/contexts/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
+import { TagInput } from '@/components/ui/tag-input';
 import { Card } from '@/components/ui/Card';
 import { CommentCard } from '@/components/common/CommentCard';
 import { Button } from '@/components/ui/Button';
@@ -36,6 +37,7 @@ import {
 } from '@/redux/features/taskDetailSlice';
 import TaskDetailSubtasks from './TaskDetailSubtasks';
 import CommentsTab from './tabs/CommentsTab';
+import { isTiptapContentEmpty } from '@/utils/mentionUtils';
 import { toast } from "sonner";
 
 interface TaskDetailPageProps {
@@ -74,15 +76,17 @@ interface Comment {
 // Đổi tên từ TaskComment thành LocalTaskComment để tránh xung đột
 interface LocalTaskComment {
   id: string;
+  task_id: string;
+  user_id: string;
   content: string;
-  authorId: string;
-  username: string;
-  createdAt: string;
-  updatedAt: string;
+  username?: string;
+  avatar_url?: string;
+  created_at: string;
+  updated_at: string;
 }
 
 interface TaskCommentsData {
-  taskComments: LocalTaskComment[];
+  task_comments: LocalTaskComment[];
 }
 
 interface CreateCommentInput {
@@ -822,7 +826,7 @@ export function TaskDetailPage({
 
   // Xử lý gửi comment với GraphQL - đã khôi phục API call
   const handleSubmitComment = async () => {
-    if (!newComment.trim() || !currentUser) return;
+    if (isTiptapContentEmpty(newComment) || !currentUser) return;
     
     try {
       setError(null);
@@ -911,7 +915,7 @@ export function TaskDetailPage({
           variables: {
             input: {
               content: processedContent,
-              taskId,
+              task_id: taskId,
             }
           }
         });
@@ -919,13 +923,13 @@ export function TaskDetailPage({
         if (data && data.create_comment) {
           // Nếu API thành công, cập nhật comment tạm thời với dữ liệu thực
           const updatedComment: TaskComment = {
-                    id: data.create_comment.id,
-                    content: data.create_comment.content,
-                    user_id: data.create_comment.author_id,
-            username: data.create_comment.username,
-            avatar_url: currentUser?.providerData?.[0]?.photoURL || undefined,
-                    created_at: data.create_comment.created_at,
-                    status: 'saved'
+            id: data.create_comment.id,
+            content: data.create_comment.content,
+            user_id: data.create_comment.user_id,
+            username: data.create_comment.username || currentUser?.name || '',
+            avatar_url: data.create_comment.avatar_url || currentUser?.providerData?.[0]?.photoURL || undefined,
+            created_at: data.create_comment.created_at,
+            status: 'saved'
           };
           
           setComments(prevComments => 
@@ -1024,7 +1028,7 @@ export function TaskDetailPage({
           variables: {
             input: {
               content: processedContent,
-              taskId,
+              task_id: taskId,
             }
           }
         });
@@ -1032,13 +1036,13 @@ export function TaskDetailPage({
         if (data && data.create_comment) {
           // Nếu API thành công, cập nhật comment với dữ liệu thực
           const updatedComment: TaskComment = {
-                    id: data.create_comment.id,
-                    content: data.create_comment.content,
-                    user_id: data.create_comment.author_id,
-                    username: currentUser?.name || 'Người dùng',
-                    avatar_url: currentUser?.providerData?.[0]?.photoURL || undefined,
-                    created_at: data.create_comment.created_at,
-                    status: 'saved'
+            id: data.create_comment.id,
+            content: data.create_comment.content,
+            user_id: data.create_comment.user_id,
+            username: data.create_comment.username || currentUser?.name || '',
+            avatar_url: data.create_comment.avatar_url || currentUser?.providerData?.[0]?.photoURL || undefined,
+            created_at: data.create_comment.created_at,
+            status: 'saved'
           };
           
           setComments(prevComments => 
@@ -1095,14 +1099,15 @@ export function TaskDetailPage({
         // Thông báo lỗi cho người dùng
         toast.error('Không thể xóa bình luận. Vui lòng thử lại sau.');
         // Nếu lỗi, khôi phục comment
-        if (commentsData && commentsData.taskComments) {
-          const formattedComments: TaskComment[] = commentsData.taskComments.map(comment => ({
+        if (commentsData && commentsData.task_comments) {
+          const formattedComments: TaskComment[] = commentsData.task_comments.map(comment => ({
             id: comment.id,
             content: comment.content,
-            user_id: comment.authorId,
-            username: comment.username,
-            created_at: comment.createdAt,
-            updated_at: comment.updatedAt
+            user_id: comment.user_id,
+            username: comment.username || '',
+            avatar_url: comment.avatar_url,
+            created_at: comment.created_at,
+            updated_at: comment.updated_at
           }));
           setComments(formattedComments);
         }
@@ -1116,19 +1121,16 @@ export function TaskDetailPage({
 
   // Chuyển đổi dữ liệu comment từ GraphQL sang định dạng cần thiết
   useEffect(() => {
-    if (commentsData && commentsData.taskComments) {
-      const formattedComments: TaskComment[] = commentsData.taskComments.map(comment => {
-        // Chuyển đổi từ LocalTaskComment sang TaskComment
-        return {
-          id: comment.id,
-          content: comment.content,
-          user_id: comment.authorId,
-          username: comment.username,
-          created_at: comment.createdAt,
-          updated_at: comment.updatedAt
-        };
-      });
-      
+    if (commentsData && commentsData.task_comments) {
+      const formattedComments: TaskComment[] = commentsData.task_comments.map(comment => ({
+        id: comment.id,
+        content: comment.content,
+        user_id: comment.user_id,
+        username: comment.username || '',
+        avatar_url: comment.avatar_url,
+        created_at: comment.created_at,
+        updated_at: comment.updated_at
+      }));
       setComments(formattedComments);
       setIsLoading(false);
     }
@@ -2056,26 +2058,52 @@ export function TaskDetailPage({
                       ]
                     )}
                     
-                    {/* Tags */}
-                    <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Tags:</div>
-                      <div className="flex-1 flex flex-wrap gap-1">
-                        {task.tags && Array.isArray(task.tags) && task.tags.length > 0 ? (
-                          task.tags.map((tag, idx) => (
-                            <span key={idx} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              {tag}
-                            </span>
-                          ))
-                        ) : task.tags && typeof task.tags === 'object' && Object.keys(task.tags).length > 0 ? (
-                          Object.entries(task.tags).map(([key, value], idx) => (
-                            <span key={idx} className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                              {typeof value === 'string' ? value : key}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-sm text-gray-500">Không có tags</span>
-                        )}
-                      </div>
+                    {/* Tags — editable chip input */}
+                    <div className="flex items-start py-1.5 rounded-md hover:bg-gray-50 mb-2">
+                      {editingField === 'tags' ? (
+                        <div className="w-full space-y-2">
+                          <label className="block text-sm font-medium text-gray-700">Tags</label>
+                          <TagInput
+                            value={Array.isArray(editedTask.tags) ? editedTask.tags : []}
+                            onChange={(tags) => setEditedTask({ ...editedTask, tags })}
+                            placeholder="Thêm tag... (Enter hoặc dấu phẩy)"
+                            className="border-gray-300"
+                          />
+                          <div className="flex mt-3 space-x-3">
+                            <button
+                              onClick={() => saveField('tags')}
+                              className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
+                              disabled={isSaving}
+                            >
+                              {isSaving ? 'Đang lưu...' : 'Lưu'}
+                            </button>
+                            <button
+                              onClick={cancelEditing}
+                              className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-300 transition-colors"
+                            >
+                              Hủy
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700 pt-1">Tags:</div>
+                          <div
+                            className="flex-1 flex flex-wrap gap-1 cursor-pointer min-h-[28px]"
+                            onClick={() => setEditingField('tags')}
+                          >
+                            {Array.isArray(editedTask.tags) && editedTask.tags.length > 0 ? (
+                              editedTask.tags.map((tag, i) => (
+                                <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                                  {tag}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="text-sm text-gray-400 italic">Chưa có tag</span>
+                            )}
+                          </div>
+                        </>
+                      )}
                     </div>
                     
                     {/* Loại tiến độ */}
@@ -2172,7 +2200,7 @@ export function TaskDetailPage({
                   <div className="mt-3 flex justify-end">
               <Button
                 onClick={handleSubmitComment}
-                      disabled={isPostingComment || !newComment}
+                      disabled={isPostingComment || isTiptapContentEmpty(newComment)}
                       isLoading={isPostingComment}
               >
                       {isPostingComment ? 'Đang gửi...' : 'Gửi bình luận'}

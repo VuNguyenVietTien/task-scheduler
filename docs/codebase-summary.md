@@ -62,6 +62,7 @@ ProjectManager is a distributed microservice system for task scheduling, project
 - Task list, task detail (with editable actual_start_date/actual_end_date fields), task creation/edit forms
 - Task detail modal triggered from KanbanBoard, Timeline, and TaskListView
 - Gantt chart with responsive design and click-to-open-modal support
+- Gantt filter bar with search, status, priority, type, and tag filters (filters visible tasks for plan saving)
 - Project sidebar with expandable tree navigation
 - Reports dashboard with multiple time periods
 - Design viewer with split-pane editor

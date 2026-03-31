@@ -35,4 +35,17 @@ export const createMentionMessage = (commenterName: string, taskTitle: string): 
  */
 export const createMentionTitle = (commenterName: string): string => {
   return `Mentioned by ${commenterName}`;
-}; 
+};
+
+/**
+ * Checks if Tiptap/rich-text HTML content is effectively empty.
+ * Tiptap outputs "<p></p>" or "<p><br></p>" when the editor is blank.
+ * Strip all HTML tags and whitespace, then check if any visible text remains.
+ * @param html The HTML string produced by AdvancedEditor/Tiptap
+ * @returns true when the content has no visible text
+ */
+export const isTiptapContentEmpty = (html: string): boolean => {
+  if (!html) return true;
+  const stripped = html.replace(/<[^>]*>/g, '').trim();
+  return stripped.length === 0;
+};

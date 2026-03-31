@@ -109,9 +109,11 @@ export const CREATE_TASK_COMMENT = gql`
   mutation CreateTaskComment($input: CreateCommentInput!) {
     create_comment(input: $input) {
       id
+      task_id
+      user_id
       content
-      author_id
       username
+      avatar_url
       created_at
       updated_at
     }
@@ -120,6 +122,6 @@ export const CREATE_TASK_COMMENT = gql`
 
 export const DELETE_TASK_COMMENT = gql`
   mutation DeleteTaskComment($commentId: ID!) {
-    delete_comment(comment_id: $commentId)
+    delete_comment(id: $commentId)
   }
 `;

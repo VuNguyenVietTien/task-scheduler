@@ -4,7 +4,7 @@
 
 ProjectManager is an integrated platform for task scheduling, project management, and design document collaboration. The roadmap outlines planned features, improvements, and milestones for 2025-2026.
 
-## Current Status (March 2025)
+## Current Status (March 2026)
 
 ### Completed ✓
 - Task scheduling core functionality (CRUD, dependencies)
@@ -34,14 +34,18 @@ ProjectManager is an integrated platform for task scheduling, project management
   - Design systems list integrated into project context
   - Create new design system from project view
   - Isolated Apollo client prevents cache conflicts with main backend
+- Gantt Chart Filter Bar (2026-03-30)
+  - Compact filter UI with search, status, priority, type, and tag filters
+  - Filter-aware plan saving (only visible tasks saved)
+  - Integrated into Timeline component toolbar
 
 ### In Progress 🔄
 - Vercel + Supabase migration validation (web/ codebase built, waiting for deployment testing)
+- Gantt filter feature user feedback and refinements
 - Design service performance optimization
 - Frontend design pages integration testing
 - External link management features
 - Reports system refinements (metrics validation)
-- Documents tab UI refinements and user testing
 
 ### Not Started ⏳
 - Real-time design collaboration (WebSocket)
@@ -67,9 +71,9 @@ Deliverables:
 ### Phase 2: Enhancement (Current)
 **Goal**: Optimize performance and expand design features
 
-**Timeline**: Q1-Q2 2025
+**Timeline**: Q1-Q2 2026
 
-**Status**: IN PROGRESS 🔄 (60% complete)
+**Status**: IN PROGRESS 🔄 (70% complete)
 
 Deliverables:
 - [x] Enhanced UI components (COMPLETE)
@@ -82,6 +86,10 @@ Deliverables:
   - Design systems list in project sidebar
   - Create design system from project view
   - Isolated Apollo client for design-doc-service
+- [x] Gantt Chart Filter Bar (COMPLETE)
+  - Search, status, priority, type, and tag filters
+  - Filter-aware plan saving
+  - Integrated into Timeline toolbar
 - [ ] Design service performance tuning
   - Query caching optimization
   - Index performance analysis

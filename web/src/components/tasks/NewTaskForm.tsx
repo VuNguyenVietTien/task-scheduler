@@ -1,12 +1,12 @@
 "use client";
 
 import React, { useState, useMemo } from "react";
-import dynamic from "next/dynamic";
 import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { taskFormSchema, progressTypeOptions } from "@/schemas/taskForm";
-import { TASK_TYPES, TASK_CATEGORIES, TASK_TAGS, Task } from "@/types/task";
+import { TASK_TYPES, TASK_CATEGORIES, Task } from "@/types/task";
+import { TagInput } from "@/components/ui/tag-input";
 import { mockTasks } from "@/data/mockTasks";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProject } from "@/hooks/useProject";
@@ -14,9 +14,7 @@ import { Combobox } from "@headlessui/react";
 import { useMutation } from "@apollo/client";
 import { CREATE_TASK } from "@/graphql/mutations";
 
-// Dynamic import for React Quill
-const ReactQuill = dynamic(() => import("react-quill"), { ssr: false });
-import "react-quill/dist/quill.snow.css";
+import { AdvancedEditor } from "@/components/common/AdvancedEditor";
 
 interface NewTaskFormProps {
   projectId: string;
@@ -56,16 +54,6 @@ interface ComboboxFieldProps {
   placeholder: string;
 }
 
-const quillModules = {
-  toolbar: [
-    [{ header: [1, 2, 3, false] }],
-    ["bold", "italic", "underline", "strike"],
-    [{ list: "ordered" }, { list: "bullet" }],
-    [{ color: [] }, { background: [] }],
-    ["link", "image"],
-    ["clean"],
-  ],
-};
 
 function ComboboxField({
   options,
@@ -229,7 +217,7 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
   const selectedAssigneeMember = useMemo(() => {
     if (!selectedAssignee || !projectData?.project?.members) return null;
     return projectData.project.members.find(
-      (m) => m.user.userId === selectedAssignee
+      (m) => m.user.user_id === selectedAssignee
     );
   }, [selectedAssignee, projectData?.project?.members]);
 
@@ -324,7 +312,7 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
         effort: data.effort || 0,
         type_: data.type || null,
         category: data.category || null,
-        progress_type: data.progressType || null,
+        progress_type: data.progressType ? data.progressType.toUpperCase() : null,
         tags: data.tags || [],
       };
 
@@ -427,12 +415,11 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
               name="description"
               control={control}
               render={({ field }) => (
-                <ReactQuill
-                  {...field}
-                  theme="snow"
-                  modules={quillModules}
-                  placeholder="Enter task description"
-                  className="bg-white"
+                <AdvancedEditor
+                  value={field.value || ''}
+                  onChange={field.onChange}
+                  placeholder="Mô tả task..."
+                  mode="full"
                 />
               )}
             />
@@ -524,16 +511,16 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
                     {filteredMembers.length > 0 ? (
                       filteredMembers.map((member) => (
                         <li
-                          key={member.user.userId}
+                          key={member.user.user_id}
                           onClick={() =>
-                            handleAssigneeSelect(member.user.userId, member.user.username)
+                            handleAssigneeSelect(member.user.user_id, member.user.username)
                           }
                           className="relative cursor-pointer select-none py-2 px-3 hover:bg-blue-50"
                         >
                           <div className="flex items-center">
-                            {member.user.avatarUrl && (
+                            {member.user.avatar_url && (
                               <img
-                                src={member.user.avatarUrl}
+                                src={member.user.avatar_url}
                                 alt=""
                                 className="h-6 w-6 rounded-full mr-2"
                               />
@@ -782,22 +769,20 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
+          <label className="block text-sm font-medium text-gray-700 mb-1">
             Tags
           </label>
-          <div className="mt-2 space-y-2 grid grid-cols-2 gap-4">
-            {TASK_TAGS.map((tag) => (
-              <label key={tag} className="inline-flex items-center">
-                <input
-                  type="checkbox"
-                  value={tag}
-                  {...register("tags")}
-                  className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                />
-                <span className="ml-2 text-sm text-gray-700">{tag}</span>
-              </label>
-            ))}
-          </div>
+          <p className="text-xs text-gray-500 mb-2">Nhấn Enter hoặc nhập dấu phẩy để thêm tag</p>
+          <Controller
+            name="tags"
+            control={control}
+            render={({ field }) => (
+              <TagInput
+                value={field.value || []}
+                onChange={field.onChange}
+              />
+            )}
+          />
           {errors.tags && (
             <p className="mt-1 text-sm text-red-600">
               {errors.tags.message as string}
