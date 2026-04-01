@@ -693,6 +693,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
           onClose={() => setIsTaskDetailOpen(false)}
           onTaskUpdate={handleTaskDetailUpdate}
           currentUser={user || undefined}
+          projectMembers={members}
         />
       )}
     </div>

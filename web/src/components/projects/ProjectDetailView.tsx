@@ -242,7 +242,7 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
 
   const isLoading = loadingTasks || loadingMembers || usersLoading;
 
-  const currentUserRole = projectData?.project?.userRole || 'guest';
+  const currentUserRole = projectData?.project?.user_role || 'guest';
 
   const isProjectAdmin = ['manager', 'leader', 'admin'].includes(String(currentUserRole).toLowerCase());
   const canManageProject = isProjectAdmin;

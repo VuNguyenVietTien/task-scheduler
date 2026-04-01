@@ -57,9 +57,6 @@ export const UPDATE_MULTIPLE_MEMBER_ROLES = gql`
     update_multiple_members(project_id: $projectId, updates: $updates) {
       success_count
       members {
-        member_id
-        project_id
-        user_id
         role
         joined_at
         user {

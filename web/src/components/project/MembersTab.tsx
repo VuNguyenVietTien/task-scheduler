@@ -28,6 +28,7 @@ import {
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Save as SaveIcon } from '@mui/icons-material';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { 
   fetchProjectMembers, 
@@ -56,6 +57,7 @@ import { toBackendRole, toFrontendRole } from '@/lib/utils';
 
 export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
   const pathname = usePathname();
+  const { user: authUser } = useAuth();
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
   const [openBulkEditDialog, setOpenBulkEditDialog] = useState(false);
@@ -78,10 +80,10 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
   
   // Sử dụng Redux
   const dispatch = useAppDispatch();
-  const { members, loading, error } = useAppSelector(state => state.members);
+  const { members, myRole, loading, error } = useAppSelector(state => state.members);
   
-  // Lấy userId của người dùng hiện tại
-  const myUserId = localStorage.getItem('userId') || '';
+  // Lấy userId của người dùng hiện tại (match by email for reliable identification)
+  const myUserId = members.find(m => m.user.email === authUser?.email)?.user.userId ?? '';
   
   // Fetch members khi component được mount
   useEffect(() => {
@@ -407,16 +409,8 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
   if (loading) return <div>Đang tải...</div>;
   if (error) return <div>Lỗi: {typeof error === 'string' ? error : 'Không thể tải dữ liệu thành viên'}</div>;
 
-  // Xác định vai trò của người dùng trong dự án
-  let myProjectRole = '';
-  const currentUserMember = members.find(member => member.user.userId === myUserId);
-  if (currentUserMember) {
-    myProjectRole = currentUserMember.role;
-  } else if (['Admin', 'SuperAdmin', 'Manager'].includes(localStorage.getItem('userRole') || '')) {
-    myProjectRole = 'Manager';
-  }
-
-  const isAdmin = myProjectRole === 'Manager' || myProjectRole === 'Leader';
+  // isAdmin is true only for users with the Manager role in this project
+  const isAdmin = myRole === 'Manager';
   const hasBulkSelections = selectedMembers.length > 0;
 
   return (
@@ -558,15 +552,16 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
                     <Select
                       value={pendingChanges[member.user.userId] || member.role}
                       onChange={(e) => handleTempRoleChange(
-                        member.user.userId, 
+                        member.user.userId,
                         e.target.value as MemberRole
                       )}
                       size="small"
                       sx={{ minWidth: 100 }}
                     >
-                      <MenuItem value="Admin">Admin</MenuItem>
+                      <MenuItem value="Manager">Manager</MenuItem>
+                      <MenuItem value="Leader">Leader</MenuItem>
                       <MenuItem value="Member">Member</MenuItem>
-                      <MenuItem value="Viewer">Viewer</MenuItem>
+                      <MenuItem value="Guest">Guest</MenuItem>
                     </Select>
                   ) : (
                     member.role
@@ -629,9 +624,10 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
                 setNewMemberRole(e.target.value as MemberRole)
               }
             >
-              <MenuItem value="Admin">Admin</MenuItem>
+              <MenuItem value="Manager">Manager</MenuItem>
+              <MenuItem value="Leader">Leader</MenuItem>
               <MenuItem value="Member">Member</MenuItem>
-              <MenuItem value="Viewer">Viewer</MenuItem>
+              <MenuItem value="Guest">Guest</MenuItem>
             </Select>
           </FormControl>
         </DialogContent>
@@ -663,9 +659,10 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
                 setSelectedRole(e.target.value as MemberRole)
               }
             >
-              <MenuItem value="Admin">Admin</MenuItem>
+              <MenuItem value="Manager">Manager</MenuItem>
+              <MenuItem value="Leader">Leader</MenuItem>
               <MenuItem value="Member">Member</MenuItem>
-              <MenuItem value="Viewer">Viewer</MenuItem>
+              <MenuItem value="Guest">Guest</MenuItem>
             </Select>
           </FormControl>
         </DialogContent>
@@ -697,9 +694,10 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
                 setBulkEditRole(e.target.value as MemberRole)
               }
             >
-              <MenuItem value="Admin">Admin</MenuItem>
+              <MenuItem value="Manager">Manager</MenuItem>
+              <MenuItem value="Leader">Leader</MenuItem>
               <MenuItem value="Member">Member</MenuItem>
-              <MenuItem value="Viewer">Viewer</MenuItem>
+              <MenuItem value="Guest">Guest</MenuItem>
             </Select>
           </FormControl>
         </DialogContent>

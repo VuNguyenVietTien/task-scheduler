@@ -99,6 +99,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
 
   // Lấy redux store tasks
   const { tasks, loading: tasksLoading } = useAppSelector(state => state.tasks);
+  const projectMembers = useAppSelector(state => state.members.members);
 
   // Lấy data từ Redux store (KHÔNG gọi API lại)
   const plans = useAppSelector(selectPlans);
@@ -1545,6 +1546,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
             onClose={() => setIsTaskDetailOpen(false)}
             onTaskUpdate={handleTaskDetailUpdate}
             currentUser={user || undefined}
+            projectMembers={projectMembers}
           />
         )}
       </div>

@@ -14,6 +14,7 @@ import { GET_TASK_COMMENTS } from '@/graphql/queries/tasks';
 import { AdvancedEditor } from '@/components/common/AdvancedEditor';
 import { isTiptapContentEmpty } from '@/utils/mentionUtils';
 import { imageService } from '@/services/imageService';
+import { Member } from '@/types/members';
 
 interface TaskDetailProps {
   task: Task;
@@ -21,6 +22,7 @@ interface TaskDetailProps {
   onClose: () => void;
   onTaskUpdate?: (taskId: string, updates: Partial<Task>) => void;
   currentUser?: User;
+  projectMembers?: Member[];
 }
 
 interface Comment {
@@ -33,7 +35,7 @@ interface Comment {
   status?: 'pending' | 'saved' | 'failed';
 }
 
-export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }: TaskDetailProps) {
+export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, projectMembers }: TaskDetailProps) {
   const taskId = task.task_id || task.id || '';
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
@@ -140,6 +142,7 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
         case 'actual_start_date': updates.actual_start_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : null; break;
         case 'actual_end_date': updates.actual_end_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : null; break;
         case 'tags': updates.tags = Array.isArray(val) ? val : []; break;
+        case 'assignee': (updates as any).assignee = val !== undefined ? val : null; break;
         default: return;
       }
 
@@ -456,34 +459,104 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser }:
 
         {/* Detail grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 bg-slate-50 p-4 rounded-md">
-          {/* Assignee (read-only) */}
+          {/* Assignee (editable) */}
           <div>
             <span className="text-xs text-slate-500 block mb-1">Nguoi duoc giao</span>
-            <div className="flex items-center gap-2 px-2 py-1 text-sm">
-              {editedTask.assignee ? (
-                <>
-                  <span className="inline-block h-6 w-6 rounded-full overflow-hidden bg-slate-200">
-                    {editedTask.assignee.avatarUrl ? (
-                      <img src={editedTask.assignee.avatarUrl} alt={editedTask.assignee.username} className="h-full w-full object-cover" />
-                    ) : (
-                      <svg className="h-full w-full text-slate-400" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M24 20.993V24H0v-2.996A14.977 14.977 0 0112.004 15c4.904 0 9.26 2.354 11.996 5.993zM16.002 8.999a4 4 0 11-8 0 4 4 0 018 0z" />
+            {editingField === 'assignee' ? (
+              <div>
+                <select
+                  value={editedTask.assignee?.userId || ''}
+                  onChange={(e) => {
+                    if (e.target.value) {
+                      const selectedMember = projectMembers?.find(m => m.user.userId === e.target.value);
+                      if (selectedMember) {
+                        setEditedTask({
+                          ...editedTask,
+                          assignee: {
+                            userId: selectedMember.user.userId,
+                            username: selectedMember.user.username || selectedMember.user.fullName || selectedMember.user.email,
+                            avatarUrl: selectedMember.user.avatarUrl,
+                            role: selectedMember.role,
+                          }
+                        } as Task);
+                      } else {
+                        setEditedTask({ ...editedTask, assignee: undefined } as Task);
+                      }
+                    } else {
+                      setEditedTask({ ...editedTask, assignee: undefined } as Task);
+                    }
+                  }}
+                  className="w-full text-sm rounded-md border-slate-300 focus:border-blue-500 focus:ring-blue-500 px-2 py-1.5"
+                >
+                  <option value="">Chua giao</option>
+                  {projectMembers?.map(m => (
+                    <option key={m.user.userId} value={m.user.userId}>
+                      {m.user.username || m.user.fullName || m.user.email}{m.position ? ` (${m.position})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <div className="flex mt-1.5 gap-1">
+                  <button
+                    onClick={() => saveField('assignee')}
+                    disabled={isSaving}
+                    className="p-1 text-green-600 hover:text-green-700 hover:bg-green-50 rounded-full transition-colors disabled:opacity-50"
+                    title="Xac nhan"
+                  >
+                    {isSaving ? (
+                      <svg className="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                       </svg>
+                    ) : (
+                      <CheckIcon className="h-4 w-4" />
                     )}
+                  </button>
+                  <button
+                    onClick={cancelEdit}
+                    className="p-1 text-red-500 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"
+                    title="Huy"
+                  >
+                    <XMarkIcon className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div
+                onClick={() => setEditingField('assignee')}
+                className="group cursor-pointer rounded px-2 py-1 -mx-2 transition-colors hover:bg-slate-100 flex items-center gap-1"
+                role="button"
+                tabIndex={0}
+                onKeyDown={e => { if (e.key === 'Enter') setEditingField('assignee'); }}
+              >
+                {editedTask.assignee ? (
+                  <span className="flex-1 text-sm text-slate-900">
+                    {editedTask.assignee.username}
+                    {(() => {
+                      const pos = projectMembers?.find(m => m.user.userId === editedTask.assignee?.userId)?.position;
+                      return pos ? <span className="text-slate-500"> ({pos})</span> : null;
+                    })()}
                   </span>
-                  <span className="text-slate-900">{editedTask.assignee.username}</span>
-                </>
-              ) : (
-                <span className="text-slate-400 italic">Chua giao</span>
-              )}
-            </div>
+                ) : (
+                  <span className="flex-1 text-sm text-slate-400 italic">Chua giao</span>
+                )}
+                <PencilIcon className="w-3.5 h-3.5 text-slate-400 group-hover:text-blue-500 transition-colors flex-shrink-0" />
+              </div>
+            )}
           </div>
 
           {/* Creator (read-only) */}
           <div>
             <span className="text-xs text-slate-500 block mb-1">Nguoi tao</span>
             <p className="px-2 py-1 text-sm text-slate-900">
-              {typeof editedTask.created_by === 'object' ? (editedTask.created_by as any)?.username : editedTask.created_by || '-'}
+              {typeof editedTask.created_by === 'object'
+                ? ((editedTask.created_by as any)?.full_name || (editedTask.created_by as any)?.username || '-')
+                : typeof editedTask.created_by === 'string'
+                  ? (() => {
+                      const creatorMember = projectMembers?.find(m => m.user.userId === editedTask.created_by);
+                      const name = creatorMember?.user.fullName || creatorMember?.user.username || '-';
+                      return creatorMember?.position ? `${name} (${creatorMember.position})` : name;
+                    })()
+                  : '-'}
             </p>
           </div>
 

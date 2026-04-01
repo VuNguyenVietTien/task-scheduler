@@ -211,7 +211,7 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
       progress: result.progress,
       assignee: result.assignee ? {
         userId: result.assignee.user_id,
-        username: result.assignee.username,
+        username: result.assignee.full_name || result.assignee.username,
         avatarUrl: result.assignee.avatar_url,
         role: result.assignee.role,
       } : undefined,

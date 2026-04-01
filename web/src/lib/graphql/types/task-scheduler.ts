@@ -89,6 +89,7 @@ export const taskSchedulerTypeDefs = `
   type ProjectMember {
     role: MemberRole!
     joined_at: String
+    position: String
     user: User!
   }
 
@@ -119,6 +120,7 @@ export const taskSchedulerTypeDefs = `
   type Assignee {
     user_id: ID!
     username: String
+    full_name: String
     avatar_url: String
     role: String
   }
@@ -237,6 +239,16 @@ export const taskSchedulerTypeDefs = `
     role: MemberRole!
   }
 
+  input MemberRoleUpdate {
+    userId: ID!
+    role: String!
+  }
+
+  type UpdateMultipleMembersResult {
+    success_count: Int!
+    members: [ProjectMember!]!
+  }
+
   input CreateTaskInput {
     project_id: ID!
     parent_task_id: ID
@@ -344,8 +356,10 @@ export const taskSchedulerTypeDefs = `
   extend type Mutation {
     create_project(input: CreateProjectInput!): Project!
     update_project(input: UpdateProjectInput!): Project!
+    invite_project_member(project_id: ID!, email: String!, role: String!): ProjectMember!
     add_project_member(input: AddProjectMemberInput!): ProjectMember!
     update_project_member(input: UpdateProjectMemberInput!): ProjectMember!
+    update_multiple_members(project_id: ID!, updates: [MemberRoleUpdate!]!): UpdateMultipleMembersResult!
     remove_project_member(project_id: ID!, user_id: ID!): Boolean!
     create_task(input: CreateTaskInput!): Task!
     update_task(input: UpdateTaskInput!): Task!
@@ -362,5 +376,6 @@ export const taskSchedulerTypeDefs = `
     mark_notification_read(notification_id: ID!): Boolean!
     mark_all_notifications_read(user_id: ID!): Boolean!
     register_fcm_token(token: String!): Boolean!
+    update_member_position(project_id: ID!, user_id: ID!, position: String): ProjectMember!
   }
 `;

@@ -1,10 +1,11 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { client } from '@/lib/apollo-client';
 import { GET_PROJECT_MEMBERS } from '@/graphql/queries/member';
-import { 
-  ADD_PROJECT_MEMBER_BY_EMAIL,
+import {
+  INVITE_PROJECT_MEMBER,
   REMOVE_PROJECT_MEMBER,
-  UPDATE_PROJECT_MEMBER_ROLE
+  UPDATE_PROJECT_MEMBER_ROLE,
+  UPDATE_MEMBER_POSITION,
 } from '@/graphql/mutations/projectMember';
 import { REMOVE_MULTIPLE_PROJECT_MEMBERS, UPDATE_MULTIPLE_MEMBER_ROLES } from '@/graphql/mutations/projectMembers';
 import { ProjectMember } from '@/hooks/useProject';
@@ -13,12 +14,14 @@ import { toFrontendRole } from '@/lib/utils';
 
 interface MembersState {
   members: Member[];
+  myRole: MemberRole | null;
   loading: boolean;
   error: string | null;
 }
 
 const initialState: MembersState = {
   members: [],
+  myRole: null,
   loading: false,
   error: null,
 };
@@ -39,19 +42,24 @@ export const fetchProjectMembers = createAsyncThunk(
       }
 
       const rawMembers = response.data.project_members ?? [];
-      return rawMembers.map((m: any) => ({
-        memberId: `member-${m.user.user_id}`,
-        userId: m.user.user_id,
-        role: toFrontendRole(m.role),
-        joinedAt: m.joined_at,
-        user: {
+      const myRole = toFrontendRole(response.data.my_project_role ?? '');
+      return {
+        members: rawMembers.map((m: any) => ({
+          memberId: `member-${m.user.user_id}`,
           userId: m.user.user_id,
-          email: m.user.email,
-          username: m.user.username,
-          fullName: m.user.full_name,
-          avatarUrl: m.user.avatar_url,
-        },
-      }));
+          role: toFrontendRole(m.role),
+          joinedAt: m.joined_at,
+          position: m.position ?? null,
+          user: {
+            userId: m.user.user_id,
+            email: m.user.email,
+            username: m.user.username,
+            fullName: m.user.full_name,
+            avatarUrl: m.user.avatar_url,
+          },
+        })),
+        myRole,
+      };
     } catch (error: any) {
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi tải danh sách thành viên');
     }
@@ -125,25 +133,26 @@ export const addMemberByEmail = createAsyncThunk(
   }, { rejectWithValue }) => {
     try {
       const response = await client.mutate({
-        mutation: ADD_PROJECT_MEMBER_BY_EMAIL,
-        variables: { 
-          projectId, 
-          email, 
-          role 
+        mutation: INVITE_PROJECT_MEMBER,
+        variables: {
+          project_id: projectId,
+          email,
+          role,
         }
       });
-      
+
       if (response.errors) {
         return rejectWithValue(response.errors[0].message);
       }
-      
+
       // Chuyển đổi dữ liệu từ API sang định dạng Member
-      const addedMember = response.data.add_project_member;
+      const addedMember = response.data.invite_project_member;
       const newMember: Member = {
         memberId: `member-${addedMember.user.user_id}`,
         userId: addedMember.user.user_id,
         role: toFrontendRole(addedMember.role),
         joinedAt: addedMember.joined_at,
+        position: addedMember.position ?? null,
         user: {
           userId: addedMember.user.user_id,
           email: addedMember.user.email,
@@ -225,6 +234,23 @@ export const removeMultipleProjectMembers = createAsyncThunk(
       };
     } catch (error: any) {
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi xóa nhiều thành viên');
+    }
+  }
+);
+
+// Async thunk để cập nhật vị trí của một thành viên
+export const updateMemberPosition = createAsyncThunk(
+  'members/updateMemberPosition',
+  async ({ projectId, userId, position }: { projectId: string; userId: string; position: string | null }, { rejectWithValue }) => {
+    try {
+      const response = await client.mutate({
+        mutation: UPDATE_MEMBER_POSITION,
+        variables: { project_id: projectId, user_id: userId, position },
+      });
+      if (response.errors) return rejectWithValue(response.errors[0].message);
+      return { userId, position };
+    } catch (error: any) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi cập nhật vị trí thành viên');
     }
   }
 );
@@ -366,7 +392,8 @@ export const membersSlice = createSlice({
       })
       .addCase(fetchProjectMembers.fulfilled, (state, action) => {
         state.loading = false;
-        state.members = action.payload;
+        state.members = action.payload.members;
+        state.myRole = action.payload.myRole;
       })
       .addCase(fetchProjectMembers.rejected, (state, action) => {
         state.loading = false;
@@ -469,6 +496,11 @@ export const membersSlice = createSlice({
       .addCase(updateMultipleProjectMemberRoles.rejected, (state, action) => {
         state.loading = false;
         state.error = action.payload as string;
+      })
+      .addCase(updateMemberPosition.fulfilled, (state, action) => {
+        const { userId, position } = action.payload;
+        const idx = state.members.findIndex(m => m.userId === userId);
+        if (idx !== -1) state.members[idx].position = position;
       });
   },
 });

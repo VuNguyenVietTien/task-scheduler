@@ -46,9 +46,10 @@ interface TaskDetailPageProps {
   currentUser?: User;
   onTaskUpdate: (updates: Partial<Task>) => Promise<boolean>;
   isLoadingProp?: boolean;
-  projectMembers?: { 
+  projectMembers?: {
     role: string;
     joinedAt: string;
+    position?: string | null;
     user: {
       userId: string;
       email: string;
@@ -581,7 +582,7 @@ export function TaskDetailPage({
                 </span>
               </div>
             )}
-            <span>{value.username || value.fullName || 'Chưa gán'}</span>
+            <span>{value.username || value.fullName || 'Chưa gán'}{value.position ? ` (${value.position})` : ''}</span>
           </div>
         );
       } else if (value) {
@@ -598,7 +599,10 @@ export function TaskDetailPage({
                 </span>
               </div>
             )}
-            <span>{assigneeData?.user?.username || assigneeData?.user?.fullName || String(value)}</span>
+            <span>
+              {assigneeData?.user?.username || assigneeData?.user?.fullName || String(value)}
+              {assigneeData?.position ? ` (${assigneeData.position})` : ''}
+            </span>
           </div>
         );
       } else {
@@ -636,7 +640,7 @@ export function TaskDetailPage({
                   </span>
                 </div>
               )}
-              <span>{creatorData.user.username || creatorData.user.fullName || 'Người dùng'}</span>
+              <span>{creatorData.user.username || creatorData.user.fullName || 'Người dùng'}{creatorData.position ? ` (${creatorData.position})` : ''}</span>
             </div>
           );
         } else {
@@ -1994,11 +1998,11 @@ export function TaskDetailPage({
                   <div className="mt-6 border-t border-gray-200 pt-4">
                     <h3 className="text-base font-medium text-gray-900 mb-3">Người phụ trách</h3>
                     {renderEditableField('Người được giao', 'assignee', 'select',
-                      projectMembers && projectMembers.length > 0 ? 
-                        [{ value: '', label: 'Chưa gán' }, ...projectMembers.map(member => ({ 
-                          value: member.user.userId, 
-                          label: member.user.username || member.user.fullName || member.user.email 
-                        }))] : 
+                      projectMembers && projectMembers.length > 0 ?
+                        [{ value: '', label: 'Chưa gán' }, ...projectMembers.map(member => ({
+                          value: member.user.userId,
+                          label: (member.user.username || member.user.fullName || member.user.email) + (member.position ? ` (${member.position})` : '')
+                        }))] :
                         [{ value: '', label: 'Chưa gán' }]
                     )}
                     

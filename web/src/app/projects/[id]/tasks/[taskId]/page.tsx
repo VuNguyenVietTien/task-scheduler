@@ -83,7 +83,7 @@ export default function TaskDetailsPage() {
           parent_task_id: t.parent_task_id ?? null,
           assignee: t.assignee ? {
             userId: t.assignee.user_id,
-            username: t.assignee.username,
+            username: t.assignee.full_name || t.assignee.username,
             avatarUrl: t.assignee.avatar_url || '',
             role: t.assignee.role || ''
           } : undefined,
@@ -96,7 +96,7 @@ export default function TaskDetailsPage() {
           progress: t.progress || 0,
           created_by: t.creator ? {
             userId: t.creator.user_id,
-            username: t.creator.username,
+            username: t.creator.full_name || t.creator.username,
             avatarUrl: t.creator.avatar_url || '',
             role: t.creator.role || ''
           } : (t.created_by || 'system'),

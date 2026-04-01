@@ -13,6 +13,7 @@ export interface Member {
   userId: string;
   role: MemberRole;
   joinedAt: string;
+  position?: string | null;
   user: UserInfo;
 }
 

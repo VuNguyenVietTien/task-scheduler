@@ -10,6 +10,7 @@ export const GET_PROJECT_TASKS = gql`
       assignee {
         user_id
         username
+        full_name
         avatar_url
         role
       }
@@ -37,6 +38,7 @@ export const GET_PROJECT_TASKS = gql`
         assignee {
           user_id
           username
+          full_name
           avatar_url
           role
         }
@@ -74,12 +76,14 @@ export const GET_TASK_BY_ID = gql`
       assignee {
         user_id
         username
+        full_name
         avatar_url
         role
       }
       creator {
         user_id
         username
+        full_name
         avatar_url
         role
       }
@@ -113,6 +117,7 @@ export const GET_PROJECT_TASKS_PAGINATED = gql`
         assignee {
           user_id
           username
+          full_name
           avatar_url
           role
         }
@@ -140,6 +145,7 @@ export const GET_PROJECT_TASKS_PAGINATED = gql`
           assignee {
             user_id
             username
+            full_name
             avatar_url
             role
           }
@@ -193,6 +199,7 @@ export const GET_TASK_SUBTASKS = gql`
       assignee {
         user_id
         username
+        full_name
         avatar_url
         role
       }

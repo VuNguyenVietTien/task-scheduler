@@ -182,7 +182,7 @@ const transformTaskFromAPI = (apiTask: any): Task => {
     description: apiTask.description,
     assignee: apiTask.assignee ? {
       userId: apiTask.assignee.user_id || apiTask.assignee.userId,
-      username: apiTask.assignee.username,
+      username: apiTask.assignee.full_name || apiTask.assignee.username,
       avatarUrl: apiTask.assignee.avatar_url || apiTask.assignee.avatarUrl || "",
       role: apiTask.assignee.role || ""
     } : undefined,

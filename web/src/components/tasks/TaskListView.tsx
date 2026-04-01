@@ -1555,6 +1555,7 @@ export function TaskListView({
           onClose={() => setIsTaskDetailOpen(false)}
           onTaskUpdate={handleTaskUpdate}
           currentUser={user || undefined}
+          projectMembers={reduxMembers}
         />
       )}
 

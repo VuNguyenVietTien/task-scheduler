@@ -311,7 +311,7 @@ const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
     description: apiTask.description,
     assignee: apiTask.assignee ? {
       userId: apiTask.assignee.user_id,
-      username: apiTask.assignee.username,
+      username: apiTask.assignee.full_name || apiTask.assignee.username,
       avatarUrl: apiTask.assignee.avatar_url || "",
       role: apiTask.assignee.role || ""
     } : undefined,

@@ -3,26 +3,28 @@
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import { useMutation } from '@apollo/client';
-import { ADD_PROJECT_MEMBER_BY_EMAIL, UPDATE_PROJECT_MEMBER_ROLE, REMOVE_PROJECT_MEMBER } from '@/graphql/mutations/projectMember';
+import { UPDATE_PROJECT_MEMBER_ROLE, REMOVE_PROJECT_MEMBER } from '@/graphql/mutations/projectMember';
 import { UPDATE_MULTIPLE_MEMBER_ROLES } from '@/graphql/mutations/projectMembers';
 import { Dialog } from '@/components/ui/Dialog';
 import { toast } from 'sonner';
-import { MemberRole } from '@/types/members';
+import { MemberRole, Member as MemberType } from '@/types/members';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
-import { 
-  updateMultipleMemberRolesInStore, 
+import {
+  updateMultipleMemberRolesInStore,
   updateMemberRoleInStore,
   addMemberByEmail,
   removeMember,
-  updateMultipleProjectMemberRoles
+  updateMultipleProjectMemberRoles,
+  updateMemberPosition,
 } from '@/redux/features/membersSlice';
 import { toBackendRole, toFrontendRole } from '@/lib/utils';
 import { RootState } from '@/redux/store';
 
 // Định nghĩa các type cần thiết
 type Member = {
-  role: string; // Role từ API 
+  role: string; // Role từ API
   joinedAt: string;
+  position?: string | null;
   user: {
     userId: string;
     email: string;
@@ -42,6 +44,7 @@ type ProjectMembersProps = {
 type AddMemberFormValues = {
   email: string;
   role: MemberRole;
+  position?: string;
 };
 
 // Định nghĩa thêm kiểu dữ liệu cho API response
@@ -72,6 +75,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
   const [emailInput, setEmailInput] = useState('');
   const [editMode, setEditMode] = useState(false);
   const [pendingChanges, setPendingChanges] = useState<Map<string, MemberRole>>(new Map());
+  const [pendingPositions, setPendingPositions] = useState<Map<string, string>>(new Map());
   const [addError, setAddError] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [success, setSuccess] = useState<string | null>(null);
@@ -100,12 +104,13 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
       setDisplayMembers(storeMembers.map(storeMember => ({
         role: storeMember.role,
         joinedAt: storeMember.joinedAt,
+        position: storeMember.position ?? null,
         user: {
           userId: storeMember.user.userId,
           email: storeMember.user.email,
-          fullName: storeMember.user.fullName || '', // Đảm bảo không null
+          fullName: storeMember.user.fullName || '',
           username: storeMember.user.username,
-          avatarUrl: storeMember.user.avatarUrl || '' // Đảm bảo không null
+          avatarUrl: storeMember.user.avatarUrl || ''
         }
       })));
       console.log('Updated displayMembers with store data');
@@ -119,8 +124,8 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
     }
   }, [storeError]);
 
-  // Kiểm tra quyền dựa trên vai trò trong dự án
-  const canManageMembers = ['manager', 'leader', 'admin'].includes(String(currentUserRole).toLowerCase());
+  // Chỉ Manager mới có quyền quản lý thành viên
+  const canManageMembers = String(currentUserRole).toLowerCase() === 'manager';
   
   // Debug: Log vai trò hiện tại để kiểm tra
   useEffect(() => {
@@ -184,6 +189,12 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
       
       // Kiểm tra kết quả action
       if (addMemberByEmail.fulfilled.match(resultAction)) {
+        // If position provided, update it after member is added
+        const position = data.position?.trim();
+        if (position) {
+          const newMember = resultAction.payload as MemberType;
+          await dispatch(updateMemberPosition({ projectId, userId: newMember.userId, position }));
+        }
         toast.success('Thành viên đã được thêm vào dự án thành công');
         setIsAddDialogOpen(false);
         reset();
@@ -321,53 +332,41 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
   };
 
   const handleSaveChanges = async () => {
-    if (!canManageMembers || pendingChanges.size === 0) return;
-    
+    if (!canManageMembers) return;
+    if (pendingChanges.size === 0 && pendingPositions.size === 0) return;
+
     try {
       setUpdating(true);
-      
-      // Chuyển đổi từ Map thành mảng updates
-      const updates = Array.from(pendingChanges.entries()).map(([userId, role]) => {
-        // Tìm thông tin member từ displayMembers
-        const member = displayMembers.find(m => m.user.userId === userId);
-        if (!member) {
-          throw new Error(`Không tìm thấy thông tin thành viên với userId: ${userId}`);
-        }
-        
-        return {
-          userId: userId,
-          role: toBackendRole(role) // Chuyển đổi role thành lowercase
-        };
-      });
 
-      console.log('Updates being sent:', updates); // Debug log
-      
-      // Dispatch async thunk để cập nhật vai trò
-      const resultAction = await dispatch(
-        updateMultipleProjectMemberRoles({
-          projectId,
-          updates
-        })
-      );
-      
-      // Kiểm tra kết quả action
-      if (updateMultipleProjectMemberRoles.fulfilled.match(resultAction)) {
-        // Thông báo thành công
-        toast.success(`Đã cập nhật ${resultAction.payload.successCount} thành viên`);
-        
-        // Xóa tất cả pendingChanges vì đã cập nhật thành công
-        setPendingChanges(new Map());
-        
-        // Tắt chế độ edit
-        setEditMode(false);
-      } else {
-        // Xử lý lỗi nếu có
-        const errorMessage = resultAction.payload as string;
-        toast.error(errorMessage || 'Không thể cập nhật vai trò thành viên');
+      // Save role changes
+      if (pendingChanges.size > 0) {
+        const updates = Array.from(pendingChanges.entries()).map(([userId, role]) => ({
+          userId,
+          role: toBackendRole(role),
+        }));
+
+        const resultAction = await dispatch(updateMultipleProjectMemberRoles({ projectId, updates }));
+
+        if (!updateMultipleProjectMemberRoles.fulfilled.match(resultAction)) {
+          const errorMessage = resultAction.payload as string;
+          toast.error(errorMessage || 'Không thể cập nhật vai trò thành viên');
+          return;
+        }
       }
+
+      // Save position changes
+      const positionEntries = Array.from(pendingPositions.entries());
+      for (const [userId, position] of positionEntries) {
+        await dispatch(updateMemberPosition({ projectId, userId, position: position.trim() || null }));
+      }
+
+      toast.success('Đã lưu thay đổi thành công');
+      setPendingChanges(new Map());
+      setPendingPositions(new Map());
+      setEditMode(false);
     } catch (error: any) {
-      console.error('Failed to update roles:', error);
-      toast.error('Có lỗi xảy ra khi cập nhật vai trò');
+      console.error('Failed to save changes:', error);
+      toast.error('Có lỗi xảy ra khi lưu thay đổi');
     } finally {
       setUpdating(false);
     }
@@ -519,7 +518,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
     }
   };
 
-  // Xử lý lưu tất cả thay đổi vai trò 
+  // Xử lý lưu tất cả thay đổi vai trò
   const handleSaveAllChanges = async () => {
     if (!canManageMembers || pendingChanges.size === 0) return;
     
@@ -578,19 +577,28 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
               Thêm thành viên
             </button>
             {editMode ? (
-              <button 
-                className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition"
-                onClick={handleSaveChanges}
-                disabled={updateMultipleLoading}
-              >
-                {updateMultipleLoading ? 'Đang lưu...' : 'Lưu thay đổi'}
-              </button>
+              <>
+                <button
+                  className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition"
+                  onClick={() => { setEditMode(false); setPendingChanges(new Map()); setPendingPositions(new Map()); }}
+                  disabled={updating}
+                >
+                  Hủy
+                </button>
+                <button
+                  className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition"
+                  onClick={handleSaveChanges}
+                  disabled={updating}
+                >
+                  {updating ? 'Đang lưu...' : 'Lưu thay đổi'}
+                </button>
+              </>
             ) : (
-              <button 
+              <button
                 className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition"
                 onClick={() => setEditMode(true)}
               >
-                Sửa vai trò
+                Chỉnh sửa
               </button>
             )}
           </div>
@@ -628,13 +636,24 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
               {...register('role')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
             >
-              <option value="Admin">Admin</option>
+              <option value="Manager">Manager</option>
+              <option value="Leader">Leader</option>
               <option value="Member">Member</option>
-              <option value="Viewer">Viewer</option>
               <option value="Guest">Guest</option>
             </select>
           </div>
-          
+
+          <div className="space-y-2">
+            <label htmlFor="position" className="text-sm font-medium">Vị trí <span className="text-gray-400 font-normal">(tùy chọn)</span></label>
+            <input
+              id="position"
+              type="text"
+              {...register('position')}
+              placeholder="Ví dụ: Frontend, Backend, Tester..."
+              className="w-full px-3 py-2 border border-gray-300 rounded-md"
+            />
+          </div>
+
           <div className="flex justify-end space-x-2 mt-4">
             <button
               type="button"
@@ -694,6 +713,9 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
                 Email
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                Vị trí
+              </th>
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                 Vai trò
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -740,9 +762,27 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
                     {member.user.email}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                    {isAdminRole(member.role) ? (
-                      <span className="font-medium text-blue-600">Admin</span>
-                    ) : canManageMembers && editMode ? (
+                    {canManageMembers && editMode ? (
+                      <input
+                        type="text"
+                        value={pendingPositions.has(member.user.userId) ? pendingPositions.get(member.user.userId) : (member.position || '')}
+                        onChange={(e) => {
+                          const newPositions = new Map(pendingPositions);
+                          newPositions.set(member.user.userId, e.target.value);
+                          setPendingPositions(newPositions);
+                        }}
+                        className="px-2 py-1 text-sm border border-gray-300 rounded-md w-36 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                        placeholder="Vị trí..."
+                        aria-label="Vị trí thành viên"
+                      />
+                    ) : (
+                      <span className="text-sm text-gray-700">
+                        {member.position || <span className="text-gray-400 italic text-xs">Chưa có</span>}
+                      </span>
+                    )}
+                  </td>
+                  <td className="px-6 py-4 whitespace-nowrap">
+                    {canManageMembers && editMode ? (
                       <select
                         value={pendingChanges.has(member.user.userId) ? pendingChanges.get(member.user.userId) : normalizedRole}
                         onChange={(e) => handleRoleChange(member.user.userId, e.target.value as MemberRole)}
@@ -752,13 +792,13 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
                         aria-label={`Thay đổi vai trò của ${member.user.fullName || member.user.username}`}
                         disabled={!canEditThisMember}
                       >
-                        <option value="Admin">Admin</option>
+                        <option value="Manager">Manager</option>
+                        <option value="Leader">Leader</option>
                         <option value="Member">Member</option>
-                        <option value="Viewer">Viewer</option>
                         <option value="Guest">Guest</option>
                       </select>
                     ) : (
-                      <span>
+                      <span className={isAdminRole(member.role) ? 'font-medium text-blue-600' : ''}>
                         {getRoleDisplay(member.role)}
                       </span>
                     )}

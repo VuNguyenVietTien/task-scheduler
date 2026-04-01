@@ -11,6 +11,7 @@ export const UPDATE_TASK_STATUS = gql`
       assignee {
         user_id
         username
+        full_name
         avatar_url
         role
       }
@@ -46,6 +47,7 @@ export const UPDATE_TASK_EFFORT = gql`
       assignee {
         user_id
         username
+        full_name
         avatar_url
         role
       }
@@ -81,6 +83,7 @@ export const UPDATE_TASK = gql`
       assignee {
         user_id
         username
+        full_name
         avatar_url
         role
       }
