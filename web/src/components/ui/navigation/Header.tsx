@@ -6,6 +6,7 @@ import Link from 'next/link';
 import NotificationDropdown from './NotificationDropdown';
 import AccountDropdown from './AccountDropdown';
 import useNotificationsRedux from '@/hooks/useNotificationsRedux';
+import SettingsPanel from '@/components/layout/SettingsPanel';
 
 const Header = () => {
   const { 
@@ -21,6 +22,7 @@ const Header = () => {
   } = useNotificationsRedux();
   
   const [isAccountOpen, setIsAccountOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const accountRef = useRef<HTMLDivElement>(null);
   // Track last unread count to detect changes
@@ -73,6 +75,7 @@ const Header = () => {
   };
 
   return (
+    <>
     <header className="fixed top-0 left-0 right-0 h-16 bg-white shadow-md z-50">
       <div className="h-full flex items-center justify-between px-4">
         <div className="flex items-center">
@@ -131,11 +134,14 @@ const Header = () => {
               isOpen={isAccountOpen}
               onClose={() => setIsAccountOpen(false)}
               onLogout={handleLogout}
+              onSettingsOpen={() => setIsSettingsOpen(true)}
             />
           </div>
         </div>
       </div>
     </header>
+    <SettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+    </>
   );
 };
 

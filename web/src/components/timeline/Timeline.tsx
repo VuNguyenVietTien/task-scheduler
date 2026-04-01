@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslation } from 'react-i18next';
 import { Task, Priority, GanttFilter } from '@/types/task';
 import { GanttFilterBar } from './gantt-filter-bar';
 import { AssignedUser } from '@/types/user';
@@ -76,6 +77,7 @@ interface DateRange {
 }
 
 export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProps) {
+  const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const ganttContentRef = useRef<HTMLDivElement>(null);
   const ganttHeaderRef = useRef<HTMLDivElement>(null);
@@ -845,12 +847,12 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
   // Thêm hàm xử lý để lưu kế hoạch
   const handleSavePlan = useCallback(() => {
     if (!planName.trim()) {
-      toast.error('Vui lòng nhập tên kế hoạch');
+      toast.error(t('gantt.enterPlanNameRequired'));
       return;
     }
 
     if (!currentProjectId) {
-      toast.error('Không tìm thấy thông tin project');
+      toast.error(t('gantt.planSelectFailed'));
       return;
     }
 
@@ -860,7 +862,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     );
 
     if (activeVisibleTasks.length === 0) {
-      toast.error('Không có task nào để lưu vào kế hoạch');
+      toast.error(t('gantt.noTasksToSave'));
       return;
     }
 
@@ -912,7 +914,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
       .unwrap()
       .then((result) => {
         console.log('Kết quả tạo plan:', result);
-        toast.success('Đã lưu kế hoạch thành công');
+        toast.success(t('gantt.planSaved'));
         setShowSavePlanDialog(false);
       })
       .catch((error) => {
@@ -924,7 +926,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
   // Thêm hàm xử lý để xóa kế hoạch
   const handleDeletePlan = useCallback(() => {
     if (!activePlan) {
-      toast.error('Không có kế hoạch nào được chọn');
+      toast.error(t('gantt.noActivePlan'));
       return;
     }
 
@@ -932,7 +934,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     dispatch(deletePlan(activePlan.id))
       .unwrap()
       .then(() => {
-        toast.success('Đã xóa kế hoạch thành công');
+        toast.success(t('gantt.planDeleted'));
         setShowDeletePlanDialog(false);
       })
       .catch((error) => {
@@ -1028,7 +1030,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     // 4. Gọi processTasksAndUpdateStore để tính toán lại ngày và cập nhật vào store
     processTasksAndUpdateStore(tasksToProcess, true, dispatch);
 
-    toast.success('Đã sắp xếp lại tasks theo mức độ ưu tiên');
+    toast.success(t('gantt.sortedByPriority'));
   }, [tasks, dispatch]);
 
   // Debug re-render
@@ -1073,9 +1075,9 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                   handleSelectPlan(selectedPlan);
                 }
               }}
-              title="Chọn kế hoạch"
+              title={t('gantt.selectPlan')}
             >
-              <option value="" disabled>Chọn kế hoạch</option>
+              <option value="" disabled>{t('gantt.selectPlan')}</option>
               {plans.map((plan: Plan) => (
                 <option key={plan.id} value={plan.id}>
                   {plan.name}
@@ -1086,7 +1088,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
             <button
               onClick={handleNewPlan}
               className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-slate-100 hover:bg-slate-200 whitespace-nowrap"
-              title="Tạo kế hoạch mới"
+              title={t('gantt.newPlan')}
             >
               <PlusIcon className="h-4 w-4" />
               New Plan
@@ -1095,16 +1097,16 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
             <button
               onClick={handleSavePlan}
               className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-blue-100 hover:bg-blue-200 whitespace-nowrap"
-              title={`Lưu kế hoạch (${visibleTasks.filter(t => !['DONE', 'CLOSE'].includes(t.status)).length} tasks hiển thị)`}
+              title={t('gantt.savePlanCount', { count: visibleTasks.filter(task => !['DONE', 'CLOSE'].includes(task.status)).length })}
             >
-              <span>Lưu kế hoạch</span>
+              <span>{t('gantt.savePlan')}</span>
             </button>
 
             {activePlan && (
               <button
                 onClick={() => setShowDeletePlanDialog(true)}
                 className="flex items-center gap-1 px-2 py-1 rounded text-sm bg-red-100 hover:bg-red-200 whitespace-nowrap"
-                title="Xóa kế hoạch hiện tại"
+                title={t('gantt.deletePlan')}
               >
                 <TrashIcon className="h-4 w-4" />
               </button>
@@ -1113,10 +1115,10 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
             <button
               onClick={handleAutoSort}
               className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-slate-100 hover:bg-slate-200 whitespace-nowrap"
-              title="Sắp xếp task tự động theo priority"
+              title={t('gantt.autoSortTitle')}
             >
               <ArrowUpDown className="h-4 w-4" />
-              <span>Sắp xếp tự động</span>
+              <span>{t('gantt.autoSort')}</span>
             </button>
           </div>
 
@@ -1163,7 +1165,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
 
             <div className="flex items-center gap-2">
               <label htmlFor="start-date" className="text-sm text-slate-600">
-                Bắt đầu:
+                {t('gantt.startLabel')}
               </label>
               <input
                 id="start-date"
@@ -1171,13 +1173,13 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                 value={dateRange.startDate.toISOString().split('T')[0]}
                 onChange={handleStartDateChange}
                 className="px-2 py-1 text-sm border rounded"
-                aria-label="Ngày bắt đầu"
-                title="Ngày bắt đầu hiển thị"
+                aria-label={t('gantt.startDate')}
+                title={t('gantt.startDate')}
               />
             </div>
             <div className="flex items-center gap-2">
               <label htmlFor="end-date" className="text-sm text-slate-600">
-                Kết thúc:
+                {t('gantt.endLabel')}
               </label>
               <input
                 id="end-date"
@@ -1185,8 +1187,8 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                 value={dateRange.endDate.toISOString().split('T')[0]}
                 onChange={handleEndDateChange}
                 className="px-2 py-1 text-sm border rounded"
-                aria-label="Ngày kết thúc"
-                title="Ngày kết thúc hiển thị"
+                aria-label={t('gantt.endDate')}
+                title={t('gantt.endDate')}
               />
             </div>
 
@@ -1203,11 +1205,11 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
           <div className="w-52 flex-shrink-0 border-r border-slate-200">
             {/* Sticky header - sticks below page header when page scrolls */}
             <div className="h-[40px] border-b border-slate-200 bg-slate-50 flex items-center px-2 sticky z-40" style={{ top: '64px' }}>
-              <span className="text-xs font-medium text-slate-500">Công việc</span>
+              <span className="text-xs font-medium text-slate-500">{t('gantt.taskList')}</span>
             </div>
             {viewMode === 'project' ? (
               <PriorityTaskList
-                title="Danh sách task"
+                title={t('gantt.taskList')}
                 tasks={visibleTasks}
                 onTaskClick={onTaskClick}
                 onTaskReorder={(taskId, newIndex) => {
@@ -1221,7 +1223,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
               <>
                 {selectedUserId ? (
                   <PriorityTaskList
-                    title="Danh sách task"
+                    title={t('gantt.taskList')}
                     tasks={visibleTasks}
                     onTaskClick={onTaskClick}
                     onTaskReorder={(taskId, newIndex) => {
@@ -1268,13 +1270,13 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                     >
                       <div className="flex flex-col justify-center items-center h-full">
                         <div className="text-xs text-slate-700 font-medium text-center">
-                          {day.toLocaleDateString('vi-VN', {
+                          {day.toLocaleDateString(undefined, {
                             day: '2-digit',
                             month: '2-digit'
                           })}
                         </div>
                         <div className="text-[0.6rem] text-slate-500 text-center">
-                          {day.toLocaleDateString('vi-VN', { weekday: 'short' })}
+                          {day.toLocaleDateString(undefined, { weekday: 'short' })}
                         </div>
                       </div>
                     </div>
@@ -1474,19 +1476,19 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
           <Dialog
             open={showSavePlanDialog}
             onClose={() => setShowSavePlanDialog(false)}
-            title="Lưu kế hoạch mới"
+            title={t('gantt.newPlan')}
             className="w-96"
           >
             <div className="mt-4">
               <label htmlFor="planName" className="block text-sm font-medium text-gray-700 mb-1">
-                Tên kế hoạch
+                {t('gantt.selectPlan')}
               </label>
               <input
                 id="planName"
                 type="text"
                 value={planName}
                 onChange={(e) => setPlanName(e.target.value)}
-                placeholder="Nhập tên kế hoạch"
+                placeholder={t('gantt.enterPlanName')}
                 className="w-full px-3 py-2 border rounded-md"
               />
             </div>
@@ -1502,7 +1504,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                 disabled={!planName.trim()}
                 className="px-4 py-2 bg-blue-500 text-white rounded-md text-sm disabled:opacity-50"
               >
-                Lưu kế hoạch
+                {t('gantt.savePlan')}
               </button>
             </div>
           </Dialog>
@@ -1513,12 +1515,12 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
           <Dialog
             open={showDeletePlanDialog}
             onClose={() => setShowDeletePlanDialog(false)}
-            title="Xóa kế hoạch"
+            title={t('gantt.deleteConfirm')}
             className="w-96"
           >
             <div className="mt-4">
               <p className="text-sm text-gray-600">
-                Bạn có chắc chắn muốn xóa kế hoạch "{activePlan?.name}" không?
+                {activePlan?.name}
               </p>
             </div>
             <div className="mt-6 flex justify-end gap-2">
@@ -1526,13 +1528,13 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                 onClick={() => setShowDeletePlanDialog(false)}
                 className="px-4 py-2 border rounded-md text-sm"
               >
-                Hủy
+                {t('tasks.actions.cancel')}
               </button>
               <button
                 onClick={handleDeletePlan}
                 className="px-4 py-2 bg-red-500 text-white rounded-md text-sm"
               >
-                Xóa kế hoạch
+                {t('gantt.deletePlan')}
               </button>
             </div>
           </Dialog>

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardSummaryCard } from './dashboard-summary-card';
 import { DashboardTaskTable, renderStatusBadge, renderPriorityBadge } from './dashboard-task-table';
 
@@ -21,7 +22,10 @@ interface MemberDashboardViewProps {
 }
 
 export function MemberDashboardView({ activeTasks, tasksByStatus }: MemberDashboardViewProps) {
-  // Sort by due date ascending (soonest first), nulls at end
+  const { t } = useTranslation();
+  const statusLabel = (s: string) => t(`tasks.statusLabels.${s?.toUpperCase()}`, { defaultValue: s });
+  const priorityLabel = (p: string) => t(`tasks.priorityLabels.${p?.toUpperCase()}`, { defaultValue: p });
+
   const sortedTasks = [...activeTasks].sort((a, b) => {
     if (!a.due_date && !b.due_date) return 0;
     if (!a.due_date) return 1;
@@ -31,26 +35,24 @@ export function MemberDashboardView({ activeTasks, tasksByStatus }: MemberDashbo
 
   return (
     <div className="space-y-6">
-      {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <DashboardSummaryCard title="Tong cong viec" count={activeTasks.length} color="text-slate-800" />
-        <DashboardSummaryCard title="Dang lam" count={tasksByStatus['DOING']?.length || 0} color="text-blue-600" />
-        <DashboardSummaryCard title="Cho xu ly" count={(tasksByStatus['TODO']?.length || 0) + (tasksByStatus['PENDING']?.length || 0)} color="text-amber-600" />
-        <DashboardSummaryCard title="Can review" count={tasksByStatus['REVIEW']?.length || 0} color="text-purple-600" />
+        <DashboardSummaryCard title={t('dashboard.totalTasks')} count={activeTasks.length} color="text-slate-800" />
+        <DashboardSummaryCard title={t('dashboard.doing')} count={tasksByStatus['DOING']?.length || 0} color="text-blue-600" />
+        <DashboardSummaryCard title={t('dashboard.pending')} count={(tasksByStatus['TODO']?.length || 0) + (tasksByStatus['PENDING']?.length || 0)} color="text-amber-600" />
+        <DashboardSummaryCard title={t('dashboard.needsReview')} count={tasksByStatus['REVIEW']?.length || 0} color="text-purple-600" />
       </div>
 
-      {/* Task table */}
       <DashboardTaskTable
-        title="Cong viec cua toi"
+        title={t('dashboard.myTasks')}
         tasks={sortedTasks}
         columns={[
-          { key: 'title', label: 'Task' },
-          { key: 'status', label: 'Trang thai', render: (v: string) => renderStatusBadge(v) },
-          { key: 'priority', label: 'Uu tien', render: (v: string) => renderPriorityBadge(v) },
-          { key: 'dueDate', label: 'Han', render: (v: string) => v ? new Date(v).toLocaleDateString('vi-VN') : '-' },
+          { key: 'title', label: t('dashboard.colTask') },
+          { key: 'status', label: t('dashboard.colStatus'), render: (v: string) => renderStatusBadge(statusLabel(v)) },
+          { key: 'priority', label: t('dashboard.colPriority'), render: (v: string) => renderPriorityBadge(priorityLabel(v)) },
+          { key: 'dueDate', label: t('dashboard.colDeadline'), render: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
         ]}
         maxRows={20}
-        emptyMessage="Khong co cong viec nao"
+        emptyMessage={t('dashboard.noTasks')}
       />
     </div>
   );

@@ -2,6 +2,7 @@
 
 import { Task, TaskStatus, TaskStatuses } from '@/types/task';
 import { useEffect, useState, useMemo, useRef, useCallback, MouseEvent as ReactMouseEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useTaskStatusUpdate } from '@/hooks/useTaskStatusUpdate';
 import {
   DragDropProvider,
@@ -100,6 +101,7 @@ const areTasksEqual = (tasksA: Task[], tasksB: Task[]): boolean => {
 };
 
 export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardProps) {
+  const { t } = useTranslation();
   // Khởi tạo state từ localStorage nếu có hoặc giá trị mặc định
   const [selectedUser, setSelectedUser] = useState<UserOption | null>(
     getStoredValue<UserOption | null>(KANBAN_SELECTED_USER_KEY, null)
@@ -247,7 +249,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
     }));
     
     // Thêm option "Tất cả" vào đầu danh sách
-    return [{ value: 'all', label: 'Tất cả' }, ...options];
+    return [{ value: 'all', label: t('common.all') }, ...options];
   }, [members]);
 
   // Lọc tasks dựa trên user đã chọn và status đã chọn
@@ -424,7 +426,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
       const event = new CustomEvent('show-notification', {
         detail: {
           type: 'success',
-          message: 'Đã cập nhật trạng thái công việc'
+          message: t('kanban.statusUpdated')
         }
       });
       window.dispatchEvent(event);
@@ -445,7 +447,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
       const event = new CustomEvent('show-notification', {
         detail: {
           type: 'error',
-          message: 'Cập nhật trạng thái thất bại. Vui lòng thử lại.'
+          message: t('kanban.statusUpdateFailed')
         }
       });
       window.dispatchEvent(event);
@@ -515,7 +517,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
       <div className="mb-2 flex flex-col gap-2 p-3">
         <div className="flex items-center gap-6">
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Người dùng:</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">{t('tasks.colAssignee')}:</label>
             <Select<UserOption, false>
               className="basic-select"
               classNamePrefix="select"
@@ -524,7 +526,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
               options={userOptions}
               isLoading={membersLoading}
               isClearable
-              placeholder="Tất cả"
+              placeholder={t('common.all')}
               components={{
                 ...animatedComponents,
                 Option
@@ -533,7 +535,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
             />
           </div>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Trạng thái:</label>
+            <label className="block text-xs font-medium text-gray-700 mb-1">{t('tasks.colStatus')}:</label>
             <Select<StatusOption, true>
               className="basic-select"
               classNamePrefix="select"
@@ -546,7 +548,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
                 MultiValueContainer,
                 Option
               }}
-              placeholder="Tất cả"
+              placeholder={t('common.all')}
               styles={customStyles}
               hideSelectedOptions={false}
               closeMenuOnSelect={false}
@@ -570,7 +572,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
                     setSelectedStatuses(selectedStatuses.filter(s => s.value !== status.value));
                   }}
                 >
-                  <span className="sr-only">Xóa {status.label}</span>
+                  <span className="sr-only">{t('kanban.removeFilter')} {status.label}</span>
                   <svg className="h-2 w-2" stroke="currentColor" fill="none" viewBox="0 0 8 8">
                     <path strokeLinecap="round" strokeWidth="1.5" d="M1 1l6 6m0-6L1 7" />
                   </svg>

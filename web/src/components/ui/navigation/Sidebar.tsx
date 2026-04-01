@@ -8,6 +8,7 @@ import { GET_USER_PROJECTS } from '@/graphql/queries/project';
 import { useSidebarState } from '@/hooks/use-sidebar-state';
 import { SidebarProjectTreeItem } from './sidebar-project-tree-item';
 import CreateProjectModal from '@/components/projects/create-project-modal';
+import { useTranslation } from 'react-i18next';
 
 interface ProjectNode {
   project_id: string;
@@ -18,6 +19,7 @@ interface ProjectNode {
 
 const Sidebar = () => {
   const pathname = usePathname();
+  const { t } = useTranslation();
   const [modalOpen, setModalOpen] = useState(false);
   const { data, loading } = useQuery(GET_USER_PROJECTS, { fetchPolicy: 'cache-first' });
   const { toggleProject, isExpanded } = useSidebarState();
@@ -42,16 +44,16 @@ const Sidebar = () => {
           <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
           </svg>
-          <span>Dashboard</span>
+          <span>{t('nav.dashboard')}</span>
         </Link>
 
         {/* Projects section */}
         <div className="pt-4">
           <div className="flex items-center justify-between px-3 py-1">
-            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Du an</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase tracking-wider">{t('nav.projects')}</span>
             <button
               onClick={() => setModalOpen(true)}
-              title="Tao du an moi"
+              title={t('nav.createProject')}
               className="text-slate-500 hover:text-slate-300 transition-colors"
             >
               <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -61,7 +63,6 @@ const Sidebar = () => {
           </div>
 
           {loading ? (
-            // Loading skeleton
             <div className="space-y-2 mt-2">
               {[1, 2, 3].map(i => (
                 <div key={i} className="animate-pulse px-3 py-2">
@@ -71,7 +72,7 @@ const Sidebar = () => {
             </div>
           ) : projects.length === 0 ? (
             <div className="px-3 py-4 text-sm text-slate-500 text-center">
-              Chua co du an nao
+              {t('nav.noProjects')}
             </div>
           ) : (
             <div className="mt-1 space-y-0.5">

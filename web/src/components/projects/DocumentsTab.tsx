@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ApolloProvider, useQuery, useMutation } from '@apollo/client';
 import { createDesignDocClient } from '@/apollo/design-doc-client';
 import { GET_SYSTEMS } from '@/graphql/queries/designs';
@@ -34,6 +35,7 @@ export function DocumentsTab({ projectId }: DocumentsTabProps) {
 
 /** Inner component: renders system list using the design-doc Apollo client. */
 function DocumentsTabContent({ projectId }: { projectId: string }) {
+  const { t } = useTranslation();
   const { data, loading, error, refetch } = useQuery(GET_SYSTEMS, {
     variables: { projectId },
     skip: !projectId,
@@ -55,7 +57,7 @@ function DocumentsTabContent({ projectId }: { projectId: string }) {
       setShowForm(false);
       refetch();
     } catch (err) {
-      setCreateError(err instanceof Error ? err.message : 'Failed to create system');
+      setCreateError(err instanceof Error ? err.message : t('docs.failedToCreate'));
     }
   };
 
@@ -71,7 +73,7 @@ function DocumentsTabContent({ projectId }: { projectId: string }) {
     return (
       <div className="p-6">
         <div className="bg-red-50 dark:bg-red-900/20 p-4 rounded-lg text-red-700 dark:text-red-400">
-          Cannot connect to design-doc-service: {error.message}
+          {t('docs.cannotConnect')}: {error.message}
         </div>
       </div>
     );
@@ -82,12 +84,12 @@ function DocumentsTabContent({ projectId }: { projectId: string }) {
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-6">
-        <h2 className="text-xl font-bold text-slate-100">Design Systems</h2>
+        <h2 className="text-xl font-bold text-slate-100">{t('docs.designSystems')}</h2>
         <button
           onClick={() => setShowForm(true)}
           className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 text-sm font-medium transition-colors"
         >
-          New System
+          {t('docs.newSystem')}
         </button>
       </div>
 
@@ -96,7 +98,7 @@ function DocumentsTabContent({ projectId }: { projectId: string }) {
           <input
             value={name}
             onChange={(e) => setName(e.target.value)}
-            placeholder="System name"
+            placeholder={t('docs.systemNamePlaceholder')}
             className="flex-1 px-3 py-2 border border-slate-600 rounded bg-slate-900 text-slate-100 placeholder-slate-500"
             onKeyDown={(e) => e.key === 'Enter' && handleCreate()}
             autoFocus
@@ -106,13 +108,13 @@ function DocumentsTabContent({ projectId }: { projectId: string }) {
             disabled={creating}
             className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 text-sm disabled:opacity-50"
           >
-            {creating ? 'Creating...' : 'Create'}
+            {creating ? t('docs.creating') : t('docs.create')}
           </button>
           <button
             onClick={() => setShowForm(false)}
             className="px-4 py-2 border border-slate-600 rounded text-slate-300 hover:bg-slate-700 text-sm"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
         </div>
       )}
@@ -138,7 +140,7 @@ function DocumentsTabContent({ projectId }: { projectId: string }) {
               d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
             />
           </svg>
-          <p>No design systems yet. Create one to get started.</p>
+          <p>{t('docs.noDesignSystems')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -150,10 +152,10 @@ function DocumentsTabContent({ projectId }: { projectId: string }) {
             >
               <h3 className="font-semibold text-lg text-slate-100">{system.name}</h3>
               <p className="text-sm text-slate-400 mt-1">
-                {system.description || 'No description'}
+                {system.description || t('docs.noDescription')}
               </p>
               <p className="text-xs text-slate-500 mt-2">
-                {system.modules?.length || 0} modules
+                {t('docs.modules', { count: system.modules?.length || 0 })}
               </p>
             </Link>
           ))}

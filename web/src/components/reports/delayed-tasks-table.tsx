@@ -40,7 +40,7 @@ export function DelayedTasksTable({ tasks }: DelayedTasksTableProps) {
                   <td>{task.assignee?.username || 'Chưa giao'}</td>
                   <td>
                     {task.plannedEndDate
-                      ? new Date(task.plannedEndDate).toLocaleDateString('vi-VN')
+                      ? new Date(task.plannedEndDate).toLocaleDateString()
                       : 'Không có hạn'}
                   </td>
                   <td>

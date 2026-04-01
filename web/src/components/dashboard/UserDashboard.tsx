@@ -2,6 +2,7 @@ import React from 'react';
 import { Task, TaskStatus, TaskStatuses } from '@/types/task';
 import { PieChart, Pie, Cell, ResponsiveContainer, Legend } from 'recharts';
 import clsx from 'clsx';
+import { getStatusLabel } from '@/constants/task-display-labels';
 
 interface DashboardStats {
   totalTasks: number;
@@ -37,17 +38,6 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
   'ARCHIVED': '#cccccc'
 };
 
-const STATUS_LABELS: Record<TaskStatus, string> = {
-  'TODO': 'To Do',
-  'PENDING': 'Pending',
-  'DOING': 'In Progress',
-  'REVIEW': 'In Review',
-  'DONE': 'Done',
-  'CLOSE': 'Closed',
-  'BLOCKED': 'Blocked',
-  'REJECTED': 'Rejected',
-  'ARCHIVED': 'Archived'
-};
 
 export const UserDashboard: React.FC<UserDashboardProps> = ({
   tasks,
@@ -58,7 +48,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
   const completionPercentage = Math.round((stats.completedTasks / stats.totalTasks) * 100) || 0;
 
   const chartData: ChartData[] = Object.entries(stats.tasksByStatus).map(([status, count]) => ({
-    name: STATUS_LABELS[status as TaskStatus] || status,
+    name: getStatusLabel(status as TaskStatus) || status,
     value: count,
     status: status as TaskStatus,
   }));
@@ -211,7 +201,7 @@ export const UserDashboard: React.FC<UserDashboardProps> = ({
                 'border border-gray-300 hover:bg-gray-50'
               )}
             >
-              {STATUS_LABELS[status as TaskStatus]}
+              {getStatusLabel(status as TaskStatus)}
             </button>
           ))}
         </div>

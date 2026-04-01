@@ -1,5 +1,6 @@
 import React, { useState, ReactNode } from 'react';
 import { Task } from '@/types/task';
+import { useTranslation } from 'react-i18next';
 
 interface TabsLayoutProps {
   task: Task;
@@ -16,11 +17,13 @@ export default function TabsLayout({
   setActiveTab,
   tabComponents
 }: TabsLayoutProps) {
+  const { t } = useTranslation();
+
   const tabs = [
-    { id: 'description', label: 'Mô tả' },
-    { id: 'details', label: 'Thông tin chi tiết' },
-    { id: 'comments', label: 'Bình luận' },
-    { id: 'subtasks', label: 'Công việc con' }
+    { id: 'description', label: t('tasks.tabs.description') },
+    { id: 'details', label: t('tasks.tabs.details') },
+    { id: 'comments', label: t('tasks.tabs.comments') },
+    { id: 'subtasks', label: t('tasks.tabs.subtasks') }
   ];
 
   return (
@@ -50,4 +53,4 @@ export default function TabsLayout({
       </div>
     </div>
   );
-} 
+}

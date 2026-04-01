@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useAppSelector } from '@/redux/hooks';
 import { PieChart, Pie, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
 import { format } from 'date-fns';
@@ -32,9 +33,9 @@ const determineTaskScheduleStatus = (task: any, planData: any[]) => {
     // Kiểm tra hoàn thành đúng hạn
     if ((planTask && task.actual_end_date && new Date(task.actual_end_date) <= new Date(planTask.end_date)) ||
         (!planTask && task.actual_end_date && task.due_date && new Date(task.actual_end_date) <= new Date(task.due_date))) {
-      return { status: 'on-schedule', label: 'Đúng tiến độ', color: 'text-green-600' };
+      return { status: 'on-schedule', labelKey: 'reports.onSchedule', color: 'text-green-600' };
     } else {
-      return { status: 'late', label: 'Trễ tiến độ', color: 'text-red-600' };
+      return { status: 'late', labelKey: 'reports.lateSchedule', color: 'text-red-600' };
     }
   } else if (task.status.toUpperCase() === 'TODO') {
     // Kiểm tra chưa đến thời gian bắt đầu
@@ -42,11 +43,11 @@ const determineTaskScheduleStatus = (task: any, planData: any[]) => {
     if (startDate) {
       startDate.setHours(0, 0, 0, 0);
       if (today.getTime() < startDate.getTime()) {
-        return { status: 'on-schedule', label: 'Chưa đến thời gian', color: 'text-blue-600' };
+        return { status: 'on-schedule', labelKey: 'reports.notStarted', color: 'text-blue-600' };
       } else if (today.getTime() === startDate.getTime()) {
-        return { status: 'on-schedule', label: 'Bắt đầu hôm nay', color: 'text-green-600' };
+        return { status: 'on-schedule', labelKey: 'reports.startingToday', color: 'text-green-600' };
       } else {
-        return { status: 'late', label: 'Trễ bắt đầu', color: 'text-red-600' };
+        return { status: 'late', labelKey: 'reports.lateStart', color: 'text-red-600' };
       }
     }
   } else if (['DOING', 'REVIEW', 'PENDING', 'BLOCKED'].includes(task.status.toUpperCase())) {
@@ -55,21 +56,22 @@ const determineTaskScheduleStatus = (task: any, planData: any[]) => {
     if (dueDate) {
       dueDate.setHours(0, 0, 0, 0);
       if (today.getTime() <= dueDate.getTime()) {
-        return { status: 'on-schedule', label: 'Đang làm đúng tiến độ', color: 'text-green-600' };
+        return { status: 'on-schedule', labelKey: 'reports.inProgressOnSchedule', color: 'text-green-600' };
       } else {
-        return { status: 'late', label: 'Đang làm trễ tiến độ', color: 'text-red-600' };
+        return { status: 'late', labelKey: 'reports.inProgressLate', color: 'text-red-600' };
       }
     }
   } else if (['DONE', 'CLOSE', 'ARCHIVED'].includes(task.status.toUpperCase())) {
-    return { status: 'on-schedule', label: 'Đã hoàn thành', color: 'text-green-600' };
+    return { status: 'on-schedule', labelKey: 'reports.completed', color: 'text-green-600' };
   } else if (task.status.toUpperCase() === 'REJECTED') {
-    return { status: 'on-schedule', label: 'Đã bị từ chối', color: 'text-gray-600' };
+    return { status: 'on-schedule', labelKey: 'reports.rejected', color: 'text-gray-600' };
   }
-  
-  return { status: 'unknown', label: 'Không xác định', color: 'text-gray-500' };
+
+  return { status: 'unknown', labelKey: 'reports.unknown', color: 'text-gray-500' };
 };
 
 export function ProjectReportView({ projectId }: { projectId: string }) {
+  const { t } = useTranslation();
   // State for active tabs
   const [activeTab, setActiveTab] = useState<ReportTabType>('overview');
   const [activeSubTab, setActiveSubTab] = useState<DailySubTab>('yesterday');
@@ -490,19 +492,19 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
 
   // Report tabs definition
   const reportTabs = [
-    { id: 'overview', label: 'Dashboard tổng quan' },
-    { id: 'daily', label: 'Báo cáo ngày' },
-    { id: 'weekly', label: 'Báo cáo tuần' },
-    { id: 'monthly', label: 'Báo cáo tháng' },
-    { id: 'quarterly', label: 'Báo cáo quý' },
-    { id: 'bugs', label: 'Quản lý Bug' },
+    { id: 'overview', label: t('reports.overview') },
+    { id: 'daily', label: t('reports.daily') },
+    { id: 'weekly', label: t('reports.weekly') },
+    { id: 'monthly', label: t('reports.monthly') },
+    { id: 'quarterly', label: t('reports.quarterly') },
+    { id: 'bugs', label: t('reports.bugManagement') },
     { id: 'plan-vs-actual', label: 'Plan vs Actual' },
   ];
 
   // Daily report sub-tabs
   const dailySubTabs = [
-    { id: 'yesterday', label: 'Hôm qua' },
-    { id: 'today', label: 'Hôm nay' },
+    { id: 'yesterday', label: t('reports.yesterday') },
+    { id: 'today', label: t('reports.today') },
   ];
 
   return (
@@ -530,14 +532,14 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
       <div className="card p-4 mb-4">
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-3">
-            <h3 className="text-lg font-medium">Kế hoạch:</h3>
+            <h3 className="text-lg font-medium">{t('reports.planLabel')}</h3>
             <select
               className="select select-bordered select-sm"
               value={selectedPlanId}
               onChange={(e) => setSelectedPlanId(e.target.value)}
-              aria-label="Chọn kế hoạch"
+              aria-label={t('reports.selectPlan')}
             >
-              <option value="">Không chọn</option>
+              <option value="">{t('reports.noSelection')}</option>
               {plans.map(plan => (
                 <option key={plan.id} value={plan.id}>
                   {plan.name || plan.id.slice(0, 8)}
@@ -554,26 +556,26 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
         {/* Overview Dashboard */}
         {activeTab === 'overview' && (
           <div>
-            <h2 className="text-xl font-bold mb-6">Dashboard tổng quan</h2>
+            <h2 className="text-xl font-bold mb-6">{t('reports.overviewDashboard')}</h2>
 
             {/* Summary Cards */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
               <div className="card p-4 shadow-sm text-center">
-                <p className="text-sm text-slate-500">Tổng task</p>
+                <p className="text-sm text-slate-500">{t('reports.totalTasks')}</p>
                 <p className="text-2xl font-bold text-slate-800">{tasks.length}</p>
               </div>
               <div className="card p-4 shadow-sm text-center">
-                <p className="text-sm text-slate-500">Hoàn thành</p>
+                <p className="text-sm text-slate-500">{t('reports.completedTasks')}</p>
                 <p className="text-2xl font-bold text-green-600">
-                  {tasks.filter(t => ['DONE', 'CLOSE'].includes(t.status.toUpperCase())).length}
+                  {tasks.filter(task => ['DONE', 'CLOSE'].includes(task.status.toUpperCase())).length}
                 </p>
               </div>
               <div className="card p-4 shadow-sm text-center">
-                <p className="text-sm text-slate-500">Đúng tiến độ</p>
+                <p className="text-sm text-slate-500">{t('reports.onScheduleCount')}</p>
                 <p className="text-2xl font-bold text-blue-600">{onScheduleTaskCount}</p>
               </div>
               <div className="card p-4 shadow-sm text-center">
-                <p className="text-sm text-slate-500">Đang trễ</p>
+                <p className="text-sm text-slate-500">{t('reports.overdueCount')}</p>
                 <p className="text-2xl font-bold text-red-600">{overdueTaskCount}</p>
               </div>
             </div>
@@ -581,7 +583,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
               {/* Task Status Pie Chart */}
               <div className="card p-4 shadow-sm">
-                <h3 className="text-lg font-medium mb-2">Tổng số task theo trạng thái</h3>
+                <h3 className="text-lg font-medium mb-2">{t('reports.tasksByStatus')}</h3>
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <PieChart>
@@ -608,7 +610,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
               
               {/* Project Progress Line Chart */}
               <div className="card p-4 shadow-sm">
-                <h3 className="text-lg font-medium mb-2">Tiến độ dự án so với kế hoạch</h3>
+                <h3 className="text-lg font-medium mb-2">{t('reports.projectProgressVsPlan')}</h3>
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart
@@ -620,8 +622,8 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                       <YAxis />
                       <Tooltip />
                       <Legend />
-                      <Line type="monotone" dataKey="planned" stroke="#8884d8" name="Kế hoạch" />
-                      <Line type="monotone" dataKey="actual" stroke="#82ca9d" name="Thực tế" />
+                      <Line type="monotone" dataKey="planned" stroke="#8884d8" name={t('reports.plan')} />
+                      <Line type="monotone" dataKey="actual" stroke="#82ca9d" name={t('reports.actual')} />
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
@@ -631,7 +633,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {/* Bug Severity Bar Chart */}
               <div className="card p-4 shadow-sm">
-                <h3 className="text-lg font-medium mb-2">Số lượng bug theo mức độ nghiêm trọng</h3>
+                <h3 className="text-lg font-medium mb-2">{t('reports.bugsBySeverity')}</h3>
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
@@ -643,7 +645,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                       <YAxis />
                       <Tooltip />
                       <Legend />
-                      <Bar dataKey="count" name="Số lượng bug" fill="#ff7300" />
+                      <Bar dataKey="count" name={t('reports.bugCount')} fill="#ff7300" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -651,7 +653,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
               
               {/* Delayed Tasks by Assignee */}
               <div className="card p-4 shadow-sm">
-                <h3 className="text-lg font-medium mb-2">Các assignee có task bị trễ nhiều nhất</h3>
+                <h3 className="text-lg font-medium mb-2">{t('reports.topDelayedAssignees')}</h3>
                 <div className="h-[300px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart
@@ -664,7 +666,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                       <YAxis type="category" dataKey="assignee" />
                       <Tooltip />
                       <Legend />
-                      <Bar dataKey="count" name="Số task trễ" fill="#8884d8" />
+                      <Bar dataKey="count" name={t('reports.lateTasks')} fill="#8884d8" />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -676,7 +678,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
         {/* Daily Report */}
         {activeTab === 'daily' && (
           <div>
-            <h2 className="text-xl font-bold mb-4">Báo cáo ngày</h2>
+            <h2 className="text-xl font-bold mb-4">{t('reports.dailyReport')}</h2>
             
             {/* Daily Report Sub-tabs */}
             <div className="flex space-x-4 mb-6 border-b">
@@ -700,7 +702,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
               <div className="space-y-6">
                 {/* Completed Tasks */}
                 <div className="card p-4 shadow-sm">
-                  <h3 className="text-lg font-medium mb-2">Các task đã hoàn thành</h3>
+                  <h3 className="text-lg font-medium mb-2">{t('reports.completedTasksTitle')}</h3>
                   {yesterdayCompletedTasks.length > 0 ? (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200">
@@ -708,7 +710,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                           <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Task</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Assignee</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Hoàn thành lúc</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.completedAt')}</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
@@ -725,13 +727,13 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                       </table>
                     </div>
                   ) : (
-                    <p className="text-slate-500">Không có task nào được hoàn thành.</p>
+                    <p className="text-slate-500">{t('reports.noCompletedTasks')}</p>
                   )}
                 </div>
                 
                 {/* Delayed Tasks */}
                 <div className="card p-4 shadow-sm">
-                  <h3 className="text-lg font-medium mb-2">Các task bị trễ so với kế hoạch</h3>
+                  <h3 className="text-lg font-medium mb-2">{t('reports.delayedTasks')}</h3>
                   {yesterdayDelayedTasks.length > 0 ? (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200">
@@ -740,7 +742,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Task</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Assignee</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Deadline</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Trạng thái</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('common.status')}</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
@@ -758,23 +760,23 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                       </table>
                     </div>
                   ) : (
-                    <p className="text-slate-500">Không có task nào bị trễ.</p>
+                    <p className="text-slate-500">{t('reports.noDelayedTasks')}</p>
                   )}
                 </div>
                 
                 {/* Member work summary */}
                 <div className="card p-4 shadow-sm">
-                  <h3 className="text-lg font-medium mb-2">Tổng hợp công việc theo thành viên</h3>
+                  <h3 className="text-lg font-medium mb-2">{t('reports.memberWorkSummary')}</h3>
                   {Object.keys(memberWorkSummary).length > 0 ? (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200">
                         <thead className="bg-slate-50">
                           <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Thành viên</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Đã hoàn thành</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Đang làm</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Bị trễ</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tổng số</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.colMember')}</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.colCompleted')}</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.colInProgress')}</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.colDelayed')}</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.colTotal')}</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
@@ -791,7 +793,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                       </table>
                     </div>
                   ) : (
-                    <p className="text-slate-500">Không có dữ liệu công việc thành viên.</p>
+                    <p className="text-slate-500">{t('reports.noMemberWorkData')}</p>
                   )}
                 </div>
               </div>
@@ -804,10 +806,10 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                 {dailyReportData.overduePlanTasks.length > 0 && (
                   <div className="card p-4 shadow-sm border-l-4 border-orange-500">
                     <h3 className="text-lg font-medium mb-1 text-orange-600">
-                      Công việc chưa bắt đầu theo kế hoạch ({dailyReportData.overduePlanTasks.length})
+                      {t('reports.overdueNotStarted', { count: dailyReportData.overduePlanTasks.length })}
                     </h3>
                     <p className="text-sm text-slate-500 mb-3">
-                      Đã qua ngày bắt đầu theo kế hoạch nhưng chưa được thực hiện
+                      {t('reports.overdueNotStartedDesc')}
                     </p>
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200">
@@ -815,9 +817,9 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                           <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Task</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Assignee</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Ngày BĐ (KH)</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Trạng thái</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">Trễ (ngày)</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">{t('reports.planStartDate')}</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">{t('common.status')}</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase">{t('reports.daysBehind')}</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
@@ -826,7 +828,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                               <td className="px-6 py-4 text-sm font-medium text-slate-900">{task.title}</td>
                               <td className="px-6 py-4 text-sm text-slate-500">{task.assignee}</td>
                               <td className="px-6 py-4 text-sm text-slate-500">
-                                {new Date(task.planStartDate).toLocaleDateString('vi-VN')}
+                                {new Date(task.planStartDate).toLocaleDateString()}
                               </td>
                               <td className="px-6 py-4 text-sm">
                                 <span className={`px-2 py-0.5 rounded text-xs text-white ${
@@ -846,26 +848,26 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                 {/* Metrics: scheduled to start today */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   <div className="card p-4 shadow-sm text-center">
-                    <p className="text-sm text-slate-500">Theo KH bắt đầu hôm nay</p>
+                    <p className="text-sm text-slate-500">{t('reports.scheduledToStart')}</p>
                     <p className="text-2xl font-bold text-purple-600">{dailyReportData.scheduledToStartToday.length}</p>
                   </div>
                   <div className="card p-4 shadow-sm text-center">
-                    <p className="text-sm text-slate-500">Thực tế bắt đầu hôm nay</p>
+                    <p className="text-sm text-slate-500">{t('reports.actuallyStarted')}</p>
                     <p className="text-2xl font-bold text-blue-600">{dailyReportData.actuallyStartedToday.length}</p>
                   </div>
                   <div className="card p-4 shadow-sm text-center">
-                    <p className="text-sm text-slate-500">Bugs chưa xử lý</p>
+                    <p className="text-sm text-slate-500">{t('reports.openBugs')}</p>
                     <p className="text-2xl font-bold text-orange-600">{dailyReportData.bugTasks.length}</p>
                   </div>
                   <div className="card p-4 shadow-sm text-center">
-                    <p className="text-sm text-slate-500">Thành viên rảnh</p>
+                    <p className="text-sm text-slate-500">{t('reports.availableMembers')}</p>
                     <p className="text-2xl font-bold text-gray-600">{dailyReportData.unassignedUsers.length}</p>
                   </div>
                 </div>
 
                 {/* Tasks expected to start today */}
                 <div className="card p-4 shadow-sm">
-                  <h3 className="text-lg font-medium mb-2">Các task dự kiến bắt đầu hôm nay</h3>
+                  <h3 className="text-lg font-medium mb-2">{t('reports.tasksStartingToday')}</h3>
                   {todayStartingTasks.length > 0 ? (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200">
@@ -873,10 +875,10 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                           <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Task</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Assignee</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nguồn dữ liệu</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Ngày dự kiến</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Trạng thái</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tiến độ</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.dataSource')}</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.plannedDate')}</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('common.status')}</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.progress')}</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
@@ -887,14 +889,14 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                               <tr key={task.task_id}>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{task.title}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.assignee?.username || 'Unassigned'}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{planTask ? 'Kế hoạch' : 'Task'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{planTask ? t('reports.planSource') : 'Task'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                  {planTask?.start_date ? format(new Date(planTask.start_date), 'dd/MM/yyyy') : 
+                                  {planTask?.start_date ? format(new Date(planTask.start_date), 'dd/MM/yyyy') :
                                    task.start_date ? format(new Date(task.start_date), 'dd/MM/yyyy') : '-'}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.status}</td>
                                 <td className={`px-6 py-4 whitespace-nowrap text-sm ${scheduleStatus.color}`}>
-                                  {scheduleStatus.label}
+                                  {t(scheduleStatus.labelKey)}
                                 </td>
                               </tr>
                             );
@@ -903,13 +905,13 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                       </table>
                     </div>
                   ) : (
-                    <p className="text-slate-500">Không có task nào dự kiến bắt đầu hôm nay.</p>
+                    <p className="text-slate-500">{t('reports.noTasksStartingToday')}</p>
                   )}
                 </div>
                 
                 {/* Tasks expected to complete today */}
                 <div className="card p-4 shadow-sm">
-                  <h3 className="text-lg font-medium mb-2">Các task dự kiến hoàn thành hôm nay</h3>
+                  <h3 className="text-lg font-medium mb-2">{t('reports.tasksCompletingToday')}</h3>
                   {todayCompletingTasks.length > 0 ? (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200">
@@ -917,11 +919,11 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                           <tr>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Task</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Assignee</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Nguồn dữ liệu</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.dataSource')}</th>
                             <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Deadline</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Tiến độ</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Trạng thái</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Đánh giá</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.progress')}</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('common.status')}</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.evaluation')}</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
@@ -932,15 +934,15 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                               <tr key={task.task_id}>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900">{task.title}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.assignee?.username || 'Unassigned'}</td>
-                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{planTask ? 'Kế hoạch' : 'Task'}</td>
+                                <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{planTask ? t('reports.planSource') : 'Task'}</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">
-                                  {planTask?.end_date ? format(new Date(planTask.end_date), 'dd/MM/yyyy') : 
+                                  {planTask?.end_date ? format(new Date(planTask.end_date), 'dd/MM/yyyy') :
                                    task.due_date ? format(new Date(task.due_date), 'dd/MM/yyyy') : '-'}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.progress || 0}%</td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-500">{task.status}</td>
                                 <td className={`px-6 py-4 whitespace-nowrap text-sm ${scheduleStatus.color}`}>
-                                  {scheduleStatus.label}
+                                  {t(scheduleStatus.labelKey)}
                                 </td>
                               </tr>
                             );
@@ -949,20 +951,20 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                       </table>
                     </div>
                   ) : (
-                    <p className="text-slate-500">Không có task nào dự kiến hoàn thành hôm nay.</p>
+                    <p className="text-slate-500">{t('reports.noTasksCompletingToday')}</p>
                   )}
                 </div>
 
                 {/* Unassigned members */}
                 <div className="card p-4 shadow-sm">
-                  <h3 className="text-lg font-medium mb-2">Các thành viên không có task được phân công hôm nay</h3>
+                  <h3 className="text-lg font-medium mb-2">{t('reports.membersWithNoTasks')}</h3>
                   {unassignedMembers.length > 0 ? (
                     <div className="overflow-x-auto">
                       <table className="min-w-full divide-y divide-slate-200">
                         <thead className="bg-slate-50">
                           <tr>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Thành viên</th>
-                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">Email</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('reports.colMember')}</th>
+                            <th className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{t('common.email')}</th>
                           </tr>
                         </thead>
                         <tbody className="bg-white divide-y divide-slate-200">
@@ -976,7 +978,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
                       </table>
                     </div>
                   ) : (
-                    <p className="text-slate-500">Tất cả thành viên đều có task được phân công hôm nay.</p>
+                    <p className="text-slate-500">{t('reports.allMembersAssigned')}</p>
                   )}
                 </div>
               </div>
@@ -996,8 +998,7 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
         {/* Bugs & Plan vs Actual - still in development */}
         {['bugs', 'plan-vs-actual'].includes(activeTab) && (
           <div className="py-8 text-center text-slate-600">
-            <h3 className="text-xl font-medium mb-2">Tính năng đang phát triển</h3>
-            <p>Báo cáo {activeTab === 'bugs' ? 'quản lý bug' : 'so sánh kế hoạch và thực tế'} sẽ sớm được cập nhật.</p>
+            <p>{t('reports.comingSoon')}</p>
           </div>
         )}
       </div>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Timeline } from '@/components/timeline/Timeline';
 import { TaskListView } from '@/components/tasks/TaskListView';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
@@ -31,6 +32,7 @@ interface ProjectDetailViewProps {
 }
 
 export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProps) {
+  const { t } = useTranslation();
   const lastFetchedProjectIdRef = useRef<string | null>(null);
   const [activeView, setActiveView] = useState<ViewType>(toViewType(initialTab));
 
@@ -304,7 +306,7 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
             <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
             </svg>
-            Them cong viec
+            {t('tasks.addTask')}
           </a>
         </div>
       )}

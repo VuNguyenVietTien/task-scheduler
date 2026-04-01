@@ -2,7 +2,7 @@ import { Task } from '@/types/task';
 import { formatDateRange, cn } from '@/lib/utils';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { STATUS_LABELS, PRIORITY_LABELS, TYPE_LABELS, CATEGORY_LABELS, PROGRESS_TYPE_LABELS, getLabel } from '@/constants/task-display-labels';
+import { STATUS_LABELS, PRIORITY_LABELS, TYPE_LABELS, CATEGORY_LABELS, PROGRESS_TYPE_LABELS, getLabel, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
 
 interface TaskBarProps {
   task: Task;
@@ -57,7 +57,7 @@ const getStatusColor = (status: string | number): string => {
 };
 
 const getStatusBadge = (status: string | undefined) => {
-  return getLabel(STATUS_LABELS, status, 'Khong xac dinh');
+  return getStatusLabel(status);
 };
 
 export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
@@ -116,7 +116,7 @@ export function TaskBar({ task, width, x, y, height, onClick }: TaskBarProps) {
             <div>Thứ tự: {task.priority_order}</div>
             <div>Người làm: {task.assignee?.username || 'Chưa gán'}</div>
             <div>Công sức: {task.effort !== undefined ? `${task.effort}h` : 'Chưa thiết lập'}</div>
-            <div>Ưu tiên: {getLabel(PRIORITY_LABELS, task.priority)}</div>
+            <div>Ưu tiên: {getPriorityLabel(task.priority)}</div>
             <div>Loại: {getLabel(TYPE_LABELS, task.type)}</div>
             <div>Phân loại: {getLabel(CATEGORY_LABELS, task.category)}</div>
             <div>Tiến độ: {task.progress || 0}%</div>

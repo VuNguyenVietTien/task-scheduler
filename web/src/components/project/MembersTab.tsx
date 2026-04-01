@@ -28,12 +28,13 @@ import {
 } from '@mui/material';
 import { Delete as DeleteIcon, Edit as EditIcon, Save as SaveIcon } from '@mui/icons-material';
 import { usePathname } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '@/contexts/AuthContext';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
-import { 
-  fetchProjectMembers, 
-  addMemberToStore, 
-  updateMemberRoleInStore, 
+import {
+  fetchProjectMembers,
+  addMemberToStore,
+  updateMemberRoleInStore,
   updateMultipleMemberRolesInStore,
   removeMemberFromStore,
   removeMultipleMembersFromStore,
@@ -44,12 +45,12 @@ import {
   updateMultipleProjectMemberRoles
 } from '@/redux/features/membersSlice';
 import { ProjectMember } from '@/hooks/useProject';
-import { 
-  MemberRole, 
-  Member, 
-  MemberRoleUpdate, 
-  MembersTabProps, 
-  PendingChanges, 
+import {
+  MemberRole,
+  Member,
+  MemberRoleUpdate,
+  MembersTabProps,
+  PendingChanges,
   NotificationType
 } from '@/types/members';
 import { GET_PROJECT_TASKS } from '@/graphql/queries/projectMembers';
@@ -57,6 +58,7 @@ import { toBackendRole, toFrontendRole } from '@/lib/utils';
 
 export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
   const pathname = usePathname();
+  const { t } = useTranslation();
   const { user: authUser } = useAuth();
   const [openAddDialog, setOpenAddDialog] = useState(false);
   const [openEditDialog, setOpenEditDialog] = useState(false);
@@ -70,48 +72,39 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
   const [bulkEditRole, setBulkEditRole] = useState<MemberRole>('Member');
   const [pendingChanges, setPendingChanges] = useState<PendingChanges>({});
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
-  
-  // State để tracking loading state của các action
+
   const [addingMember, setAddingMember] = useState(false);
   const [removingMember, setRemovingMember] = useState(false);
   const [updatingRole, setUpdatingRole] = useState(false);
   const [updatingMultipleRoles, setUpdatingMultipleRoles] = useState(false);
   const [updating, setUpdating] = useState(false);
-  
-  // Sử dụng Redux
+
   const dispatch = useAppDispatch();
   const { members, myRole, loading, error } = useAppSelector(state => state.members);
-  
-  // Lấy userId của người dùng hiện tại (match by email for reliable identification)
+
   const myUserId = members.find(m => m.user.email === authUser?.email)?.user.userId ?? '';
-  
-  // Fetch members khi component được mount
+
   useEffect(() => {
     dispatch(fetchProjectMembers(projectId));
   }, [dispatch, projectId]);
 
-  // Theo dõi thay đổi trong members state từ Redux store
   const [localMembers, setLocalMembers] = useState<Member[]>([]);
-  
-  // Cập nhật localMembers khi members từ Redux store thay đổi
+
   useEffect(() => {
     if (members && members.length > 0) {
       setLocalMembers([...members]);
       console.log("Members data updated from Redux store:", members);
     }
   }, [members]);
-  
-  // Hiển thị thông báo
+
   const showNotification = (type: 'success' | 'error' | 'info', message: string) => {
     setNotification({ type, message });
   };
 
-  // Đóng thông báo
   const handleCloseNotification = () => {
     setNotification(null);
   };
 
-  // Xử lý chọn/bỏ chọn member
   const handleToggleMember = (userId: string) => {
     setSelectedMembers(prev => {
       if (prev.includes(userId)) {
@@ -122,180 +115,152 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
     });
   };
 
-  // Xử lý chọn tất cả/bỏ chọn tất cả
   const handleToggleAllMembers = () => {
     if (selectedMembers.length === localMembers.filter(m => m.user.userId !== myUserId).length) {
-      // Nếu đã chọn tất cả, bỏ chọn tất cả
       setSelectedMembers([]);
     } else {
-      // Chọn tất cả (trừ user hiện tại)
       setSelectedMembers(localMembers
         .filter(m => m.user.userId !== myUserId)
         .map(m => m.user.userId));
     }
   };
 
-  // Xử lý cập nhật hàng loạt role của các thành viên
   const handleBulkUpdateRole = async () => {
-    // Nếu không có thành viên nào được chọn thì không làm gì cả
     if (selectedMembers.length === 0) return;
 
     try {
       setUpdatingMultipleRoles(true);
-      
-      // Tạo danh sách updates chỉ với những thành viên được chọn
+
       const updates = selectedMembers.map(userId => ({
         userId,
-        role: toBackendRole(bulkEditRole) // Sử dụng hàm toBackendRole để chuyển đổi sang định dạng backend
+        role: toBackendRole(bulkEditRole)
       }));
 
-      // Chỉ cập nhật những thành viên có vai trò khác với hiện tại
       const changedUpdates = updates.filter(update => {
         const member = members.find(m => m.user.userId === update.userId);
-        return member && toBackendRole(member.role) !== update.role; // So sánh sau khi đã chuyển đổi
+        return member && toBackendRole(member.role) !== update.role;
       });
 
-      // Nếu không có thay đổi, hiển thị thông báo và thoát
       if (changedUpdates.length === 0) {
-        showNotification('info', 'Không có thay đổi nào để cập nhật');
+        showNotification('info', t('members.noChanges'));
         setOpenBulkEditDialog(false);
         return;
       }
 
-      // Gọi Redux thunk
       const resultAction = await dispatch(
         updateMultipleProjectMemberRoles({
           projectId,
           updates: changedUpdates
         })
       );
-      
-      // Kiểm tra kết quả action
+
       if (updateMultipleProjectMemberRoles.fulfilled.match(resultAction)) {
         setOpenBulkEditDialog(false);
         setSelectedMembers([]);
-        showNotification('success', `Đã cập nhật vai trò cho ${changedUpdates.length} thành viên`);
+        showNotification('success', t('members.rolesUpdated', { count: changedUpdates.length }));
       } else {
         const errorMessage = resultAction.payload as string;
-        showNotification('error', errorMessage || 'Không thể cập nhật vai trò thành viên. Vui lòng thử lại.');
+        showNotification('error', errorMessage || t('members.roleUpdateFailed'));
       }
     } catch (error) {
       console.error('Error updating member roles:', error);
-      showNotification('error', 'Không thể cập nhật vai trò thành viên. Vui lòng thử lại.');
+      showNotification('error', t('members.roleUpdateFailed'));
     } finally {
       setUpdatingMultipleRoles(false);
     }
   };
 
-  // Thêm hàm để thay đổi role tạm thời (chưa lưu vào DB)
   const handleTempRoleChange = (userId: string, newRole: MemberRole) => {
-    // Tìm member hiện tại để kiểm tra xem có thay đổi không
     const member = members.find(m => m.user.userId === userId);
     if (!member) return;
 
-    // Nếu role mới giống với role hiện tại, xóa khỏi pending changes
     if (member.role === newRole) {
       const newPendingChanges = {...pendingChanges};
       delete newPendingChanges[userId];
       setPendingChanges(newPendingChanges);
-      // Cập nhật trạng thái sau khi thay đổi pendingChanges
       setTimeout(() => setHasPendingChanges(Object.keys(newPendingChanges).length > 0), 0);
     } else {
-      // Nếu khác, thêm vào pending changes
       const newPendingChanges = {
         ...pendingChanges,
         [userId]: newRole
       };
       setPendingChanges(newPendingChanges);
-      // Cập nhật trạng thái sau khi thay đổi pendingChanges
       setTimeout(() => setHasPendingChanges(Object.keys(newPendingChanges).length > 0), 0);
     }
   };
 
-  // Xử lý lưu các thay đổi tạm thời vào database
   const handleSaveBulkChanges = async () => {
     try {
       setUpdating(true);
-      
-      // Chuẩn bị dữ liệu theo đúng định dạng API cần
+
       const updatedMembers = Object.entries(pendingChanges).map(([userId, role]) => {
         return {
           userId,
-          role: toBackendRole(role)  // Chuyển đổi thành lowercase
+          role: toBackendRole(role)
         } as MemberRoleUpdate;
       });
-      
-      // Nếu không có thay đổi, thoát khỏi hàm
+
       if (updatedMembers.length === 0) {
         setUpdating(false);
         return;
       }
 
-      // Gọi Redux thunk
       const resultAction = await dispatch(
         updateMultipleProjectMemberRoles({
           projectId,
           updates: updatedMembers
         })
       );
-      
-      // Kiểm tra kết quả action
+
       if (updateMultipleProjectMemberRoles.fulfilled.match(resultAction)) {
-        // Xóa các thay đổi tạm thời sau khi đã lưu thành công
         setPendingChanges({});
         setHasPendingChanges(false);
-        
-        showNotification('success', `Đã cập nhật vai trò cho ${updatedMembers.length} thành viên`);
+        showNotification('success', t('members.rolesUpdated', { count: updatedMembers.length }));
       } else {
         const errorMessage = resultAction.payload as string;
-        showNotification('error', errorMessage || 'Không thể cập nhật vai trò thành viên. Vui lòng thử lại.');
+        showNotification('error', errorMessage || t('members.roleUpdateFailed'));
       }
     } catch (error) {
       console.error('Error updating member roles:', error);
-      showNotification('error', 'Không thể cập nhật vai trò thành viên. Vui lòng thử lại.');
+      showNotification('error', t('members.roleUpdateFailed'));
     } finally {
       setUpdating(false);
     }
   };
 
-  // Xử lý cập nhật vai trò của một thành viên
   const handleUpdateMemberRole = async () => {
     if (!selectedMember) return;
-    
+
     try {
       setUpdatingRole(true);
-      
-      // Gọi Redux thunk
+
       const resultAction = await dispatch(
         updateProjectMemberRole({
-          projectId, 
+          projectId,
           userId: selectedMember.user.userId,
-          role: toBackendRole(selectedRole)  // Chuyển đổi role sang lowercase
+          role: toBackendRole(selectedRole)
         })
       );
-      
-      // Kiểm tra kết quả action
+
       if (updateProjectMemberRole.fulfilled.match(resultAction)) {
         setOpenEditDialog(false);
-        showNotification('success', 'Cập nhật vai trò thành công');
+        showNotification('success', t('members.roleUpdated'));
       } else {
         const errorMessage = resultAction.payload as string;
-        showNotification('error', errorMessage || 'Không thể cập nhật vai trò. Vui lòng thử lại.');
+        showNotification('error', errorMessage || t('members.roleUpdateSingleFailed'));
       }
     } catch (error) {
       console.error('Error updating member role:', error);
-      showNotification('error', 'Không thể cập nhật vai trò. Vui lòng thử lại.');
+      showNotification('error', t('members.roleUpdateSingleFailed'));
     } finally {
       setUpdatingRole(false);
     }
   };
 
-  // Xử lý thêm thành viên qua email sử dụng redux thunk
   const handleAddMember = async () => {
     try {
       setAddingMember(true);
-      
-      // Gọi redux thunk
+
       const resultAction = await dispatch(
         addMemberByEmail({
           projectId,
@@ -303,120 +268,97 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
           role: toBackendRole(newMemberRole)
         })
       );
-      
-      // Kiểm tra kết quả action 
+
       if (addMemberByEmail.fulfilled.match(resultAction)) {
         setOpenAddDialog(false);
         setNewMemberEmail('');
-        showNotification('success', 'Thêm thành viên thành công');
-        
-        // Kiểm tra dữ liệu trong Redux store
-        console.log('Thành viên mới đã được thêm vào Redux store:', resultAction.payload);
+        showNotification('success', t('members.memberAdded'));
+        console.log('New member added to Redux store:', resultAction.payload);
       } else {
         const errorMessage = resultAction.payload as string;
-        showNotification('error', errorMessage || 'Không thể thêm thành viên. Vui lòng thử lại.');
+        showNotification('error', errorMessage || t('members.memberAddFailed'));
       }
     } catch (error) {
       console.error('Error adding member:', error);
-      showNotification('error', 'Không thể thêm thành viên. Vui lòng thử lại.');
+      showNotification('error', t('members.memberAddFailed'));
     } finally {
       setAddingMember(false);
     }
   };
 
-  // Xử lý xóa thành viên sử dụng redux thunk
   const handleRemoveMember = async (memberId: string, userId: string) => {
     try {
       setRemovingMember(true);
-      
-      // Gọi redux thunk
+
       const resultAction = await dispatch(
         removeMember({
           projectId,
           userId
         })
       );
-      
-      // Kiểm tra kết quả action
+
       if (removeMember.fulfilled.match(resultAction)) {
-        showNotification('success', 'Xóa thành viên thành công');
-        
-        // Kiểm tra dữ liệu trong Redux store
-        console.log('Thành viên đã bị xóa khỏi Redux store:', userId);
+        showNotification('success', t('members.memberRemoved'));
+        console.log('Member removed from Redux store:', userId);
       } else {
         const errorMessage = resultAction.payload as string;
-        showNotification('error', errorMessage || 'Không thể xóa thành viên. Vui lòng thử lại.');
+        showNotification('error', errorMessage || t('members.memberRemoveFailed'));
       }
     } catch (error) {
       console.error('Error removing member:', error);
-      showNotification('error', 'Không thể xóa thành viên. Vui lòng thử lại.');
+      showNotification('error', t('members.memberRemoveFailed'));
     } finally {
       setRemovingMember(false);
     }
   };
 
-  // Thêm hàm xóa nhiều member cùng lúc
   const handleRemoveMultipleMembers = async () => {
     if (selectedMembers.length === 0) return;
 
     try {
-      // Chuyển đổi từ userId sang memberId
       const memberIds = selectedMembers.map(userId => `member-${userId}`);
-      
-      // Sử dụng redux thunk
+
       const resultAction = await dispatch(
         removeMultipleProjectMembers({
           projectId,
           memberIds
         })
       );
-      
-      // Kiểm tra kết quả action
+
       if (removeMultipleProjectMembers.fulfilled.match(resultAction)) {
         const { userIds } = resultAction.payload;
         const successCount = resultAction.payload.successCount;
         const failedCount = resultAction.payload.failedCount;
-        
-        // Xóa danh sách selected
+
         setSelectedMembers([]);
-        
-        showNotification(
-          'success', 
-          `Đã xóa ${successCount} thành viên thành công`
-        );
-        
-        // Kiểm tra dữ liệu trong Redux store
-        console.log('Các thành viên đã bị xóa khỏi Redux store:', userIds);
-        
+        showNotification('success', t('members.membersRemoved', { count: successCount }));
+        console.log('Members removed from Redux store:', userIds);
+
         if (failedCount > 0) {
           setTimeout(() => {
-            showNotification(
-              'info', 
-              `Không thể xóa ${failedCount} thành viên`
-            );
+            showNotification('info', t('members.membersRemoveFailed', { count: failedCount }));
           }, 3000);
         }
       } else {
         const errorMessage = resultAction.payload as string;
-        showNotification('error', errorMessage || 'Không thể xóa các thành viên. Vui lòng thử lại.');
+        showNotification('error', errorMessage || t('members.membersRemoveAllFailed'));
       }
     } catch (error) {
       console.error('Error removing multiple members:', error);
-      showNotification('error', 'Không thể xóa các thành viên. Vui lòng thử lại.');
+      showNotification('error', t('members.membersRemoveAllFailed'));
     }
   };
 
-  if (loading) return <div>Đang tải...</div>;
-  if (error) return <div>Lỗi: {typeof error === 'string' ? error : 'Không thể tải dữ liệu thành viên'}</div>;
+  if (loading) return <div>{t('common.loading')}</div>;
+  if (error) return <div>{t('common.error')}: {typeof error === 'string' ? error : t('members.cannotLoadMembers')}</div>;
 
-  // isAdmin is true only for users with the Manager role in this project
   const isAdmin = myRole === 'Manager';
   const hasBulkSelections = selectedMembers.length > 0;
 
   return (
     <Box sx={{ p: 3 }}>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-        <Typography variant="h6">Thành viên dự án</Typography>
+        <Typography variant="h6">{t('members.projectMembers')}</Typography>
         <Box sx={{ display: 'flex', gap: 2 }}>
           {hasPendingChanges && isAdmin && (
             <Button
@@ -426,9 +368,9 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
               onClick={handleSaveBulkChanges}
               disabled={updating}
             >
-              {updating 
-                ? <CircularProgress size={24} color="inherit" /> 
-                : `Lưu thay đổi (${Object.keys(pendingChanges).length})`}
+              {updating
+                ? <CircularProgress size={24} color="inherit" />
+                : t('members.saveChanges', { count: Object.keys(pendingChanges).length })}
             </Button>
           )}
           {hasBulkSelections && isAdmin && (
@@ -440,9 +382,9 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
                 onClick={() => setOpenBulkEditDialog(true)}
                 disabled={updatingMultipleRoles}
               >
-                {updatingMultipleRoles 
-                  ? <CircularProgress size={24} color="inherit" /> 
-                  : `Sửa ${selectedMembers.length} thành viên`}
+                {updatingMultipleRoles
+                  ? <CircularProgress size={24} color="inherit" />
+                  : t('members.editSelected', { count: selectedMembers.length })}
               </Button>
               <Button
                 variant="contained"
@@ -453,7 +395,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
               >
                 {removingMember
                   ? <CircularProgress size={24} color="inherit" />
-                  : `Xóa ${selectedMembers.length} thành viên`}
+                  : t('members.deleteSelected', { count: selectedMembers.length })}
               </Button>
             </>
           )}
@@ -464,7 +406,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
             onClick={() => setOpenAddDialog(true)}
             disabled={addingMember}
           >
-            {addingMember ? <CircularProgress size={24} color="inherit" /> : 'Thêm thành viên'}
+            {addingMember ? <CircularProgress size={24} color="inherit" /> : t('members.addMember')}
           </Button>
         )}
         </Box>
@@ -484,18 +426,17 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
                   />
                 </TableCell>
               )}
-              <TableCell>Người dùng</TableCell>
-              <TableCell>Email</TableCell>
-              <TableCell>Vai trò</TableCell>
-              <TableCell>Tham gia từ</TableCell>
-              {isAdmin && <TableCell align="right">Thao tác</TableCell>}
+              <TableCell>{t('members.colUser')}</TableCell>
+              <TableCell>{t('common.email')}</TableCell>
+              <TableCell>{t('common.role')}</TableCell>
+              <TableCell>{t('members.colJoinedAt')}</TableCell>
+              {isAdmin && <TableCell align="right">{t('common.actions')}</TableCell>}
             </TableRow>
           </TableHead>
           <TableBody>
             {localMembers.map((member) => (
-              <TableRow 
+              <TableRow
                 key={member.user.userId}
-                // Đánh dấu hàng có thay đổi đang chờ
                 sx={pendingChanges[member.user.userId] ? { backgroundColor: 'rgba(0, 128, 0, 0.05)' } : {}}
               >
                 {isAdmin && (
@@ -568,7 +509,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
                   )}
                 </TableCell>
                 <TableCell>
-                  {new Date(member.joinedAt).toLocaleDateString('vi-VN')}
+                  {new Date(member.joinedAt).toLocaleDateString()}
                 </TableCell>
                 {isAdmin && (
                   <TableCell align="right">
@@ -602,14 +543,14 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
         </Table>
       </TableContainer>
 
-      {/* Dialog thêm thành viên */}
+      {/* Add member dialog */}
       <Dialog open={openAddDialog} onClose={() => !addingMember && setOpenAddDialog(false)}>
-        <DialogTitle>Thêm thành viên</DialogTitle>
+        <DialogTitle>{t('members.addMemberTitle')}</DialogTitle>
         <DialogContent>
           <TextField
             autoFocus
             margin="dense"
-            label="Email"
+            label={t('common.email')}
             type="email"
             fullWidth
             value={newMemberEmail}
@@ -617,7 +558,7 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
             disabled={addingMember}
           />
           <FormControl fullWidth margin="dense" disabled={addingMember}>
-            <InputLabel>Vai trò</InputLabel>
+            <InputLabel>{t('common.role')}</InputLabel>
             <Select
               value={newMemberRole}
               onChange={(e: SelectChangeEvent<string>) =>
@@ -632,27 +573,27 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
           </FormControl>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenAddDialog(false)} disabled={addingMember}>Hủy</Button>
-          <Button 
-            onClick={handleAddMember} 
-            variant="contained" 
+          <Button onClick={() => setOpenAddDialog(false)} disabled={addingMember}>{t('common.cancel')}</Button>
+          <Button
+            onClick={handleAddMember}
+            variant="contained"
             color="primary"
             disabled={addingMember || !newMemberEmail}
           >
-            {addingMember ? <CircularProgress size={24} color="inherit" /> : 'Thêm'}
+            {addingMember ? <CircularProgress size={24} color="inherit" /> : t('common.add')}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Dialog chỉnh sửa vai trò */}
+      {/* Edit role dialog */}
       <Dialog open={openEditDialog} onClose={() => !updatingRole && setOpenEditDialog(false)}>
-        <DialogTitle>Chỉnh sửa vai trò</DialogTitle>
+        <DialogTitle>{t('members.editRoleTitle')}</DialogTitle>
         <DialogContent>
           <Typography variant="body1" gutterBottom>
-            Thay đổi vai trò cho {selectedMember?.user.fullName || selectedMember?.user.username}
+            {t('members.changeRoleFor', { name: selectedMember?.user.fullName || selectedMember?.user.username })}
           </Typography>
           <FormControl fullWidth margin="dense" disabled={updatingRole}>
-            <InputLabel>Vai trò</InputLabel>
+            <InputLabel>{t('common.role')}</InputLabel>
             <Select
               value={selectedRole}
               onChange={(e: SelectChangeEvent<string>) =>
@@ -667,27 +608,27 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
           </FormControl>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenEditDialog(false)} disabled={updatingRole}>Hủy</Button>
-          <Button 
-            onClick={handleUpdateMemberRole} 
-            variant="contained" 
+          <Button onClick={() => setOpenEditDialog(false)} disabled={updatingRole}>{t('common.cancel')}</Button>
+          <Button
+            onClick={handleUpdateMemberRole}
+            variant="contained"
             color="primary"
             disabled={updatingRole}
           >
-            {updatingRole ? <CircularProgress size={24} color="inherit" /> : 'Lưu thay đổi'}
+            {updatingRole ? <CircularProgress size={24} color="inherit" /> : t('common.save')}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Dialog chỉnh sửa hàng loạt */}
+      {/* Bulk edit dialog */}
       <Dialog open={openBulkEditDialog} onClose={() => !updatingMultipleRoles && setOpenBulkEditDialog(false)}>
-        <DialogTitle>Chỉnh sửa hàng loạt</DialogTitle>
+        <DialogTitle>{t('members.bulkEditTitle')}</DialogTitle>
         <DialogContent>
           <Typography variant="body1" gutterBottom>
-            Thay đổi vai trò cho {selectedMembers.length} thành viên
+            {t('members.bulkChangeRoleFor', { count: selectedMembers.length })}
           </Typography>
           <FormControl fullWidth margin="dense" disabled={updatingMultipleRoles}>
-            <InputLabel>Vai trò mới</InputLabel>
+            <InputLabel>{t('members.newRole')}</InputLabel>
             <Select
               value={bulkEditRole}
               onChange={(e: SelectChangeEvent<string>) =>
@@ -702,28 +643,28 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
           </FormControl>
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setOpenBulkEditDialog(false)} disabled={updatingMultipleRoles}>Hủy</Button>
-          <Button 
-            onClick={handleBulkUpdateRole} 
-            variant="contained" 
+          <Button onClick={() => setOpenBulkEditDialog(false)} disabled={updatingMultipleRoles}>{t('common.cancel')}</Button>
+          <Button
+            onClick={handleBulkUpdateRole}
+            variant="contained"
             color="primary"
             disabled={updatingMultipleRoles}
           >
-            {updatingMultipleRoles ? <CircularProgress size={24} color="inherit" /> : 'Cập nhật'}
+            {updatingMultipleRoles ? <CircularProgress size={24} color="inherit" /> : t('members.update')}
           </Button>
         </DialogActions>
       </Dialog>
 
-      {/* Thông báo */}
-      <Snackbar 
-        open={notification !== null} 
-        autoHideDuration={3000} 
+      {/* Notification */}
+      <Snackbar
+        open={notification !== null}
+        autoHideDuration={3000}
         onClose={handleCloseNotification}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
-        <Alert 
-          onClose={handleCloseNotification} 
-          severity={notification?.type || 'info'} 
+        <Alert
+          onClose={handleCloseNotification}
+          severity={notification?.type || 'info'}
           sx={{ width: '100%' }}
         >
           {notification?.message || ''}
@@ -731,4 +672,4 @@ export const MembersTab: React.FC<MembersTabProps> = ({ projectId }) => {
       </Snackbar>
     </Box>
   );
-}; 
+};

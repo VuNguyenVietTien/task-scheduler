@@ -6,9 +6,11 @@ import { useDashboardTasks } from '@/hooks/use-dashboard-tasks';
 import { PMDashboardView } from '@/components/dashboard/pm-dashboard-view';
 import { MemberDashboardView } from '@/components/dashboard/member-dashboard-view';
 import { useRouter } from 'next/navigation';
+import { useTranslation } from 'react-i18next';
 
 export default function DashboardPage() {
   const { user } = useAuth();
+  const { t } = useTranslation();
   const router = useRouter();
 
   // Hooks must be called before any early return (React rules of hooks)
@@ -25,9 +27,9 @@ export default function DashboardPage() {
   return (
     <div className="p-5">
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-slate-800">Xin chao, {user.name}!</h1>
+        <h1 className="text-2xl font-bold text-slate-800">{t('dashboard.greeting', { name: user.name })}</h1>
         <p className="text-sm text-slate-500 mt-1">
-          {isPM ? 'Tong quan du an' : 'Tong quan cong viec cua ban'}
+          {isPM ? t('dashboard.projectOverview') : t('dashboard.myTaskOverview')}
         </p>
       </div>
 
@@ -52,7 +54,7 @@ export default function DashboardPage() {
         </div>
       ) : error ? (
         <div className="bg-red-50 p-4 rounded-lg text-red-700">
-          Khong the tai du lieu dashboard. Vui long thu lai.
+          {t('dashboard.loadingError')}
         </div>
       ) : isPM ? (
         <PMDashboardView

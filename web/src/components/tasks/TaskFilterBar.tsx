@@ -1,5 +1,5 @@
 import { TaskFilter, TaskStatus, Priority, TaskStatuses, Priorities } from '../../types/task';
-import { STATUS_LABELS, PRIORITY_LABELS } from '../../constants/task-display-labels';
+import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '../../constants/task-display-labels';
 import { User } from '../../contexts/AuthContext';
 import { ProjectData } from '../../types/project';
 import { useState } from 'react';
@@ -163,7 +163,7 @@ export function TaskFilterBar({
                   <option value="">All Statuses</option>
                   {Object.values(TaskStatuses).map((status) => (
                     <option key={status} value={status}>
-                      {STATUS_LABELS[status] || status}
+                      {getStatusLabel(status)}
                     </option>
                   ))}
                 </select>
@@ -191,7 +191,7 @@ export function TaskFilterBar({
                   <option value="">All Priorities</option>
                   {Object.values(Priorities).map((priority) => (
                     <option key={priority} value={priority}>
-                      {PRIORITY_LABELS[priority] || priority}
+                      {getPriorityLabel(priority)}
                     </option>
                   ))}
                 </select>

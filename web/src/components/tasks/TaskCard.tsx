@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Task, TaskStatus } from '@/types/task';
 import clsx from 'clsx';
+import { useTranslation } from 'react-i18next';
 
 interface TaskCardProps {
   task: Task;
@@ -10,10 +11,10 @@ interface TaskCardProps {
 }
 
 export const TaskCard = ({ task, onClick, onStatusChange }: TaskCardProps) => {
+  const { t } = useTranslation();
   const taskId = task.id || task.task_id || '';
   const projectId = task.project_id;
-  
-  // Sử dụng dynamic routing NextJS để tạo đường dẫn
+
   const taskDetailUrl = `/projects/${projectId}/tasks/${taskId}`;
 
   const handleClick = (e: React.MouseEvent) => {
@@ -22,7 +23,7 @@ export const TaskCard = ({ task, onClick, onStatusChange }: TaskCardProps) => {
   };
 
   const isOverdue = task.deadline && new Date(task.deadline) < new Date();
-  const isNearDeadline = task.deadline && 
+  const isNearDeadline = task.deadline &&
     new Date(task.deadline).getTime() - Date.now() < 24 * 60 * 60 * 1000;
 
   const statusColors: Record<string, string> = {
@@ -44,14 +45,26 @@ export const TaskCard = ({ task, onClick, onStatusChange }: TaskCardProps) => {
     'CRITICAL': 'bg-red-100 text-red-800 font-bold'
   };
 
+  const getStatusLabel = (status: string) => {
+    const key = `tasks.statusLabels.${status}` as any;
+    const translated = t(key);
+    return translated !== key ? translated : status;
+  };
+
+  const getPriorityLabel = (priority: string) => {
+    const key = `tasks.priorityLabels.${priority}` as any;
+    const translated = t(key);
+    return translated !== key ? translated : priority;
+  };
+
   return (
-    <Link 
+    <Link
       href={taskDetailUrl}
       className="block"
-      prefetch={false} // Không prefetch để tối ưu hiệu suất
-      shallow={true} // Sử dụng shallow routing để không tải lại layout
+      prefetch={false}
+      shallow={true}
     >
-      <div 
+      <div
         className="bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow p-4 h-full cursor-pointer"
         onClick={handleClick}
         aria-label={`Task: ${task.title}`}
@@ -59,44 +72,29 @@ export const TaskCard = ({ task, onClick, onStatusChange }: TaskCardProps) => {
         <h3 className="text-lg font-medium mb-2 text-gray-900 line-clamp-2" title={task.title}>
           {task.title}
         </h3>
-        
+
         <div className="flex flex-wrap gap-2 mb-2">
           <span className={clsx(
             'text-xs px-2 py-0.5 rounded-full',
             statusColors[task.status] || 'bg-gray-100'
           )}>
-            {task.status === 'TODO' ? 'Chưa làm' :
-             task.status === 'DOING' ? 'Đang làm' :
-             task.status === 'DONE' ? 'Hoàn thành' :
-             task.status === 'PENDING' ? 'Chờ xử lý' :
-             task.status === 'REVIEW' ? 'Đang xem xét' :
-             task.status === 'BLOCKED' ? 'Bị chặn' :
-             task.status === 'REJECTED' ? 'Từ chối' :
-             task.status === 'CLOSE' ? 'Đã đóng' :
-             task.status}
+            {getStatusLabel(task.status)}
           </span>
-          
+
           <span className={clsx(
             'text-xs px-2 py-0.5 rounded-full',
             priorityColors[task.priority] || 'bg-gray-100'
           )}>
-            {task.priority === 'LOW' ? 'Thấp' :
-             task.priority === 'MEDIUM' ? 'Trung bình' :
-             task.priority === 'HIGH' ? 'Cao' :
-             task.priority === 'URGENT' ? 'Khẩn cấp' :
-             task.priority === 'CRITICAL' ? 'Nghiêm trọng' :
-             task.priority}
+            {getPriorityLabel(task.priority)}
           </span>
         </div>
-        
-        {/* Hiển thị ngày hết hạn nếu có */}
+
         {task.due_date && (
           <div className="text-xs text-gray-500 mb-2">
-            Hết hạn: {new Date(task.due_date).toLocaleDateString('vi-VN')}
+            {new Date(task.due_date).toLocaleDateString()}
           </div>
         )}
-        
-        {/* Hiển thị người được giao nếu có */}
+
         {task.assignee && task.assignee.userId && (
           <div className="flex items-center mt-2">
             <div className="flex -space-x-1 overflow-hidden">
@@ -111,7 +109,7 @@ export const TaskCard = ({ task, onClick, onStatusChange }: TaskCardProps) => {
               </div>
             </div>
             <span className="text-xs ml-2 text-gray-600 truncate">
-              {task.assignee.username || 'Không xác định'}
+              {task.assignee.username || t('common.unknown')}
             </span>
           </div>
         )}

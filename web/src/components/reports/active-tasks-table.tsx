@@ -35,7 +35,7 @@ export function ActiveTasksTable({ tasks }: ActiveTasksTableProps) {
                   <td>{task.assignee?.username || 'Chưa giao'}</td>
                   <td>
                     {task.plannedEndDate
-                      ? new Date(task.plannedEndDate).toLocaleDateString('vi-VN')
+                      ? new Date(task.plannedEndDate).toLocaleDateString()
                       : 'Không có hạn'}
                   </td>
                   <td>

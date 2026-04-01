@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef, forwardRef, useMemo } from 'react';
 import { Task, TaskStatus, Priority, TaskStatuses, Priorities, UserBasic, TaskComment } from '@/types/task';
-import { STATUS_LABELS, PRIORITY_LABELS } from '@/constants/task-display-labels';
+import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
 import { User } from '@/contexts/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
 import { TagInput } from '@/components/ui/tag-input';
@@ -11,8 +11,8 @@ import { CommentCard } from '@/components/common/CommentCard';
 import { Button } from '@/components/ui/Button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { formatDistance } from 'date-fns';
-import { vi } from 'date-fns/locale';
 import Link from 'next/link';
+import { useTranslation } from 'react-i18next';
 import { PencilIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, BookOpenIcon, DocumentTextIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQuery, useApolloClient } from '@apollo/client';
 import { GET_TASK_COMMENTS, GET_TASK_SUBTASKS, GET_TASK_BY_ID, GET_TASK_BASIC_INFO } from '@/graphql/queries/tasks';
@@ -113,6 +113,7 @@ export function TaskDetailPage({
   initialCommentId = null,
   initialActiveTab = 'description'
 }: TaskDetailPageProps) {
+  const { t } = useTranslation();
   // Khai báo các biến cần dùng chung
   const taskId = task.task_id || task.id || '';
   const taskIdString = taskId.toString();
@@ -475,8 +476,8 @@ export function TaskDetailPage({
 
   // Định dạng ngày tháng
   const formatDate = (dateString?: string) => {
-    if (!dateString) return 'Chưa thiết lập';
-    return new Date(dateString).toLocaleDateString('vi-VN', {
+    if (!dateString) return t('common.notSet');
+    return new Date(dateString).toLocaleDateString(undefined, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -505,24 +506,26 @@ export function TaskDetailPage({
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
     
     if (diffDays < 0) {
-      return `Quá hạn ${Math.abs(diffDays)} ngày`;
+      return t('common.overdue', { count: Math.abs(diffDays) });
     } else if (diffDays === 0) {
-      return 'Đến hạn hôm nay';
+      return t('common.dueToday');
     } else {
-      return `Còn ${diffDays} ngày`;
+      return t('common.daysRemaining', { count: diffDays });
     }
   };
 
   // Định dạng effort thành giờ hoặc ngày
   const formatEffort = (effort?: number) => {
-    if (!effort) return 'Chưa ước tính';
-    
+    if (!effort) return t('common.notSet');
+
     if (effort < 8) {
-      return `${effort} giờ`;
+      return `${effort} ${t('common.hours')}`;
     } else {
       const days = Math.floor(effort / 8);
       const hours = effort % 8;
-      return hours > 0 ? `${days} ngày ${hours} giờ` : `${days} ngày`;
+      return hours > 0
+        ? `${days} ${t('common.days')} ${hours} ${t('common.hours')}`
+        : `${days} ${t('common.days')}`;
     }
   };
 
@@ -562,11 +565,11 @@ export function TaskDetailPage({
     
     // Xác định giá trị hiển thị dựa trên loại trường
     if (fieldName === 'status') {
-      displayValue = STATUS_LABELS[value as TaskStatus] || value || 'Chưa thiết lập';
+      displayValue = getStatusLabel(value as TaskStatus) || value || t('common.notSet');
     } else if (fieldName === 'priority') {
-      displayValue = PRIORITY_LABELS[value as Priority] || value || 'Chưa thiết lập';
+      displayValue = getPriorityLabel(value as Priority) || value || t('common.notSet');
     } else if (type === 'date') {
-      displayValue = value ? formatDate(value) : 'Chưa thiết lập';
+      displayValue = value ? formatDate(value) : t('common.notSet');
     } else if (fieldName === 'assignee') {
       // Xử lý đặc biệt cho assignee vì có thể là object hoặc id
       if (typeof value === 'object' && value !== null) {
@@ -582,7 +585,7 @@ export function TaskDetailPage({
                 </span>
               </div>
             )}
-            <span>{value.username || value.fullName || 'Chưa gán'}{value.position ? ` (${value.position})` : ''}</span>
+            <span>{value.username || value.fullName || t('common.notAssigned')}{value.position ? ` (${value.position})` : ''}</span>
           </div>
         );
       } else if (value) {
@@ -606,7 +609,7 @@ export function TaskDetailPage({
           </div>
         );
       } else {
-        displayValue = 'Chưa gán';
+        displayValue = t('common.notAssigned');
       }
     } else if (fieldName === 'created_by') {
       // Đặc biệt xử lý người tạo - hiển thị username thay vì ID
@@ -622,7 +625,7 @@ export function TaskDetailPage({
                 </span>
                 </div>
               )}
-            <span>{value.username || 'Không xác định'}</span>
+            <span>{value.username || t('common.unknown')}</span>
           </div>
         );
       } else if (typeof value === 'string') {
@@ -640,7 +643,7 @@ export function TaskDetailPage({
                   </span>
                 </div>
               )}
-              <span>{creatorData.user.username || creatorData.user.fullName || 'Người dùng'}{creatorData.position ? ` (${creatorData.position})` : ''}</span>
+              <span>{creatorData.user.username || creatorData.user.fullName || t('common.unknown')}{creatorData.position ? ` (${creatorData.position})` : ''}</span>
             </div>
           );
         } else {
@@ -656,7 +659,7 @@ export function TaskDetailPage({
           );
         }
       } else {
-        displayValue = 'Không xác định';
+        displayValue = t('common.unknown');
       }
     } else if (fieldName === 'progress') {
       displayValue = value ? `${value}%` : '0%';
@@ -667,7 +670,7 @@ export function TaskDetailPage({
         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
           {value}
         </span>
-      ) : 'Chưa thiết lập';
+      ) : t('common.notSet');
     } else {
       // Đảm bảo displayValue luôn là string hoặc ReactNode, không phải object
       displayValue = typeof value === 'object' ? JSON.stringify(value) : String(value || '');
@@ -743,7 +746,7 @@ export function TaskDetailPage({
                       type="button"
                       onClick={() => setEditedTask({...editedTask, [fieldName]: null})}
                       className="text-gray-400 hover:text-gray-600 text-sm px-2"
-                      title="Xóa ngày"
+                      title={t('tasks.actions.clearDate')}
                     >
                       ✕
                     </button>
@@ -781,13 +784,13 @@ export function TaskDetailPage({
                 className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
                 disabled={isSaving}
               >
-                {isSaving ? 'Đang lưu...' : 'Lưu'}
+                {isSaving ? t('tasks.actions.saving') : t('tasks.actions.save')}
               </button>
               <button
                 onClick={cancelEditing}
                 className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-300 transition-colors"
               >
-                Hủy
+                {t('tasks.actions.cancel')}
               </button>
             </div>
           </div>
@@ -899,7 +902,7 @@ export function TaskDetailPage({
         id: tempId,
         content: processedContent,
         user_id: currentUser?.id || 'unknown', // Sửa từ uid thành id
-        username: currentUser?.name || 'Người dùng',
+        username: currentUser?.name || t('common.unknown'),
         avatar_url: currentUser?.providerData?.[0]?.photoURL || undefined,
         created_at: new Date().toISOString(),
         status: 'pending'
@@ -1743,27 +1746,27 @@ export function TaskDetailPage({
                   value={editedTask.title}
                   onChange={(e) => setEditedTask({...editedTask, title: e.target.value})}
                   className="block w-full text-lg font-bold rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500"
-                  placeholder="Tiêu đề công việc"
-                  aria-label="Tiêu đề công việc"
+                  placeholder={t('tasks.titlePlaceholder')}
+                  aria-label={t('tasks.titlePlaceholder')}
                 />
                 <div className="flex space-x-2">
                   <button 
                     onClick={() => saveField('title')} 
                     className="p-1 text-blue-600 hover:text-blue-800 rounded-full hover:bg-blue-50 flex items-center"
-                    title="Lưu"
-                    aria-label="Lưu thay đổi"
+                    title={t('tasks.actions.save')}
+                    aria-label={t('tasks.actions.save')}
                   >
                     <CheckIcon className="h-4 w-4" />
-                    <span className="ml-1 text-sm">Lưu</span>
+                    <span className="ml-1 text-sm">{t('tasks.actions.save')}</span>
                   </button>
-                  <button 
+                  <button
                     onClick={cancelEditing}
                     className="p-1 text-red-600 hover:text-red-800 rounded-full hover:bg-red-50 flex items-center"
-                    title="Hủy"
-                    aria-label="Hủy thay đổi"
+                    title={t('tasks.actions.cancel')}
+                    aria-label={t('tasks.actions.cancel')}
                   >
                     <XMarkIcon className="h-4 w-4" />
-                    <span className="ml-1 text-sm">Hủy</span>
+                    <span className="ml-1 text-sm">{t('tasks.actions.cancel')}</span>
                   </button>
                 </div>
               </div>
@@ -1802,7 +1805,7 @@ export function TaskDetailPage({
                         <span className="mr-2">
                           <Spinner size="sm" />
                         </span>
-                        <span className="text-gray-500">Đang tải thông tin...</span>
+                        <span className="text-gray-500">{t('tasks.actions.loadingInfo')}</span>
                       </>
                     )}
                   </Link>
@@ -1814,7 +1817,7 @@ export function TaskDetailPage({
                       }));
                     }}
                     className="ml-2 p-1 text-gray-400 hover:text-red-500 rounded-full hover:bg-gray-100"
-                    title="Xóa liên kết với parent task"
+                    title={t('tasks.actions.removeParentLink')}
                   >
                     <XMarkIcon className="h-4 w-4" />
                   </button>
@@ -1828,13 +1831,13 @@ export function TaskDetailPage({
                       value={parentTaskIdInput}
                       onChange={handleTaskSearchInputChange}
                       onKeyDown={handleSearchKeyDown}
-                      placeholder="Nhập ID task cha"
+                      placeholder={t('tasks.actions.searchParentTask')}
                       className="w-full border border-gray-300 rounded-md p-2 pr-10 text-sm"
                     />
                     <button
                       onClick={handleSearchClick}
                       className="absolute right-2 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-blue-600"
-                      title="Tìm kiếm"
+                      title={t('tasks.actions.search')}
                     >
                       <MagnifyingGlassIcon className="h-5 w-5" />
                     </button>
@@ -1865,7 +1868,7 @@ export function TaskDetailPage({
                             setShowParentResults(false);
                           }}
                         >
-                          Thêm làm task cha
+                          {t('tasks.actions.addParentTask')}
                         </button>
                       </div>
                     </div>
@@ -1888,7 +1891,7 @@ export function TaskDetailPage({
                         }}
                         className="text-xs text-gray-500 hover:text-gray-700"
                       >
-                        Đóng
+                        {t('tasks.actions.closeResults')}
                       </button>
                     </div>
                   )}
@@ -1908,21 +1911,21 @@ export function TaskDetailPage({
                 onClick={() => setActiveTab('description')}
               >
                 <BookOpenIcon className="h-4 w-4 mr-2" />
-                Mô tả
+                {t('tasks.tabs.description')}
               </button>
-              <button 
+              <button
                 className={`tab-item ${activeTab === 'details' ? 'active' : ''}`}
                 onClick={() => setActiveTab('details')}
               >
                 <DocumentTextIcon className="h-4 w-4 mr-2" />
-                Chi tiết
+                {t('tasks.tabs.details')}
               </button>
-              <button 
+              <button
                 className={`tab-item ${activeTab === 'comments' ? 'active' : ''}`}
                 onClick={() => setActiveTab('comments')}
               >
                 <ChatBubbleLeftIcon className="h-4 w-4 mr-2" />
-                Bình luận
+                {t('tasks.tabs.comments')}
               </button>
               <button 
                 className={`tab-item ${activeTab === 'subtasks' ? 'active' : ''}`}
@@ -1931,7 +1934,7 @@ export function TaskDetailPage({
                 <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
                 </svg>
-                Task con ({subtasks.length})
+                {t('tasks.subtasks.subtaskCount', { count: subtasks.length })}
               </button>
             </div>
           </div>
@@ -1955,78 +1958,77 @@ export function TaskDetailPage({
             
             <div className={`tab-content ${activeTab === 'details' ? 'active' : ''}`}>
               <div className="bg-white rounded-lg">
-                <h2 className="text-lg font-medium text-gray-900 mb-4">Thông tin chi tiết</h2>
+                <h2 className="text-lg font-medium text-gray-900 mb-4">{t('tasks.sections.detailedInfo')}</h2>
                 
                 <div className="grid grid-cols-1 gap-2">
-                  {/* Trạng thái */}
-                  {renderEditableField('Trạng thái', 'status', 'select',
+                  {/* Status */}
+                  {renderEditableField(t('tasks.fields.status'), 'status', 'select',
                     Object.values(TaskStatuses).map(value => ({
                       value,
-                      label: STATUS_LABELS[value] || value
+                      label: getStatusLabel(value)
                     })))}
 
-                  {/* Mức độ ưu tiên */}
-                  {renderEditableField('Mức độ ưu tiên', 'priority', 'select',
+                  {/* Priority */}
+                  {renderEditableField(t('tasks.fields.priority'), 'priority', 'select',
                     Object.values(Priorities).map(value => ({
                       value,
-                      label: PRIORITY_LABELS[value] || value
+                      label: getPriorityLabel(value)
                     })))}
-                  
-                  {/* Thời gian */}
+
+                  {/* Timeline */}
                   <div className="mt-6 border-t border-gray-200 pt-4">
-                    <h3 className="text-base font-medium text-gray-900 mb-3">Thời gian</h3>
-                    {renderEditableField('Ngày bắt đầu', 'start_date', 'date')}
-                    {renderEditableField('Ngày đến hạn', 'due_date', 'date')}
-                    
-                    {/* Ngày thực tế - editable */}
-                    {renderEditableField('Ngày bắt đầu thực tế', 'actual_start_date', 'date')}
-                    {renderEditableField('Ngày kết thúc thực tế', 'actual_end_date', 'date')}
-                    
+                    <h3 className="text-base font-medium text-gray-900 mb-3">{t('tasks.sections.timeline')}</h3>
+                    {renderEditableField(t('tasks.fields.startDate'), 'start_date', 'date')}
+                    {renderEditableField(t('tasks.fields.dueDate'), 'due_date', 'date')}
+
+                    {renderEditableField(t('tasks.fields.actualStartDate'), 'actual_start_date', 'date')}
+                    {renderEditableField(t('tasks.fields.actualEndDate'), 'actual_end_date', 'date')}
+
                     {calculateDaysRemaining() && (
                       <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                        <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Thời gian còn lại:</div>
+                        <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">{t('tasks.fields.timeRemaining')}:</div>
                         <div className="flex-1">
-                          <span className={`inline-block px-2 py-1 text-sm rounded ${calculateDaysRemaining()?.includes('Quá hạn') ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
+                          <span className={`inline-block px-2 py-1 text-sm rounded ${calculateDaysRemaining()?.includes('Quá hạn') || calculateDaysRemaining()?.includes('Overdue') || calculateDaysRemaining()?.includes('超過') ? 'bg-red-100 text-red-800' : 'bg-blue-100 text-blue-800'}`}>
                             {calculateDaysRemaining()}
                           </span>
                         </div>
                       </div>
                     )}
-                  </div>               
-                  
-                  {/* Người phụ trách */}
+                  </div>
+
+                  {/* Assignees */}
                   <div className="mt-6 border-t border-gray-200 pt-4">
-                    <h3 className="text-base font-medium text-gray-900 mb-3">Người phụ trách</h3>
-                    {renderEditableField('Người được giao', 'assignee', 'select',
+                    <h3 className="text-base font-medium text-gray-900 mb-3">{t('tasks.sections.assignees')}</h3>
+                    {renderEditableField(t('tasks.fields.assignedTo'), 'assignee', 'select',
                       projectMembers && projectMembers.length > 0 ?
-                        [{ value: '', label: 'Chưa gán' }, ...projectMembers.map(member => ({
+                        [{ value: '', label: t('common.notAssigned') }, ...projectMembers.map(member => ({
                           value: member.user.userId,
                           label: (member.user.username || member.user.fullName || member.user.email) + (member.position ? ` (${member.position})` : '')
                         }))] :
-                        [{ value: '', label: 'Chưa gán' }]
+                        [{ value: '', label: t('common.notAssigned') }]
                     )}
-                    
-                    {renderEditableField('Người tạo', 'created_by')}
+
+                    {renderEditableField(t('tasks.fields.createdBy'), 'created_by')}
                   </div>
-                  
-                  {/* Nỗ lực và tiến độ */}
+
+                  {/* Effort & Progress */}
                   <div className="mt-6 border-t border-gray-200 pt-4">
-                    <h3 className="text-base font-medium text-gray-900 mb-3">Nỗ lực và tiến độ</h3>
+                    <h3 className="text-base font-medium text-gray-900 mb-3">{t('tasks.sections.effortAndProgress')}</h3>
                     {subtasks.length === 0 ? (
                       <>
-                        {renderEditableField('Nỗ lực (giờ)', 'effort', 'number')}
-                        {renderEditableField('Tiến độ (%)', 'progress', 'number')}
+                        {renderEditableField(t('tasks.fields.effort'), 'effort', 'number')}
+                        {renderEditableField(t('tasks.fields.progress'), 'progress', 'number')}
                       </>
                     ) : (
                       <>
                         <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                          <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Nỗ lực:</div>
+                          <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">{t('tasks.fields.effortLabel')}:</div>
                           <div className="flex-1 text-sm text-gray-900">
                             {formatEffortWithRemaining(subtasks)}
                           </div>
                         </div>
                         <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                          <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Tiến độ:</div>
+                          <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">{t('tasks.fields.progressLabel')}:</div>
                           <div className="flex-1 text-sm text-gray-900">
                             {calculateProgress(subtasks)}%
                           </div>
@@ -2034,15 +2036,15 @@ export function TaskDetailPage({
                       </>
                     )}
                   </div>
-                  
-                  {/* Phân loại */}
+
+                  {/* Classification */}
                   <div className="mt-6 border-t border-gray-200 pt-4">
-                    <h3 className="text-base font-medium text-gray-900 mb-3">Phân loại</h3>
-                    
-                    {/* Loại task */}
-                    {renderEditableField('Loại task', 'type', 'select', 
+                    <h3 className="text-base font-medium text-gray-900 mb-3">{t('tasks.sections.classification')}</h3>
+
+                    {/* Task type */}
+                    {renderEditableField(t('tasks.fields.taskType'), 'type', 'select',
                       [
-                        { value: '', label: 'Không xác định' },
+                        { value: '', label: t('common.unknown') },
                         { value: 'Feature', label: 'Feature' },
                         { value: 'Bug', label: 'Bug' },
                         { value: 'Enhancement', label: 'Enhancement' },
@@ -2051,9 +2053,9 @@ export function TaskDetailPage({
                     )}
                     
                     {/* Danh mục */}
-                    {renderEditableField('Danh mục', 'category', 'select', 
+                    {renderEditableField(t('tasks.fields.category'), 'category', 'select',
                       [
-                        { value: '', label: 'Không xác định' },
+                        { value: '', label: t('common.unknown') },
                         { value: 'Frontend', label: 'Frontend' },
                         { value: 'Backend', label: 'Backend' },
                         { value: 'Design', label: 'Design' },
@@ -2061,7 +2063,7 @@ export function TaskDetailPage({
                         { value: 'DevOps', label: 'DevOps' }
                       ]
                     )}
-                    
+
                     {/* Tags — editable chip input */}
                     <div className="flex items-start py-1.5 rounded-md hover:bg-gray-50 mb-2">
                       {editingField === 'tags' ? (
@@ -2070,7 +2072,7 @@ export function TaskDetailPage({
                           <TagInput
                             value={Array.isArray(editedTask.tags) ? editedTask.tags : []}
                             onChange={(tags) => setEditedTask({ ...editedTask, tags })}
-                            placeholder="Thêm tag... (Enter hoặc dấu phẩy)"
+                            placeholder={t('tasks.actions.addTag')}
                             className="border-gray-300"
                           />
                           <div className="flex mt-3 space-x-3">
@@ -2079,13 +2081,13 @@ export function TaskDetailPage({
                               className="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
                               disabled={isSaving}
                             >
-                              {isSaving ? 'Đang lưu...' : 'Lưu'}
+                              {isSaving ? t('tasks.actions.saving') : t('tasks.actions.save')}
                             </button>
                             <button
                               onClick={cancelEditing}
                               className="px-4 py-2 bg-gray-200 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-300 transition-colors"
                             >
-                              Hủy
+                              {t('tasks.actions.cancel')}
                             </button>
                           </div>
                         </div>
@@ -2103,48 +2105,48 @@ export function TaskDetailPage({
                                 </span>
                               ))
                             ) : (
-                              <span className="text-sm text-gray-400 italic">Chưa có tag</span>
+                              <span className="text-sm text-gray-400 italic">{t('tasks.actions.noTags')}</span>
                             )}
                           </div>
                         </>
                       )}
                     </div>
-                    
-                    {/* Loại tiến độ */}
-                    {renderEditableField('Loại tiến độ', 'progress_type', 'select', 
+
+                    {/* Progress type */}
+                    {renderEditableField(t('tasks.fields.progressType'), 'progress_type', 'select',
                       [
-                        { value: '', label: 'Chưa thiết lập' },
-                        { value: 'study', label: 'Nghiên cứu' },
-                        { value: 'investigate', label: 'Điều tra' },
-                        { value: 'code', label: 'Lập trình' },
-                        { value: 'test', label: 'Kiểm thử' },
-                        { value: 'review_code', label: 'Review code' },
-                        { value: 'review_test_report', label: 'Review báo cáo test' },
-                        { value: 'release', label: 'Phát hành' }
+                        { value: '', label: t('tasks.progressTypes.notSet') },
+                        { value: 'study', label: t('tasks.progressTypes.study') },
+                        { value: 'investigate', label: t('tasks.progressTypes.investigate') },
+                        { value: 'code', label: t('tasks.progressTypes.code') },
+                        { value: 'test', label: t('tasks.progressTypes.test') },
+                        { value: 'review_code', label: t('tasks.progressTypes.review_code') },
+                        { value: 'review_test_report', label: t('tasks.progressTypes.review_test_report') },
+                        { value: 'release', label: t('tasks.progressTypes.release') }
                       ]
                     )}
                   </div>
-                  
-                  {/* Thông tin khác */}
+
+                  {/* Other info */}
                   <div className="mt-6 border-t border-gray-200 pt-4">
-                    <h3 className="text-base font-medium text-gray-900 mb-3">Thông tin khác</h3>
+                    <h3 className="text-base font-medium text-gray-900 mb-3">{t('tasks.sections.otherInfo')}</h3>
                     <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Thời gian tạo:</div>
+                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">{t('tasks.fields.createdAt')}:</div>
                       <div className="flex-1 text-sm text-gray-900">
                         {formatDate(task.created_at)}
                       </div>
                     </div>
-                    
+
                     <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">Cập nhật cuối:</div>
+                      <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">{t('tasks.fields.lastUpdated')}:</div>
                       <div className="flex-1 text-sm text-gray-900">
                         {formatDate(task.updated_at)}
                       </div>
                     </div>
-                    
+
                     {task.task_id && (
                       <div className="flex items-center py-1.5 rounded-md hover:bg-gray-50">
-                        <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">ID Task:</div>
+                        <div className="flex-shrink-0 w-1/3 text-sm font-medium text-gray-700">{t('tasks.fields.taskId')}:</div>
                         <div className="flex-1 text-sm text-gray-900 font-mono">
                           {task.task_id}
                         </div>
@@ -2157,7 +2159,7 @@ export function TaskDetailPage({
             
             <div className={`tab-content ${activeTab === 'comments' ? 'active' : ''}`}>
               <div className="bg-white rounded-lg">
-          <h2 className="text-lg font-medium text-gray-900 mb-4">Bình luận và hoạt động</h2>
+          <h2 className="text-lg font-medium text-gray-900 mb-4">{t('tasks.comments.activity')}</h2>
           
           {/* Danh sách bình luận */}
           <div className="space-y-4 mb-6">
@@ -2170,7 +2172,7 @@ export function TaskDetailPage({
                 {comments.map((comment) => renderComment(comment))}
               </div>
             ) : (
-              <p className="text-center text-gray-500 py-8">Chưa có bình luận nào</p>
+              <p className="text-center text-gray-500 py-8">{t('tasks.comments.noComments')}</p>
             )}
           </div>
           
@@ -2195,7 +2197,7 @@ export function TaskDetailPage({
               ref={commentEditorRef}
               value={newComment}
                     onChange={setNewComment}
-                    placeholder="Thêm bình luận..."
+                    placeholder={t('tasks.comments.placeholderSimple')}
               mode="compact"
               projectMembers={projectMembers}
               onMentionSelect={handleMentionSelect}
@@ -2207,7 +2209,7 @@ export function TaskDetailPage({
                       disabled={isPostingComment || isTiptapContentEmpty(newComment)}
                       isLoading={isPostingComment}
               >
-                      {isPostingComment ? 'Đang gửi...' : 'Gửi bình luận'}
+                      {isPostingComment ? t('tasks.comments.submitting') : t('tasks.comments.submit')}
               </Button>
                   </div>
                 </div>
@@ -2217,10 +2219,10 @@ export function TaskDetailPage({
             <div className={`tab-content ${activeTab === 'subtasks' ? 'active' : ''}`}>
               <div className="bg-white rounded-lg">
                 <div className="flex justify-between items-center mb-4">
-                  <h2 className="text-lg font-medium text-gray-900">Task con ({subtasks.length})</h2>
+                  <h2 className="text-lg font-medium text-gray-900">{t('tasks.subtasks.subtaskCount', { count: subtasks.length })}</h2>
                   <Link href={`/projects/${projectId}/tasks/${taskId}/create-subtask`}>
                     <Button size="sm" variant="outline">
-                      <span className="mr-1">+</span> Thêm task con
+                      <span className="mr-1">+</span> {t('tasks.subtasks.addSubtaskButton')}
                     </Button>
                   </Link>
                 </div>
@@ -2230,7 +2232,7 @@ export function TaskDetailPage({
                     <Spinner size="lg" />
                   </div>
                 ) : subtasks.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">Chưa có task con nào</p>
+                  <p className="text-center text-gray-500 py-8">{t('tasks.subtasks.noSubtasks')}</p>
                 ) : (
                   // Sử dụng component mới cho task con thay vì SubtasksTable
                   <TaskDetailSubtasks 

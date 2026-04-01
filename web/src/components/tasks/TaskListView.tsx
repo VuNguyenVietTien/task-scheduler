@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Task, TaskStatus, Priority, TaskFilter, TaskStatuses, Priorities, UserBasic } from '@/types/task';
-import { STATUS_LABELS, PRIORITY_LABELS } from '@/constants/task-display-labels';
+import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
 import { ProjectData } from '@/types/project';
 import { TaskFilterBar } from './TaskFilterBar';
 import { TaskBulkActions } from './TaskBulkActions';
@@ -94,13 +95,14 @@ const taskNestedStyles = `
   }
 `;
 
-export function TaskListView({ 
-  tasks: initialTasks, 
+export function TaskListView({
+  tasks: initialTasks,
   onTaskClick,
   pagination,
   filters = {},
   setFilters
 }: TaskListViewProps) {
+  const { t } = useTranslation();
   const [filter, setFilter] = useState<TaskFilter>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'created_at', direction: 'desc' });
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
@@ -458,7 +460,7 @@ export function TaskListView({
                   >
                     {Object.values(TaskStatuses).map((status) => (
                       <option key={status} value={status}>
-                        {STATUS_LABELS[status] || status}
+                        {getStatusLabel(status)}
                       </option>
                     ))}
                   </select>
@@ -489,7 +491,7 @@ export function TaskListView({
                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(childTask.status)} cursor-pointer hover:opacity-75`}
                 onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'status', childTask.status); }}
               >
-                {STATUS_LABELS[childTask.status] || childTask.status}
+                {getStatusLabel(childTask.status)}
               </span>
             )}
           </td>
@@ -507,7 +509,7 @@ export function TaskListView({
                   >
                     {Object.values(Priorities).map((priority) => (
                       <option key={priority} value={priority}>
-                        {PRIORITY_LABELS[priority] || priority}
+                        {getPriorityLabel(priority)}
                       </option>
                     ))}
                   </select>
@@ -538,7 +540,7 @@ export function TaskListView({
                 className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(childTask.priority)} cursor-pointer hover:opacity-75`}
                 onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'priority', childTask.priority); }}
               >
-                {PRIORITY_LABELS[childTask.priority] || childTask.priority}
+                {getPriorityLabel(childTask.priority)}
               </span>
             )}
           </td>
@@ -1084,7 +1086,7 @@ export function TaskListView({
             <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
             </svg>
-            Lọc công việc
+            {t('tasks.filterTasks')}
             {hasFilters && (
               <span className="ml-2 inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-800">
                 {Object.keys(filters).length}
@@ -1098,7 +1100,7 @@ export function TaskListView({
               ${showCompletedTasks 
                 ? 'bg-slate-200 text-slate-800 border-slate-300' 
                 : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
-            aria-label={showCompletedTasks ? "Ẩn công việc đã hoàn thành" : "Hiện công việc đã hoàn thành"}
+            aria-label={showCompletedTasks ? t('tasks.hideCompleted') : t('tasks.showCompleted')}
           >
             <svg 
               xmlns="http://www.w3.org/2000/svg" 
@@ -1109,7 +1111,7 @@ export function TaskListView({
             >
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            {showCompletedTasks ? 'Ẩn đã hoàn thành' : 'Hiện đã hoàn thành'}
+            {showCompletedTasks ? t('tasks.hideCompleted') : t('tasks.showCompleted')}
           </button>
         </div>
         
@@ -1122,7 +1124,7 @@ export function TaskListView({
                 key={status} 
                 className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${getStatusColor(status as TaskStatus)}`}
               >
-                {STATUS_LABELS[status] || status}: {count}
+                {getStatusLabel(status)}: {count}
               </span>
             ))}
         </div>
@@ -1152,28 +1154,28 @@ export function TaskListView({
                 />
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Tiêu đề
+                {t('tasks.colTitle')}
               </th>
               <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Trạng thái
+                {t('tasks.colStatus')}
               </th>
               <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Ưu tiên
+                {t('tasks.colPriority')}
               </th>
               <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Loai
+                {t('tasks.colType')}
               </th>
               <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Người được giao
+                {t('tasks.colAssignee')}
               </th>
               <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Hạn
+                {t('tasks.colDeadline')}
               </th>
               <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                Công sức
+                {t('tasks.colEffort')}
               </th>
               <th scope="col" className="relative px-3 py-3">
-                <span className="sr-only">Thao tác</span>
+                <span className="sr-only">{t('tasks.colActions')}</span>
               </th>
             </tr>
           </thead>
@@ -1238,7 +1240,7 @@ export function TaskListView({
                             >
                               {Object.values(TaskStatuses).map((status) => (
                                 <option key={status} value={status}>
-                                  {STATUS_LABELS[status] || status}
+                                  {getStatusLabel(status)}
                                 </option>
                               ))}
                             </select>
@@ -1269,7 +1271,7 @@ export function TaskListView({
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getStatusColor(task.status)} cursor-pointer hover:opacity-75`}
                           onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'status', task.status); }}
                         >
-                          {STATUS_LABELS[task.status] || task.status}
+                          {getStatusLabel(task.status)}
                         </span>
                       )}
                     </td>
@@ -1287,7 +1289,7 @@ export function TaskListView({
                             >
                               {Object.values(Priorities).map((priority) => (
                                 <option key={priority} value={priority}>
-                                  {PRIORITY_LABELS[priority] || priority}
+                                  {getPriorityLabel(priority)}
                                 </option>
                               ))}
                             </select>
@@ -1318,7 +1320,7 @@ export function TaskListView({
                           className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPriorityColor(task.priority)} cursor-pointer hover:opacity-75`}
                           onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'priority', task.priority); }}
                         >
-                          {PRIORITY_LABELS[task.priority] || task.priority}
+                          {getPriorityLabel(task.priority)}
                         </span>
                       )}
                     </td>
@@ -1508,13 +1510,13 @@ export function TaskListView({
                     </svg>
                     {hasFilters ? (
                       <>
-                        <p className="text-lg font-medium">Không tìm thấy công việc nào</p>
-                        <p className="mt-1">Thử thay đổi bộ lọc hoặc tạo công việc mới</p>
+                        <p className="text-lg font-medium">{t('tasks.noTasks')}</p>
+                        <p className="mt-1">{t('tasks.noTasksFilter', { defaultValue: t('tasks.noTasks') })}</p>
                       </>
                     ) : (
                       <>
-                        <p className="text-lg font-medium">Chưa có công việc nào</p>
-                        <p className="mt-1">Thêm công việc mới ngay để bắt đầu</p>
+                        <p className="text-lg font-medium">{t('tasks.noTasks')}</p>
+                        <p className="mt-1">{t('tasks.noTasksHint', { defaultValue: '' })}</p>
                       </>
                     )}
                   </div>

@@ -1,8 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
-import { STATUS_LABELS, PRIORITY_LABELS } from '@/constants/task-display-labels';
+import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
 import { User } from '@/contexts/AuthContext';
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { Spinner } from '@/components/ui/Spinner';
@@ -31,6 +32,7 @@ export default function TaskDetailsPanel({
   className = '',
   projectMembers = []
 }: TaskDetailsPanelProps) {
+  const { t } = useTranslation();
   const [editedTask, setEditedTask] = useState<Task>(task);
   const [editingField, setEditingField] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -41,10 +43,10 @@ export default function TaskDetailsPanel({
     setEditedTask(task);
   }, [task]);
 
-  // Định dạng ngày tháng
+  // Format date using browser locale
   const formatDate = (dateString?: string) => {
-    if (!dateString) return 'Chưa thiết lập';
-    return new Date(dateString).toLocaleDateString('vi-VN', {
+    if (!dateString) return t('common.notSet');
+    return new Date(dateString).toLocaleDateString(undefined, {
       year: 'numeric',
       month: 'long',
       day: 'numeric',
@@ -183,7 +185,7 @@ export default function TaskDetailsPanel({
         fieldValue = editedTask.status;
         displayValue = (
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getStatusColor(task.status)}`}>
-            {STATUS_LABELS[task.status] || task.status}
+            {getStatusLabel(task.status)}
           </span>
         );
         break;
@@ -191,7 +193,7 @@ export default function TaskDetailsPanel({
         fieldValue = editedTask.priority;
         displayValue = (
           <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getPriorityColor(task.priority)}`}>
-            {PRIORITY_LABELS[task.priority] || task.priority}
+            {getPriorityLabel(task.priority)}
           </span>
         );
         break;
@@ -445,12 +447,12 @@ export default function TaskDetailsPanel({
             <h3 className="text-base font-medium text-gray-900 mb-3">Thông tin cơ bản</h3>
             
             {renderEditableField('Trạng thái', 'status', 'select',
-              Object.values(TaskStatuses).map(status => ({ value: status, label: STATUS_LABELS[status] || status })))}
+              Object.values(TaskStatuses).map(status => ({ value: status, label: getStatusLabel(status) })))}
 
             {renderEditableField('Người được giao', 'assignee', 'select')}
 
             {renderEditableField('Mức ưu tiên', 'priority', 'select',
-              Object.values(Priorities).map(priority => ({ value: priority, label: PRIORITY_LABELS[priority] || priority })))}
+              Object.values(Priorities).map(priority => ({ value: priority, label: getPriorityLabel(priority) })))}
           </div>
         </div>
         

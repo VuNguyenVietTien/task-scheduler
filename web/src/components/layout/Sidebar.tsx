@@ -2,19 +2,21 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-
-const navigation = [
-  { name: 'Dashboard', href: '/', icon: '📊' },
-  { name: 'Projects', href: '/projects', icon: '📂' },
-  { name: 'Calendar', href: '/calendar', icon: '📅' },
-  { name: 'Reports', href: '/reports', icon: '📈' },
-];
+import { useTranslation } from 'react-i18next';
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const { t } = useTranslation();
+
+  const navigation = [
+    { name: t('nav.dashboard'), href: '/', icon: '📊' },
+    { name: t('nav.projects'), href: '/projects', icon: '📂' },
+    { name: t('nav.calendar'), href: '/calendar', icon: '📅' },
+    { name: t('nav.reports'), href: '/reports', icon: '📈' },
+  ];
 
   const isActive = (path: string) => {
-    return pathname === path || pathname.startsWith(`${path}/`);
+    return pathname === path || pathname?.startsWith(`${path}/`);
   };
 
   return (

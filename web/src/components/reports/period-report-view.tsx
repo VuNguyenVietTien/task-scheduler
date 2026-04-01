@@ -334,10 +334,10 @@ export function PeriodReportView({ projectId, reportType, planId }: PeriodReport
                         <tr key={row.taskId}>
                           <td className="max-w-[200px] truncate">{row.title}</td>
                           <td>{row.assignee}</td>
-                          <td>{row.plannedStart ? new Date(row.plannedStart).toLocaleDateString('vi-VN') : '-'}</td>
-                          <td>{row.plannedEnd ? new Date(row.plannedEnd).toLocaleDateString('vi-VN') : '-'}</td>
-                          <td>{row.actualStart ? new Date(row.actualStart).toLocaleDateString('vi-VN') : '-'}</td>
-                          <td>{row.actualEnd ? new Date(row.actualEnd).toLocaleDateString('vi-VN') : '-'}</td>
+                          <td>{row.plannedStart ? new Date(row.plannedStart).toLocaleDateString() : '-'}</td>
+                          <td>{row.plannedEnd ? new Date(row.plannedEnd).toLocaleDateString() : '-'}</td>
+                          <td>{row.actualStart ? new Date(row.actualStart).toLocaleDateString() : '-'}</td>
+                          <td>{row.actualEnd ? new Date(row.actualEnd).toLocaleDateString() : '-'}</td>
                           <td>
                             <span className={`px-2 py-0.5 rounded text-xs text-white ${
                               row.status === 'DONE' || row.status === 'CLOSE' ? 'bg-green-500' :

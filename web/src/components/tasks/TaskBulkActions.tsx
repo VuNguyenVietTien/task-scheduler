@@ -1,5 +1,5 @@
 import { TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
-import { STATUS_LABELS, PRIORITY_LABELS } from '@/constants/task-display-labels';
+import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
 
 interface TaskBulkActionsProps {
   selectedCount: number;
@@ -48,7 +48,7 @@ export function TaskBulkActions({
             <option value="" disabled>Trạng thái</option>
             {Object.values(TaskStatuses).map((status) => (
               <option key={status} value={status}>
-                {STATUS_LABELS[status] || status}
+                {getStatusLabel(status)}
               </option>
             ))}
           </select>
@@ -65,7 +65,7 @@ export function TaskBulkActions({
             <option value="" disabled>Ưu tiên</option>
             {Object.values(Priorities).map((priority) => (
               <option key={priority} value={priority}>
-                {PRIORITY_LABELS[priority] || priority}
+                {getPriorityLabel(priority)}
               </option>
             ))}
           </select>

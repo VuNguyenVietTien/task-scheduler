@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import { Task } from '@/types/task';
-import { FiPlus, FiEdit2, FiCheck, FiX } from 'react-icons/fi';
+import { FiPlus, FiCheck, FiX } from 'react-icons/fi';
 import Link from 'next/link';
 import TaskStatusBadge from '@/components/tasks/TaskStatusBadge';
 import TaskPriorityBadge from '@/components/tasks/TaskPriorityBadge';
 import Image from 'next/image';
+import { useTranslation } from 'react-i18next';
 
 interface SubtasksTabProps {
   task: Task;
@@ -23,6 +24,7 @@ export default function SubtasksTab({
   handleCreateSubtask,
   formatDate
 }: SubtasksTabProps) {
+  const { t } = useTranslation();
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [isAddingSubtask, setIsAddingSubtask] = useState(false);
 
@@ -38,7 +40,6 @@ export default function SubtasksTab({
 
   const confirmAddSubtask = () => {
     if (newSubtaskTitle.trim()) {
-      // Logic thêm subtask có thể được triển khai ở đây
       handleCreateSubtask();
       setIsAddingSubtask(false);
       setNewSubtaskTitle('');
@@ -48,23 +49,23 @@ export default function SubtasksTab({
   return (
     <div className="bg-white rounded-lg">
       <div className="flex justify-between items-center mb-4">
-        <h2 className="text-lg font-medium text-gray-900">Công việc con</h2>
+        <h2 className="text-lg font-medium text-gray-900">{t('tasks.subtasks.title')}</h2>
         <button
           type="button"
           onClick={startAddingSubtask}
           className="inline-flex items-center px-3 py-1.5 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
           <FiPlus className="mr-1" />
-          Thêm công việc con
+          {t('tasks.subtasks.addSubtask')}
         </button>
       </div>
 
       {isAddingSubtask && (
         <div className="mb-6 p-4 border border-gray-200 rounded-lg bg-gray-50">
-          <h3 className="text-base font-medium text-gray-900 mb-3">Tạo công việc con mới</h3>
+          <h3 className="text-base font-medium text-gray-900 mb-3">{t('tasks.subtasks.createNew')}</h3>
           <div className="mb-3">
             <label htmlFor="subtask-title" className="block text-sm font-medium text-gray-700">
-              Tiêu đề
+              {t('tasks.subtasks.subtaskTitle')}
             </label>
             <input
               type="text"
@@ -72,7 +73,7 @@ export default function SubtasksTab({
               value={newSubtaskTitle}
               onChange={(e) => setNewSubtaskTitle(e.target.value)}
               className="mt-1 block w-full shadow-sm sm:text-sm border-gray-300 rounded-md"
-              placeholder="Nhập tiêu đề công việc con"
+              placeholder={t('tasks.subtasks.subtaskTitle')}
               autoFocus
             />
           </div>
@@ -83,7 +84,7 @@ export default function SubtasksTab({
               className="inline-flex items-center px-3 py-1.5 border border-gray-300 text-sm font-medium rounded-md shadow-sm text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
             >
               <FiX className="mr-1" />
-              Hủy
+              {t('common.cancel')}
             </button>
             <button
               type="button"
@@ -94,7 +95,7 @@ export default function SubtasksTab({
               disabled={!newSubtaskTitle.trim()}
             >
               <FiCheck className="mr-1" />
-              Tạo
+              {t('tasks.subtasks.createSubtask')}
             </button>
           </div>
         </div>
@@ -110,25 +111,25 @@ export default function SubtasksTab({
             <thead className="bg-gray-50">
               <tr>
                 <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Tiêu đề
+                  {t('tasks.subtasks.subtaskTitle')}
                 </th>
                 <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Trạng thái
+                  {t('tasks.subtasks.statusHeader')}
                 </th>
                 <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ưu tiên
+                  {t('tasks.subtasks.priorityHeader')}
                 </th>
                 <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Người thực hiện
+                  {t('tasks.subtasks.assigneeHeader')}
                 </th>
                 <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ngày bắt đầu
+                  {t('tasks.subtasks.startDateHeader')}
                 </th>
                 <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Ngày kết thúc
+                  {t('tasks.subtasks.endDateHeader')}
                 </th>
                 <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                  Nỗ lực
+                  {t('tasks.subtasks.effortHeader')}
                 </th>
               </tr>
             </thead>
@@ -168,17 +169,17 @@ export default function SubtasksTab({
                         <span className="text-sm">{subtask.assignee.username}</span>
                       </div>
                     ) : (
-                      <span className="text-gray-500 text-sm">Chưa gán</span>
+                      <span className="text-gray-500 text-sm">{t('common.notAssigned')}</span>
                     )}
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
-                    {subtask.start_date ? formatDate(subtask.start_date) : 'Chưa thiết lập'}
+                    {subtask.start_date ? formatDate(subtask.start_date) : t('common.notSet')}
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
-                    {subtask.due_date ? formatDate(subtask.due_date) : 'Chưa thiết lập'}
+                    {subtask.due_date ? formatDate(subtask.due_date) : t('common.notSet')}
                   </td>
                   <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-500">
-                    {subtask.effort || 0} giờ
+                    {subtask.effort || 0} {t('common.hours')}
                   </td>
                 </tr>
               ))}
@@ -187,17 +188,17 @@ export default function SubtasksTab({
         </div>
       ) : (
         <div className="text-center py-10 bg-gray-50 rounded-lg border border-gray-200">
-          <p className="text-gray-500 mb-4">Chưa có công việc con nào được tạo cho công việc này.</p>
+          <p className="text-gray-500 mb-4">{t('tasks.subtasks.noSubtasks')}</p>
           <button
             type="button"
             onClick={startAddingSubtask}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
           >
             <FiPlus className="mr-2" />
-            Tạo công việc con
+            {t('tasks.subtasks.createSubtask')}
           </button>
         </div>
       )}
     </div>
   );
-} 
+}

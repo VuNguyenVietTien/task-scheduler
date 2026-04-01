@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
 import { User } from '@/contexts/AuthContext';
 import { imageService } from '@/services/imageService';
+import { useTranslation } from 'react-i18next';
 
 // Định nghĩa kiểu dữ liệu cho API Comment
 interface ApiComment {
@@ -51,6 +52,7 @@ interface CommentSectionProps {
 }
 
 export default function CommentSection({ taskId, currentUser }: CommentSectionProps) {
+  const { t } = useTranslation();
   const [comments, setComments] = useState<LocalComment[]>([]);
   const [newComment, setNewComment] = useState<string>('');
   const [loading, setLoading] = useState<boolean>(true);
@@ -606,7 +608,7 @@ export default function CommentSection({ taskId, currentUser }: CommentSectionPr
                       {comment.username}
                     </h3>
                     <div className="flex items-center text-xs text-gray-500">
-                      <span>Đang gửi...</span>
+                      <span>{t('tasks.comments.submitting')}</span>
                       <Spinner size="sm" className="ml-2" />
                     </div>
                   </div>
@@ -628,19 +630,19 @@ export default function CommentSection({ taskId, currentUser }: CommentSectionPr
             />
             <div className="mt-2 flex items-center justify-end space-x-2">
               <div className="text-sm text-red-500">{comment.error}</div>
-              <Button 
-                size="sm" 
-                variant="secondary" 
+              <Button
+                size="sm"
+                variant="secondary"
                 onClick={() => handleRetryComment(comment.id)}
               >
-                Thử lại
+                {t('common.retry')}
               </Button>
-              <Button 
-                size="sm" 
-                variant="danger" 
+              <Button
+                size="sm"
+                variant="danger"
                 onClick={() => handleDeleteFailedComment(comment.id)}
               >
-                Xóa
+                {t('common.delete')}
               </Button>
             </div>
           </div>
@@ -657,7 +659,7 @@ export default function CommentSection({ taskId, currentUser }: CommentSectionPr
   
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-medium text-gray-900 mb-2">Bình luận</h2>
+      <h2 className="text-lg font-medium text-gray-900 mb-2">{t('tasks.comments.title')}</h2>
       
       {/* Hiển thị thông báo lỗi nếu có */}
       {error && (
@@ -674,19 +676,19 @@ export default function CommentSection({ taskId, currentUser }: CommentSectionPr
               {/* Hiển thị các nút khi lỗi liên quan đến hình ảnh */}
               {error.includes('Lưu ý:') && (
                 <div className="mt-2 flex flex-wrap gap-2">
-                  <Button 
-                    variant="secondary" 
+                  <Button
+                    variant="secondary"
                     size="sm"
                     onClick={cancelComment}
                   >
-                    Hủy
+                    {t('common.cancel')}
                   </Button>
-                  <Button 
-                    variant="primary" 
+                  <Button
+                    variant="primary"
                     size="sm"
                     onClick={forceSendComment}
                   >
-                    Gửi bình luận (bỏ hình ảnh)
+                    {t('tasks.comments.sendWithoutImages')}
                   </Button>
                 </div>
               )}
@@ -709,12 +711,12 @@ export default function CommentSection({ taskId, currentUser }: CommentSectionPr
         </div>
       ) : (
         <div className="text-center py-8 text-gray-500">
-          <p>Chưa có bình luận nào. Hãy là người đầu tiên bình luận!</p>
+          <p>{t('tasks.comments.noCommentsFirst')}</p>
         </div>
       )}
       
       <div className="mt-4">
-        <h3 className="text-sm font-medium text-gray-700 mb-2">Thêm bình luận:</h3>
+        <h3 className="text-sm font-medium text-gray-700 mb-2">{t('tasks.comments.addComment')}</h3>
         <div className="border border-gray-300 rounded-lg overflow-hidden">
           <AdvancedEditor
             value={newComment}
@@ -726,21 +728,21 @@ export default function CommentSection({ taskId, currentUser }: CommentSectionPr
                 console.error('Lỗi khi cập nhật nội dung:', error);
               }
             }}
-            placeholder="Viết bình luận của bạn..."
+            placeholder={t('tasks.comments.placeholderSimple')}
             mode="compact"
           />
           <div className="flex justify-end bg-gray-50 px-4 py-2">
             {isSending || isProcessingImages ? (
               <div className="flex items-center px-4 py-2">
                 <Spinner size="sm" className="mr-2" />
-                <span>{isProcessingImages ? 'Đang xử lý hình ảnh...' : 'Đang gửi...'}</span>
+                <span>{isProcessingImages ? t('tasks.comments.processingImages') : t('tasks.comments.submitting')}</span>
               </div>
             ) : (
               <Button
                 onClick={handleSubmitComment}
                 disabled={!newComment.trim()}
               >
-                Gửi bình luận
+                {t('tasks.comments.submit')}
               </Button>
             )}
           </div>

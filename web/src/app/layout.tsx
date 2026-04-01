@@ -6,6 +6,7 @@ import { ClientProviders } from "@/providers/ClientProviders";
 import { Toaster } from "sonner";
 import Layout from "@/components/ui/navigation/Layout";
 import { usePathname } from "next/navigation";
+import { I18nProvider } from "@/i18n/I18nProvider";
 
 const inter = Inter({ subsets: ['latin'] });
 
@@ -18,18 +19,20 @@ export default function RootLayout({
   const isAuthRoute = pathname?.startsWith('/auth');
 
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={inter.className}>
-        <ClientProviders>
-          {isAuthRoute ? (
-            children
-          ) : (
-            <Layout>
-              {children}
-            </Layout>
-          )}
-          <Toaster richColors position="top-right" />
-        </ClientProviders>
+        <I18nProvider>
+          <ClientProviders>
+            {isAuthRoute ? (
+              children
+            ) : (
+              <Layout>
+                {children}
+              </Layout>
+            )}
+            <Toaster richColors position="top-right" />
+          </ClientProviders>
+        </I18nProvider>
       </body>
     </html>
   );

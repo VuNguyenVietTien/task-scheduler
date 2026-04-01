@@ -34,7 +34,7 @@ export function CompletedTasksTable({ tasks }: CompletedTasksTableProps) {
                   <td>{task.assignee?.username || 'Không xác định'}</td>
                   <td>
                     {task.actualEndDate
-                      ? new Date(task.actualEndDate).toLocaleDateString('vi-VN')
+                      ? new Date(task.actualEndDate).toLocaleDateString()
                       : 'Không có dữ liệu'}
                   </td>
                 </tr>

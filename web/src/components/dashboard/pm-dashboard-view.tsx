@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { useTranslation } from 'react-i18next';
 import { DashboardSummaryCard } from './dashboard-summary-card';
 import { DashboardTaskTable, renderStatusBadge, renderPriorityBadge } from './dashboard-task-table';
 
@@ -31,55 +32,55 @@ function daysOverdue(dueDate: string): number {
 }
 
 export function PMDashboardView({ overdueTasks, doingTasks, bugTasks, criticalTasks }: PMDashboardViewProps) {
+  const { t } = useTranslation();
+  const statusLabel = (s: string) => t(`tasks.statusLabels.${s?.toUpperCase()}`, { defaultValue: s });
+  const priorityLabel = (p: string) => t(`tasks.priorityLabels.${p?.toUpperCase()}`, { defaultValue: p });
+
   return (
     <div className="space-y-6">
-      {/* Summary cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <DashboardSummaryCard title="Task tre han" count={overdueTasks.length} color="text-red-600" />
-        <DashboardSummaryCard title="Dang thuc hien" count={doingTasks.length} color="text-blue-600" />
-        <DashboardSummaryCard title="Bug chua xong" count={bugTasks.length} color="text-orange-500" />
-        <DashboardSummaryCard title="Critical/Urgent" count={criticalTasks.length} color="text-red-600" />
+        <DashboardSummaryCard title={t('dashboard.overdueTasks')} count={overdueTasks.length} color="text-red-600" />
+        <DashboardSummaryCard title={t('dashboard.activeTasks')} count={doingTasks.length} color="text-blue-600" />
+        <DashboardSummaryCard title={t('dashboard.unfinishedBugs')} count={bugTasks.length} color="text-orange-500" />
+        <DashboardSummaryCard title={t('dashboard.criticalUrgent')} count={criticalTasks.length} color="text-red-600" />
       </div>
 
-      {/* Overdue tasks table */}
       <DashboardTaskTable
-        title="Task dang tre han"
+        title={t('dashboard.overdueTasksTitle')}
         tasks={overdueTasks}
         columns={[
-          { key: 'title', label: 'Task' },
-          { key: 'assignee', label: 'Nguoi thuc hien', render: (v: any) => v?.username || '-' },
-          { key: 'due_date', label: 'Han', render: (v: string) => v ? new Date(v).toLocaleDateString('vi-VN') : '-' },
-          { key: 'daysOverdue', label: 'Tre (ngay)', render: (_v: any, row: any) => row.due_date ? daysOverdue(row.due_date) : '-' },
-          { key: 'status', label: 'Trang thai', render: (v: string) => renderStatusBadge(v) },
+          { key: 'title', label: t('dashboard.colTask') },
+          { key: 'assignee', label: t('dashboard.colAssignee'), render: (v: any) => v?.username || '-' },
+          { key: 'due_date', label: t('dashboard.colDeadline'), render: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
+          { key: 'daysOverdue', label: t('dashboard.colOverdueDays'), render: (_v: any, row: any) => row.due_date ? daysOverdue(row.due_date) : '-' },
+          { key: 'status', label: t('dashboard.colStatus'), render: (v: string) => renderStatusBadge(statusLabel(v)) },
         ]}
-        emptyMessage="Khong co task tre han"
+        emptyMessage={t('dashboard.noOverdueTasks')}
       />
 
-      {/* Active bugs table */}
       <DashboardTaskTable
-        title="Bug chua hoan thanh"
+        title={t('dashboard.activeBugsTitle')}
         tasks={bugTasks}
         columns={[
-          { key: 'title', label: 'Task' },
-          { key: 'assignee', label: 'Nguoi thuc hien', render: (v: any) => v?.username || '-' },
-          { key: 'priority', label: 'Uu tien', render: (v: string) => renderPriorityBadge(v) },
-          { key: 'status', label: 'Trang thai', render: (v: string) => renderStatusBadge(v) },
+          { key: 'title', label: t('dashboard.colTask') },
+          { key: 'assignee', label: t('dashboard.colAssignee'), render: (v: any) => v?.username || '-' },
+          { key: 'priority', label: t('dashboard.colPriority'), render: (v: string) => renderPriorityBadge(priorityLabel(v)) },
+          { key: 'status', label: t('dashboard.colStatus'), render: (v: string) => renderStatusBadge(statusLabel(v)) },
         ]}
-        emptyMessage="Khong co bug"
+        emptyMessage={t('dashboard.noBugs')}
       />
 
-      {/* Critical/Urgent tasks table */}
       <DashboardTaskTable
-        title="Task Critical/Urgent"
+        title={t('dashboard.criticalUrgent')}
         tasks={criticalTasks}
         columns={[
-          { key: 'title', label: 'Task' },
-          { key: 'assignee', label: 'Nguoi thuc hien', render: (v: any) => v?.username || '-' },
-          { key: 'due_date', label: 'Han', render: (v: string) => v ? new Date(v).toLocaleDateString('vi-VN') : '-' },
-          { key: 'priority', label: 'Uu tien', render: (v: string) => renderPriorityBadge(v) },
-          { key: 'status', label: 'Trang thai', render: (v: string) => renderStatusBadge(v) },
+          { key: 'title', label: t('dashboard.colTask') },
+          { key: 'assignee', label: t('dashboard.colAssignee'), render: (v: any) => v?.username || '-' },
+          { key: 'due_date', label: t('dashboard.colDeadline'), render: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
+          { key: 'priority', label: t('dashboard.colPriority'), render: (v: string) => renderPriorityBadge(priorityLabel(v)) },
+          { key: 'status', label: t('dashboard.colStatus'), render: (v: string) => renderStatusBadge(statusLabel(v)) },
         ]}
-        emptyMessage="Khong co task critical/urgent"
+        emptyMessage={t('dashboard.noCritical')}
       />
     </div>
   );

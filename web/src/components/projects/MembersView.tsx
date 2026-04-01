@@ -19,6 +19,7 @@ import {
 } from '@/redux/features/membersSlice';
 import { toBackendRole, toFrontendRole } from '@/lib/utils';
 import { RootState } from '@/redux/store';
+import { useTranslation } from 'react-i18next';
 
 // Định nghĩa các type cần thiết
 type Member = {
@@ -71,6 +72,7 @@ type UpdateMultipleMembersResponse = {
 };
 
 export function MembersView({ projectId, members: propMembers, currentUserRole, refetch }: ProjectMembersProps) {
+  const { t } = useTranslation();
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const [emailInput, setEmailInput] = useState('');
   const [editMode, setEditMode] = useState(false);
@@ -170,7 +172,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
   // Xử lý thêm thành viên bằng Redux thunk
   const onAddMemberSubmit = async (data: AddMemberFormValues) => {
     if (!canManageMembers) {
-      toast.error('Bạn không có quyền thêm thành viên');
+      toast.error(t('members.noPermissionAdd'));
       return;
     }
     
@@ -195,7 +197,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
           const newMember = resultAction.payload as MemberType;
           await dispatch(updateMemberPosition({ projectId, userId: newMember.userId, position }));
         }
-        toast.success('Thành viên đã được thêm vào dự án thành công');
+        toast.success(t('members.memberAddedSuccess'));
         setIsAddDialogOpen(false);
         reset();
         // Redux store đã cập nhật state, không cần gọi refetch
@@ -203,15 +205,15 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
       } else {
         const errorMessage = resultAction.payload as string;
         if (errorMessage.includes("User with this email not found")) {
-          setAddError("Email không tồn tại trong hệ thống.");
+          setAddError(t('members.emailNotFound'));
         } else if (errorMessage.includes("User is already a member")) {
-          setAddError("Người dùng này đã là thành viên của dự án.");
+          setAddError(t('members.alreadyMember'));
         } else {
-          setAddError("Không thể thêm thành viên. Vui lòng thử lại sau.");
+          setAddError(t('members.cannotAddMember'));
         }
       }
     } catch (error: any) {
-      setAddError(error.message || "Có lỗi xảy ra khi thêm thành viên.");
+      setAddError(error.message || t('members.errorAddingMember'));
     } finally {
       setAddLoading(false);
     }
@@ -220,12 +222,12 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
   // Xử lý thêm nhanh thành viên bằng Redux thunk
   const handleQuickAdd = async () => {
     if (!canManageMembers) {
-      toast.error('Bạn không có quyền thêm thành viên');
+      toast.error(t('members.noPermissionAdd'));
       return;
     }
-    
+
     if (!emailInput.trim()) {
-      toast.error('Vui lòng nhập email');
+      toast.error(t('members.emailRequired'));
       return;
     }
 
@@ -244,22 +246,22 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
       
       // Kiểm tra kết quả action
       if (addMemberByEmail.fulfilled.match(resultAction)) {
-        toast.success('Thành viên đã được thêm vào dự án thành công');
+        toast.success(t('members.memberAddedSuccess'));
         setEmailInput('');
         // Không cần gọi refetch vì Redux store đã được cập nhật
         // Component sẽ tự động cập nhật từ state
       } else {
         const errorMessage = resultAction.payload as string;
         if (errorMessage.includes("User with this email not found")) {
-          setAddError("Email không tồn tại trong hệ thống.");
+          setAddError(t('members.emailNotFound'));
         } else if (errorMessage.includes("User is already a member")) {
-          setAddError("Người dùng này đã là thành viên của dự án.");
+          setAddError(t('members.alreadyMember'));
         } else {
-          setAddError("Không thể thêm thành viên. Vui lòng thử lại sau.");
+          setAddError(t('members.cannotAddMember'));
         }
       }
     } catch (error: any) {
-      setAddError(error.message || "Có lỗi xảy ra khi thêm thành viên.");
+      setAddError(error.message || t('members.errorAddingMember'));
     } finally {
       setAddLoading(false);
     }
@@ -268,18 +270,18 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
   // Xử lý xóa thành viên bằng Redux thunk
   const handleRemoveMember = async (userId: string) => {
     if (!canManageMembers) {
-      toast.error('Bạn không có quyền xóa thành viên');
+      toast.error(t('members.noPermissionRemove'));
       return;
     }
-    
+
     // Không cho phép xóa chính mình khỏi dự án
     const currentUserId = localStorage.getItem('userId');
     if (userId === currentUserId) {
-      toast.error('Bạn không thể xóa chính mình khỏi dự án');
+      toast.error(t('members.cannotRemoveSelf'));
       return;
     }
-    
-    if (confirm('Bạn có chắc chắn muốn xóa thành viên này?')) {
+
+    if (confirm(t('members.confirmRemoveMember'))) {
       setRemoveLoading(true);
       
       try {
@@ -293,15 +295,15 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
         
         // Kiểm tra kết quả action
         if (removeMember.fulfilled.match(resultAction)) {
-          toast.success('Thành viên đã được xóa khỏi dự án');
+          toast.success(t('members.memberRemovedSuccess'));
           // Không cần gọi refetch vì Redux đã cập nhật state
           // UI sẽ tự động cập nhật nhờ useSelector và useEffect
         } else {
           const errorMessage = resultAction.payload as string;
-          toast.error(errorMessage || 'Không thể xóa thành viên');
+          toast.error(errorMessage || t('members.cannotRemoveMemberError'));
         }
       } catch (error: any) {
-        toast.error(error.message || 'Có lỗi xảy ra khi xóa thành viên');
+        toast.error(error.message || t('members.errorRemovingMember'));
       } finally {
         setRemoveLoading(false);
       }
@@ -311,7 +313,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
   // Xử lý khi người dùng thay đổi vai trò của thành viên
   const handleRoleChange = (userId: string, newRole: MemberRole) => {
     if (!canManageMembers) {
-      toast.error('Bạn không có quyền chỉnh sửa vai trò thành viên');
+      toast.error(t('members.noPermissionEditRole'));
       return;
     }
     
@@ -349,7 +351,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
 
         if (!updateMultipleProjectMemberRoles.fulfilled.match(resultAction)) {
           const errorMessage = resultAction.payload as string;
-          toast.error(errorMessage || 'Không thể cập nhật vai trò thành viên');
+          toast.error(errorMessage || t('members.cannotUpdateRole'));
           return;
         }
       }
@@ -360,20 +362,20 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
         await dispatch(updateMemberPosition({ projectId, userId, position: position.trim() || null }));
       }
 
-      toast.success('Đã lưu thay đổi thành công');
+      toast.success(t('members.changesSavedSuccess'));
       setPendingChanges(new Map());
       setPendingPositions(new Map());
       setEditMode(false);
     } catch (error: any) {
       console.error('Failed to save changes:', error);
-      toast.error('Có lỗi xảy ra khi lưu thay đổi');
+      toast.error(t('members.errorSavingChanges'));
     } finally {
       setUpdating(false);
     }
   };
 
   const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString('vi-VN', {
+    return new Date(dateString).toLocaleDateString(undefined, {
       year: 'numeric',
       month: 'long',
       day: 'numeric'
@@ -414,12 +416,12 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
         },
         onError: (error) => {
           console.error('Error updating role:', error);
-          setError('Không thể cập nhật vai trò thành viên');
+          setError(t('members.cannotUpdateRole'));
         }
       });
 
       if (data) {
-        setSuccess('Cập nhật vai trò thành công');
+        setSuccess(t('members.roleUpdateSuccess'));
         // Cập nhật redux store
         dispatch(updateMemberRoleInStore({
           userId,
@@ -433,7 +435,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
       }
     } catch (err) {
       console.error('Failed to update role:', err);
-      setError('Có lỗi xảy ra khi cập nhật vai trò');
+      setError(t('members.errorUpdatingRole'));
     }
   };
 
@@ -454,7 +456,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
       });
 
       if (data) {
-        setSuccess(`Đã cập nhật ${data.update_multiple_members.success_count} thành viên`);
+        setSuccess(t('members.rolesUpdatedSuccess', { count: data.update_multiple_members.success_count }));
 
         // Chuyển đổi dữ liệu từ API và đưa vào Redux
         const updatedRoles = data.update_multiple_members.members.map((member: any) => ({
@@ -472,7 +474,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
       }
     } catch (err) {
       console.error('Failed to update roles:', err);
-      setError('Có lỗi xảy ra khi cập nhật vai trò hàng loạt');
+      setError(t('members.errorUpdatingRole'));
     }
   };
 
@@ -506,13 +508,13 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
         setPendingChanges(newChanges);
         
         // Thông báo thành công
-        setSuccess('Đã cập nhật vai trò thành công');
+        setSuccess(t('members.roleUpdateSuccess'));
         
         // UI sẽ tự động cập nhật từ redux state, không cần refetch
       }
     } catch (error) {
       console.error('Failed to update role:', error);
-      setError('Có lỗi xảy ra khi cập nhật vai trò');
+      setError(t('members.errorUpdatingRole'));
     } finally {
       setUpdating(false);
     }
@@ -552,13 +554,13 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
         setPendingChanges(new Map());
 
         // Thông báo thành công
-        setSuccess(`Đã cập nhật ${data.update_multiple_members.success_count} thành viên`);
+        setSuccess(t('members.rolesUpdatedSuccess', { count: data.update_multiple_members.success_count }));
         
         // Không cần refetch, UI sẽ tự động cập nhật từ redux state
       }
     } catch (error) {
       console.error('Failed to update roles:', error);
-      setError('Có lỗi xảy ra khi cập nhật vai trò');
+      setError(t('members.errorUpdatingRole'));
     } finally {
       setUpdating(false);
     }
@@ -567,14 +569,14 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
-        <h2 className="text-xl font-semibold">Thành viên dự án</h2>
+        <h2 className="text-xl font-semibold">{t('members.projectMembers')}</h2>
         {canManageMembers && (
           <div className="flex gap-2">
-            <button 
+            <button
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
               onClick={() => setIsAddDialogOpen(true)}
             >
-              Thêm thành viên
+              {t('members.addMember')}
             </button>
             {editMode ? (
               <>
@@ -583,14 +585,14 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
                   onClick={() => { setEditMode(false); setPendingChanges(new Map()); setPendingPositions(new Map()); }}
                   disabled={updating}
                 >
-                  Hủy
+                  {t('members.cancelEdit')}
                 </button>
                 <button
                   className="px-4 py-2 bg-green-600 text-white rounded-md hover:bg-green-700 transition"
                   onClick={handleSaveChanges}
                   disabled={updating}
                 >
-                  {updating ? 'Đang lưu...' : 'Lưu thay đổi'}
+                  {updating ? t('members.saving') : t('members.saveChanges')}
                 </button>
               </>
             ) : (
@@ -598,7 +600,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
                 className="px-4 py-2 border border-gray-300 rounded-md hover:bg-gray-100 transition"
                 onClick={() => setEditMode(true)}
               >
-                Chỉnh sửa
+                {t('members.editMode')}
               </button>
             )}
           </div>
@@ -613,16 +615,16 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
           setAddError(null);
           reset();
         }}
-        title="Thêm thành viên vào dự án"
+        title={t('members.addMemberToProject')}
       >
         <form onSubmit={handleSubmit(onAddMemberSubmit)} className="space-y-4">
           <div className="space-y-2">
-            <label htmlFor="email" className="text-sm font-medium">Email</label>
+            <label htmlFor="email" className="text-sm font-medium">{t('members.emailLabel')}</label>
             <input
               id="email"
               type="email"
-              {...register('email', { required: 'Email là bắt buộc' })}
-              placeholder="Nhập email thành viên"
+              {...register('email', { required: t('members.emailRequired') })}
+              placeholder={t('members.emailInputPlaceholder')}
               className={`w-full px-3 py-2 border ${addError ? 'border-red-500' : 'border-gray-300'} rounded-md`}
             />
             {errors.email && <p className="text-red-500 text-sm">{errors.email.message}</p>}
@@ -630,7 +632,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
           </div>
           
           <div className="space-y-2">
-            <label htmlFor="role" className="text-sm font-medium">Vai trò</label>
+            <label htmlFor="role" className="text-sm font-medium">{t('members.roleLabel')}</label>
             <select
               id="role"
               {...register('role')}
@@ -644,12 +646,12 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
           </div>
 
           <div className="space-y-2">
-            <label htmlFor="position" className="text-sm font-medium">Vị trí <span className="text-gray-400 font-normal">(tùy chọn)</span></label>
+            <label htmlFor="position" className="text-sm font-medium">{t('members.positionLabel')} <span className="text-gray-400 font-normal">{t('members.positionOptional')}</span></label>
             <input
               id="position"
               type="text"
               {...register('position')}
-              placeholder="Ví dụ: Frontend, Backend, Tester..."
+              placeholder={t('members.positionPlaceholder')}
               className="w-full px-3 py-2 border border-gray-300 rounded-md"
             />
           </div>
@@ -664,14 +666,14 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
                 reset();
               }}
             >
-              Hủy
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               disabled={addLoading}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
             >
-              {addLoading ? 'Đang thêm...' : 'Thêm thành viên'}
+              {addLoading ? t('members.addingMember') : t('members.addMember')}
             </button>
           </div>
         </form>
@@ -685,7 +687,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
               type="email"
               value={emailInput}
               onChange={(e) => setEmailInput(e.target.value)}
-              placeholder="Nhập email để thêm thành viên nhanh"
+              placeholder={t('members.emailPlaceholder')}
               className={`flex-1 px-3 py-2 border ${addError ? 'border-red-500' : 'border-gray-300'} rounded-md`}
             />
             <button
@@ -693,7 +695,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
               disabled={addLoading || !emailInput.trim()}
               className="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition disabled:opacity-50"
             >
-              {addLoading ? 'Đang thêm...' : 'Thêm nhanh'}
+              {addLoading ? t('members.addingMember') : t('members.quickAdd')}
             </button>
           </div>
           {addError && (
@@ -707,22 +709,22 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
           <thead className="bg-gray-50">
             <tr>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Thành viên
+                {t('members.memberColumn')}
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Email
+                {t('common.email')}
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Vị trí
+                {t('common.position')}
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Vai trò
+                {t('common.role')}
               </th>
               <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Ngày tham gia
+                {t('members.joinedAt')}
               </th>
               {canManageMembers && <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">
-                Thao tác
+                {t('common.actions')}
               </th>}
             </tr>
           </thead>
@@ -754,7 +756,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
                       )}
                       <span className="font-medium">
                         {member.user.fullName || member.user.username}
-                        {isCurrentUser && <span className="ml-2 text-xs text-blue-600">(Bạn)</span>}
+                        {isCurrentUser && <span className="ml-2 text-xs text-blue-600">{t('members.youBadge')}</span>}
                       </span>
                     </div>
                   </td>
@@ -772,12 +774,12 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
                           setPendingPositions(newPositions);
                         }}
                         className="px-2 py-1 text-sm border border-gray-300 rounded-md w-36 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                        placeholder="Vị trí..."
-                        aria-label="Vị trí thành viên"
+                        placeholder={t('members.positionInputPlaceholder')}
+                        aria-label={t('common.position')}
                       />
                     ) : (
                       <span className="text-sm text-gray-700">
-                        {member.position || <span className="text-gray-400 italic text-xs">Chưa có</span>}
+                        {member.position || <span className="text-gray-400 italic text-xs">{t('members.noPosition')}</span>}
                       </span>
                     )}
                   </td>
@@ -789,7 +791,7 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
                         className={`px-2 py-1 border border-gray-300 rounded-md ${
                           pendingChanges.has(member.user.userId) ? 'bg-yellow-50 border-yellow-300' : ''
                         }`}
-                        aria-label={`Thay đổi vai trò của ${member.user.fullName || member.user.username}`}
+                        aria-label={`${t('common.role')}: ${member.user.fullName || member.user.username}`}
                         disabled={!canEditThisMember}
                       >
                         <option value="Manager">Manager</option>
@@ -813,9 +815,9 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
                           onClick={() => handleRemoveMember(member.user.userId)}
                           disabled={removeLoading}
                           className="text-red-600 hover:text-red-800"
-                          aria-label={`Xóa thành viên ${member.user.fullName || member.user.username}`}
+                          aria-label={`${t('members.removeMember')} ${member.user.fullName || member.user.username}`}
                         >
-                          Xóa
+                          {t('members.removeMember')}
                         </button>
                       )}
                     </td>
