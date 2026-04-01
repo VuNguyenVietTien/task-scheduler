@@ -60,19 +60,18 @@
   },
   "auth": {
     "signIn": "Đăng nhập vào tài khoản",
-    "createAccount": "Tạo tài khoản mới",
-    "signOut": "Đăng xuất",
-    "signInLink": "Đăng nhập",
-    "orCreateAccount": "tạo tài khoản mới",
-    "alreadyHaveAccount": "Đã có tài khoản?",
     "continueWithGoogle": "Tiếp tục với Google",
-    "orContinueWithEmail": "Hoặc tiếp tục với email",
+    "orContinueWithEmail": "Hoặc đăng nhập bằng email",
     "emailAddress": "Địa chỉ email",
     "password": "Mật khẩu",
+    "noAccountHint": "Chưa có tài khoản? Dùng",
+    "noAccountGoogle": "Tiếp tục với Google",
+    "noAccountSuffix": "để tạo tài khoản.",
     "checkYourEmail": "Kiểm tra email của bạn",
-    "verificationEmailSent": "Chúng tôi đã gửi email xác minh. Vui lòng nhấp vào liên kết để xác minh tài khoản.",
+    "verificationEmailSent": "Chúng tôi đã gửi email xác minh. Vui lòng nhấn vào liên kết trong email để xác minh tài khoản.",
     "authFailed": "Xác thực thất bại",
-    "googleAuthFailed": "Xác thực Google thất bại"
+    "googleAuthFailed": "Xác thực Google thất bại",
+    "signInButton": "Đăng nhập"
   },
   "dashboard": {
     "greeting": "Xin chào, {{name}}!",
@@ -110,7 +109,24 @@
     "viewGantt": "Gantt",
     "viewMembers": "Thành viên",
     "viewReport": "Báo cáo",
-    "viewDocuments": "Tài liệu"
+    "viewDocuments": "Tài liệu",
+    "createTitle": "Tạo dự án mới",
+    "projectName": "Tên dự án",
+    "projectNamePlaceholder": "vd. Thiết kế lại website",
+    "description": "Mô tả",
+    "descriptionPlaceholder": "Mô tả ngắn về dự án...",
+    "priority": "Độ ưu tiên",
+    "status": "Trạng thái",
+    "visibility": "Chế độ hiển thị",
+    "tags": "Thẻ",
+    "tagsHint": "(nhấn Enter để thêm)",
+    "addTagPlaceholder": "Thêm thẻ...",
+    "tagMaxCount": "Tối đa 10 thẻ",
+    "tagMaxLength": "Thẻ phải ít hơn 30 ký tự",
+    "cancel": "Hủy",
+    "creating": "Đang tạo...",
+    "create": "Tạo dự án",
+    "somethingWentWrong": "Đã xảy ra lỗi"
   },
   "tasks": {
     "title": "Công việc",
@@ -383,7 +399,8 @@
     "settings": "Cài đặt",
     "signOut": "Đăng xuất",
     "yourProfile": "Hồ sơ của bạn",
-    "preferences": "Tùy chỉnh"
+    "preferences": "Tùy chỉnh",
+    "setPassword": "Đặt mật khẩu"
   },
   "gantt": {
     "selectPlan": "Chọn kế hoạch",
@@ -499,5 +516,27 @@
     "modules": "{{count}} modules",
     "cannotConnect": "Không thể kết nối đến design-doc-service",
     "failedToCreate": "Không thể tạo hệ thống"
+  },
+  "treeBuilder": {
+    "title": "Công cụ tạo cây thư mục",
+    "inputLabel": "Danh sách thụt lề — 2 dấu cách hoặc Tab mỗi cấp",
+    "previewLabel": "Xem trước",
+    "previewPlaceholder": "Bản xem trước sẽ hiển thị ở đây…",
+    "insertButton": "Chèn dưới dạng khối mã",
+    "cancel": "Hủy"
+  },
+  "setPasswordModal": {
+    "title": "Đặt mật khẩu",
+    "newPassword": "Mật khẩu mới",
+    "confirmPassword": "Xác nhận mật khẩu",
+    "passwordMinLength": "Mật khẩu phải có ít nhất 6 ký tự.",
+    "passwordMismatch": "Mật khẩu không khớp.",
+    "passwordUpdated": "Cập nhật mật khẩu thành công!",
+    "savingPassword": "Đang lưu…",
+    "savePassword": "Lưu mật khẩu",
+    "passwordPlaceholder": "Ít nhất 6 ký tự",
+    "confirmPlaceholder": "Nhập lại mật khẩu",
+    "failedToSetPassword": "Không thể đặt mật khẩu.",
+    "cancel": "Hủy"
   }
 }

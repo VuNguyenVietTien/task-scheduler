@@ -2,6 +2,10 @@ import { initializeApp, getApp, type FirebaseApp } from 'firebase/app';
 import {
   getAuth,
   signInWithPopup,
+  signInWithEmailAndPassword,
+  updatePassword,
+  EmailAuthProvider,
+  linkWithCredential,
   GoogleAuthProvider,
   signOut,
   onAuthStateChanged,
@@ -65,6 +69,35 @@ export async function signInWithGoogle() {
   const result = await signInWithPopup(firebaseAuth, googleProvider);
   const idToken = await result.user.getIdToken();
   return { token: idToken, user: result.user };
+}
+
+export async function signInWithEmailPassword(email: string, password: string) {
+  const firebaseAuth = getFirebaseAuth();
+  if (!firebaseAuth) throw new Error('Firebase is not configured on this deployment.');
+  const result = await signInWithEmailAndPassword(firebaseAuth, email, password);
+  const idToken = await result.user.getIdToken();
+  return { token: idToken, user: result.user };
+}
+
+/**
+ * Set or update password for the current Firebase user.
+ * - Google-only users: links email/password credential to their account.
+ * - Users who already have a password: updates it (may require recent login).
+ */
+export async function setFirebasePassword(newPassword: string) {
+  const firebaseAuth = getFirebaseAuth();
+  if (!firebaseAuth) throw new Error('Firebase is not configured on this deployment.');
+  const currentUser = firebaseAuth.currentUser;
+  if (!currentUser) throw new Error('No authenticated Firebase user.');
+
+  const hasPasswordProvider = currentUser.providerData.some(p => p.providerId === 'password');
+  if (hasPasswordProvider) {
+    await updatePassword(currentUser, newPassword);
+  } else {
+    // Google-only user — link email/password as a new provider
+    const credential = EmailAuthProvider.credential(currentUser.email!, newPassword);
+    await linkWithCredential(currentUser, credential);
+  }
 }
 
 export async function signOutUser() {

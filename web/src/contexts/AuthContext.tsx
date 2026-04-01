@@ -2,7 +2,7 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithGoogle, signOutUser } from '@/lib/firebase';
+import { signInWithGoogle, signInWithEmailPassword, setFirebasePassword, signOutUser } from '@/lib/firebase';
 import { loginUser, registerUser } from '@/lib/authApi';
 import { createBrowserClient } from '@/lib/supabase/client';
 
@@ -32,6 +32,7 @@ export interface AuthContextType {
   register: (email: string, password: string, name: string) => Promise<void>;
   loginWithGoogle: () => Promise<void>;
   logout: () => Promise<void>;
+  setPassword: (newPassword: string) => Promise<void>;
   clearError: () => void;
   sendVerificationEmail: () => Promise<void>;
 }
@@ -151,12 +152,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       setLoading(true);
-      const response = await loginUser({ email, password });
-      setUser(response.user as User);
+      // Authenticate via Firebase email/password
+      const { token, user: firebaseUser } = await signInWithEmailPassword(email, password);
+
+      // Sync with backend (same flow as Google login)
+      const response = await fetch('/api/auth/firebase/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firebase_token: token,
+          email: firebaseUser.email,
+          name: firebaseUser.displayName || email.split('@')[0],
+          firebase_uid: firebaseUser.uid,
+        }),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        await signOutUser();
+        throw new Error(data.error || 'Login failed');
+      }
+
+      // Establish Supabase session
+      if (data.session?.properties?.email_otp) {
+        const supabase = createBrowserClient();
+        const { error: otpError } = await supabase.auth.verifyOtp({
+          email: firebaseUser.email!,
+          token: data.session.properties.email_otp,
+          type: 'email',
+        });
+        if (otpError) throw new Error('Session establishment failed');
+      }
+
+      setUser(data.user);
       window.location.href = '/dashboard';
     } catch (error) {
       console.error('[Auth] Login error:', error);
-      setError('Invalid email or password');
+      setError(error instanceof Error ? error.message : 'Invalid email or password');
     } finally {
       setLoading(false);
     }
@@ -198,6 +230,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const setPassword = async (newPassword: string) => {
+    try {
+      setLoading(true);
+      await setFirebasePassword(newPassword);
+    } catch (error) {
+      console.error('[Auth] Set password error:', error);
+      const msg = error instanceof Error ? error.message : 'Failed to set password';
+      // Firebase requires-recent-login error
+      if (msg.includes('requires-recent-login') || msg.includes('recent')) {
+        throw new Error('Please sign out and sign in again before changing your password.');
+      }
+      throw new Error(msg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const sendVerificationEmail = async () => {
     try {
       setLoading(true);
@@ -230,6 +279,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     register,
     loginWithGoogle,
     logout,
+    setPassword,
     clearError,
     sendVerificationEmail
   };

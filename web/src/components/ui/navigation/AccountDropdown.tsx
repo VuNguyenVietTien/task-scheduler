@@ -8,6 +8,7 @@ interface AccountDropdownProps {
   onClose: () => void;
   onLogout: () => void;
   onSettingsOpen: () => void;
+  onSetPasswordOpen: () => void;
 }
 
 const AccountDropdown: React.FC<AccountDropdownProps> = ({
@@ -15,6 +16,7 @@ const AccountDropdown: React.FC<AccountDropdownProps> = ({
   onClose,
   onLogout,
   onSettingsOpen,
+  onSetPasswordOpen,
 }) => {
   const { t } = useTranslation();
 
@@ -27,6 +29,12 @@ const AccountDropdown: React.FC<AccountDropdownProps> = ({
         className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
       >
         {t('profile.settings')}
+      </button>
+      <button
+        onClick={() => { onSetPasswordOpen(); onClose(); }}
+        className="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100"
+      >
+        {t('profile.setPassword')}
       </button>
       <hr className="my-1 border-gray-200" />
       <button

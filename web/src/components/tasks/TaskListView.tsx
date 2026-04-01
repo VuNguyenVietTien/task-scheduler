@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { Task, TaskStatus, Priority, TaskFilter, TaskStatuses, Priorities, UserBasic } from '@/types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
@@ -103,6 +104,7 @@ export function TaskListView({
   setFilters
 }: TaskListViewProps) {
   const { t } = useTranslation();
+  const router = useRouter();
   const [filter, setFilter] = useState<TaskFilter>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'created_at', direction: 'desc' });
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
@@ -742,19 +744,20 @@ export function TaskListView({
       return;
     }
 
+    const taskUrl = `/projects/${foundTask.project_id}/tasks/${taskId}`;
+
     // Ctrl+click / middle click -> navigate to full page in new tab
     if (event?.ctrlKey || event?.metaKey || event?.button === 1) {
       event?.preventDefault();
-      window.open(`/projects/${foundTask.project_id}/tasks/${taskId}`, '_blank');
+      window.open(taskUrl, '_blank');
       return;
     }
 
-    // Left click -> open modal
-    setSelectedTask(foundTask);
-    setIsTaskDetailOpen(true);
+    // Left click -> navigate to task detail page
+    router.push(taskUrl);
 
     if (onTaskClick) onTaskClick(taskId);
-  }, [tasks, onTaskClick]);
+  }, [tasks, onTaskClick, router]);
 
   const handleTaskUpdate = (taskId: string, updates: Partial<Task>) => {
     // Cập nhật task trong state nếu cần

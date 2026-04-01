@@ -1573,6 +1573,41 @@ export function TaskDetailPage({
             text-decoration: line-through;
           }
 
+          /* Code block styles */
+          .rich-text-content pre {
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            border-radius: 0.375rem;
+            padding: 1rem;
+            margin: 0.75rem 0;
+            overflow-x: auto;
+            font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.875rem;
+            line-height: 1.6;
+            white-space: pre;
+            tab-size: 2;
+          }
+
+          .rich-text-content pre code {
+            background: none;
+            border: none;
+            padding: 0;
+            font-family: inherit;
+            font-size: inherit;
+            color: inherit;
+            white-space: pre;
+          }
+
+          /* Inline code */
+          .rich-text-content code {
+            background-color: #f3f4f6;
+            color: #e11d48;
+            border-radius: 0.25rem;
+            padding: 0.1rem 0.35rem;
+            font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+            font-size: 0.85em;
+          }
+
         /* CSS cho tabs */
         .task-detail-page-container {
           display: flex;
@@ -2176,43 +2211,6 @@ export function TaskDetailPage({
             )}
           </div>
           
-          {/* Form thêm bình luận */}
-          <div className="bg-gray-50 p-4 rounded-lg">
-            {error && (
-              <div className="bg-red-50 border-l-4 border-red-500 p-4 mb-4 rounded-md">
-                <div className="flex">
-                  <div className="flex-shrink-0">
-                    <svg className="h-5 w-5 text-red-500" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
-                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
-                    </svg>
-                  </div>
-                        <div className="ml-3">
-                    <p className="text-sm text-red-700">{error}</p>
-                  </div>
-                </div>
-              </div>
-            )}
-                  
-            <AdvancedEditor
-              ref={commentEditorRef}
-              value={newComment}
-                    onChange={setNewComment}
-                    placeholder={t('tasks.comments.placeholderSimple')}
-              mode="compact"
-              projectMembers={projectMembers}
-              onMentionSelect={handleMentionSelect}
-            />
-                  
-                  <div className="mt-3 flex justify-end">
-              <Button
-                onClick={handleSubmitComment}
-                      disabled={isPostingComment || isTiptapContentEmpty(newComment)}
-                      isLoading={isPostingComment}
-              >
-                      {isPostingComment ? t('tasks.comments.submitting') : t('tasks.comments.submit')}
-              </Button>
-                  </div>
-                </div>
               </div>
             </div>
             
@@ -2240,6 +2238,39 @@ export function TaskDetailPage({
                     projectId={projectId}
                   />
                 )}
+              </div>
+            </div>
+
+            {/* Comment input — always visible below all tab content */}
+            <div className="mt-6 pt-4 border-t border-gray-200">
+              <h3 className="text-sm font-medium text-gray-700 mb-3">{t('tasks.comments.addComment')}</h3>
+              {error && (
+                <div className="bg-red-50 border-l-4 border-red-500 p-3 mb-3 rounded-md">
+                  <div className="flex items-start">
+                    <svg className="h-5 w-5 text-red-500 flex-shrink-0 mt-0.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                    </svg>
+                    <p className="ml-3 text-sm text-red-700">{error}</p>
+                  </div>
+                </div>
+              )}
+              <AdvancedEditor
+                ref={commentEditorRef}
+                value={newComment}
+                onChange={setNewComment}
+                placeholder={t('tasks.comments.placeholderSimple')}
+                mode="compact"
+                projectMembers={projectMembers}
+                onMentionSelect={handleMentionSelect}
+              />
+              <div className="mt-3 flex justify-end">
+                <Button
+                  onClick={handleSubmitComment}
+                  disabled={isPostingComment || isTiptapContentEmpty(newComment)}
+                  isLoading={isPostingComment}
+                >
+                  {isPostingComment ? t('tasks.comments.submitting') : t('tasks.comments.submit')}
+                </Button>
               </div>
             </div>
           </div>

@@ -60,19 +60,18 @@
   },
   "auth": {
     "signIn": "アカウントにサインイン",
-    "createAccount": "新しいアカウントを作成",
-    "signOut": "サインアウト",
-    "signInLink": "サインイン",
-    "orCreateAccount": "新しいアカウントを作成",
-    "alreadyHaveAccount": "すでにアカウントをお持ちですか？",
     "continueWithGoogle": "Googleで続ける",
-    "orContinueWithEmail": "またはメールで続ける",
+    "orContinueWithEmail": "またはメールでサインイン",
     "emailAddress": "メールアドレス",
     "password": "パスワード",
+    "noAccountHint": "アカウントをお持ちでない方は",
+    "noAccountGoogle": "Googleで続ける",
+    "noAccountSuffix": "でアカウントを作成できます。",
     "checkYourEmail": "メールを確認してください",
     "verificationEmailSent": "確認リンクをメールで送信しました。リンクをクリックしてアカウントを確認してください。",
     "authFailed": "認証に失敗しました",
-    "googleAuthFailed": "Google認証に失敗しました"
+    "googleAuthFailed": "Google認証に失敗しました",
+    "signInButton": "サインイン"
   },
   "dashboard": {
     "greeting": "こんにちは、{{name}}さん！",
@@ -110,7 +109,24 @@
     "viewGantt": "ガント",
     "viewMembers": "メンバー",
     "viewReport": "レポート",
-    "viewDocuments": "ドキュメント"
+    "viewDocuments": "ドキュメント",
+    "createTitle": "新しいプロジェクトを作成",
+    "projectName": "プロジェクト名",
+    "projectNamePlaceholder": "例: ウェブサイトリデザイン",
+    "description": "説明",
+    "descriptionPlaceholder": "プロジェクトの簡単な説明...",
+    "priority": "優先度",
+    "status": "ステータス",
+    "visibility": "公開設定",
+    "tags": "タグ",
+    "tagsHint": "(Enterを押して追加)",
+    "addTagPlaceholder": "タグを追加...",
+    "tagMaxCount": "タグは最大10個まで",
+    "tagMaxLength": "タグは30文字未満にしてください",
+    "cancel": "キャンセル",
+    "creating": "作成中...",
+    "create": "プロジェクトを作成",
+    "somethingWentWrong": "エラーが発生しました"
   },
   "tasks": {
     "title": "タスク",
@@ -383,7 +399,8 @@
     "settings": "設定",
     "signOut": "サインアウト",
     "yourProfile": "プロフィール",
-    "preferences": "設定"
+    "preferences": "設定",
+    "setPassword": "パスワードを設定"
   },
   "gantt": {
     "selectPlan": "計画を選択",
@@ -499,5 +516,27 @@
     "modules": "{{count}}モジュール",
     "cannotConnect": "design-doc-serviceに接続できません",
     "failedToCreate": "システムの作成に失敗しました"
+  },
+  "treeBuilder": {
+    "title": "ツリー構造ビルダー",
+    "inputLabel": "インデントリスト — 1レベルにつきスペース2つまたはTab",
+    "previewLabel": "プレビュー",
+    "previewPlaceholder": "プレビューがここに表示されます…",
+    "insertButton": "コードブロックとして挿入",
+    "cancel": "キャンセル"
+  },
+  "setPasswordModal": {
+    "title": "パスワードを設定",
+    "newPassword": "新しいパスワード",
+    "confirmPassword": "パスワードを確認",
+    "passwordMinLength": "パスワードは6文字以上必要です。",
+    "passwordMismatch": "パスワードが一致しません。",
+    "passwordUpdated": "パスワードを更新しました！",
+    "savingPassword": "保存中…",
+    "savePassword": "パスワードを保存",
+    "passwordPlaceholder": "6文字以上",
+    "confirmPlaceholder": "パスワードを再入力",
+    "failedToSetPassword": "パスワードの設定に失敗しました。",
+    "cancel": "キャンセル"
   }
 }

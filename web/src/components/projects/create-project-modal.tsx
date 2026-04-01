@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useMutation } from '@apollo/client';
 import { XCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { Dialog } from '@/components/ui/Dialog';
 import { CREATE_PROJECT, GET_USER_PROJECTS } from '@/graphql/queries/project';
 import {
@@ -31,6 +32,7 @@ const INITIAL_FORM: ProjectFormData = {
 };
 
 export default function CreateProjectModal({ open, onClose }: CreateProjectModalProps) {
+  const { t } = useTranslation();
   const router = useRouter();
   const [formData, setFormData] = useState<ProjectFormData>(INITIAL_FORM);
   const [newTag, setNewTag] = useState('');
@@ -54,11 +56,11 @@ export default function CreateProjectModal({ open, onClose }: CreateProjectModal
     if (e.key !== 'Enter' || !newTag.trim()) return;
     e.preventDefault();
     if (formData.tags.length >= 10) {
-      setErrors((prev) => [...prev, { path: 'tags', message: 'Maximum 10 tags allowed' }]);
+      setErrors((prev) => [...prev, { path: 'tags', message: t('projects.tagMaxCount') }]);
       return;
     }
     if (newTag.length > 30) {
-      setErrors((prev) => [...prev, { path: 'tags', message: 'Tag must be less than 30 characters' }]);
+      setErrors((prev) => [...prev, { path: 'tags', message: t('projects.tagMaxLength') }]);
       return;
     }
     setFormData((prev) => ({ ...prev, tags: [...prev.tags, newTag.trim()] }));
@@ -108,7 +110,7 @@ export default function CreateProjectModal({ open, onClose }: CreateProjectModal
         return;
       }
       setErrors([
-        { path: 'form', message: err instanceof Error ? err.message : 'Something went wrong' },
+        { path: 'form', message: err instanceof Error ? err.message : t('projects.somethingWentWrong') },
       ]);
     }
   };
@@ -121,7 +123,7 @@ export default function CreateProjectModal({ open, onClose }: CreateProjectModal
     }`;
 
   return (
-    <Dialog open={open} onClose={handleClose} title="Create New Project" preventBackdropClose>
+    <Dialog open={open} onClose={handleClose} title={t('projects.createTitle')} preventBackdropClose>
       <div className="mt-4 w-full min-w-[480px]">
         {getFieldError('form') && (
           <div className="mb-4 bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700">
@@ -133,7 +135,7 @@ export default function CreateProjectModal({ open, onClose }: CreateProjectModal
           {/* Name */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Project Name <span className="text-red-500">*</span>
+              {t('projects.projectName')} <span className="text-red-500">*</span>
             </label>
             <input
               type="text"
@@ -141,7 +143,7 @@ export default function CreateProjectModal({ open, onClose }: CreateProjectModal
               required
               value={formData.name}
               onChange={handleChange}
-              placeholder="e.g. Website Redesign"
+              placeholder={t('projects.projectNamePlaceholder')}
               className={inputClass('name')}
             />
             {getFieldError('name') && (
@@ -151,13 +153,15 @@ export default function CreateProjectModal({ open, onClose }: CreateProjectModal
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-gray-700">Description</label>
+            <label className="block text-sm font-medium text-gray-700">
+              {t('projects.description')}
+            </label>
             <textarea
               name="description"
               rows={3}
               value={formData.description || ''}
               onChange={handleChange}
-              placeholder="Brief description of the project..."
+              placeholder={t('projects.descriptionPlaceholder')}
               className={`${inputClass('description')} resize-none`}
             />
             {getFieldError('description') && (
@@ -169,7 +173,7 @@ export default function CreateProjectModal({ open, onClose }: CreateProjectModal
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Priority <span className="text-red-500">*</span>
+                {t('projects.priority')} <span className="text-red-500">*</span>
               </label>
               <select
                 name="priority"
@@ -184,7 +188,7 @@ export default function CreateProjectModal({ open, onClose }: CreateProjectModal
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Status <span className="text-red-500">*</span>
+                {t('projects.status')} <span className="text-red-500">*</span>
               </label>
               <select
                 name="status"
@@ -202,7 +206,7 @@ export default function CreateProjectModal({ open, onClose }: CreateProjectModal
           {/* Visibility */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Visibility <span className="text-red-500">*</span>
+              {t('projects.visibility')} <span className="text-red-500">*</span>
             </label>
             <select
               name="visibility"
@@ -219,14 +223,15 @@ export default function CreateProjectModal({ open, onClose }: CreateProjectModal
           {/* Tags */}
           <div>
             <label className="block text-sm font-medium text-gray-700">
-              Tags <span className="text-gray-400 font-normal">(press Enter to add)</span>
+              {t('projects.tags')}{' '}
+              <span className="text-gray-400 font-normal">{t('projects.tagsHint')}</span>
             </label>
             <input
               type="text"
               value={newTag}
               onChange={(e) => setNewTag(e.target.value)}
               onKeyDown={handleAddTag}
-              placeholder="Add a tag..."
+              placeholder={t('projects.addTagPlaceholder')}
               className={inputClass('tags')}
             />
             {getFieldError('tags') && (
@@ -260,7 +265,7 @@ export default function CreateProjectModal({ open, onClose }: CreateProjectModal
               onClick={handleClose}
               className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
             >
-              Cancel
+              {t('projects.cancel')}
             </button>
             <button
               type="submit"
@@ -273,7 +278,7 @@ export default function CreateProjectModal({ open, onClose }: CreateProjectModal
                   <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                 </svg>
               )}
-              {loading ? 'Creating...' : 'Create Project'}
+              {loading ? t('projects.creating') : t('projects.create')}
             </button>
           </div>
         </form>

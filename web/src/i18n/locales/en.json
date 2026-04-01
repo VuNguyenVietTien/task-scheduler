@@ -60,19 +60,18 @@
   },
   "auth": {
     "signIn": "Sign in to your account",
-    "createAccount": "Create a new account",
-    "signOut": "Sign out",
-    "signInLink": "Sign in",
-    "orCreateAccount": "create a new account",
-    "alreadyHaveAccount": "Already have an account?",
     "continueWithGoogle": "Continue with Google",
-    "orContinueWithEmail": "Or continue with email",
+    "orContinueWithEmail": "Or sign in with email",
     "emailAddress": "Email address",
     "password": "Password",
+    "noAccountHint": "Don't have an account? Use",
+    "noAccountGoogle": "Continue with Google",
+    "noAccountSuffix": "to create one.",
     "checkYourEmail": "Check your email",
     "verificationEmailSent": "We sent you an email with a verification link. Please click the link to verify your account.",
     "authFailed": "Authentication failed",
-    "googleAuthFailed": "Google authentication failed"
+    "googleAuthFailed": "Google authentication failed",
+    "signInButton": "Sign in"
   },
   "dashboard": {
     "greeting": "Hello, {{name}}!",
@@ -110,7 +109,24 @@
     "viewGantt": "Gantt",
     "viewMembers": "Members",
     "viewReport": "Report",
-    "viewDocuments": "Documents"
+    "viewDocuments": "Documents",
+    "createTitle": "Create New Project",
+    "projectName": "Project Name",
+    "projectNamePlaceholder": "e.g. Website Redesign",
+    "description": "Description",
+    "descriptionPlaceholder": "Brief description of the project...",
+    "priority": "Priority",
+    "status": "Status",
+    "visibility": "Visibility",
+    "tags": "Tags",
+    "tagsHint": "(press Enter to add)",
+    "addTagPlaceholder": "Add a tag...",
+    "tagMaxCount": "Maximum 10 tags allowed",
+    "tagMaxLength": "Tag must be less than 30 characters",
+    "cancel": "Cancel",
+    "creating": "Creating...",
+    "create": "Create Project",
+    "somethingWentWrong": "Something went wrong"
   },
   "tasks": {
     "title": "Tasks",
@@ -383,7 +399,8 @@
     "settings": "Settings",
     "signOut": "Sign out",
     "yourProfile": "Your Profile",
-    "preferences": "Preferences"
+    "preferences": "Preferences",
+    "setPassword": "Set Password"
   },
   "gantt": {
     "selectPlan": "Select plan",
@@ -499,5 +516,27 @@
     "modules": "{{count}} modules",
     "cannotConnect": "Cannot connect to design-doc-service",
     "failedToCreate": "Failed to create system"
+  },
+  "treeBuilder": {
+    "title": "Tree Structure Builder",
+    "inputLabel": "Indented list — 2 spaces or Tab per level",
+    "previewLabel": "Preview",
+    "previewPlaceholder": "Preview will appear here…",
+    "insertButton": "Insert as Code Block",
+    "cancel": "Cancel"
+  },
+  "setPasswordModal": {
+    "title": "Set Password",
+    "newPassword": "New Password",
+    "confirmPassword": "Confirm Password",
+    "passwordMinLength": "Password must be at least 6 characters.",
+    "passwordMismatch": "Passwords do not match.",
+    "passwordUpdated": "Password updated successfully!",
+    "savingPassword": "Saving…",
+    "savePassword": "Save Password",
+    "passwordPlaceholder": "At least 6 characters",
+    "confirmPlaceholder": "Repeat password",
+    "failedToSetPassword": "Failed to set password.",
+    "cancel": "Cancel"
   }
 }

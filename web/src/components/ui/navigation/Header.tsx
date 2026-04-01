@@ -5,24 +5,28 @@ import Image from 'next/image';
 import Link from 'next/link';
 import NotificationDropdown from './NotificationDropdown';
 import AccountDropdown from './AccountDropdown';
+import SetPasswordModal from './SetPasswordModal';
 import useNotificationsRedux from '@/hooks/useNotificationsRedux';
 import SettingsPanel from '@/components/layout/SettingsPanel';
+import { useAuth } from '@/hooks/useAuth';
 
 const Header = () => {
-  const { 
-    notifications, 
-    unreadCount, 
-    isDropdownOpen: isNotificationOpen, 
-    toggleDropdown: toggleNotification, 
+  const { logout, setPassword } = useAuth();
+  const {
+    notifications,
+    unreadCount,
+    isDropdownOpen: isNotificationOpen,
+    toggleDropdown: toggleNotification,
     markAsRead,
     markAllAsRead,
     handleNotificationClick,
     loading: notificationsLoading,
     forceUpdateValue
   } = useNotificationsRedux();
-  
+
   const [isAccountOpen, setIsAccountOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isSetPasswordOpen, setIsSetPasswordOpen] = useState(false);
   const notificationRef = useRef<HTMLDivElement>(null);
   const accountRef = useRef<HTMLDivElement>(null);
   // Track last unread count to detect changes
@@ -64,15 +68,7 @@ const Header = () => {
     toggleNotification();
   };
 
-  const handleLogout = async () => {
-    // TODO: Implement logout functionality
-    try {
-      await fetch('/api/auth/logout', { method: 'POST' });
-      window.location.href = '/login';
-    } catch (error) {
-      console.error('Logout failed:', error);
-    }
-  };
+  const handleLogout = () => logout();
 
   return (
     <>
@@ -135,12 +131,18 @@ const Header = () => {
               onClose={() => setIsAccountOpen(false)}
               onLogout={handleLogout}
               onSettingsOpen={() => setIsSettingsOpen(true)}
+              onSetPasswordOpen={() => setIsSetPasswordOpen(true)}
             />
           </div>
         </div>
       </div>
     </header>
     <SettingsPanel isOpen={isSettingsOpen} onClose={() => setIsSettingsOpen(false)} />
+    <SetPasswordModal
+      isOpen={isSetPasswordOpen}
+      onClose={() => setIsSetPasswordOpen(false)}
+      onSubmit={setPassword}
+    />
     </>
   );
 };

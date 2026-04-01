@@ -37,6 +37,9 @@ import {
   LineChartIcon as LineHeight,
 } from "lucide-react"
 import { imageService } from "@/services/imageService"
+import { htmlToMarkdown, markdownToHtml, looksLikeMarkdown } from '@/utils/editor-markdown'
+import { toast } from 'sonner'
+import { TreeBuilderPanel } from './TreeBuilderPanel'
 
 // Mở rộng ChainedCommands để thêm phương thức setLineHeight và setMention
 declare module '@tiptap/core' {
@@ -441,6 +444,13 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [showImageUrlInput, setShowImageUrlInput] = useState(false)
   const [imageUrlValue, setImageUrlValue] = useState('')
+  const [showSymbolPicker, setShowSymbolPicker] = useState(false)
+  const symbolPickerRef = useRef<HTMLDivElement>(null)
+  const symbolBtnRef = useRef<HTMLButtonElement>(null)
+  const [symbolPickerPos, setSymbolPickerPos] = useState<{ top: number; left: number } | null>(null)
+  const [editorMode, setEditorMode] = useState<'wysiwyg' | 'markdown'>('wysiwyg')
+  const [markdownValue, setMarkdownValue] = useState('')
+  const [showTreeBuilder, setShowTreeBuilder] = useState(false)
   const [mentionPopup, setMentionPopup] = useState<{
     show: boolean;
     query: string;
@@ -693,6 +703,81 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
     }
   }
 
+  // Close symbol picker when clicking outside
+  useEffect(() => {
+    if (!showSymbolPicker) return
+    const handleClickOutside = (e: MouseEvent) => {
+      if (
+        symbolPickerRef.current && !symbolPickerRef.current.contains(e.target as HTMLElement) &&
+        symbolBtnRef.current && !symbolBtnRef.current.contains(e.target as HTMLElement)
+      ) {
+        setShowSymbolPicker(false)
+        setSymbolPickerPos(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showSymbolPicker])
+
+  // Insert a symbol at cursor position (keeps dropdown open for repeated insertion)
+  const insertSymbol = (symbol: string) => {
+    editor?.chain().focus().insertContent(symbol).run()
+  }
+
+  // Switch WYSIWYG → Markdown: convert current HTML to markdown text
+  const switchToMarkdown = () => {
+    if (!editor) return
+    const md = htmlToMarkdown(editor.getHTML())
+    setMarkdownValue(md)
+    setEditorMode('markdown')
+  }
+
+  // Switch Markdown → WYSIWYG: parse markdown and set in editor
+  const switchToWysiwyg = () => {
+    if (!editor) return
+    const html = markdownToHtml(markdownValue)
+    editor.commands.setContent(html, false)
+    onChange(html)
+    setEditorMode('wysiwyg')
+  }
+
+  // Handle markdown textarea changes — sync to parent as HTML
+  const handleMarkdownChange = (md: string) => {
+    setMarkdownValue(md)
+    onChange(markdownToHtml(md))
+  }
+
+  // Copy current content as plain Markdown
+  const copyAsMarkdown = async () => {
+    const md = editorMode === 'markdown' ? markdownValue : htmlToMarkdown(editor?.getHTML() || '')
+    await navigator.clipboard.writeText(md)
+    toast.success('Copied as Markdown')
+  }
+
+  // Copy current content as rich text (HTML in clipboard)
+  const copyAsRichText = async () => {
+    try {
+      const html = editorMode === 'markdown' ? markdownToHtml(markdownValue) : (editor?.getHTML() || '')
+      await navigator.clipboard.write([
+        new ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }) }),
+      ])
+      toast.success('Copied as Rich Text')
+    } catch {
+      toast.error('Rich text copy not supported in this browser')
+    }
+  }
+
+  // Handle paste in WYSIWYG mode: auto-convert pasted markdown to rich text
+  const handlePaste = (e: React.ClipboardEvent) => {
+    if (editorMode !== 'wysiwyg' || !editor) return
+    const text = e.clipboardData.getData('text/plain')
+    if (text && looksLikeMarkdown(text)) {
+      e.preventDefault()
+      const html = markdownToHtml(text)
+      editor.chain().focus().insertContent(html).run()
+    }
+  }
+
   // Add image via file upload
   const addImage = () => {
     if (fileInputRef.current) {
@@ -773,7 +858,7 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
   }
 
   return (
-    <div className={`rich-text-editor ${className}`} onDrop={handleDrop} onDragOver={handleDragOver} onKeyDown={handleKeyDown}>
+    <div className={`rich-text-editor ${className}`} style={{ position: 'relative' }} onDrop={handleDrop} onDragOver={handleDragOver} onKeyDown={handleKeyDown} onPaste={handlePaste}>
       <style jsx global>{`
         .rich-text-editor {
           border: 1px solid #e5e7eb;
@@ -986,18 +1071,155 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
         .mention-item.selected {
           background-color: #f3f4f6;
         }
-        
+
         .mention-avatar {
           width: 24px;
           height: 24px;
           border-radius: 50%;
           object-fit: cover;
         }
+
+        /* Code block styles */
+        .rich-text-editor pre {
+          background-color: #1e1e1e;
+          color: #d4d4d4;
+          border-radius: 0.375rem;
+          padding: 1rem;
+          margin: 0.75rem 0;
+          overflow-x: auto;
+          font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+          font-size: 0.875rem;
+          line-height: 1.6;
+          white-space: pre;
+          tab-size: 2;
+        }
+
+        .rich-text-editor pre code {
+          background: none;
+          border: none;
+          padding: 0;
+          font-family: inherit;
+          font-size: inherit;
+          color: inherit;
+          white-space: pre;
+        }
+
+        /* Inline code */
+        .rich-text-editor code {
+          background-color: #f3f4f6;
+          color: #e11d48;
+          border-radius: 0.25rem;
+          padding: 0.1rem 0.35rem;
+          font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+          font-size: 0.85em;
+        }
+
+        /* Markdown textarea */
+        .rich-text-editor .markdown-editor {
+          width: 100%;
+          min-height: ${minHeight};
+          padding: 1rem;
+          font-family: 'Cascadia Code', 'Fira Code', 'Consolas', 'Monaco', 'Courier New', monospace;
+          font-size: 0.875rem;
+          line-height: 1.7;
+          color: #1f2937;
+          background-color: #fafafa;
+          border: none;
+          outline: none;
+          resize: vertical;
+          tab-size: 2;
+          white-space: pre;
+          overflow-x: auto;
+        }
+
+        .rich-text-editor .mode-badge {
+          display: inline-flex;
+          align-items: center;
+          gap: 0.2rem;
+          padding: 0.15rem 0.5rem;
+          border-radius: 0.25rem;
+          font-size: 0.7rem;
+          font-weight: 600;
+          letter-spacing: 0.04em;
+          text-transform: uppercase;
+        }
+
+        .rich-text-editor .mode-badge.wysiwyg {
+          background-color: #e0e7ff;
+          color: #4f46e5;
+        }
+
+        .rich-text-editor .mode-badge.markdown {
+          background-color: #fef3c7;
+          color: #92400e;
+        }
+
+        /* Symbol picker popup */
+        .symbol-picker-popup {
+          /* position/top/left/z-index set via inline style (fixed) */
+          background: white;
+          border: 1px solid #e5e7eb;
+          border-radius: 0.375rem;
+          box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+          padding: 0.5rem;
+          min-width: 160px;
+        }
+
+        .symbol-picker-popup .symbol-label {
+          font-size: 0.7rem;
+          color: #9ca3af;
+          padding: 0.1rem 0.25rem 0.35rem;
+          text-transform: uppercase;
+          letter-spacing: 0.04em;
+        }
+
+        .symbol-picker-popup button {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          width: 100%;
+          padding: 0.3rem 0.5rem;
+          border: none;
+          background: none;
+          cursor: pointer;
+          border-radius: 0.25rem;
+          font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+          font-size: 0.85rem;
+          text-align: left;
+          color: #374151;
+        }
+
+        .symbol-picker-popup button:hover {
+          background-color: #f3f4f6;
+        }
       `}</style>
 
       {!readOnly && (
         <div className="editor-toolbar">
-          {mode === 'full' && (
+          {/* Mode toggle — always visible */}
+          <button
+            type="button"
+            onClick={editorMode === 'wysiwyg' ? switchToMarkdown : switchToWysiwyg}
+            className="toolbar-item"
+            title={editorMode === 'wysiwyg' ? 'Switch to Markdown mode' : 'Switch to WYSIWYG mode'}
+          >
+            <span className={`mode-badge ${editorMode}`}>
+              {editorMode === 'wysiwyg' ? 'MD' : 'WY'}
+            </span>
+          </button>
+
+          {/* Copy actions */}
+          <button type="button" onClick={copyAsMarkdown} className="toolbar-item" title="Copy as Markdown">
+            <span className="text-xs">⎘MD</span>
+          </button>
+          <button type="button" onClick={copyAsRichText} className="toolbar-item" title="Copy as Rich Text">
+            <span className="text-xs">⎘RT</span>
+          </button>
+
+          <div className="separator" />
+
+          {/* WYSIWYG-only controls — hidden in markdown mode */}
+          {editorMode === 'wysiwyg' && mode === 'full' && (
             <>
               <button
                 type="button"
@@ -1027,6 +1249,8 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
             </>
           )}
 
+          {/* All WYSIWYG-only formatting controls */}
+          {editorMode === 'wysiwyg' && <>
           <button
             type="button"
             onClick={() => editor.chain().focus().toggleBold().run()}
@@ -1112,6 +1336,48 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
             title="Ordered list"
           >
             <ListOrdered size={16} />
+          </button>
+
+          <div className="separator" />
+
+          {/* Code block toggle */}
+          <button
+            type="button"
+            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+            className={`toolbar-item ${editor.isActive('codeBlock') ? 'is-active' : ''}`}
+            title="Code block (``` to toggle)"
+          >
+            <span className="text-xs font-mono font-bold">{'{}'}</span>
+          </button>
+
+          {/* Tree structure builder */}
+          <button
+            type="button"
+            onClick={() => setShowTreeBuilder(v => !v)}
+            className={`toolbar-item ${showTreeBuilder ? 'is-active' : ''}`}
+            title="Tree structure builder"
+          >
+            <span className="text-xs">🌲</span>
+          </button>
+
+          {/* Symbol picker */}
+          <button
+            ref={symbolBtnRef}
+            type="button"
+            onClick={() => {
+              if (showSymbolPicker) {
+                setShowSymbolPicker(false)
+                setSymbolPickerPos(null)
+              } else {
+                const rect = symbolBtnRef.current?.getBoundingClientRect()
+                if (rect) setSymbolPickerPos({ top: rect.bottom + 4, left: rect.left })
+                setShowSymbolPicker(true)
+              }
+            }}
+            className={`toolbar-item ${showSymbolPicker ? 'is-active' : ''}`}
+            title="Insert tree symbols"
+          >
+            <span className="text-xs font-mono">├</span>
           </button>
 
           <div className="separator" />
@@ -1229,7 +1495,23 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
               </button>
             </>
           )}
+          </>}
         </div>
+      )}
+
+      {/* Tree structure builder panel */}
+      {showTreeBuilder && (
+        <TreeBuilderPanel
+          onInsert={(tree) => {
+            // Insert tree as a fenced code block in the editor
+            editor.chain().focus().insertContent({
+              type: 'codeBlock',
+              content: [{ type: 'text', text: tree }],
+            }).run()
+            setShowTreeBuilder(false)
+          }}
+          onClose={() => setShowTreeBuilder(false)}
+        />
       )}
 
       {/* Inline image URL input panel — rendered outside toolbar to avoid flex layout issues */}
@@ -1264,8 +1546,42 @@ const RichTextEditorComponent: ForwardRefRenderFunction<any, RichTextEditorProps
         </div>
       )}
 
-      <EditorContent editor={editor} />
+      {editorMode === 'markdown' ? (
+        <textarea
+          className="markdown-editor"
+          value={markdownValue}
+          onChange={(e) => handleMarkdownChange(e.target.value)}
+          placeholder="Write Markdown here..."
+          spellCheck={false}
+        />
+      ) : (
+        <EditorContent editor={editor} />
+      )}
       
+      {/* Symbol picker popup — fixed position to escape overflow:hidden clipping */}
+      {showSymbolPicker && symbolPickerPos && (
+        <div
+          ref={symbolPickerRef}
+          className="symbol-picker-popup"
+          style={{ position: 'fixed', top: symbolPickerPos.top, left: symbolPickerPos.left, zIndex: 9999 }}
+        >
+          <div className="symbol-label">Tree symbols</div>
+          {[
+            { symbol: '├──', label: '├──' },
+            { symbol: '└──', label: '└──' },
+            { symbol: '│',   label: '│' },
+            { symbol: '├─',  label: '├─' },
+            { symbol: '└─',  label: '└─' },
+            { symbol: '───', label: '───' },
+            { symbol: '/',   label: '/' },
+          ].map(({ symbol, label }) => (
+            <button key={label} type="button" onClick={() => insertSymbol(symbol)}>
+              <span>{label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* Mention popup */}
       {mentionPopup.show && (
         <div 
