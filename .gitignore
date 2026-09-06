@@ -56,6 +56,9 @@ Desktop/mcp browser/ScreenShotDebug/
 # Task management (root-level only, not source code)
 /tasks/
 
+# Local AI session state
+/.claude/session-state/
+
 # Media files
 media/images/
 .vercel
