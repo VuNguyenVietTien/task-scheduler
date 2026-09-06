@@ -1,12 +1,22 @@
 'use client';
 
 import { useTranslation } from 'react-i18next';
+import { computeTaskAllocations, schedulingHorizon, type TaskAllocation } from '@/utils/taskAllocations';
+import { PlanLifecycleBar } from '@/components/timeline/PlanLifecycleBar';
+import { buildGanttTaskRows } from '@/utils/ganttRows';
 import { Task, Priority, GanttFilter } from '@/types/task';
 import { GanttFilterBar } from './gantt-filter-bar';
 import { AssignedUser } from '@/types/user';
 import { TaskBar } from './TaskBar';
 import { TimelineSkeleton } from './TimelineSkeleton';
 import { PriorityTaskList } from './PriorityTaskList';
+import { ScheduleModeControl } from './ScheduleModeControl';
+import { PhaseScheduleRow } from './PhaseScheduleRow';
+import { WbsSourceHeadingRow } from './WbsSourceHeadingRow';
+import { useProjectTaxonomies } from '@/hooks/useProjectTaxonomies';
+import { useScheduleProjection } from '@/hooks/useScheduleProjection';
+import type { ScheduleDisplayMode, WbsSourceHeading, PhaseDescriptor } from '@/types/taxonomy';
+import type { PhaseRollupSummary } from '@/types/schedule-projection';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { getDatesBetween, formatDateVN, debugDate, isSameDay } from '@/lib/utils';
 import {
@@ -44,7 +54,7 @@ import { Dialog } from '@/components/ui/Dialog';
 import { TaskDetail } from '@/components/tasks/TaskDetail';
 import { useAuth } from '@/contexts/AuthContext';
 import { Plan, PlanData, PlanTaskData, CreatePlanInput, CreatePlanDataInput, CreatePlanTaskDataInput } from '@/types/plan';
-import { ChevronDownIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { ChevronDownIcon, ChevronRightIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import {
   updateTaskOrder,
   updateTasksWithDates,
@@ -57,26 +67,46 @@ import {
   selectAutoSort,
   updateOrderedTaskItem
 } from '@/redux/features/taskOrderStore';
-import { convertTaskOrderToTask, isWeekend, getNextWorkDay, findNextAvailableStartDate, calculateTaskSchedule, WorkSchedule, processTasksAndUpdateStore, processTasksBasedOnPlan } from '@/utils/taskScheduler';
+import { convertTaskOrderToTask, isWeekend, getNextWorkDay, findNextAvailableStartDate, calculateTaskSchedule, WorkSchedule, processTasksAndUpdateStore, processTasksBasedOnPlan, ScheduleOptions } from '@/utils/taskScheduler';
+import { useProjectSchedulingConfig } from '@/hooks/useProjectSchedulingConfig';
 import { useParams } from 'next/navigation';
 import { ArrowUpDown } from 'lucide-react';
 import { batch } from 'react-redux';
 import { sortTasksByPriority } from '@/utils/taskScheduler';
 
+interface TimelineBarsOverride {
+  start: string;
+  end: string;
+  hoursPerDay: Record<string, number>;
+}
+
 interface TimelineProps {
   isLoading?: boolean;
   onTaskClick?: (taskId: string) => void;
   users?: AssignedUser[];
+  /**
+   * herdr-260906 saved-plan/draft view: when present, bars for the listed
+   * task ids render from the SNAPSHOT (dates + per-day hours) instead of
+   * being recomputed — viewport- and config-independent by construction.
+   */
+  barsOverride?: Record<string, TimelineBarsOverride> | null;
 }
 
 type ViewMode = 'project' | 'user';
+
+/** Unified grid row: real tasks reuse the existing TaskBar; heading/phase
+ * summary rows are NON-DRAGGABLE display rows with no task callbacks. */
+type ScheduleGridRow =
+  | { key: string; kind: 'HEADING'; heading: WbsSourceHeading }
+  | { key: string; kind: 'PHASE'; group: PhaseRollupSummary }
+  | { key: string; kind: 'TASK'; task: Task; depth: number };
 
 interface DateRange {
   startDate: Date;
   endDate: Date;
 }
 
-export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProps) {
+export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }: TimelineProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const ganttContentRef = useRef<HTMLDivElement>(null);
@@ -97,6 +127,10 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
   const [selectedTaskForDetail, setSelectedTaskForDetail] = useState<Task | null>(null);
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const [ganttFilter, setGanttFilter] = useState<GanttFilter>({});
+  // Requirement 1: collapsed parent rows in the gantt task-name column.
+  const [collapsedRows, setCollapsedRows] = useState<Set<string>>(new Set());
+  // Increment 1: presentation-only schedule mode (switching never writes).
+  const [scheduleMode, setScheduleMode] = useState<ScheduleDisplayMode>('WBS_DETAIL');
   const { user } = useAuth();
 
   // Lấy redux store tasks
@@ -286,6 +320,53 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
   // Lấy thông tin dự án hiện tại từ URL
   const params = useParams();
   const currentProjectId = params ? (params.id as string) : '';
+  // Requirements 3/6: persisted capacity + days off + recurring commitments.
+  const schedulingConfig = useProjectSchedulingConfig(currentProjectId || undefined);
+
+  // ── Increment 1: schedule modes (WBS_DETAIL | MASTER_SCHEDULE) ──────────────
+  // Read-only projection (CURRENT_TASK_FIELDS producer). Mode switching and
+  // refetches perform NO mutations; phase/heading rows never receive task
+  // callbacks and are never draggable.
+  const { phases: projectPhases } = useProjectTaxonomies(currentProjectId || null);
+  const phaseDescriptors = useMemo<PhaseDescriptor[]>(
+    () =>
+      projectPhases.map((p) => ({
+        phase_id: p.phase_id,
+        name: p.name,
+        display_order: p.display_order,
+      })),
+    [projectPhases]
+  );
+  const { wbsRows: projectionWbsRows, masterRows, loading: projectionLoading } =
+    useScheduleProjection(currentProjectId || null, phaseDescriptors);
+
+  /** Fallback Task built from a projection entry when Redux has no full task. */
+  const taskFromProjection = useCallback(
+    (entry: { task_id: string; title: string; effort_hours?: number | null; start?: string | null; end?: string | null; progress_percent?: number | null }): Task => ({
+      task_id: entry.task_id,
+      id: entry.task_id,
+      project_id: currentProjectId || '',
+      title: entry.title,
+      priority_order: 0,
+      created_by: '' as string, // projection fallback: no creator known
+      status: 'TODO' as const,
+      priority: 'MEDIUM' as const,
+      effort: typeof entry.effort_hours === 'number' ? entry.effort_hours : undefined,
+      progress: typeof entry.progress_percent === 'number' ? entry.progress_percent : undefined,
+      start_date: entry.start ?? undefined,
+      due_date: entry.end ?? undefined,
+    }),
+    [currentProjectId]
+  );
+
+  /** Resolve the full Redux task for a projection entry (modal data). */
+  const resolveTask = useCallback(
+    (entry: { task_id: string; title: string; effort_hours?: number | null; start?: string | null; end?: string | null; progress_percent?: number | null }): Task => {
+      const full = tasks.find((t) => t.task_id === entry.task_id || t.id === entry.task_id);
+      return full ?? taskFromProjection(entry);
+    },
+    [tasks, taskFromProjection]
+  );
 
   // Lấy thông tin các thành viên từ tasks và users (props)
   const allMembers = useMemo(() => {
@@ -620,6 +701,120 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
     });
   }, [filteredTasks, ganttFilter, tasks]);
 
+  // ── Increment 1: unified grid rows for the schedule modes ───────────────────
+  // TASK rows reuse the existing TaskBar rendering below; HEADING/PHASE rows
+  // are NON-DRAGGABLE display rows never passed to task callbacks.
+  const scheduleGridRows = useMemo<ScheduleGridRow[]>(() => {
+    // No projection data yet (loading/error): keep the existing task-bar view,
+    // but render parent/child hierarchy from task.parent_task_id (requirement 1).
+    if (projectionLoading || projectionWbsRows.length === 0) {
+      // herdr-260906: hardened row builder — dedup by task_id, cycle guard,
+      // orphan emission (shared util, unit-tested for deep/orphan/cycle/
+      // duplicate inputs).
+      const enriched = visibleTasks.map((task) => {
+        const full = tasks.find(
+          (t) => t.task_id === task.task_id || t.id === task.task_id
+        );
+        return { ...task, parent_task_id: full?.parent_task_id };
+      });
+      return buildGanttTaskRows(enriched);
+    }
+
+    if (scheduleMode === 'WBS_DETAIL') {
+      return projectionWbsRows.map((row) =>
+        row.kind === 'SOURCE_HEADING'
+          ? { key: row.row_id, kind: 'HEADING' as const, heading: row.heading }
+          : {
+              key: row.row_id,
+              kind: 'TASK' as const,
+              task: resolveTask(row.task),
+              depth: row.depth,
+            }
+      );
+    }
+
+    // MASTER_SCHEDULE: phase groups in exact display order, Unphased ALWAYS LAST.
+    const rows: ScheduleGridRow[] = [];
+    for (const group of [...masterRows.phase_groups, masterRows.unphased_group]) {
+      rows.push({ key: group.phase_id ? `phase:${group.phase_id}` : 'phase:unphased', kind: 'PHASE', group });
+      for (const taskId of group.task_ids) {
+        const wbsTask = projectionWbsRows.find(
+          (r) => r.kind === 'TASK' && r.task.task_id === taskId
+        );
+        const entry = wbsTask && wbsTask.kind === 'TASK' ? wbsTask.task : { task_id: taskId, title: taskId };
+        rows.push({ key: `task:${taskId}`, kind: 'TASK', task: resolveTask(entry), depth: 1 });
+      }
+    }
+    return rows;
+  }, [scheduleMode, projectionWbsRows, masterRows, projectionLoading, visibleTasks, resolveTask, tasks, currentProjectId]);
+
+  // ── Requirement 1: parent/child expand/collapse over the grid rows ────────
+  // A row "has children" when any following row is deeper before an
+  // equal-or-shallower row appears. Collapsed parents hide their subtree.
+  const { gridRows, rowHasChildren } = useMemo(() => {
+    const hasChildren = new Map<string, boolean>();
+    for (let i = 0; i < scheduleGridRows.length; i++) {
+      const row = scheduleGridRows[i];
+      const depth =
+        row.kind === 'TASK'
+          ? row.depth
+          : row.kind === 'HEADING'
+            ? row.heading.depth
+            : 0;
+      let child = false;
+      for (let j = i + 1; j < scheduleGridRows.length; j++) {
+        const next = scheduleGridRows[j];
+        const nextDepth =
+          next.kind === 'TASK'
+            ? next.depth
+            : next.kind === 'HEADING'
+              ? next.heading.depth
+              : 0;
+        if (nextDepth > depth) {
+          child = true;
+          break;
+        }
+        if (nextDepth <= depth) break;
+      }
+      hasChildren.set(row.key, child);
+    }
+    if (collapsedRows.size === 0) {
+      return { gridRows: scheduleGridRows, rowHasChildren: hasChildren };
+    }
+    const visible: ScheduleGridRow[] = [];
+    const openStack: { depthVal: number; collapsed: boolean }[] = [];
+    for (const row of scheduleGridRows) {
+      const depth =
+        row.kind === 'TASK'
+          ? row.depth
+          : row.kind === 'HEADING'
+            ? row.heading.depth
+            : 0;
+      while (openStack.length > 0 && openStack[openStack.length - 1].depthVal >= depth) {
+        openStack.pop();
+      }
+      const hidden = openStack.some((a) => a.collapsed);
+      if (!hidden) visible.push(row);
+      if (hasChildren.get(row.key) && collapsedRows.has(row.key)) {
+        openStack.push({ depthVal: depth, collapsed: true });
+      } else if (hasChildren.get(row.key)) {
+        openStack.push({ depthVal: depth, collapsed: false });
+      }
+    }
+    return { gridRows: visible, rowHasChildren: hasChildren };
+  }, [scheduleGridRows, collapsedRows]);
+
+  const toggleRowCollapsed = useCallback((key: string) => {
+    setCollapsedRows((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+
+
   // Điều chỉnh onDragStart để đánh dấu bắt đầu kéo thả
   const onDragStart = useCallback(() => {
     setIsDragging(true);
@@ -772,6 +967,87 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
   const days = getDatesBetween(dateRange.startDate, dateRange.endDate);
   const dayWidth = Math.max(80, dimensions.width / days.length);
   const rowHeight = 48;
+  // ── Requirements 3/5/6: capacity-aware per-task allocation with per-day ──
+  // hour splits (e.g. effort 10h → 8h + 2h). Recurring commitments are
+  // reserved before finite priority tasks; zero-hour days get no hours.
+  // ── Requirements 3/5/6: capacity-aware allocation with per-day hour
+  // splits, computed on an EXPLICIT horizon (today → +365d, extended by long
+  // viewports) — never on the visible viewport alone, so tasks that spill
+  // past the view still get commitments subtracted and scrolling cannot
+  // change an allocation (manager review).
+  const allocationHorizon = useMemo(
+    () => schedulingHorizon(today, days[0], days[days.length - 1]),
+    [today, days]
+  );
+  const taskAllocationResult = useMemo(
+    () =>
+      computeTaskAllocations(
+        orderedTasks.map((t) => ({
+          ...t,
+          assignee_user_id: (t.assignee as { userId?: string } | undefined)?.userId ?? null,
+        })),
+        {
+          capacityFor: (key) => schedulingConfig.capacityFor(key),
+          reservedFor: (key, from, to) => schedulingConfig.reservedFor(key, from, to),
+          memberKeyFor: (userId) => schedulingConfig.memberKeyFor(userId),
+        },
+        allocationHorizon,
+        today
+      ),
+    [orderedTasks, schedulingConfig, allocationHorizon, today]
+  );
+  // herdr-260906: saved-plan / draft override — snapshot bars (incl. per-day
+  // hours) replace computed allocations when a lifecycle view is active.
+  const taskAllocations = useMemo(() => {
+    if (!barsOverride) return taskAllocationResult.allocations;
+    const merged: Record<string, TaskAllocation> = { ...taskAllocationResult.allocations };
+    for (const [taskId, bar] of Object.entries(barsOverride)) {
+      merged[taskId] = {
+        start: new Date(bar.start),
+        end: new Date(bar.end),
+        hoursPerDay: bar.hoursPerDay,
+      };
+    }
+    return merged;
+  }, [taskAllocationResult, barsOverride]);
+
+  // Scheduling inputs shared with the plan lifecycle (same mapping the
+  // allocation above uses, so drafts match live computation).
+  const planLifecycleScheduling = useMemo(
+    () => ({
+      tasks: orderedTasks.map((t) => ({
+        ...t,
+        assignee_user_id: (t.assignee as { userId?: string } | undefined)?.userId ?? null,
+      })),
+      config: {
+        capacityFor: (key: string) => schedulingConfig.capacityFor(key),
+        reservedFor: (key: string, from: string, to: string) =>
+          schedulingConfig.reservedFor(key, from, to),
+        memberKeyFor: (userId?: string | null) => schedulingConfig.memberKeyFor(userId),
+      },
+      horizon: allocationHorizon,
+      today,
+    }),
+    [orderedTasks, schedulingConfig, allocationHorizon, today]
+  );
+
+  // Requirement 3: reallocate tasks by priority when capacity config changes.
+  const handleRecalculateSchedule = useCallback(() => {
+    const tasksToRecalc = orderedTasks.map((task, index) => ({
+      ...task,
+      priority_order: task.priority_order ?? index + 1,
+      force_recalculate: true,
+    })) as Task[];
+    const options: ScheduleOptions = {
+      capacityFor: (assigneeId) => schedulingConfig.capacityFor(assigneeId || 'unassigned'),
+      reservedFor: (assigneeId) =>
+        schedulingConfig.reservedFor(assigneeId || 'unassigned', allocationHorizon.from, allocationHorizon.to),
+    };
+    processTasksAndUpdateStore(tasksToRecalc, true, dispatch, options);
+    toast.success('Recalculated schedule from member capacity & commitments');
+  }, [orderedTasks, currentProjectId, schedulingConfig, days, dispatch]);
+
+  const gridRowCount = Math.max(gridRows.length, 6);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -1102,6 +1378,12 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
               <span>{t('gantt.savePlan')}</span>
             </button>
 
+            <PlanLifecycleBar
+              projectId={currentProjectId || undefined}
+              scheduling={planLifecycleScheduling}
+              truncatedCommitmentRules={schedulingConfig.truncatedCommitmentRules}
+            />
+
             {activePlan && (
               <button
                 onClick={() => setShowDeletePlanDialog(true)}
@@ -1160,6 +1442,33 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                 ))}
               </select>
             )}
+
+            {/* Increment 1: presentation-only schedule mode toggle (no writes) */}
+            <ScheduleModeControl mode={scheduleMode} onModeChange={setScheduleMode} />
+
+            {/* R3/R6: unschedulable-effort warning — NEVER silently report
+                exhausted tasks as fully allocated. */}
+            {taskAllocationResult.exhaustedTaskIds.length > 0 && (
+              <span
+                className="px-2 py-1 rounded text-xs bg-red-100 text-red-700 whitespace-nowrap"
+                data-testid="schedule-exhausted-warning"
+                title={taskAllocationResult.exhaustedTaskIds.join(', ')}
+              >
+                ⚠ {taskAllocationResult.exhaustedTaskIds.length} task(s) exceed capacity/horizon — effort left unscheduled
+              </span>
+            )}
+
+            {/* Requirement 3: priority reallocation from member capacity /
+                days off / recurring commitments (explicit user action). */}
+            <button
+              onClick={handleRecalculateSchedule}
+              className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-emerald-100 hover:bg-emerald-200 whitespace-nowrap"
+              title="Recalculate task dates from member capacity, days off and recurring commitments"
+              data-testid="recalculate-schedule-btn"
+            >
+              <ChevronDownIcon className="h-4 w-4" />
+              <span>Recalculate</span>
+            </button>
 
             <div className="h-6 w-px bg-slate-200 mx-2"></div>
 
@@ -1243,7 +1552,70 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
           </div>
 
           {/* Gantt Chart */}
-          <div className="flex-1 min-w-0" ref={containerRef}>
+          <div className="flex-1 min-w-0 flex" ref={containerRef}>
+            {/* Requirement 1: task-name column on the right side of the
+                priority list — parent/child hierarchy with indent and
+                expand/collapse, vertically aligned with the bar grid. */}
+            <div className="w-60 flex-shrink-0 border-r border-slate-200 bg-white" data-testid="gantt-name-column">
+              <div className="h-[40px] border-b border-slate-200 bg-slate-50 flex items-center px-2 sticky z-40" style={{ top: '64px' }}>
+                <span className="text-xs font-medium text-slate-500">Task</span>
+              </div>
+              <div className="relative" style={{ height: `${gridRowCount * rowHeight}px`, minHeight: `${6 * rowHeight}px` }}>
+                {gridRows.map((row, rowIndex) => {
+                  const depth =
+                    row.kind === 'TASK'
+                      ? row.depth
+                      : row.kind === 'HEADING'
+                        ? row.heading.depth
+                        : 0;
+                  const hasChildren = rowHasChildren.get(row.key) ?? false;
+                  const collapsed = collapsedRows.has(row.key);
+                  const title =
+                    row.kind === 'TASK'
+                      ? row.task.title
+                      : row.kind === 'HEADING'
+                        ? row.heading.title
+                        : row.group.name;
+                  const isTaskRow = row.kind === 'TASK';
+                  return (
+                    <div
+                      key={row.key}
+                      className="absolute left-0 right-0 flex items-center gap-1 px-2 border-b border-slate-100"
+                      style={{ top: `${rowIndex * rowHeight}px`, height: `${rowHeight}px` }}
+                      data-testid="gantt-name-row"
+                      data-depth={depth}
+                    >
+                      {hasChildren ? (
+                        <button
+                          type="button"
+                          aria-label={collapsed ? 'Expand' : 'Collapse'}
+                          aria-expanded={!collapsed}
+                          data-testid="gantt-row-toggle"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleRowCollapsed(row.key);
+                          }}
+                          className="p-0.5 rounded hover:bg-slate-200 text-slate-600"
+                        >
+                          {collapsed ? <ChevronRightIcon className="h-3.5 w-3.5" /> : <ChevronDownIcon className="h-3.5 w-3.5" />}
+                        </button>
+                      ) : (
+                        <span className="w-[22px]" />
+                      )}
+                      <span
+                        className={`truncate text-xs ${isTaskRow ? 'text-slate-700' : 'font-semibold text-slate-800'}`}
+                        style={{ paddingLeft: `${depth * 14}px` }}
+                        title={title}
+                        onClick={isTaskRow ? () => handleTaskBarClick(row.task.task_id) : undefined}
+                      >
+                        {title}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="flex-1 min-w-0">
             {/* Date header - sticky, synced horizontal scroll with grid below */}
             <div
               className="sticky z-40 bg-white border-b border-slate-200 overflow-hidden"
@@ -1292,7 +1664,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                 {/* Phần grid và task bars */}
                 <div
                   style={{
-                    height: `${Math.max(visibleTasks.length, 6) * rowHeight}px`,
+                    height: `${gridRowCount * rowHeight}px`,
                     minHeight: `${6 * rowHeight}px`
                   }}
                 >
@@ -1335,13 +1707,13 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                         className="grid relative"
                         style={{
                           gridTemplateColumns: `repeat(${days.length}, ${dayWidth}px)`,
-                          gridTemplateRows: `repeat(${Math.max(visibleTasks.length, 6)}, ${rowHeight}px)`,
+                          gridTemplateRows: `repeat(${gridRowCount}, ${rowHeight}px)`,
                           gridAutoFlow: 'row',
                           height: '100%',
                           zIndex: 10
                         }}
                       >
-                        {Array.from({ length: days.length * Math.max(visibleTasks.length, 6) }).map((_, index) => (
+                        {Array.from({ length: days.length * gridRowCount }).map((_, index) => (
                           <div
                             key={`grid-cell-${index}`}
                             className="border-r border-b border-slate-200 relative"
@@ -1349,12 +1721,47 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                         ))}
                       </div>
 
-                      {/* Task Bars */}
-                      {/* Deduplicate visibleTasks to avoid key warnings */}
-                      {Array.from(new Map(visibleTasks.map(task => [task.task_id, task])).values()).map((task: Task, rowIndex: number) => {
+                      {/* Task Bars + schedule rows (Increment 1) */}
+                      {/* TASK rows reuse the existing TaskBar; HEADING/PHASE rows
+                          are non-draggable display rows with NO task callbacks. */}
+                      {gridRows.map((row, rowIndex) => {
+                        if (row.kind !== 'TASK') {
+                          return (
+                            <div
+                              key={row.key}
+                              style={{
+                                position: 'absolute',
+                                left: 0,
+                                top: `${rowIndex * rowHeight}px`,
+                                width: '100%',
+                                height: `${rowHeight}px`,
+                                zIndex: 14,
+                                pointerEvents: 'none'
+                              }}
+                            >
+                              {row.kind === 'HEADING' ? (
+                                <WbsSourceHeadingRow heading={row.heading} />
+                              ) : (
+                                <PhaseScheduleRow group={row.group} />
+                              )}
+                            </div>
+                          );
+                        }
+
+                        const task = row.task;
+                        // Requirements 3/5/6: capacity-aware allocation with
+                        // per-day hour splits when available.
+                        const allocation = taskAllocations[task.task_id];
+                        // herdr-260906: saved snapshot bar (or unsaved draft)
+                        // wins over live computation — config/viewport cannot
+                        // move it while a plan view is active.
+                        const planBar = barsOverride?.[task.task_id];
                         let taskStartDate: Date;
 
-                        if (task.start_date) {
+                        if (planBar) {
+                          taskStartDate = new Date(planBar.start);
+                          taskStartDate.setHours(0, 0, 0, 0);
+                        } else if (task.start_date) {
                           // Plan start date set → use as-is (even if in the past)
                           taskStartDate = new Date(task.start_date);
                           taskStartDate.setHours(0, 0, 0, 0);
@@ -1373,7 +1780,10 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                         // Nếu không có effort nhưng có due_date → dùng due_date
                         // Còn lại → same day as start
                         let taskEndDate: Date;
-                        if (task.effort != null && task.effort > 0) {
+                        if (planBar) {
+                          taskEndDate = new Date(planBar.end);
+                          taskEndDate.setHours(0, 0, 0, 0);
+                        } else if (task.effort != null && task.effort > 0) {
                           taskEndDate = calculateTaskSchedule(taskStartDate, task.effort).endDate;
                         } else if (task.due_date) {
                           taskEndDate = new Date(task.due_date);
@@ -1436,6 +1846,55 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                         // Đảm bảo task luôn có ít nhất 1 ngày hiển thị
                         const displayDays = Math.max(1, totalDays);
 
+                        // Requirement 5: render per-day hour segments
+                        // (effort 10h → “8h” + “2h” cells; zero days blank).
+                        if (allocation) {
+                          const segments = Object.entries(allocation.hoursPerDay)
+                            .filter(([, hours]) => hours > 0)
+                            .map(([dateKey, hours]) => {
+                              const idx = days.findIndex((d) => formatDateVN(d) === dateKey);
+                              if (idx === -1) return null;
+                              return (
+                                <div
+                                  key={`${task.task_id}-seg-${dateKey}`}
+                                  title={`${task.title} — ${dateKey}: ${hours}h`}
+                                  onClick={(e) => handleTaskBarClick(task.task_id, e)}
+                                  className="rounded-sm text-gray-800 text-[0.65rem] font-medium cursor-pointer shadow hover:brightness-95 transition-all flex items-center justify-center border border-blue-200 bg-blue-100"
+                                  style={{
+                                    position: 'absolute',
+                                    left: `${idx * dayWidth + 4}px`,
+                                    top: '6px',
+                                    width: `${dayWidth - 8}px`,
+                                    height: '36px',
+                                  }}
+                                  data-testid="task-day-segment"
+                                  data-task-id={task.task_id}
+                                  data-date={dateKey}
+                                  data-hours={hours}
+                                >
+                                  {Math.round(hours * 10) / 10}h
+                                </div>
+                              );
+                            });
+                          return (
+                            <div
+                              key={task.task_id}
+                              data-testid={`task-bar-${task.task_id}`}
+                              onClick={(e) => handleTaskBarClick(task.task_id, e)}
+                              style={{
+                                position: 'absolute',
+                                left: 0,
+                                top: `${rowIndex * rowHeight}px`,
+                                width: '100%',
+                                height: `${rowHeight}px`,
+                                zIndex: 15,
+                              }}
+                            >
+                              {segments}
+                            </div>
+                          );
+                        }
+
                         return (
                           <div
                             key={task.task_id}
@@ -1467,6 +1926,7 @@ export function Timeline({ isLoading = false, onTaskClick, users }: TimelineProp
                   </div>
                 </div>
               </div>
+            </div>
             </div>
           </div>
         </div>

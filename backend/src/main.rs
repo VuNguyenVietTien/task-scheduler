@@ -1,32 +1,34 @@
+mod api;
 mod auth;
 mod config;
 mod db;
+mod domain;
 mod error;
+mod firebase;
 mod graphql;
+mod migration_runner;
 mod utils;
 mod websocket;
-mod api;
-mod firebase;
 
-use actix_cors::Cors;
 use actix_web::{guard, web, App, HttpServer};
 use dotenv::dotenv;
-use sqlx::postgres::PgPool;
-use std::sync::Arc;
-use std::io::Write;
+use sqlx::postgres::PgPoolOptions;
 use std::fs::OpenOptions;
+use std::io::Write;
+use std::sync::Arc;
+use std::time::Duration;
 
 use crate::{
-    config::Config,
-    graphql::{
-        schema::create_schema,
-        handlers::{graphql_handler, graphql_playground},
-        dataloaders::{ProjectLoader, UserLoader},
-    },
-    websocket::{ws_connect, NotificationBroadcaster},
-    firebase::FirebaseService,
     api::routes,
     auth::AuthService,
+    config::{Config, DB_CONNECT_TIMEOUT, DB_MAX_CONNECTIONS},
+    firebase::FirebaseService,
+    graphql::{
+        dataloaders::{ProjectLoader, UserLoader},
+        handlers::{graphql_handler, graphql_playground},
+        schema::create_schema,
+    },
+    websocket::{ws_connect, NotificationBroadcaster},
 };
 
 #[actix_web::main]
@@ -65,12 +67,22 @@ async fn main() -> std::io::Result<()> {
     let config = Config::from_env().expect("Failed to load config");
     let addr = format!("{}:{}", config.server_host, config.server_port);
 
-    // Database connection
+    // Use an explicit bounded pool rather than PgPool::connect defaults.
     let pool = Arc::new(
-        PgPool::connect(&config.database_url)
+        PgPoolOptions::new()
+            .max_connections(DB_MAX_CONNECTIONS)
+            .acquire_timeout(Duration::from_secs(DB_CONNECT_TIMEOUT))
+            .connect(&config.database_url)
             .await
             .expect("Failed to connect to database"),
     );
+
+    if config.run_migrations {
+        match migration_runner::run(pool.as_ref()).await {
+            Ok(outcome) => eprintln!("Database migrations: {:?}", outcome),
+            Err(e) => panic!("Database migration failed: {}", e),
+        }
+    }
 
     eprintln!("Database connected");
 
@@ -81,11 +93,11 @@ async fn main() -> std::io::Result<()> {
 
     // Initialize services
     let auth_service = web::Data::new(AuthService::new(pool.as_ref().clone()));
-    
+
     // Initialize Firebase service
     let firebase_service = web::Data::new(
         FirebaseService::new("config/firebase-service-account.json".to_string())
-            .expect("Failed to initialize Firebase service")
+            .expect("Failed to initialize Firebase service"),
     );
 
     // Create dataloaders
@@ -95,16 +107,15 @@ async fn main() -> std::io::Result<()> {
     let pool_data = web::Data::new(pool.clone());
 
     // Create GraphQL schema with database pool and config
-    let schema = web::Data::new(create_schema(pool.as_ref().clone(), config.get_ref().clone()));
+    let schema = web::Data::new(create_schema(
+        pool.as_ref().clone(),
+        config.get_ref().clone(),
+    ));
 
     // Start HTTP server
     HttpServer::new(move || {
-        let cors = Cors::default()
-            .allow_any_origin()
-            .allow_any_method()
-            .allow_any_header()
-            .supports_credentials()
-            .max_age(3600);
+        // Exact configured allowlist; wildcard credentialed CORS is forbidden.
+        let cors = routes::build_cors(config.get_ref());
 
         App::new()
             .wrap(cors)
@@ -116,7 +127,7 @@ async fn main() -> std::io::Result<()> {
             .app_data(auth_service.clone())
             .app_data(firebase_service.clone())
             .app_data(web::Data::new(Arc::clone(&broadcaster)))
-            .configure(routes::config)  // Add API routes
+            .configure(routes::config) // Add API routes
             .service(
                 web::resource("/graphql")
                     .guard(guard::Post())
@@ -127,11 +138,7 @@ async fn main() -> std::io::Result<()> {
                     .guard(guard::Get())
                     .to(graphql_playground),
             )
-            .service(
-                web::resource("/ws")
-                    .guard(guard::Get())
-                    .to(ws_connect),
-            )
+            .service(web::resource("/ws").guard(guard::Get()).to(ws_connect))
     })
     .bind(addr)?
     .run()

@@ -1,24 +1,25 @@
 use async_graphql::*;
 use chrono::{DateTime, Utc};
-use sqlx::Type;
-use uuid::Uuid;
-use std::str::FromStr;
-use std::fmt;
-use serde::{Serialize, Deserialize};
-use serde_json::Value as JsonValue;
 use log::debug;
+use serde::{Deserialize, Serialize};
+use serde_json::Value as JsonValue;
+use sqlx::Type;
+use std::fmt;
+use std::str::FromStr;
+use uuid::Uuid;
 
 #[derive(SimpleObject, Debug, Clone, Serialize, Deserialize)]
-#[graphql(rename_fields = "camelCase")]
+#[graphql(rename_fields = "snake_case")]
 pub struct Assignee {
     pub user_id: Uuid,
+    pub full_name: Option<String>,
     pub username: String,
     pub avatar_url: Option<String>,
-    pub role: Option<String>
+    pub role: Option<String>,
 }
 
 #[derive(SimpleObject, Debug, Clone, Serialize, Deserialize)]
-#[graphql(rename_fields = "camelCase")]
+#[graphql(rename_fields = "snake_case", complex)]
 pub struct Task {
     pub task_id: Uuid,
     pub project_id: Uuid,
@@ -26,6 +27,9 @@ pub struct Task {
     pub title: String,
     pub description: Option<String>,
     pub assignee: Option<Assignee>,
+    /// Direct assignment to a resource member (may be an UNLINKED
+    /// placeholder). Stable across user linking; scheduling key prefers it.
+    pub assignee_resource_member_id: Option<Uuid>,
     pub priority_order: i32,
     pub start_date: Option<DateTime<Utc>>,
     pub due_date: Option<DateTime<Utc>>,
@@ -40,33 +44,47 @@ pub struct Task {
     pub is_deleted: Option<bool>,
     pub status: TaskStatus,
     pub priority: TaskPriority,
+    #[graphql(name = "type_")]
     pub type_: Option<String>,
     pub category: Option<String>,
+    /// Project-scoped taxonomy links (Task 1.3 contract): NULL = Unphased /
+    /// uncategorised. Same-project validity enforced by set_task_taxonomy.
+    pub phase_id: Option<Uuid>,
+    pub category_id: Option<Uuid>,
     pub progress_type: Option<TaskProgressType>,
     pub tags: Option<JsonValue>,
-    pub child_tasks: Option<Vec<Task>>
+    pub child_tasks: Option<Vec<Task>>,
+}
+
+/// D4 decision: expose BOTH `type_` (frontend/web-SDL) and `type` (plain alias).
+#[ComplexObject]
+impl Task {
+    #[graphql(name = "type")]
+    async fn type_alias(&self) -> Option<String> {
+        self.type_.clone()
+    }
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]
-#[sqlx(type_name = "task_status", rename_all = "lowercase")]
+#[sqlx(type_name = "task_status", rename_all = "UPPERCASE")]
 pub enum TaskStatus {
-    #[graphql(name = "todo")]
+    #[graphql(name = "TODO")]
     Todo,
-    #[graphql(name = "doing")]
-    Doing, 
-    #[graphql(name = "done")]
+    #[graphql(name = "DOING")]
+    Doing,
+    #[graphql(name = "DONE")]
     Done,
-    #[graphql(name = "close")]
+    #[graphql(name = "CLOSE")]
     Close,
-    #[graphql(name = "pending")]
+    #[graphql(name = "PENDING")]
     Pending,
-    #[graphql(name = "review")]
+    #[graphql(name = "REVIEW")]
     Review,
-    #[graphql(name = "blocked")]
+    #[graphql(name = "BLOCKED")]
     Blocked,
-    #[graphql(name = "rejected")]
+    #[graphql(name = "REJECTED")]
     Rejected,
-    #[graphql(name = "archived")]
+    #[graphql(name = "ARCHIVED")]
     Archived,
 }
 
@@ -74,15 +92,15 @@ impl fmt::Display for TaskStatus {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         // Convert enum variant to lowercase string
         let s = match self {
-            TaskStatus::Todo => "todo",
-            TaskStatus::Doing => "doing",
-            TaskStatus::Done => "done",
-            TaskStatus::Close => "close",
-            TaskStatus::Pending => "pending",
-            TaskStatus::Review => "review",
-            TaskStatus::Blocked => "blocked",
-            TaskStatus::Rejected => "rejected",
-            TaskStatus::Archived => "archived",
+            TaskStatus::Todo => "TODO",
+            TaskStatus::Doing => "DOING",
+            TaskStatus::Done => "DONE",
+            TaskStatus::Close => "CLOSE",
+            TaskStatus::Pending => "PENDING",
+            TaskStatus::Review => "REVIEW",
+            TaskStatus::Blocked => "BLOCKED",
+            TaskStatus::Rejected => "REJECTED",
+            TaskStatus::Archived => "ARCHIVED",
         };
         write!(f, "{}", s)
     }
@@ -96,7 +114,7 @@ impl FromStr for TaskStatus {
         match s.to_lowercase().as_str() {
             "todo" => Ok(TaskStatus::Todo),
             "doing" => Ok(TaskStatus::Doing),
-            "done" => Ok(TaskStatus::Done), 
+            "done" => Ok(TaskStatus::Done),
             "close" => Ok(TaskStatus::Close),
             "pending" => Ok(TaskStatus::Pending),
             "review" => Ok(TaskStatus::Review),
@@ -119,17 +137,17 @@ impl From<String> for TaskStatus {
 }
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq, Debug, Serialize, Deserialize, Type)]
-#[sqlx(type_name = "task_priority", rename_all = "lowercase")]
+#[sqlx(type_name = "task_priority", rename_all = "UPPERCASE")]
 pub enum TaskPriority {
-    #[graphql(name = "low")]
+    #[graphql(name = "LOW")]
     Low,
-    #[graphql(name = "medium")]
+    #[graphql(name = "MEDIUM")]
     Medium,
-    #[graphql(name = "high")]
+    #[graphql(name = "HIGH")]
     High,
-    #[graphql(name = "urgent")]
+    #[graphql(name = "URGENT")]
     Urgent,
-    #[graphql(name = "critical")]
+    #[graphql(name = "CRITICAL")]
     Critical,
 }
 
@@ -175,7 +193,7 @@ pub enum TaskProgressType {
     #[graphql(name = "review_test_report")]
     ReviewTestReport,
     #[graphql(name = "release")]
-    Release
+    Release,
 }
 
 impl FromStr for TaskProgressType {
@@ -207,7 +225,7 @@ impl From<String> for TaskProgressType {
 }
 
 #[derive(InputObject)]
-#[graphql(rename_fields = "camelCase")]
+#[graphql(rename_fields = "snake_case")]
 pub struct CreateTaskInput {
     pub project_id: ID,
     pub parent_task_id: Option<ID>,
@@ -221,6 +239,9 @@ pub struct CreateTaskInput {
     pub effort: Option<f64>,
     pub progress: Option<f64>,
     pub assignee_id: Option<ID>,
+    /// Resource-member assignment; placeholder allowed before user link.
+    pub assignee_resource_member_id: Option<ID>,
+    #[graphql(name = "type_")]
     pub type_: Option<String>,
     pub category: Option<String>,
     pub tags: Option<Vec<String>>,
@@ -228,7 +249,7 @@ pub struct CreateTaskInput {
 }
 
 #[derive(InputObject)]
-#[graphql(rename_fields = "camelCase")]
+#[graphql(rename_fields = "snake_case")]
 pub struct UpdateTaskInput {
     pub task_id: ID,
     pub title: Option<String>,
@@ -243,7 +264,9 @@ pub struct UpdateTaskInput {
     pub effort: Option<f64>,
     pub progress: Option<f64>,
     pub assignee_id: Option<ID>,
+    pub assignee_resource_member_id: Option<ID>,
     pub parent_task_id: Option<ID>,
+    #[graphql(name = "type_")]
     pub type_: Option<String>,
     pub category: Option<String>,
     pub tags: Option<Vec<String>>,
@@ -252,7 +275,7 @@ pub struct UpdateTaskInput {
 }
 
 #[derive(InputObject)]
-#[graphql(rename_fields = "camelCase")]
+#[graphql(rename_fields = "snake_case")]
 pub struct UpdateTaskStatusInput {
     pub task_id: ID,
     #[graphql(validator(custom = "validate_task_status"))]
@@ -261,17 +284,21 @@ pub struct UpdateTaskStatusInput {
 
 fn validate_task_status(status: &String) -> Result<(), String> {
     match status.to_lowercase().as_str() {
-        "todo" | "doing" | "done" | "close" | "pending" | "review" | "blocked" | "rejected" | "archived" => Ok(()),
+        "todo" | "doing" | "done" | "close" | "pending" | "review" | "blocked" | "rejected"
+        | "archived" => Ok(()),
         _ => Err(format!("Invalid task status: {}", status)),
     }
 }
 
 #[derive(InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct ReorderTasksInput {
-    pub task_orders: Vec<TaskOrderInput>,
+    pub project_id: ID,
+    pub tasks: Vec<TaskOrderInput>,
 }
 
 #[derive(InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct TaskOrderInput {
     pub task_id: ID,
     pub priority_order: i32,

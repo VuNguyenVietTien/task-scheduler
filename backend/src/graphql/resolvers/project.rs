@@ -1,30 +1,32 @@
-use async_graphql::{Context, Object, Result, ID, InputObject};
+use async_graphql::{Context, InputObject, Object, Result, ID};
 use chrono::{DateTime, NaiveDate, Utc};
-use sqlx::{Row, postgres::PgRow};
-use uuid::Uuid;
 use serde_json::{json, Value};
+use sqlx::{postgres::PgRow, Row};
+use uuid::Uuid;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
 use crate::graphql::types::{
-    CreateProjectInput, Projects, Project, ProjectMember, ProjectResponse, 
-    ProjectStatus, ProjectPriority, ProjectVisibility, MemberRole, User
+    CreateProjectInput, MemberRole, Project, ProjectMember, ProjectPriority, ProjectResponse,
+    ProjectStatus, ProjectVisibility, Projects, User,
 };
 
 #[derive(Default)]
 pub struct ProjectQuery;
 
-#[Object]
+#[Object(rename_fields = "snake_case", rename_args = "snake_case")]
 impl ProjectQuery {
     // Lấy project theo project_id
     async fn project(&self, ctx: &Context<'_>, project_id: ID) -> Result<Project> {
         let context = ctx.data::<GraphQLContext>()?;
         let pool = &context.db;
-        
+
         // Kiểm tra user đã đăng nhập
-        let current_user = context.auth.as_ref()
+        let current_user = context
+            .auth
+            .as_ref()
             .ok_or_else(|| AuthError::Unauthorized("You must be logged in".into()))?;
-            
+
         let project_id = Uuid::parse_str(&project_id.to_string())?;
 
         // Kiểm tra quyền truy cập project (là member hoặc owner)
@@ -42,7 +44,7 @@ impl ProjectQuery {
                     )
                 )
             )
-            "#
+            "#,
         )
         .bind(project_id)
         .bind(current_user.user_id()?)
@@ -52,7 +54,9 @@ impl ProjectQuery {
 
         let has_access: bool = access_check.get(0);
         if !has_access {
-            return Err(AuthError::Forbidden("You don't have access to this project".into()).into());
+            return Err(
+                AuthError::Forbidden("You don't have access to this project".into()).into(),
+            );
         }
 
         // Lấy thông tin project và owner
@@ -75,7 +79,7 @@ impl ProjectQuery {
             INNER JOIN users u ON p.owner_id = u.user_id
             LEFT JOIN project_members_count pmc ON p.project_id = pmc.project_id
             WHERE p.project_id = $1
-            "#
+            "#,
         )
         .bind(project_id)
         .fetch_one(pool)
@@ -96,7 +100,7 @@ impl ProjectQuery {
             FROM project_members pm
             INNER JOIN users u ON pm.user_id = u.user_id
             WHERE pm.project_id = $1
-            "#
+            "#,
         )
         .bind(project_id)
         .fetch_all(pool)
@@ -124,7 +128,7 @@ impl ProjectQuery {
             r#"
             SELECT role FROM project_members
             WHERE project_id = $1 AND user_id = $2
-            "#
+            "#,
         )
         .bind(project_id)
         .bind(current_user.user_id()?)
@@ -133,11 +137,11 @@ impl ProjectQuery {
         .map_err(|e| AuthError::Database(e))?;
 
         let user_role = user_role.map(|row| row.get::<MemberRole, _>("role"));
-        
+
         // In ra log để debug
         match &user_role {
             Some(role) => println!("User role in project: {:?}", role),
-            None => println!("User has no specific role in project")
+            None => println!("User has no specific role in project"),
         }
 
         // Map project data
@@ -148,8 +152,14 @@ impl ProjectQuery {
             created_at: project.get("created_at"),
             updated_at: project.get("updated_at"),
             priority: project.get("priority"),
-            visibility: project.get("visibility"), 
-            tags: project.get::<Option<Value>, _>("tags").and_then(|v| v.as_array().map(|arr| arr.iter().filter_map(|val| val.as_str().map(String::from)).collect())),
+            visibility: project.get("visibility"),
+            tags: project.get::<Option<Value>, _>("tags").and_then(|v| {
+                v.as_array().map(|arr| {
+                    arr.iter()
+                        .filter_map(|val| val.as_str().map(String::from))
+                        .collect()
+                })
+            }),
             progress: project.get::<f64, _>("progress"),
             category: project.get("category"),
             metadata: project.get("metadata"),
@@ -162,7 +172,7 @@ impl ProjectQuery {
             owner: User {
                 user_id: project.get("owner_id"),
                 email: project.get("owner_email"),
-                username: project.get("owner_name"), 
+                username: project.get("owner_name"),
                 full_name: project.get("owner_full_name"),
                 avatar_url: project.get::<Option<String>, _>("owner_avatar_url"),
             },
@@ -172,15 +182,18 @@ impl ProjectQuery {
         };
 
         eprintln!("\n=== Get Project Response ===");
-        eprintln!("Project: {}", json!({
-            "id": project.project_id,
-            "name": project.name,
-            "owner": {
-                "id": project.owner.user_id,
-                "email": project.owner.email
-            },
-            "memberCount": project.member_count
-        }));
+        eprintln!(
+            "Project: {}",
+            json!({
+                "id": project.project_id,
+                "name": project.name,
+                "owner": {
+                    "id": project.owner.user_id,
+                    "email": project.owner.email
+                },
+                "memberCount": project.member_count
+            })
+        );
         eprintln!("=========================\n");
 
         Ok(project)
@@ -189,9 +202,11 @@ impl ProjectQuery {
     async fn projects(&self, ctx: &Context<'_>) -> Result<Vec<Projects>> {
         let context = ctx.data::<GraphQLContext>()?;
         let pool = &context.db;
-        
+
         // Kiểm tra user đã đăng nhập
-        let current_user = context.auth.as_ref()
+        let current_user = context
+            .auth
+            .as_ref()
             .ok_or_else(|| AuthError::Unauthorized("You must be logged in".into()))?;
 
         // Get all projects that user is a member of, including member counts
@@ -228,66 +243,79 @@ impl ProjectQuery {
             LEFT JOIN project_members_count pmc ON p.project_id = pmc.project_id
             WHERE pm.user_id = $1
             ORDER BY p.created_at DESC
-            "#
+            "#,
         )
         .bind(current_user.user_id()?)
         .fetch_all(pool)
         .await
         .map_err(|e| AuthError::Database(e))?;
 
-        let result: Vec<Projects> = projects.into_iter().map(|row: PgRow| {
-            // Lấy giá trị date, xử lý null bằng cách sử dụng Option
-            let start_date: Option<NaiveDate> = row.get("start_date");
-            let end_date: Option<NaiveDate> = row.get("end_date");
-            
-            // Chuyển đổi NaiveDate sang DateTime<Utc> với xử lý null
-            let start_datetime = start_date.map_or_else(
-                || Utc::now(), // Giá trị mặc định nếu null
-                |date| DateTime::<Utc>::from_utc(
-                    date.and_hms_opt(0, 0, 0).unwrap_or_default(),
-                    Utc
-                )
-            );
-            let end_datetime = end_date.map_or_else(
-                || Utc::now() + chrono::Duration::days(30), // Giá trị mặc định nếu null
-                |date| DateTime::<Utc>::from_utc(
-                    date.and_hms_opt(0, 0, 0).unwrap_or_default(), 
-                    Utc
-                )
-            );
-            
-            Projects {
-                project_id: row.get("project_id"),
-                name: row.get("name"),
-                start_date: start_datetime,
-                end_date: end_datetime,
-                status: row.get("status"),
-                member_count: row.get("member_count"),
-                progress: row.get("progress"),
-                category: row.get("category"),
-                priority: row.get("priority"),
-                visibility: row.get("visibility"),
-                icon_url: row.get("icon_url"),
-                owner: User {
-                    user_id: row.get("owner_id"),
-                    email: row.get("owner_email"),
-                    username: row.get::<Option<String>, _>("owner_name"),
-                    full_name: row.get::<Option<String>, _>("owner_full_name"),
-                    avatar_url: row.get::<Option<String>, _>("owner_avatar_url"),
-                },
-            }
-        }).collect();
+        let result: Vec<Projects> = projects
+            .into_iter()
+            .map(|row: PgRow| {
+                // Lấy giá trị date, xử lý null bằng cách sử dụng Option
+                let start_date: Option<NaiveDate> = row.get("start_date");
+                let end_date: Option<NaiveDate> = row.get("end_date");
+
+                // Chuyển đổi NaiveDate sang DateTime<Utc> với xử lý null
+                let start_datetime = start_date.map_or_else(
+                    || Utc::now(), // Giá trị mặc định nếu null
+                    |date| {
+                        DateTime::<Utc>::from_utc(
+                            date.and_hms_opt(0, 0, 0).unwrap_or_default(),
+                            Utc,
+                        )
+                    },
+                );
+                let end_datetime = end_date.map_or_else(
+                    || Utc::now() + chrono::Duration::days(30), // Giá trị mặc định nếu null
+                    |date| {
+                        DateTime::<Utc>::from_utc(
+                            date.and_hms_opt(0, 0, 0).unwrap_or_default(),
+                            Utc,
+                        )
+                    },
+                );
+
+                Projects {
+                    project_id: row.get("project_id"),
+                    name: row.get("name"),
+                    start_date: start_datetime,
+                    end_date: end_datetime,
+                    status: row.get("status"),
+                    member_count: row.get("member_count"),
+                    progress: row.get("progress"),
+                    category: row.get("category"),
+                    priority: row.get("priority"),
+                    visibility: row.get("visibility"),
+                    icon_url: row.get("icon_url"),
+                    owner: User {
+                        user_id: row.get("owner_id"),
+                        email: row.get("owner_email"),
+                        username: row.get::<Option<String>, _>("owner_name"),
+                        full_name: row.get::<Option<String>, _>("owner_full_name"),
+                        avatar_url: row.get::<Option<String>, _>("owner_avatar_url"),
+                    },
+                }
+            })
+            .collect();
 
         eprintln!("\n=== Get Projects Response ===");
         eprintln!("Found {} projects", result.len());
-        eprintln!("Projects: {}", json!(result.iter().map(|p| {
-            json!({
-                "project_id": p.project_id,
-                "name": p.name,
-                "status": p.status,
-                "member_count": p.member_count
-            })
-        }).collect::<Vec<_>>()));
+        eprintln!(
+            "Projects: {}",
+            json!(result
+                .iter()
+                .map(|p| {
+                    json!({
+                        "project_id": p.project_id,
+                        "name": p.name,
+                        "status": p.status,
+                        "member_count": p.member_count
+                    })
+                })
+                .collect::<Vec<_>>())
+        );
         eprintln!("===========================\n");
 
         Ok(result)
@@ -297,7 +325,7 @@ impl ProjectQuery {
 #[derive(Default)]
 pub struct ProjectMutation;
 
-#[Object]
+#[Object(rename_fields = "snake_case", rename_args = "snake_case")]
 impl ProjectMutation {
     async fn create_project(
         &self,
@@ -305,22 +333,27 @@ impl ProjectMutation {
         input: CreateProjectInput,
     ) -> Result<ProjectResponse> {
         eprintln!("\n=== Create Project Request ===");
-        eprintln!("Input Data: {}", json!({
-            "name": &input.name,
-            "description": &input.description,
-            "startDate": &input.start_date,
-            "endDate": &input.end_date,
-            "status": &input.status.map(|s| format!("{:?}", s)),
-            "priority": &input.priority.map(|p| format!("{:?}", p)),
-            "visibility": &input.visibility.map(|v| format!("{:?}", v)),
-            "tags": &input.tags
-        }));
+        eprintln!(
+            "Input Data: {}",
+            json!({
+                "name": &input.name,
+                "description": &input.description,
+                "startDate": &input.start_date,
+                "endDate": &input.end_date,
+                "status": &input.status.map(|s| format!("{:?}", s)),
+                "priority": &input.priority.map(|p| format!("{:?}", p)),
+                "visibility": &input.visibility.map(|v| format!("{:?}", v)),
+                "tags": &input.tags
+            })
+        );
 
         let context = ctx.data::<GraphQLContext>()?;
         let pool = &context.db;
 
         // Kiểm tra user đã đăng nhập
-        let current_user = context.auth.as_ref()
+        let current_user = context
+            .auth
+            .as_ref()
             .ok_or_else(|| AuthError::Unauthorized("You must be logged in".into()))?;
 
         // Start transaction
@@ -342,7 +375,7 @@ impl ProjectMutation {
         let status_str = match input.status {
             Some(status) => match status {
                 ProjectStatus::Active => "active",
-                ProjectStatus::Completed => "completed", 
+                ProjectStatus::Completed => "completed",
                 ProjectStatus::OnHold => "on_hold",
                 ProjectStatus::Cancelled => "cancelled",
             },
@@ -433,7 +466,7 @@ impl ProjectMutation {
             r#"
             INSERT INTO project_members (member_id, project_id, user_id, role)
             VALUES ($1, $2, $3, 'manager')
-            "#
+            "#,
         )
         .bind(member_id)
         .bind(project_id)
@@ -467,7 +500,13 @@ impl ProjectMutation {
             createdAt: project_row.get("created_at"),
             metadata: project_row.get::<Option<Value>, _>("metadata"),
             isPublic: project_row.get("is_public"),
-            tags: project_row.get::<Option<Value>, _>("tags").and_then(|v| v.as_array().map(|arr| arr.iter().filter_map(|val| val.as_str().map(String::from)).collect())),
+            tags: project_row.get::<Option<Value>, _>("tags").and_then(|v| {
+                v.as_array().map(|arr| {
+                    arr.iter()
+                        .filter_map(|val| val.as_str().map(String::from))
+                        .collect()
+                })
+            }),
             members: vec![], // Owner is added as member
         };
 

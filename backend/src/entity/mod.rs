@@ -1,7 +1,7 @@
+use crate::db::types::{ProjectPriority, ProjectStatus, ProjectVisibility};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
-use crate::db::types::{ProjectPriority, ProjectStatus, ProjectVisibility};
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Project {
@@ -21,6 +21,6 @@ pub struct Project {
 }
 
 pub mod projects {
-    use super::*;
     pub use super::Project as Entity;
+    use super::*;
 }

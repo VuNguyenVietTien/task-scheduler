@@ -1,23 +1,27 @@
 use async_graphql::{Context, Object, Result};
 use uuid::Uuid;
 
+use crate::auth::auth_common;
 use crate::auth::service::AuthService;
-use crate::auth::auth_common as auth_common;
 use crate::graphql::types::AuthPayload;
-use crate::graphql::types::{RegisterInput, LoginInput};
+use crate::graphql::types::{LoginInput, RegisterInput};
 use crate::graphql::Context as GraphQLContext;
 
 #[derive(Default)]
 pub struct AuthMutation;
 
-#[Object]
-impl AuthMutation {    
+#[Object(rename_fields = "snake_case", rename_args = "snake_case")]
+impl AuthMutation {
     async fn register(&self, ctx: &Context<'_>, input: RegisterInput) -> Result<AuthPayload> {
         let ctx = ctx.data::<GraphQLContext>()?;
         let auth_service = AuthService::new(ctx.db.clone());
 
         let result = auth_service
-            .register(input.email.clone(), input.password.clone(), input.username.clone().unwrap())
+            .register(
+                input.email.clone(),
+                input.password.clone(),
+                input.username.clone().unwrap(),
+            )
             .await
             .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
@@ -44,7 +48,8 @@ impl AuthMutation {
             user.email.clone(),
             user.username.clone().unwrap(),
             &ctx.config,
-        ).map_err(|e| async_graphql::Error::new(e.to_string()))?;
+        )
+        .map_err(|e| async_graphql::Error::new(e.to_string()))?;
 
         Ok(AuthPayload {
             access_token: token.clone(),

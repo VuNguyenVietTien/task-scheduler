@@ -1,643 +1,1154 @@
-# Schema Types
-
-"""
-User role in the system
-"""
-enum UserRole {
-    admin
-    manager
-    member
-}
-
-"""
-Task priority level
-"""
-enum TaskPriority {
-    low
-    medium
-    high
-    urgent
-    critical
-}
-
-"""
-Task status
-"""
-enum TaskStatus {
-    todo
-    doing
-    done
-    close
-    pending
-    review
-    blocked
-    rejected
-    archived
-}
-
-"""
-Project member role
-"""
-enum ProjectRole {
-    owner
-    manager
-    editor
-    viewer
-}
-
-"""
-Project status
-"""
-enum ProjectStatus {
-    active
-    completed
-    cancelled
-    on_hold
-}
-
-"""
-Project priority
-"""
-enum ProjectPriority {
-    low
-    medium
-    high
-    urgent
-}
-
-"""
-Project visibility
-"""
-enum ProjectVisibility {
-    public
-    private
-    team
-}
-
-"""
-Task progress type
-"""
-enum TaskProgressType {
-    not_started
-    in_progress
-    completed
-    blocked
-    on_hold
-}
-
-"""
-Notification type
-"""
-enum NotificationType {
-    task_assigned
-    task_updated
-    comment_added
-    project_invitation
-    deadline_reminder
-}
-
-# Queries
-
-type Query {
-  """
-  Get current authenticated user
-  """
-  me: User!
-
-  """
-  Get a specific user by ID
-  """
-  user(userId: ID!): User
-
-  """
-  Get a list of users with optional filters
-  """
-  users(role: UserRole): [User!]!
-
-  """
-  Get a specific project by ID
-  """
-  project(projectId: ID!): Project
-
-  """
-  Get all accessible projects for current user
-  """
-  projects: [Project!]!
-
-  """
-  Get a specific task by ID
-  """
-  task(taskId: ID!): Task
-
-  """
-  Get subtasks of a specific task
-  """
-  taskSubtasks(taskId: ID!): [Task!]!
-
-  """
-  Get tasks with optional filters
-  """
-  tasks(
-    projectId: ID
-    status: TaskStatus
-    assigneeId: ID
-  ): [Task!]!
-
-  """
-  Get notifications for current user
-  """
-  notifications(includeRead: Boolean = false): [Notification!]!
-
-  """
-  Get count of unread notifications
-  """
-  unreadNotificationCount: Int!
-  
-  """
-  Get plans for a project
-  """
-  getProjectPlans(project_id: String!): [Plan!]!
-  
-  """
-  Get the latest plan for a project
-  """
-  getLatestProjectPlan(project_id: String!): Plan
-  
-  """
-  Get a specific plan by ID
-  """
-  getPlan(id: String!): Plan
-}
-
-# Mutations
-
-type Mutation {
-  """
-  Register a new user
-  """
-  register(input: RegisterInput!): AuthPayload!
-
-  """
-  Login with email and password
-  """
-  login(email: String!, password: String!): AuthPayload!
-
-  """
-  Refresh authentication token
-  """
-  refreshToken(refreshToken: String!): AuthPayload!
-
-  """
-  Create a new project
-  """
-  createProject(input: CreateProjectInput!): Project!
-
-  """
-  Update project details
-  """
-  updateProject(
-    projectId: ID!
-    input: UpdateProjectInput!
-  ): Project!
-
-  """
-  Add member to project
-  """
-  addProjectMember(input: AddProjectMemberInput!): ProjectMember!
-
-  """
-  Add member to project by email
-  """
-  addProjectMemberByEmail(projectId: ID!, email: String!, role: ProjectRole!): ProjectMember!
-
-  """
-  Update project member role
-  """
-  updateProjectMember(projectId: ID!, userId: ID!, role: ProjectRole!): ProjectMember!
-
-  """
-  Remove member from project
-  """
-  removeProjectMember(projectId: ID!, userId: ID!): Boolean!
-
-  """
-  Create a new task
-  """
-  createTask(input: CreateTaskInput!): Task!
-
-  """
-  Update task details
-  """
-  updateTask(
-    taskId: ID!
-    title: String
-    description: String
-    status: TaskStatus
-    priority: TaskPriority
-    startDate: DateTime
-    deadline: DateTime
-    assigneeId: ID
-    priorityOrder: Int
-    type: String
-    category: String
-    progressType: TaskProgressType
-    tags: [String!]
-  ): Task!
-
-  """
-  Delete task from project
-  """
-  deleteTask(taskId: ID!): Boolean!
-
-  """
-  Assign task to user
-  """
-  assignTask(taskId: ID!, userId: ID!): Task!
-
-  """
-  Add comment to task
-  """
-  createComment(input: CreateCommentInput!): Comment!
-
-  """
-  Upload file attachment
-  """
-  uploadAttachment(taskId: ID!, file: Upload!): Attachment!
-
-  """
-  Delete attachment
-  """
-  deleteAttachment(attachmentId: ID!): ID!
-
-  """
-  Mark notification as read
-  """
-  markNotificationAsRead(notificationId: ID!): Notification!
-
-  """
-  Mark all notifications as read
-  """
-  markAllNotificationsAsRead: Boolean!
-
-  """
-  Update task priority order
-  """
-  updateTaskPriorityOrder(taskId: ID!, newOrder: Int!): Task!
-
-  """
-  Reorder multiple tasks at once
-  """
-  reorderTasks(input: ReorderTasksInput!): [Task!]!
-  
-  """
-  Create a new plan
-  """
-  createPlan(input: CreatePlanInput!): Plan!
-  
-  """
-  Update an existing plan
-  """
-  updatePlan(input: UpdatePlanInput!): Plan!
-  
-  """
-  Delete a plan
-  """
-  deletePlan(id: String!): Boolean!
-  
-  """
-  Set a plan as active
-  """
-  setPlanActive(id: String!): Plan!
-
-  """
-  Delete account
-  """
-  deleteAccount: Boolean!
-  
-  """
-  Register FCM token for push notifications
-  """
-  registerFcmToken(token: String!, deviceId: String): Boolean!
-  
-  """
-  Unregister FCM token when logging out
-  """
-  unregisterFcmToken(token: String!): Boolean!
-}
-
-# Types
-
-type User {
-  userId: ID!
-  email: String!
-  fullName: String!
-  username: String
-  avatarUrl: String
-  role: UserRole!
-  workCapacity: Float!
-  createdAt: DateTime!
-  updatedAt: DateTime!
-}
-
-type Project {
-  projectId: ID!
-  name: String!
-  description: String
-  owner: User!
-  createdBy: User!
-  members: [ProjectMember!]!
-  status: ProjectStatus!
-  priority: ProjectPriority!
-  visibility: ProjectVisibility!
-  tags: [String!]!
-  progress: Float!
-  category: String
-  metadata: JSON
-  startDate: DateTime
-  endDate: DateTime
-  iconUrl: String
-  isPublic: Boolean!
-  memberCount: Int!
-  tasks: [Task!]!
-  createdAt: DateTime!
-  updatedAt: DateTime!
-}
-
-type ProjectMember {
-  role: ProjectRole!
-  joinedAt: DateTime!
-  user: User!
-}
-
-type Task {
-  taskId: ID!
-  projectId: ID!
-  project: Project!
-  parentTaskId: ID
-  parentTask: Task
-  subtasks: [Task!]!
-  title: String!
-  description: String
-  status: TaskStatus!
-  assigneeId: ID
-  assignee: UserBasic
-  priority: TaskPriority!
-  priorityOrder: Int!
-  effort: Float
-  startDate: DateTime
-  dueDate: DateTime
-  deadline: DateTime
-  createdBy: ID
-  creator: UserBasic
-  assignees: [User!]!
-  comments: [Comment!]!
-  attachments: [Attachment!]!
-  type: String
-  category: String
-  progressType: TaskProgressType
-  tags: [String!]
-  metadata: JSON
-  createdAt: DateTime!
-  updatedAt: DateTime!
-}
-
-type Comment {
-  commentId: ID!
-  taskId: ID!
-  task: Task!
-  userId: ID!
-  user: User!
-  content: String!
-  parentCommentId: ID
-  parentComment: Comment
-  replies: [Comment!]!
-  createdAt: DateTime!
-  updatedAt: DateTime!
-}
-
-type Attachment {
-  attachmentId: ID!
-  taskId: ID!
-  task: Task!
-  userId: ID!
-  user: User!
-  fileName: String!
-  fileSize: Int!
-  mimeType: String!
-  storagePath: String!
-  createdAt: DateTime!
-}
-
-type Notification {
-  notificationId: ID!
-  userId: ID!
-  type: NotificationType!
-  content: JSON!
-  createdAt: DateTime!
-}
-
-type AuthPayload {
-  accessToken: String!
-  refreshToken: String!
-  user: User!
-}
-
-"""
-Plan for Gantt chart task ordering
-"""
-type Plan {
-  id: String!
-  project_id: String!
-  name: String!
-  description: String
-  created_by: String!
-  created_at: DateTime!
-  updated_at: DateTime!
-  is_active: Boolean!
-  plan_data: PlanData!
-}
-
-"""
-Data structure for plan
-"""
-type PlanData {
-  tasks: [PlanTaskData!]!
-  metadata: PlanMetadata
-}
-
-"""
-Task data for plan
-"""
-type PlanTaskData {
-  task_id: String!
-  priority_order: Int!
-  original_priority: String
-  start_date: DateTime
-  end_date: DateTime
-  title: String
-  effort: Float
-  assignee_id: String
-  assignee_name: String
-  priority: String
-  status: String
-}
-
-"""
-Metadata for plan
-"""
-type PlanMetadata {
-  last_sorted_date: DateTime
-  sort_criteria: String
-}
-
-# Input Types
-
-input RegisterInput {
-  email: String!
-  password: String!
-  name: String!
-}
-
-"""
-Input for creating a new project
-"""
-input CreateProjectInput {
-  name: String!
-  description: String
-  status: ProjectStatus = active
-  priority: ProjectPriority = medium
-  visibility: ProjectVisibility = private
-  tags: [String!]
-  startDate: DateTime
-  endDate: DateTime
-  category: String
-  metadata: JSON
-}
-
-"""
-Input for updating project details
-"""
-input UpdateProjectInput {
-  name: String
-  description: String
-  status: ProjectStatus
-  priority: ProjectPriority
-  visibility: ProjectVisibility
-  tags: [String!]
-  startDate: DateTime
-  endDate: DateTime
-  category: String
-  metadata: JSON
+input AddDayOffInput {
+	project_id: ID!
+	"""
+	INDIVIDUAL | GROUP | PROJECT
+	"""
+	scope: String!
+	resource_member_id: ID
+	group_id: ID
+	start_date: NaiveDate!
+	end_date: NaiveDate!
+	reason: String
 }
 
 input AddProjectMemberInput {
-  projectId: ID!
-  userId: ID!
-  role: ProjectRole!
+	project_id: ID!
+	user_id: ID!
+	role: MemberRole!
 }
 
-input CreateTaskInput {
-  projectId: ID!
-  parentTaskId: ID
-  title: String!
-  description: String
-  status: TaskStatus!
-  priority: TaskPriority!
-  effort: Float
-  startDate: DateTime
-  dueDate: DateTime
-  assigneeId: ID
-  priorityOrder: Int
-  type: String
-  category: String
-  progressType: TaskProgressType
-  tags: [String!]
+input ArchiveStrategyInput {
+	"""
+	Atomically move every referencing task to this active term.
+	"""
+	reassign_to: ID
+	"""
+	Explicit Unphased conversion: referencing tasks lose the attribute.
+	Exactly one of `reassign_to` / `unphased` must be set.
+	"""
+	unphased: Boolean
+}
+
+type Assignee {
+	user_id: UUID!
+	full_name: String
+	username: String!
+	avatar_url: String
+	role: String
+}
+
+type AuthPayload {
+	access_token: String!
+	refresh_token: String!
+	user: User!
+}
+
+
+type BulkRemoveResponse {
+	success_count: Int!
+	failed_count: Int!
+}
+
+type BulkUpdateResponse {
+	success_count: Int!
+	members: [ResolverProjectMember!]!
+}
+
+type CapacityDateOverride {
+	date: NaiveDate!
+	hours: Float!
+}
+
+input CapacityDateOverrideInput {
+	resource_member_id: ID!
+	date: NaiveDate!
+	hours: Float!
+}
+
+type CommentResponse {
+	id: String!
+	content: String!
+	user_id: String!
+	task_id: String!
+	parent_id: String
+	metadata: JSON
+	is_deleted: Boolean!
+	created_at: DateTime!
+	updated_at: DateTime!
+	username: String
+	full_name: String
+	avatar_url: String
 }
 
 input CreateCommentInput {
-  taskId: ID!
-  content: String!
-  parentCommentId: ID
+	content: String!
+	task_id: String!
+	parent_id: String
+	metadata: JSON
 }
 
-"""
-Input for reordering multiple tasks
-"""
-input ReorderTasksInput {
-  projectId: ID!
-  taskOrders: [TaskOrderInput!]!
+input CreateNotificationInput {
+	user_id: ID!
+	project_id: ID
+	sender_id: ID
+	type_: String!
+	reference_type: String!
+	reference_id: ID!
+	message: String!
+	action: String!
+	metadata: JSON
 }
 
-"""
-Input for specifying task order
-"""
-input TaskOrderInput {
-  taskId: ID!
-  priorityOrder: Int!
-}
-
-"""
-Input for creating a plan
-"""
 input CreatePlanInput {
-  project_id: String!
-  name: String!
-  description: String
-  plan_data: CreatePlanDataInput!
+	project_id: String!
+	name: String!
+	description: String
+	plan_data: PlanDataInput!
+}
+
+input CreateProjectInput {
+	name: String!
+	description: String
+	priority: ProjectPriority
+	visibility: ProjectVisibility
+	tags: [String!]
+	status: ProjectStatus
+	category: String
+	start_date: NaiveDate
+	end_date: NaiveDate
+	icon_url: String
+	metadata: JSON
+}
+
+input CreateRecurringCommitmentInput {
+	project_id: ID!
+	title: String!
+	"""
+	PROJECT | GROUP
+	"""
+	scope: String!
+	group_id: ID
+	frequency: RecurrenceFrequency!
+	recurrence_interval: Int
+	weekday: Int
+	month_day: Int
+	start_date: NaiveDate!
+	end_date: NaiveDate
+	start_hour: Int!
+	duration_hours: Float!
+}
+
+input CreateResourceMemberInput {
+	project_id: ID!
+	display_name: String!
+	email: String
+	"""
+	MEMBER (default) | COMPANY | GROUP. Companies/groups classify only.
+	"""
+	member_kind: String
+}
+
+input CreateTaskInput {
+	project_id: ID!
+	parent_task_id: ID
+	title: String!
+	description: String
+	status: TaskStatus!
+	priority: TaskPriority!
+	priority_order: Int!
+	start_date: DateTime
+	due_date: DateTime
+	effort: Float
+	progress: Float
+	assignee_id: ID
+	"""
+	Resource-member assignment; placeholder allowed before user link.
+	"""
+	assignee_resource_member_id: ID
+	type_: String
+	category: String
+	tags: [String!]
+	progress_type: TaskProgressType
+}
+
+input CreateTermInput {
+	project_id: ID!
+	term_key: String!
+	display_order: Int!
+	color: String
+	translations: [TranslationInput!]!
 }
 
 """
-Input for updating a plan
-"""
-input UpdatePlanInput {
-  id: String!
-  name: String
-  description: String
-  is_active: Boolean
-  plan_data: CreatePlanDataInput
-}
+Implement the DateTime<Utc> scalar
 
+The input/output is a string in RFC3339 format.
 """
-Input for plan data
-"""
-input CreatePlanDataInput {
-  tasks: [CreatePlanTaskDataInput!]!
-  metadata: CreatePlanMetadataInput
-}
-
-"""
-Input for plan task data
-"""
-input CreatePlanTaskDataInput {
-  task_id: String!
-  priority_order: Int!
-  original_priority: String
-  start_date: DateTime
-  end_date: DateTime
-  title: String
-  effort: Float
-  assignee_id: String
-  assignee_name: String
-  priority: String
-  status: String
-}
-
-"""
-Input for plan metadata
-"""
-input CreatePlanMetadataInput {
-  last_sorted_date: DateTime
-  sort_criteria: String
-}
-
-# Scalars
 scalar DateTime
+
+type DayOff {
+	id: ID!
+	project_id: ID!
+	scope: String!
+	resource_member_id: ID
+	group_id: ID
+	start_date: NaiveDate!
+	end_date: NaiveDate!
+	reason: String
+}
+
+type DryRunIssue1139Check {
+	external_id: String!
+	"""
+	Decimal truth as a String.
+	"""
+	effort_hours: String!
+	assignee_display_name: String!
+	assignee_linked: Boolean!
+	wbs_row: Int!
+}
+
+type DryRunPhaseCount {
+	phase_key: String!
+	count: Int!
+}
+
+
+
+type ImportDryRunReport {
+	source_system: String!
+	root_external_id: String!
+	root_title: String!
+	heading_count: Int!
+	task_count: Int!
+	phase_counts: [DryRunPhaseCount!]!
+	total_effort_hours: String!
+	issue_1139: DryRunIssue1139Check!
+	planned_assignee_count: Int!
+	planned_dependency_count: Int!
+	diagnostics: [String!]!
+	"""
+	SHA-256 hex of the canonical manifest snapshot
+	(`imports::manifest::canonical_snapshot`).
+	"""
+	snapshot_sha256: String!
+	"""
+	Full deterministic report payload (serializable DryRunReport).
+	"""
+	report_json: JSON
+}
+
+
+"""
+A scalar that can represent any JSON value.
+"""
 scalar JSON
+
+input LoginInput {
+	email: String!
+	password: String!
+}
+
+input MediaUploadInput {
+	file: Upload!
+	storage_type: StorageType
+}
+
+type MediaUploadResponse {
+	"""
+	Unique identifier for the uploaded file
+	"""
+	id: ID!
+	"""
+	Original filename
+	"""
+	filename: String!
+	"""
+	MIME type of the file
+	"""
+	mimetype: String!
+	"""
+	Size of the file in bytes
+	"""
+	size: Int!
+	"""
+	Public URL to access the file
+	"""
+	url: String!
+	"""
+	Upload timestamp
+	"""
+	created_at: DateTime!
+}
+
+type MemberCapacity {
+	resource_member_id: ID!
+	weekday_hours: Float!
+	weekend_hours: Float!
+	date_overrides: [CapacityDateOverride!]!
+}
+
+enum MemberRole {
+	manager
+	leader
+	member
+	guest
+}
+
+input MemberRoleUpdate {
+	user_id: ID!
+	role: ProjectMemberRole!
+}
+
+type MemberUserResponse {
+	id: String!
+	email: String!
+	username: String!
+	full_name: String
+	avatar_url: String
+}
+
+type Mutation {
+	register(input: RegisterInput!): AuthPayload!
+	login(input: LoginInput!): AuthPayload!
+	create_project(input: CreateProjectInput!): ProjectResponse!
+	create_comment(input: CreateCommentInput!): CommentResponse!
+	delete_comment(id: ID!): Boolean!
+	update_profile(input: UpdateUserProfileInput!): UserResponse!
+	"""
+	Register FCM token for push notifications
+	"""
+	register_fcm_token(token: String!, device_id: String): Boolean!
+	"""
+	Unregister FCM token
+	"""
+	unregister_fcm_token(token: String!): Boolean!
+	"""
+	Add member to project
+	"""
+	add_project_member(input: AddProjectMemberInput!): ProjectMember!
+	update_project_member(project_id: ID!, user_id: ID!, role: MemberRole!): ProjectMember!
+	remove_project_member(project_id: ID!, user_id: ID!): Boolean!
+	create_task(input: CreateTaskInput!): Task!
+	update_task(input: UpdateTaskInput!): Task!
+	update_task_status(input: UpdateTaskStatusInput!): Task!
+	update_task_effort(input: UpdateTaskEffortInput!): Task!
+	delete_task(task_id: ID!): Boolean!
+	reorder_tasks(input: ReorderTasksInput!): [Task!]!
+	add_project_member_by_email(project_id: ID!, email: String!, role: MemberRole!): ProjectMember!
+	"""
+	Cập nhật vai trò của nhiều thành viên cùng lúc
+	"""
+	update_multiple_members(project_id: ID!, updates: [MemberRoleUpdate!]!): BulkUpdateResponse!
+	"""
+	Xóa nhiều thành viên cùng lúc
+	"""
+	remove_multiple_project_members(project_id: ID!, member_ids: [ID!]!): BulkRemoveResponse!
+	"""
+	Upload a file to the server
+	"""
+	upload_image(input: MediaUploadInput!): MediaUploadResponse!
+	"""
+	Delete an uploaded image
+	"""
+	delete_image(id: ID!): Boolean!
+	"""
+	Tạo mới plan
+	"""
+	createPlan(input: CreatePlanInput!): Plan!
+	"""
+	Cập nhật plan
+	"""
+	updatePlan(input: UpdatePlanInput!): Plan!
+	"""
+	Xóa plan
+	"""
+	deletePlan(id: String!): Boolean!
+	"""
+	Đặt plan là active
+	"""
+	setPlanActive(id: String!): Plan!
+	"""
+	Alias of createPlan for snake_case (web SDL) clients
+	"""
+	create_plan(input: CreatePlanInput!): Plan!
+	"""
+	Alias of updatePlan for snake_case (web SDL) clients
+	"""
+	update_plan(input: UpdatePlanInput!): Plan!
+	"""
+	Alias of deletePlan for snake_case (web SDL) clients
+	"""
+	delete_plan(id: String!): Boolean!
+	"""
+	Alias of setPlanActive for snake_case (web SDL) clients
+	"""
+	set_plan_active(id: String!): Plan!
+	create_notification(input: CreateNotificationInput!): Notification!
+	mark_notification_as_read(notification_id: ID!): Notification!
+	mark_all_notifications_as_read: Boolean!
+	"""
+	(Re-)apply the exact five default phases (idempotent; seeds new
+	projects, verifies existing ones).
+	"""
+	ensure_default_phases(project_id: ID!): Int!
+	"""
+	Create a project phase (project-local key/order uniqueness enforced).
+	"""
+	create_project_phase(input: CreateTermInput!): ProjectPhaseType!
+	"""
+	Edit a phase's order/color/translations (labels are never identifiers).
+	"""
+	update_project_phase_translations(input: UpdateTermTranslationsInput!): ProjectPhaseType!
+	"""
+	Archive a phase. Referencing tasks must be atomically reassigned or
+	explicitly converted to Unphased (ArchiveStrategyInput).
+	"""
+	archive_project_phase(project_id: ID!, phase_id: ID!, strategy: ArchiveStrategyInput!): Int!
+	"""
+	Assign a task's phase/category. Both terms must belong to the task's
+	project and be active; NULL explicitly means Unphased/uncategorised.
+	"""
+	set_task_taxonomy(task_id: ID!, phase_id: ID, category_id: ID): Boolean!
+	"""
+	Create a resource identity. With no user_id this is a PLACEHOLDER:
+	stable ID, required display name, optional email, no fabricated user.
+	"""
+	create_resource_member(input: CreateResourceMemberInput!): ResourceMemberType!
+	"""
+	Link a user to an existing resource member. The member ID never
+	changes; a duplicate linked user (same project) is an explicit error.
+	"""
+	link_resource_member_user(resource_member_id: ID!, user_id: ID!): ResourceMemberType!
+	"""
+	Classify a concrete MEMBER by a COMPANY/GROUP of the same project.
+	Classification only: no assignment/capacity semantics.
+	"""
+	classify_resource_member(resource_member_id: ID!, classified_by_resource_member_id: ID!): Boolean!
+	"""
+	R3: set a member's default weekday/weekend hours (persisted).
+	"""
+	set_member_capacity(input: SetMemberCapacityInput!): MemberCapacity!
+	"""
+	R3: set an explicit per-date hours override (e.g. working Saturday 8h
+	or a 0h weekday). Upsert per (member, date).
+	"""
+	set_capacity_date_override(input: CapacityDateOverrideInput!): MemberCapacity!
+	"""
+	R3: add a day off (individual / group / project scope).
+	"""
+	add_day_off(input: AddDayOffInput!): DayOff!
+	"""
+	R3: remove a day off.
+	"""
+	remove_day_off(id: ID!): Boolean!
+	create_resource_group(project_id: ID!, name: String!): ResourceGroup!
+	delete_resource_group(id: ID!): Boolean!
+	"""
+	Add resource members to a group (idempotent). Returns the new size.
+	"""
+	add_resource_group_members(group_id: ID!, member_ids: [ID!]!): Int!
+	remove_resource_group_member(group_id: ID!, member_id: ID!): Boolean!
+	"""
+	R4: expand a group into `project_members` rows — every LINKED group
+	member's user gets project membership (placeholders skipped). Atomic +
+	idempotent; returns the number of users actually added.
+	"""
+	add_project_members_by_group(group_id: ID!, role: MemberRole): Int!
+	create_recurring_commitment(input: CreateRecurringCommitmentInput!): RecurringCommitment!
+	delete_recurring_commitment(id: ID!): Boolean!
+	"""
+	Batch-save the caller's timesheet entries. Upsert semantics on
+	(user_id, task_id, work_date): re-saving a day overwrites the stored
+	hours — duplicates are impossible. Per-row failures are returned (not
+	thrown) so one bad row never loses the valid ones.
+	"""
+	save_timesheet_batch(input: SaveTimesheetBatchInput!): TimesheetBatchResult!
+	"""
+	Save a client-computed draft as a snapshot. NEVER implicitly
+	overwrites an existing plan: no plan_id → new plan (revision 1);
+	plan_id + NEW_REVISION → appended revision row (old row retained);
+	plan_id + SAME_REVISION → explicit in-place overwrite of that row.
+	"""
+	save_plan_snapshot(input: SavePlanSnapshotInput!): SavedPlan!
+}
+
+"""
+ISO 8601 calendar date without timezone.
+Format: %Y-%m-%d
+
+# Examples
+
+* `1994-11-13`
+* `2000-02-24`
+"""
+scalar NaiveDate
+
+type Notification {
+	notification_id: ID!
+	user_id: ID!
+	project_id: ID
+	sender_id: ID
+	type_: String!
+	reference_type: String!
+	reference_id: ID!
+	message: String!
+	action: String!
+	metadata: JSON!
+	is_read: Boolean!
+	created_at: DateTime!
+	type: String!
+}
+
+type NotificationCount {
+	total: Int!
+	unread: Int!
+}
+
+type PhaseTranslationType {
+	locale: String!
+	name: String!
+}
+
+type Plan {
+	id: UUID!
+	project_id: UUID!
+	name: String!
+	description: String
+	created_by: UUID!
+	created_at: DateTime!
+	updated_at: DateTime!
+	is_active: Boolean!
+	plan_data: JSON!
+}
+
+input PlanDataInput {
+	tasks: [PlanTaskDataInput!]!
+}
+
+type PlanRecalcMetadata {
+	plan_id: UUID!
+	project_id: UUID!
+	revision: Int!
+	stale: Boolean!
+	stale_reasons: [String!]!
+	current_config_fingerprint: String!
+	task_ids: [String!]!
+}
+
+enum PlanRevisionMode {
+	"""
+	Append revision N+1 as a new row (non-destructive; default-safe).
+	"""
+	NEW_REVISION
+	"""
+	Overwrite THIS plan row's snapshot only (explicit user choice).
+	"""
+	SAME_REVISION
+}
+
+input PlanTaskDataInput {
+	task_id: String!
+	priority_order: Int!
+	start_date: String
+	end_date: String
+	title: String
+	effort: Float
+	assignee_id: String
+	assignee_name: String
+	priority: String
+	status: String
+	original_priority: String
+}
+
+type Project {
+	project_id: UUID!
+	name: String!
+	description: String
+	created_at: DateTime!
+	updated_at: DateTime!
+	priority: ProjectPriority!
+	visibility: ProjectVisibility!
+	tags: [String!]
+	progress: Float!
+	category: String
+	metadata: JSON
+	start_date: NaiveDate
+	end_date: NaiveDate
+	icon_url: String
+	is_public: Boolean!
+	status: ProjectStatus!
+	member_count: Int!
+	owner: User!
+	created_by: User
+	user_role: MemberRole
+	members: [ProjectMember!]!
+}
+
+type ProjectMember {
+	role: MemberRole!
+	joined_at: DateTime
+	user: User!
+}
+
+enum ProjectMemberRole {
+	manager
+	leader
+	member
+	guest
+}
+
+type ProjectPhaseType {
+	phase_id: ID!
+	project_id: ID!
+	phase_key: String!
+	display_order: Int!
+	is_active: Boolean!
+	translations: [PhaseTranslationType!]!
+}
+
+enum ProjectPriority {
+	LOW
+	MEDIUM
+	HIGH
+	URGENT
+}
+
+type ProjectResponse {
+	project_id: UUID!
+	name: String!
+	description: String
+	start_date: NaiveDate
+	end_date: NaiveDate
+	status: ProjectStatus!
+	owner: User!
+	progress: Float!
+	category: String
+	priority: ProjectPriority!
+	visibility: ProjectVisibility!
+	icon_url: String
+	created_at: DateTime!
+	metadata: JSON
+	is_public: Boolean!
+	tags: [String!]
+	members: [ProjectMember!]!
+}
+
+type ProjectScheduleProjection {
+	project_id: ID!
+	source: ScheduleProjectionSource!
+	phase_groups: [SchedulePhaseGroup!]!
+	wbs_rows: [ScheduleWbsRow!]!
+	totals: ScheduleTotals!
+}
+
+enum ProjectStatus {
+	ACTIVE
+	COMPLETED
+	ON_HOLD
+	CANCELLED
+}
+
+enum ProjectVisibility {
+	PUBLIC
+	PRIVATE
+	TEAM
+}
+
+type Projects {
+	project_id: UUID!
+	name: String!
+	start_date: DateTime!
+	end_date: DateTime!
+	status: ProjectStatus!
+	member_count: Int!
+	progress: Float!
+	category: String
+	priority: ProjectPriority!
+	visibility: ProjectVisibility!
+	icon_url: String
+	owner: User!
+}
+
+type Query {
+	project(project_id: ID!): Project!
+	projects: [Projects!]!
+	comment(id: ID!): CommentResponse
+	task_comments(task_id: ID!): [CommentResponse!]!
+	me: UserResponse!
+	user(id: ID!): UserResponse
+	users: [UserResponse!]!
+	project_members(project_id: ID!): [ProjectMember!]!
+	project_member(project_id: ID!, user_id: ID!): ProjectMember
+	task(task_id: ID!): Task
+	task_subtasks(task_id: ID!): [Task!]!
+	tasks(project_id: ID, status: String, assignee_id: ID): [Task!]!
+	"""
+	Get the current user's role in a specific project
+	"""
+	my_project_role(project_id: ID!): MemberRole
+	"""
+	Lấy danh sách plan của project
+	"""
+	get_project_plans(project_id: String!): [Plan!]!
+	"""
+	Lấy plan mới nhất của project
+	"""
+	get_latest_project_plan(project_id: String!): Plan
+	"""
+	Lấy chi tiết plan
+	"""
+	get_plan(id: String!): Plan
+	notifications(limit: Int, offset: Int): [Notification!]!
+	notification(id: ID!): Notification
+	notification_count: NotificationCount!
+	"""
+	A project's phases in display order with all translations.
+	"""
+	project_phases(project_id: ID!, include_archived: Boolean): [ProjectPhaseType!]!
+	"""
+	A project's resource identities (optionally only concrete members).
+	"""
+	resource_members(project_id: ID!, only_assignable: Boolean): [ResourceMemberType!]!
+	"""
+	One resource member by stable ID.
+	"""
+	resource_member(resource_member_id: ID!): ResourceMemberType!
+	"""
+	Replaceable project schedule projection. Increment 1 producer is
+	CURRENT_TASK_FIELDS (task dates/effort/progress); no capacity
+	scheduler is involved.
+	"""
+	project_schedule_projection(project_id: ID!): ProjectScheduleProjection!
+	"""
+	Issue-1115 import dry run over a static bundle manifest (v1 schema).
+	PURE: deterministic, zero writes. Exposes the DryRunReport gates.
+	"""
+	import_dry_run(manifest: JSON!): ImportDryRunReport!
+	"""
+	Per-member capacity settings (R3). Members without a row use the
+	documented defaults (weekday 8h / weekend 0h).
+	"""
+	capacity_settings(project_id: ID!): [MemberCapacity!]!
+	"""
+	Days off (leave/holidays) for a project at all scopes (R3).
+	"""
+	day_offs(project_id: ID!): [DayOff!]!
+	"""
+	Member groups with their member ids (R4).
+	"""
+	resource_groups(project_id: ID!): [ResourceGroup!]!
+	"""
+	Recurring commitments (R6).
+	"""
+	recurring_commitments(project_id: ID!): [RecurringCommitment!]!
+	"""
+	The CURRENT user's timesheet entries for a project within a date
+	range. Authorization: caller must be owner/member of the project;
+	rows are always scoped to the caller's own user_id.
+	"""
+	my_timesheet_entries(project_id: ID!, from: NaiveDate!, to: NaiveDate!): [TimesheetEntry!]!
+	"""
+	Load one saved plan (snapshot bars + computed staleness). Rendering a
+	saved plan uses ONLY plan_data — current config affects nothing until
+	an explicit recalculate + save.
+	"""
+	saved_plan(plan_id: ID!): SavedPlan
+	"""
+	All saved plans of a project (newest first).
+	"""
+	saved_plans(project_id: ID!): [SavedPlan!]!
+	"""
+	Recalculate metadata: which tasks the saved plan schedules (so the
+	client rebuilds a draft from the SAVED plan's tasks with CURRENT
+	config) + current fingerprint + staleness.
+	"""
+	plan_recalc_metadata(plan_id: ID!): PlanRecalcMetadata!
+}
+
+enum RecurrenceFrequency {
+	DAILY
+	WEEKLY
+	MONTHLY
+}
+
+type RecurringCommitment {
+	id: ID!
+	project_id: ID!
+	title: String!
+	"""
+	PROJECT | GROUP
+	"""
+	scope: String!
+	group_id: ID
+	"""
+	DAILY | WEEKLY | MONTHLY
+	"""
+	frequency: String!
+	recurrence_interval: Int!
+	"""
+	0=Sun … 6=Sat (WEEKLY)
+	"""
+	weekday: Int
+	"""
+	1..=31 (MONTHLY)
+	"""
+	month_day: Int
+	start_date: NaiveDate!
+	end_date: NaiveDate
+	"""
+	Fixed hour of day 0..=23
+	"""
+	start_hour: Int!
+	duration_hours: Float!
+}
+
+input RegisterInput {
+	email: String!
+	password: String!
+	username: String
+}
+
+input ReorderTasksInput {
+	project_id: ID!
+	tasks: [TaskOrderInput!]!
+}
+
+type ResolverProjectMember {
+	member_id: String!
+	project_id: String!
+	user_id: String!
+	role: ProjectMemberRole!
+	joined_at: DateTime!
+	invited_by: String
+	user: MemberUserResponse!
+}
+
+type ResourceGroup {
+	id: ID!
+	project_id: ID!
+	name: String!
+	member_ids: [ID!]!
+}
+
+type ResourceMemberType {
+	resource_member_id: ID!
+	project_id: ID!
+	display_name: String!
+	email: String
+	"""
+	NULL while the member is a placeholder.
+	"""
+	user_id: ID
+	"""
+	MEMBER | COMPANY | GROUP. Only MEMBER is assignable.
+	"""
+	member_kind: String!
+	linked_at: DateTime
+}
+
+input SavePlanSnapshotInput {
+	project_id: ID!
+	name: String!
+	"""
+	v2 snapshot: {version:2, tasks:[{task_id,start_date,end_date,
+	hours_per_day,assignee ids,priority_order}], meta:{...}}.
+	"""
+	snapshot: JSON!
+	"""
+	Existing plan id for SAME_REVISION / NEW_REVISION saves; omit to
+	create a brand-new plan (revision 1).
+	"""
+	plan_id: ID
+	revision_mode: PlanRevisionMode!
+}
+
+input SaveTimesheetBatchInput {
+	project_id: ID!
+	entries: [TimesheetEntryInput!]!
+}
+
+type SavedPlan {
+	plan_id: UUID!
+	project_id: UUID!
+	name: String!
+	revision: Int!
+	is_active: Boolean!
+	stale: Boolean!
+	stale_reasons: [String!]!
+	config_fingerprint: String
+	parent_plan_id: UUID
+	plan_data: JSON!
+	created_at: DateTime!
+	updated_at: DateTime!
+}
+
+type SchedulePhaseGroup {
+	phase_id: ID
+	phase_key: String!
+	is_unphased: Boolean!
+	task_ids: [ID!]!
+	totals: ScheduleTotals!
+}
+
+enum ScheduleProjectionSource {
+	"""
+	Increment 1 producer: current task dates/effort/progress fields.
+	"""
+	CURRENT_TASK_FIELDS
+}
+
+"""
+Source WBS heading row: DISTINCT object with NO task identity, NO bar
+callbacks, NO schedule numbers. Display/provenance metadata only.
+"""
+type ScheduleSourceHeading {
+	heading_id: ID!
+	source_system: String!
+	external_id: String!
+	title: String!
+	depth: Int!
+}
+
+"""
+A real task row. Carries the bar-relevant current fields.
+"""
+type ScheduleTaskEntry {
+	task_id: ID!
+	title: String!
+	phase_id: ID
+	start_date: DateTime
+	end_date: DateTime
+	effort_hours: String!
+	progress: Float
+	depth: Int!
+}
+
+type ScheduleTotals {
+	task_count: Int!
+	"""
+	Normalized display decimal string (e.g. "387.00").
+	"""
+	effort_hours: String!
+	progress: Float
+	start_date: DateTime
+	end_date: DateTime
+}
+
+union ScheduleWbsRow = ScheduleTaskEntry | ScheduleSourceHeading
+
+input SetMemberCapacityInput {
+	resource_member_id: ID!
+	weekday_hours: Float!
+	weekend_hours: Float!
+}
+
+enum StorageType {
+	local
+	google_drive
+}
+
+
+type Task {
+	task_id: UUID!
+	project_id: UUID!
+	parent_task_id: UUID
+	title: String!
+	description: String
+	assignee: Assignee
+	"""
+	Direct assignment to a resource member (may be an UNLINKED
+	placeholder). Stable across user linking; scheduling key prefers it.
+	"""
+	assignee_resource_member_id: UUID
+	priority_order: Int!
+	start_date: DateTime
+	due_date: DateTime
+	actual_start_date: DateTime
+	actual_end_date: DateTime
+	effort: Float
+	progress: Float
+	created_by: UUID!
+	creator: Assignee
+	created_at: DateTime
+	updated_at: DateTime
+	is_deleted: Boolean
+	status: TaskStatus!
+	priority: TaskPriority!
+	type_: String
+	category: String
+	"""
+	Project-scoped taxonomy links (Task 1.3 contract): NULL = Unphased /
+	uncategorised. Same-project validity enforced by set_task_taxonomy.
+	"""
+	phase_id: UUID
+	category_id: UUID
+	progress_type: TaskProgressType
+	tags: JSON
+	child_tasks: [Task!]
+	type: String
+}
+
+input TaskOrderInput {
+	task_id: ID!
+	priority_order: Int!
+}
+
+enum TaskPriority {
+	LOW
+	MEDIUM
+	HIGH
+	URGENT
+	CRITICAL
+}
+
+enum TaskProgressType {
+	study
+	investigate
+	code
+	test
+	review_code
+	review_test_report
+	release
+}
+
+enum TaskStatus {
+	TODO
+	DOING
+	DONE
+	CLOSE
+	PENDING
+	REVIEW
+	BLOCKED
+	REJECTED
+	ARCHIVED
+}
+
+type TimesheetBatchError {
+	"""
+	Zero-based row index within the submitted batch.
+	"""
+	row: Int!
+	message: String!
+}
+
+type TimesheetBatchResult {
+	saved: Int!
+	errors: [TimesheetBatchError!]!
+}
+
+type TimesheetEntry {
+	id: ID!
+	project_id: ID!
+	user_id: ID!
+	task_id: ID!
+	work_date: NaiveDate!
+	hours: Float!
+	note: String
+}
+
+input TimesheetEntryInput {
+	task_id: ID!
+	work_date: NaiveDate!
+	hours: Float!
+	note: String
+}
+
+input TranslationInput {
+	locale: String!
+	name: String!
+	description: String
+}
+
+"""
+A UUID is a unique 128-bit number, stored as 16 octets. UUIDs are parsed as
+Strings within GraphQL. UUIDs are used to assign unique identifiers to
+entities without requiring a central allocating authority.
+
+# References
+
+* [Wikipedia: Universally Unique Identifier](http://en.wikipedia.org/wiki/Universally_unique_identifier)
+* [RFC4122: A Universally Unique IDentifier (UUID) URN Namespace](http://tools.ietf.org/html/rfc4122)
+"""
+scalar UUID
+
+input UpdatePlanInput {
+	id: String!
+	name: String
+	description: String
+	is_active: Boolean
+	plan_data: PlanDataInput
+}
+
+input UpdateTaskEffortInput {
+	task_id: ID!
+	effort: Float!
+}
+
+input UpdateTaskInput {
+	task_id: ID!
+	title: String
+	description: String
+	status: TaskStatus
+	priority: TaskPriority
+	priority_order: Int
+	start_date: DateTime
+	due_date: DateTime
+	actual_start_date: DateTime
+	actual_end_date: DateTime
+	effort: Float
+	progress: Float
+	assignee_id: ID
+	assignee_resource_member_id: ID
+	parent_task_id: ID
+	type_: String
+	category: String
+	tags: [String!]
+	progress_type: TaskProgressType
+	is_deleted: Boolean
+}
+
+input UpdateTaskStatusInput {
+	task_id: ID!
+	status: String!
+}
+
+input UpdateTermTranslationsInput {
+	project_id: ID!
+	term_id: ID!
+	display_order: Int
+	color: String
+	translations: [TranslationInput!]
+}
+
+input UpdateUserProfileInput {
+	full_name: String
+	avatar_url: String
+}
+
 scalar Upload
 
-type UserBasic {
-  userId: ID!
-  username: String
-  avatarUrl: String
-  role: String
+type User {
+	user_id: UUID!
+	email: String!
+	username: String
+	full_name: String
+	avatar_url: String
+}
+
+type UserResponse {
+	id: String!
+	email: String!
+	username: String!
+	full_name: String
+	avatar_url: String
+	email_verified: Boolean!
+	role: String!
+	created_at: DateTime!
+	updated_at: DateTime!
+}
+
+schema {
+	query: Query
+	mutation: Mutation
 }

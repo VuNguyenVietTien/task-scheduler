@@ -4,7 +4,7 @@ use uuid::Uuid;
 use crate::auth::error::AuthError;
 use crate::db::queries::notification::create_notification as db_create_notification;
 use crate::graphql::context::Context as GraphQLContext;
-use crate::graphql::types::{Notification, CreateNotificationInput};
+use crate::graphql::types::{CreateNotificationInput, Notification};
 
 pub async fn create_notification(
     ctx: &Context<'_>,
@@ -12,10 +12,12 @@ pub async fn create_notification(
 ) -> Result<Notification> {
     let context = ctx.data::<GraphQLContext>()?;
     let pool = &context.db;
-    let user_id = context.auth.as_ref()
+    let user_id = context
+        .auth
+        .as_ref()
         .ok_or_else(|| AuthError::Unauthorized("Not authenticated".to_string()))?
         .user_id();
-    
+
     // Convert GraphQL input to database input
     let db_input = crate::db::models::CreateNotificationInput {
         user_id: Uuid::parse_str(&input.user_id)?,
@@ -28,10 +30,10 @@ pub async fn create_notification(
         action: input.action,
         metadata: input.metadata,
     };
-    
+
     let notification = db_create_notification(pool, db_input)
         .await
         .map_err(|e| AuthError::Database(e))?;
-    
+
     Ok(notification.into())
-} 
+}

@@ -1,0 +1,6 @@
+{
+  "packages": [
+    "npm:pi-mcp-adapter@2.31.0",
+    "npm:pi-gitnexus@0.6.4"
+  ]
+}

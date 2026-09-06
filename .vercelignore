@@ -1,0 +1,32 @@
+# Vercel upload policy (repository root)
+# Vercel project Root Directory = web (Next.js). Deny everything at repo root by
+# default, then re-allow only the deployable web tree. Vercel CLI applies
+# .vercelignore with gitignore semantics; later rules override earlier ones.
+
+# 1) Deny-all default: backend/, frontend/, design-doc-service/, plans/ (local
+#    reports & artifacts), docs/, tests, VCS, caches, secrets, logs never upload.
+*
+
+# 2) Re-allow the Vercel Root Directory and its contents
+!web
+!web/**
+
+# 3) Generated/dependency/local artifacts INSIDE web (override the re-allow).
+#    node_modules: installed at build time on Vercel; .next: build output;
+#    logs/logDebug/plans/Users: local runtime/debug artifacts; tsbuildinfo:
+#    incremental-build cache; .DS_Store: macOS noise.
+web/node_modules/
+web/.next/
+web/logs/
+web/logDebug/
+web/plans/
+web/Users/
+web/tsconfig.tsbuildinfo
+web/.DS_Store
+**/.DS_Store
+
+# 4) Secrets guard (also excluded by the deny-all, but explicit in case someone
+#    later widens the whitelist). .env.example is documentation, not a secret.
+web/.env
+web/.env.*
+!web/.env.example

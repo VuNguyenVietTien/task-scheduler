@@ -1,5 +1,16 @@
 import '@testing-library/jest-dom'
 import 'whatwg-fetch'
+import { webcrypto } from 'crypto'
+import { TextDecoder, TextEncoder } from 'util'
+
+// jsdom does not expose Node's encoding globals, but server-side auth code uses
+// the standard Web API implementations that are available in production.
+global.TextEncoder = TextEncoder
+global.TextDecoder = TextDecoder
+Object.defineProperty(global, 'crypto', {
+  configurable: true,
+  value: webcrypto,
+})
 
 // Mock intersectionObserver
 global.IntersectionObserver = class IntersectionObserver {

@@ -1,9 +1,9 @@
-use async_graphql::{Context, Object, ID, Result, InputObject};
-use uuid::Uuid;
-use sqlx::{PgPool, Row};
 use crate::auth::error::AuthError;
-use crate::graphql::context::Context as GraphQLContext;
 use crate::db::queries::user;
+use crate::graphql::context::Context as GraphQLContext;
+use async_graphql::{Context, InputObject, Object, Result, ID};
+use sqlx::{PgPool, Row};
+use uuid::Uuid;
 
 pub struct UserResponse {
     pub id: String,
@@ -17,7 +17,7 @@ pub struct UserResponse {
     pub updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-#[Object]
+#[Object(rename_fields = "snake_case", rename_args = "snake_case")]
 impl UserResponse {
     async fn id(&self) -> &str {
         &self.id
@@ -77,13 +77,13 @@ impl TryFrom<sqlx::postgres::PgRow> for UserResponse {
 #[derive(Default)]
 pub struct UserQuery;
 
-#[Object]
+#[Object(rename_fields = "snake_case", rename_args = "snake_case")]
 impl UserQuery {
     pub async fn me(&self, ctx: &Context<'_>) -> Result<UserResponse> {
         let db = ctx.data::<PgPool>().unwrap();
         let user_id = ctx.data::<String>().unwrap();
-        let user_id = Uuid::parse_str(user_id)
-            .map_err(|_| async_graphql::Error::new("Invalid user ID"))?;
+        let user_id =
+            Uuid::parse_str(user_id).map_err(|_| async_graphql::Error::new("Invalid user ID"))?;
 
         let record = sqlx::query(
             "SELECT user_id, email, username, full_name, avatar_url, email_verified, role::text, created_at, updated_at 
@@ -103,8 +103,8 @@ impl UserQuery {
 
     pub async fn user(&self, ctx: &Context<'_>, id: ID) -> Result<Option<UserResponse>> {
         let db = ctx.data::<PgPool>().unwrap();
-        let user_id = Uuid::parse_str(&id)
-            .map_err(|_| async_graphql::Error::new("Invalid user ID"))?;
+        let user_id =
+            Uuid::parse_str(&id).map_err(|_| async_graphql::Error::new("Invalid user ID"))?;
 
         let record = sqlx::query(
             "SELECT user_id, email, username, full_name, avatar_url, email_verified, role::text, created_at, updated_at 
@@ -141,6 +141,7 @@ impl UserQuery {
 }
 
 #[derive(Debug, InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct UpdateUserProfileInput {
     pub full_name: Option<String>,
     pub avatar_url: Option<String>,
@@ -149,7 +150,7 @@ pub struct UpdateUserProfileInput {
 #[derive(Default)]
 pub struct UserMutation;
 
-#[Object]
+#[Object(rename_fields = "snake_case", rename_args = "snake_case")]
 impl UserMutation {
     pub async fn update_profile(
         &self,
@@ -158,8 +159,8 @@ impl UserMutation {
     ) -> Result<UserResponse> {
         let db = ctx.data::<PgPool>().unwrap();
         let user_id = ctx.data::<String>().unwrap();
-        let user_id = Uuid::parse_str(user_id)
-            .map_err(|_| async_graphql::Error::new("Invalid user ID"))?;
+        let user_id =
+            Uuid::parse_str(user_id).map_err(|_| async_graphql::Error::new("Invalid user ID"))?;
 
         let record = sqlx::query(
             "UPDATE users 
@@ -191,55 +192,47 @@ impl UserMutation {
     ) -> Result<bool> {
         let context = ctx.data::<GraphQLContext>()?;
         let pool = &context.db;
-        
+
         // Get current user from context
-        let current_user = context.auth.as_ref()
+        let current_user = context
+            .auth
+            .as_ref()
             .ok_or_else(|| AuthError::Unauthorized("Not authenticated".to_string()))?;
-        
+
         let user_id = current_user.user_id()?;
-        
+
         // Add FCM token to user
-        user::add_fcm_token(
-            pool, 
-            user_id, 
-            &token,
-            device_id.as_deref(),
-        ).await
-        .map_err(|e| {
-            eprintln!("Error registering FCM token: {:?}", e);
-            AuthError::Database(e)
-        })?;
-        
+        user::add_fcm_token(pool, user_id, &token, device_id.as_deref())
+            .await
+            .map_err(|e| {
+                eprintln!("Error registering FCM token: {:?}", e);
+                AuthError::Database(e)
+            })?;
+
         Ok(true)
     }
 
     /// Unregister FCM token
-    pub async fn unregister_fcm_token(
-        &self,
-        ctx: &Context<'_>,
-        token: String,
-    ) -> Result<bool> {
+    pub async fn unregister_fcm_token(&self, ctx: &Context<'_>, token: String) -> Result<bool> {
         let context = ctx.data::<GraphQLContext>()?;
         let pool = &context.db;
-        
+
         // Get current user from context
-        let current_user = context.auth.as_ref()
+        let current_user = context
+            .auth
+            .as_ref()
             .ok_or_else(|| AuthError::Unauthorized("Not authenticated".to_string()))?;
-        
+
         let user_id = current_user.user_id()?;
-        
+
         // Remove FCM token from user
-        user::remove_fcm_token(
-            pool, 
-            user_id, 
-            &token
-        )
-        .await
-        .map_err(|e| {
-            eprintln!("Error unregistering FCM token: {:?}", e);
-            AuthError::Database(e)
-        })?;
-        
+        user::remove_fcm_token(pool, user_id, &token)
+            .await
+            .map_err(|e| {
+                eprintln!("Error unregistering FCM token: {:?}", e);
+                AuthError::Database(e)
+            })?;
+
         Ok(true)
     }
 }

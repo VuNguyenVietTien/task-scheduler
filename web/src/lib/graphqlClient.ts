@@ -1,118 +1,33 @@
-import { createBrowserClient } from '@/lib/supabase/client';
+/**
+ * @deprecated RETIRED 2026-08-31 (W2 transport migration).
+ *
+ * The former implementation POSTed to the same-origin Next Yoga route
+ * `/api/graphql` with a Supabase session token. That transport is retired:
+ * the active Apollo client (`@/lib/apollo-client`) now calls the Rust backend
+ * (NEXT_PUBLIC_BACKEND_URL/graphql) with a Firebase ID-token Bearer header.
+ *
+ * This stub exists only because two dead files still import it
+ * (`src/lib/projectApi.ts`, `src/lib/taskApi.ts` — both have no importers of
+ * their own and are slated for deletion with their owning group). Calling
+ * `graphqlRequest` now fails loudly instead of silently hitting a retired
+ * endpoint. It re-exports nothing misleading beyond the input types.
+ */
 
-const GRAPHQL_ENDPOINT = '/api/graphql';
+export type {
+  RegisterInput,
+  LoginInput,
+  CreateProjectInput,
+  CreateTaskInput,
+  UpdateTaskInput,
+} from './graphqlClient.types';
 
-interface GraphQLResponse<T> {
-  data?: T;
-  errors?: Array<{
-    message: string;
-    locations?: Array<{ line: number; column: number }>;
-    path?: string[];
-  }>;
-}
-
-// Main GraphQL request function — uses Supabase session for auth
 export async function graphqlRequest<T = unknown>(
-  query: string,
-  variables?: Record<string, unknown>,
+  _query: string,
+  _variables?: Record<string, unknown>,
 ): Promise<T> {
-  const supabase = createBrowserClient();
-  const { data: { session } } = await supabase.auth.getSession();
-
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-  };
-
-  if (session?.access_token) {
-    headers.Authorization = `Bearer ${session.access_token}`;
-  }
-
-  const response = await fetch(GRAPHQL_ENDPOINT, {
-    method: 'POST',
-    credentials: 'same-origin',
-    headers,
-    body: JSON.stringify({ query, variables }),
-  });
-
-  if (response.status === 401) {
-    window.location.href = '/auth';
-    throw new Error('Unauthorized');
-  }
-
-  const result: GraphQLResponse<T> = await response.json();
-
-  if (result.errors) {
-    const error = new Error(result.errors[0].message);
-    if (result.errors[0].message.toLowerCase().includes('unauthenticated')) {
-      window.location.href = '/auth';
-    }
-    throw error;
-  }
-
-  return result.data as T;
+  throw new Error(
+    'graphqlRequest is retired (W2 transport migration, 2026-08-31): the ' +
+      'Supabase-session same-origin GraphQL bridge no longer exists. Use the ' +
+      'Apollo client from @/lib/apollo-client instead.'
+  );
 }
-
-// Re-export types for backward compatibility
-export type { RegisterInput, LoginInput, CreateProjectInput, CreateTaskInput, UpdateTaskInput } from './graphqlClient.types';
-
-// Authentication Mutations
-export const registerMutation = `
-  mutation Register($input: RegisterInput!) {
-    register(input: $input) {
-      token
-      expires_in
-      user { id email name role verified }
-    }
-  }
-`;
-
-export const loginMutation = `
-  mutation Login($input: LoginInput!) {
-    login(input: $input) {
-      token
-      expires_in
-      user { id email name role verified }
-    }
-  }
-`;
-
-// Project Mutations
-export const createProjectMutation = `
-  mutation CreateProject($input: CreateProjectInput!) {
-    create_project(input: $input) {
-      id name description status priority visibility
-      created_at updated_at
-      owner { user_id email full_name avatar_url }
-    }
-  }
-`;
-
-// Task Mutations
-export const createTaskMutation = `
-  mutation CreateTask($input: CreateTaskInput!) {
-    create_task(input: $input) {
-      task_id title description status
-    }
-  }
-`;
-
-export const updateTaskMutation = `
-  mutation UpdateTask($input: UpdateTaskInput!) {
-    update_task(input: $input) {
-      task_id title description status priority_order
-      start_date due_date updated_at
-    }
-  }
-`;
-
-// Task Queries
-export const getTasksQuery = `
-  query GetTasks($project_id: ID!) {
-    tasks(project_id: $project_id) {
-      task_id title description status effort priority_order priority
-      progress start_date due_date actual_start_date actual_end_date
-      created_at updated_at
-      assignee { user_id username avatar_url }
-    }
-  }
-`;

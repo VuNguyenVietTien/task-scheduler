@@ -1,18 +1,21 @@
-use jsonwebtoken::{decode, Algorithm, DecodingKey, Validation, decode_header, encode, Header, EncodingKey};
+use base64::engine::general_purpose::STANDARD as BASE64;
+use base64::Engine;
+use jsonwebtoken::{
+    decode, decode_header, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation,
+};
+use log::{debug, error, info, warn};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::error::Error;
-use std::sync::Arc;
-use std::fs;
-use std::time::{SystemTime, UNIX_EPOCH, Duration};
-use tokio::sync::RwLock;
-use log::{info, error, debug, warn};
-use base64::Engine;
-use base64::engine::general_purpose::STANDARD as BASE64;
 use std::collections::HashMap;
+use std::error::Error;
+use std::fs;
+use std::sync::Arc;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::sync::RwLock;
 
-const FIREBASE_PUBLIC_KEYS_URL: &str = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
+const FIREBASE_PUBLIC_KEYS_URL: &str =
+    "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com";
 const FCM_AUTH_URL: &str = "https://oauth2.googleapis.com/token";
 const FCM_V1_SEND_URL: &str = "https://fcm.googleapis.com/v1/projects/{}/messages:send";
 
@@ -108,40 +111,49 @@ impl std::fmt::Debug for FirebaseService {
 
 impl FirebaseService {
     pub fn new(service_account_path: String) -> Result<Self, Box<dyn Error>> {
-        info!("[Firebase] Loading service account from: {}", service_account_path);
+        info!(
+            "[Firebase] Loading service account from: {}",
+            service_account_path
+        );
 
         // Read and parse the service account file
         let contents = fs::read_to_string(&service_account_path)?;
-        let service_account: ServiceAccount = serde_json::from_str(&contents)
-            .map_err(|e| {
-                error!("[Firebase] Failed to parse service account JSON: {}", e);
-                e
-            })?;
+        let service_account: ServiceAccount = serde_json::from_str(&contents).map_err(|e| {
+            error!("[Firebase] Failed to parse service account JSON: {}", e);
+            e
+        })?;
 
-        info!("[Firebase] Initialized with project_id: {}", service_account.project_id);
+        info!(
+            "[Firebase] Initialized with project_id: {}",
+            service_account.project_id
+        );
 
         // Tìm server key từ nhiều nguồn khác nhau
         // 1. Đầu tiên, thử từ biến môi trường
         let mut server_key = std::env::var("FIREBASE_SERVER_KEY").ok();
-        
-        // 2. Nếu không có, thử đọc từ file riêng 
+
+        // 2. Nếu không có, thử đọc từ file riêng
         if server_key.is_none() {
             let server_key_path = format!("{}.key", service_account_path);
             if let Ok(key) = fs::read_to_string(&server_key_path) {
-                info!("[Firebase] FCM server key loaded from file: {}", server_key_path);
+                info!(
+                    "[Firebase] FCM server key loaded from file: {}",
+                    server_key_path
+                );
                 server_key = Some(key.trim().to_string());
             }
         }
-        
+
         // 3. Fallback: Sử dụng key test cứng cho phát triển
         if server_key.is_none() {
             // SỬ DỤNG KEY MẶC ĐỊNH CHỈ CHO MÔI TRƯỜNG DEV
-            if cfg!(debug_assertions) { // Kiểm tra nếu đang trong chế độ debug
+            if cfg!(debug_assertions) {
+                // Kiểm tra nếu đang trong chế độ debug
                 warn!("[Firebase] USING DEVELOPMENT SERVER KEY - NOT SECURE FOR PRODUCTION");
                 server_key = Some("DEVELOPMENT_SERVER_KEY".to_string());
             }
         }
-        
+
         if server_key.is_some() {
             info!("[Firebase] FCM server key loaded successfully");
         } else {
@@ -158,21 +170,28 @@ impl FirebaseService {
     }
 
     fn has_valid_credentials(&self) -> bool {
-        !self.service_account.private_key.is_empty() && 
-        !self.service_account.client_email.is_empty()
+        !self.service_account.private_key.is_empty()
+            && !self.service_account.client_email.is_empty()
     }
 
     async fn refresh_public_keys(&self) -> Result<(), Box<dyn Error>> {
-        info!("[Firebase] Refreshing public keys from {}", FIREBASE_PUBLIC_KEYS_URL);
-        
-        let response = self.http_client.get(FIREBASE_PUBLIC_KEYS_URL).send().await?;
+        info!(
+            "[Firebase] Refreshing public keys from {}",
+            FIREBASE_PUBLIC_KEYS_URL
+        );
+
+        let response = self
+            .http_client
+            .get(FIREBASE_PUBLIC_KEYS_URL)
+            .send()
+            .await?;
         let keys = response.json::<Value>().await?;
-        
+
         debug!("[Firebase] Received public keys: {:?}", keys);
-        
+
         *self.public_keys.write().await = keys;
         info!("[Firebase] Public keys refreshed successfully");
-        
+
         Ok(())
     }
 
@@ -180,11 +199,10 @@ impl FirebaseService {
         info!("[Firebase] Starting token verification");
 
         // Parse and validate token header
-        let header = decode_header(token)
-            .map_err(|e| {
-                error!("[Firebase] Failed to decode token header: {}", e);
-                e
-            })?;
+        let header = decode_header(token).map_err(|e| {
+            error!("[Firebase] Failed to decode token header: {}", e);
+            e
+        })?;
         info!("[Firebase] Token header: {:?}", header);
 
         // Check algorithm
@@ -216,10 +234,7 @@ impl FirebaseService {
 
         // Set up validation
         let mut validation = Validation::new(Algorithm::RS256);
-        let expected_issuer = format!(
-            "https://securetoken.google.com/{}",
-            self.project_id
-        );
+        let expected_issuer = format!("https://securetoken.google.com/{}", self.project_id);
         validation.set_audience(&[&self.project_id]);
         validation.set_issuer(&[&expected_issuer]);
 
@@ -228,11 +243,14 @@ impl FirebaseService {
         info!("[Firebase] - Expected issuer: {}", expected_issuer);
 
         // Decode and verify token
-        let token_data = decode::<FirebaseClaims>(token, &decoding_key, &validation)
-            .map_err(|e| {
+        let token_data =
+            decode::<FirebaseClaims>(token, &decoding_key, &validation).map_err(|e| {
                 error!("[Firebase] Token verification failed: {}", e);
                 error!("[Firebase] Token claims may not match expected values:");
-                error!("[Firebase] - Expected project_id (aud): {}", self.project_id);
+                error!(
+                    "[Firebase] - Expected project_id (aud): {}",
+                    self.project_id
+                );
                 error!("[Firebase] - Expected issuer: {}", expected_issuer);
                 e
             })?;
@@ -265,7 +283,10 @@ impl FirebaseService {
         notification: FcmNotificationPayload,
         data: FcmDataPayload,
     ) -> Result<(), Box<dyn Error>> {
-        info!("[Firebase] Sending FCM notification to device: {}", device_token);
+        info!(
+            "[Firebase] Sending FCM notification to device: {}",
+            device_token
+        );
         debug!("[Firebase] Notification data: {:?}", notification);
 
         // Nếu đang ở chế độ debug và dev_mode = true thì chỉ log không gửi
@@ -279,77 +300,94 @@ impl FirebaseService {
         // }
 
         let fcm_message = self.build_fcm_message(device_token, &notification, &data);
-        
+
         // DEV MODE FALLBACK
         if cfg!(debug_assertions) && !self.has_valid_credentials() {
             warn!("[Firebase] Running in DEV MODE without valid credentials");
-            info!("[Firebase] DEV MODE: FCM would be sent to: {}", device_token);
+            info!(
+                "[Firebase] DEV MODE: FCM would be sent to: {}",
+                device_token
+            );
             info!("[Firebase] DEV MODE: Title: {}", notification.title);
             info!("[Firebase] DEV MODE: Body: {}", notification.body);
             return Ok(());
         }
-        
-        info!("[Firebase] Sending FCM notification to device: {}", device_token);
+
+        info!(
+            "[Firebase] Sending FCM notification to device: {}",
+            device_token
+        );
         debug!("[Firebase] Notification data: {:?}", notification);
-        
+
         // Đầu tiên, authenticate với Google để lấy access token
         // Sử dụng service account để tạo JWT và exchange lấy access token
         let jwt = create_auth_token(&self.service_account)?;
-        
-        let token_response = self.http_client
+
+        let token_response = self
+            .http_client
             .post(FCM_AUTH_URL)
             .form(&[
                 ("grant_type", "urn:ietf:params:oauth:grant-type:jwt-bearer"),
-                ("assertion", &jwt)
+                ("assertion", &jwt),
             ])
             .send()
             .await?;
-            
+
         if !token_response.status().is_success() {
             let status = token_response.status();
             let error_text = token_response.text().await?;
-            error!("[Firebase] FCM auth failed: Status: {}, Response: {}", status, error_text);
+            error!(
+                "[Firebase] FCM auth failed: Status: {}, Response: {}",
+                status, error_text
+            );
             return Err(format!("FCM auth failed: {}", error_text).into());
         }
-        
+
         let token_data: AccessTokenResponse = token_response.json().await?;
-        
+
         // Gửi request đến FCM HTTP v1 API
         let fcm_url = FCM_V1_SEND_URL.replace("{}", &self.project_id);
-        
-        let response = self.http_client
+
+        let response = self
+            .http_client
             .post(&fcm_url)
             .bearer_auth(&token_data.access_token)
             .header("Content-Type", "application/json")
             .json(&fcm_message)
             .send()
             .await?;
-            
+
         if !response.status().is_success() {
             let status = response.status();
             let error_text = response.text().await?;
-            error!("[Firebase] FCM send failed: Status: {}, Response: {}", status, error_text);
+            error!(
+                "[Firebase] FCM send failed: Status: {}, Response: {}",
+                status, error_text
+            );
             return Err(format!("FCM send failed: {}", error_text).into());
         }
-        
+
         let response_json = response.json::<Value>().await?;
         info!("[Firebase] FCM send successful: {:?}", response_json);
-        
+
         // Log more detailed FCM response for debugging
-        debug!("[Firebase] FCM detailed response for token {}: {}", 
-               device_token,
-               serde_json::to_string_pretty(&response_json).unwrap_or_else(|_| "Could not serialize response".to_string()));
-                
+        debug!(
+            "[Firebase] FCM detailed response for token {}: {}",
+            device_token,
+            serde_json::to_string_pretty(&response_json)
+                .unwrap_or_else(|_| "Could not serialize response".to_string())
+        );
+
         // Extract the message ID from response for tracking
         if let Some(name) = response_json.get("name") {
             if let Some(message_id) = name.as_str() {
                 info!("[Firebase] FCM message sent with ID: {}", message_id);
             }
         }
-        
+
         Ok(())
     }
-    
+
     /// Send a Firebase Cloud Messaging (FCM) notification to multiple devices
     pub async fn send_fcm_notification_to_multiple(
         &self,
@@ -358,14 +396,17 @@ impl FirebaseService {
         data: FcmDataPayload,
     ) -> Result<(), Box<dyn Error>> {
         for token in device_tokens {
-            match self.send_fcm_notification(token, notification.clone(), data.clone()).await {
+            match self
+                .send_fcm_notification(token, notification.clone(), data.clone())
+                .await
+            {
                 Ok(_) => info!("[Firebase] FCM notification sent to device: {}", token),
                 Err(e) => error!("[Firebase] Failed to send FCM to device {}: {}", token, e),
             }
         }
         Ok(())
     }
-    
+
     /// Send a Firebase Cloud Messaging (FCM) notification to multiple tokens and return detailed response
     pub async fn send_notification_to_tokens(
         &self,
@@ -387,17 +428,23 @@ impl FirebaseService {
         let mut results = serde_json::Map::new();
 
         for token in device_tokens {
-            match self.send_fcm_notification(&token, notification.clone(), data.clone()).await {
+            match self
+                .send_fcm_notification(&token, notification.clone(), data.clone())
+                .await
+            {
                 Ok(_) => {
                     success_count += 1;
                     results.insert(token.clone(), serde_json::json!({ "status": "success" }));
-                },
+                }
                 Err(e) => {
                     failure_count += 1;
-                    results.insert(token.clone(), serde_json::json!({ 
-                        "status": "error",
-                        "error": e.to_string()
-                    }));
+                    results.insert(
+                        token.clone(),
+                        serde_json::json!({
+                            "status": "error",
+                            "error": e.to_string()
+                        }),
+                    );
                 }
             }
         }
@@ -431,9 +478,10 @@ impl FirebaseService {
         };
 
         let apns_config = ApnsConfig {
-            headers: Some(HashMap::from([
-                ("apns-priority".to_string(), "10".to_string()),
-            ])),
+            headers: Some(HashMap::from([(
+                "apns-priority".to_string(),
+                "10".to_string(),
+            )])),
             payload: Some(ApnsPayload {
                 aps: Aps {
                     alert: Some(ApsAlert {
@@ -451,38 +499,39 @@ impl FirebaseService {
             }),
             ..Default::default()
         };
-        
+
         // Thêm Web Push config
         let webpush_config = WebPushConfig {
-            headers: Some(HashMap::from([
-                ("Urgency".to_string(), "high".to_string()),
-            ])),
+            headers: Some(HashMap::from([("Urgency".to_string(), "high".to_string())])),
             ..Default::default()
         };
 
         // Serialize data to a JSON object that FCM can handle
         let mut fcm_data = HashMap::new();
         fcm_data.insert("notification_id".to_string(), data.notification_id.clone());
-        fcm_data.insert("notification_type".to_string(), data.notification_type.clone());
-        
+        fcm_data.insert(
+            "notification_type".to_string(),
+            data.notification_type.clone(),
+        );
+
         if let Some(project_id) = &data.project_id {
             fcm_data.insert("project_id".to_string(), project_id.clone());
         }
-        
+
         if let Some(task_id) = &data.task_id {
             fcm_data.insert("task_id".to_string(), task_id.clone());
         }
-        
+
         if let Some(comment_id) = &data.comment_id {
             fcm_data.insert("comment_id".to_string(), comment_id.clone());
         }
-        
+
         fcm_data.insert("user_id".to_string(), data.user_id.clone());
-        
+
         if let Some(sender_id) = &data.sender_id {
             fcm_data.insert("sender_id".to_string(), sender_id.clone());
         }
-        
+
         // Thêm các giá trị extra nếu có
         for (key, value) in &data.extra {
             fcm_data.insert(key.clone(), value.clone());
@@ -504,11 +553,14 @@ impl FirebaseService {
                 ..Default::default()
             },
         };
-        
+
         // Log the final message structure for debugging
-        debug!("[Firebase] Final FCM message structure: {}", 
-               serde_json::to_string_pretty(&fcm_message).unwrap_or_else(|_| "Could not serialize message".to_string()));
-        
+        debug!(
+            "[Firebase] Final FCM message structure: {}",
+            serde_json::to_string_pretty(&fcm_message)
+                .unwrap_or_else(|_| "Could not serialize message".to_string())
+        );
+
         fcm_message
     }
 }
@@ -553,7 +605,7 @@ mod tests {
 fn create_auth_token(service_account: &ServiceAccount) -> Result<String, Box<dyn Error>> {
     let now = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
     let token_expiration = 3600; // 1 hour
-    
+
     let claims = serde_json::json!({
         "iss": service_account.client_email,
         "sub": service_account.client_email,
@@ -562,25 +614,31 @@ fn create_auth_token(service_account: &ServiceAccount) -> Result<String, Box<dyn
         "exp": now + token_expiration,
         "scope": "https://www.googleapis.com/auth/firebase.messaging"
     });
-    
+
     // Create JWT header with RS256 algorithm (standard for Google services)
     let header = Header::new(Algorithm::RS256);
-    
+
     // Normalize private key - replace escaped newlines and clean up
     let mut private_key = service_account.private_key.replace("\\n", "\n");
-    
+
     // Also handle Windows line endings and any whitespace issues
     private_key = private_key.replace("\r\n", "\n").trim().to_string();
-    
-    info!("[Firebase] Processing private key for JWT creation (length: {})", private_key.len());
-    
+
+    info!(
+        "[Firebase] Processing private key for JWT creation (length: {})",
+        private_key.len()
+    );
+
     // If the private key doesn't have the proper PEM header/footer, add them
     let formatted_key = if !private_key.contains("-----BEGIN PRIVATE KEY-----") {
-        format!("-----BEGIN PRIVATE KEY-----\n{}\n-----END PRIVATE KEY-----", private_key)
+        format!(
+            "-----BEGIN PRIVATE KEY-----\n{}\n-----END PRIVATE KEY-----",
+            private_key
+        )
     } else {
         private_key
     };
-    
+
     // Method 1: Try to create encoding key from standard PEM format
     match EncodingKey::from_rsa_pem(formatted_key.as_bytes()) {
         Ok(key) => {
@@ -589,19 +647,19 @@ fn create_auth_token(service_account: &ServiceAccount) -> Result<String, Box<dyn
                 Ok(token) => {
                     info!("[Firebase] JWT token created successfully with RSA PEM");
                     return Ok(token);
-                },
+                }
                 Err(e) => {
                     warn!("[Firebase] Failed to encode JWT with RSA key: {}", e);
                     // Continue to next method
                 }
             }
-        },
+        }
         Err(e) => {
             warn!("[Firebase] Failed to load RSA key: {}", e);
             // Continue to next method
         }
     }
-    
+
     // Method 2: Try with EC PEM instead
     info!("[Firebase] Trying EC PEM key format");
     match EncodingKey::from_ec_pem(formatted_key.as_bytes()) {
@@ -611,19 +669,19 @@ fn create_auth_token(service_account: &ServiceAccount) -> Result<String, Box<dyn
                 Ok(token) => {
                     info!("[Firebase] JWT token created successfully with EC PEM");
                     return Ok(token);
-                },
+                }
                 Err(e) => {
                     warn!("[Firebase] Failed to encode JWT with EC PEM key: {}", e);
                     // Continue to next method
                 }
             }
-        },
+        }
         Err(e) => {
             warn!("[Firebase] Failed to load EC PEM key: {}", e);
             // Continue to next method
         }
     }
-    
+
     // Method 3: Try to extract the base64 content from PEM and decode to DER
     info!("[Firebase] Trying with base64 extraction from PEM");
     let pem_content = formatted_key
@@ -632,19 +690,22 @@ fn create_auth_token(service_account: &ServiceAccount) -> Result<String, Box<dyn
         .replace("\n", "")
         .trim()
         .to_string();
-    
+
     if let Ok(der_bytes) = BASE64.decode(&pem_content) {
-        info!("[Firebase] Successfully decoded base64 to DER (length: {})", der_bytes.len());
-        
+        info!(
+            "[Firebase] Successfully decoded base64 to DER (length: {})",
+            der_bytes.len()
+        );
+
         // Create an encoding key using simpler approach
         let der_result = EncodingKey::from_rsa_der(&der_bytes);
         info!("[Firebase] Successfully created RSA key from DER");
-        
+
         match encode(&header, &claims, &der_result) {
             Ok(token) => {
                 info!("[Firebase] JWT token created successfully with RSA DER");
                 return Ok(token);
-            },
+            }
             Err(e) => {
                 warn!("[Firebase] Failed to encode JWT with RSA DER key: {}", e);
             }
@@ -652,7 +713,7 @@ fn create_auth_token(service_account: &ServiceAccount) -> Result<String, Box<dyn
     } else {
         warn!("[Firebase] Failed to decode base64 to DER");
     }
-    
+
     // Method 4: Last resort - try with secret key
     info!("[Firebase] Trying with secret key as last resort");
     let secret_key = EncodingKey::from_secret(formatted_key.as_bytes());
@@ -660,12 +721,18 @@ fn create_auth_token(service_account: &ServiceAccount) -> Result<String, Box<dyn
         Ok(token) => {
             info!("[Firebase] JWT token created successfully with secret key");
             return Ok(token);
-        },
+        }
         Err(e) => {
-            error!("[Firebase] All key parsing methods failed. Last error: {}", e);
-            error!("[Firebase] Private key length: {}", service_account.private_key.len());
+            error!(
+                "[Firebase] All key parsing methods failed. Last error: {}",
+                e
+            );
+            error!(
+                "[Firebase] Private key length: {}",
+                service_account.private_key.len()
+            );
             error!("[Firebase] Please verify the service account key is valid");
-            
+
             return Err(format!("Failed to create JWT token: {}", e).into());
         }
     }
@@ -703,9 +770,7 @@ struct WebPushConfig {
 
 impl Default for WebPushConfig {
     fn default() -> Self {
-        Self {
-            headers: None,
-        }
+        Self { headers: None }
     }
 }
 

@@ -1,10 +1,10 @@
-use crate::db::models::{Bug, Report, ReportTask};
 use crate::db::enums::TaskStatus;
+use crate::db::models::{Bug, Report, ReportTask};
 use chrono::{NaiveDate, Utc};
+use serde;
 use serde_json::Value;
 use sqlx::{postgres::PgRow, PgPool, Row};
 use uuid::Uuid;
-use serde;
 
 // Thêm các định nghĩa BugSeverity và BugStatus
 #[derive(Debug, Clone, Copy, PartialEq, Eq, sqlx::Type, serde::Serialize, serde::Deserialize)]
@@ -31,7 +31,7 @@ pub enum ReportType {
     Daily,
     Weekly,
     Monthly,
-    Quarterly
+    Quarterly,
 }
 
 /// Lấy báo cáo theo ID
@@ -39,41 +39,39 @@ pub async fn get_report_by_id(
     pool: &PgPool,
     report_id: Uuid,
 ) -> Result<Option<Report>, sqlx::Error> {
-    sqlx::query(
-        "SELECT * FROM reports WHERE id = $1"
-    )
-    .bind(report_id)
-    .map(|row: PgRow| {
-        Ok(Report {
-            id: row.try_get("id")?,
-            report_type: row.try_get("report_type")?,
-            report_date: row.try_get("report_date")?,
-            project_id: row.try_get("project_id")?,
-            plan_id: row.try_get("plan_id")?,
-            period_start_date: row.try_get("period_start_date")?,
-            period_end_date: row.try_get("period_end_date")?,
-            total_tasks: row.try_get("total_tasks")?,
-            completed_tasks: row.try_get("completed_tasks")?,
-            delayed_tasks: row.try_get("delayed_tasks")?,
-            on_schedule_tasks: row.try_get("on_schedule_tasks")?,
-            new_started_tasks: row.try_get("new_started_tasks")?,
-            unassigned_resources: row.try_get("unassigned_resources")?,
-            total_bugs: row.try_get("total_bugs")?,
-            critical_bugs: row.try_get("critical_bugs")?,
-            major_bugs: row.try_get("major_bugs")?,
-            minor_bugs: row.try_get("minor_bugs")?,
-            resolved_bugs: row.try_get("resolved_bugs")?,
-            rejected_tasks: row.try_get("rejected_tasks")?,
-            on_schedule_percentage: row.try_get("on_schedule_percentage")?,
-            delay_percentage: row.try_get("delay_percentage")?,
-            summary: row.try_get("summary")?,
-            created_at: row.try_get("created_at")?,
-            updated_at: row.try_get("updated_at")?,
+    sqlx::query("SELECT * FROM reports WHERE id = $1")
+        .bind(report_id)
+        .map(|row: PgRow| {
+            Ok(Report {
+                id: row.try_get("id")?,
+                report_type: row.try_get("report_type")?,
+                report_date: row.try_get("report_date")?,
+                project_id: row.try_get("project_id")?,
+                plan_id: row.try_get("plan_id")?,
+                period_start_date: row.try_get("period_start_date")?,
+                period_end_date: row.try_get("period_end_date")?,
+                total_tasks: row.try_get("total_tasks")?,
+                completed_tasks: row.try_get("completed_tasks")?,
+                delayed_tasks: row.try_get("delayed_tasks")?,
+                on_schedule_tasks: row.try_get("on_schedule_tasks")?,
+                new_started_tasks: row.try_get("new_started_tasks")?,
+                unassigned_resources: row.try_get("unassigned_resources")?,
+                total_bugs: row.try_get("total_bugs")?,
+                critical_bugs: row.try_get("critical_bugs")?,
+                major_bugs: row.try_get("major_bugs")?,
+                minor_bugs: row.try_get("minor_bugs")?,
+                resolved_bugs: row.try_get("resolved_bugs")?,
+                rejected_tasks: row.try_get("rejected_tasks")?,
+                on_schedule_percentage: row.try_get("on_schedule_percentage")?,
+                delay_percentage: row.try_get("delay_percentage")?,
+                summary: row.try_get("summary")?,
+                created_at: row.try_get("created_at")?,
+                updated_at: row.try_get("updated_at")?,
+            })
         })
-    })
-    .fetch_optional(pool)
-    .await?
-    .transpose()
+        .fetch_optional(pool)
+        .await?
+        .transpose()
 }
 
 /// Lấy danh sách báo cáo theo dự án và loại báo cáo
@@ -84,7 +82,7 @@ pub async fn get_reports_by_project(
     sqlx::query(
         "SELECT * FROM reports 
         WHERE project_id = $1
-        ORDER BY created_at DESC"
+        ORDER BY created_at DESC",
     )
     .bind(project_id)
     .map(|row: PgRow| {
@@ -126,66 +124,62 @@ pub async fn get_report_tasks(
     pool: &PgPool,
     report_id: Uuid,
 ) -> Result<Vec<ReportTask>, sqlx::Error> {
-    sqlx::query(
-        "SELECT * FROM report_tasks WHERE report_id = $1"
-    )
-    .bind(report_id)
-    .map(|row: PgRow| {
-        Ok(ReportTask {
-            id: row.try_get("id")?,
-            report_id: row.try_get("report_id")?,
-            task_id: row.try_get("task_id")?,
-            task_title: row.try_get("task_title")?,
-            assignee_id: row.try_get("assignee_id")?,
-            planned_start_date: row.try_get("planned_start_date")?,
-            planned_end_date: row.try_get("planned_end_date")?,
-            actual_start_date: row.try_get("actual_start_date")?,
-            actual_end_date: row.try_get("actual_end_date")?,
-            status: row.try_get("status")?,
-            is_delayed: row.try_get("is_delayed")?,
-            delay_reason: row.try_get("delay_reason")?,
-            remarks: row.try_get("remarks")?,
-            created_at: row.try_get("created_at")?,
+    sqlx::query("SELECT * FROM report_tasks WHERE report_id = $1")
+        .bind(report_id)
+        .map(|row: PgRow| {
+            Ok(ReportTask {
+                id: row.try_get("id")?,
+                report_id: row.try_get("report_id")?,
+                task_id: row.try_get("task_id")?,
+                task_title: row.try_get("task_title")?,
+                assignee_id: row.try_get("assignee_id")?,
+                planned_start_date: row.try_get("planned_start_date")?,
+                planned_end_date: row.try_get("planned_end_date")?,
+                actual_start_date: row.try_get("actual_start_date")?,
+                actual_end_date: row.try_get("actual_end_date")?,
+                status: row.try_get("status")?,
+                is_delayed: row.try_get("is_delayed")?,
+                delay_reason: row.try_get("delay_reason")?,
+                remarks: row.try_get("remarks")?,
+                created_at: row.try_get("created_at")?,
+            })
         })
-    })
-    .fetch_all(pool)
-    .await?
-    .into_iter()
-    .collect::<Result<Vec<_>, _>>()
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
 }
 
 /// Lấy tất cả các bug của một dự án
 pub async fn get_bugs_by_project(pool: &PgPool, project_id: Uuid) -> Result<Vec<Bug>, sqlx::Error> {
-    sqlx::query(
-        "SELECT * FROM bugs WHERE project_id = $1"
-    )
-    .bind(project_id)
-    .map(|row: PgRow| {
-        Ok(Bug {
-            id: row.try_get("id")?,
-            task_id: row.try_get("task_id")?,
-            project_id: row.try_get("project_id")?,
-            title: row.try_get("title")?,
-            description: row.try_get("description")?,
-            severity: row.try_get("severity")?,
-            status: row.try_get("status")?,
-            priority: row.try_get("priority")?,
-            assignee_id: row.try_get("assignee_id")?,
-            reporter_id: row.try_get("reporter_id")?,
-            date_discovered: row.try_get("date_discovered")?,
-            date_resolved: row.try_get("date_resolved")?,
-            resolution_time: row.try_get("resolution_time")?,
-            resolution_description: row.try_get("resolution_description")?,
-            affected_components: row.try_get("affected_components")?,
-            tags: row.try_get("tags")?,
-            created_at: row.try_get("created_at")?,
-            updated_at: row.try_get("updated_at")?,
+    sqlx::query("SELECT * FROM bugs WHERE project_id = $1")
+        .bind(project_id)
+        .map(|row: PgRow| {
+            Ok(Bug {
+                id: row.try_get("id")?,
+                task_id: row.try_get("task_id")?,
+                project_id: row.try_get("project_id")?,
+                title: row.try_get("title")?,
+                description: row.try_get("description")?,
+                severity: row.try_get("severity")?,
+                status: row.try_get("status")?,
+                priority: row.try_get("priority")?,
+                assignee_id: row.try_get("assignee_id")?,
+                reporter_id: row.try_get("reporter_id")?,
+                date_discovered: row.try_get("date_discovered")?,
+                date_resolved: row.try_get("date_resolved")?,
+                resolution_time: row.try_get("resolution_time")?,
+                resolution_description: row.try_get("resolution_description")?,
+                affected_components: row.try_get("affected_components")?,
+                tags: row.try_get("tags")?,
+                created_at: row.try_get("created_at")?,
+                updated_at: row.try_get("updated_at")?,
+            })
         })
-    })
-    .fetch_all(pool)
-    .await?
-    .into_iter()
-    .collect::<Result<Vec<_>, _>>()
+        .fetch_all(pool)
+        .await?
+        .into_iter()
+        .collect::<Result<Vec<_>, _>>()
 }
 
 /// Tạo báo cáo mới
@@ -340,7 +334,7 @@ pub async fn update_report(
             summary = $20,
             updated_at = $21
         WHERE id = $22
-        RETURNING *"
+        RETURNING *",
     )
     .bind(report_type.unwrap_or(report.report_type))
     .bind(report_date.unwrap_or(report.report_date))
@@ -422,7 +416,7 @@ pub async fn create_report_task(
             status, is_delayed, delay_reason, remarks, created_at
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-        RETURNING *"
+        RETURNING *",
     )
     .bind(report_id)
     .bind(task_id)
@@ -490,7 +484,7 @@ pub async fn create_bug(
             created_at, updated_at
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
-        RETURNING *"
+        RETURNING *",
     )
     .bind(task_id)
     .bind(project_id)

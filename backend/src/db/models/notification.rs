@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::types::Uuid;
 use sqlx::types::JsonValue;
+use sqlx::types::Uuid;
 
 #[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct Notification {
@@ -30,4 +30,4 @@ pub struct CreateNotificationInput {
     pub message: String,
     pub action: String,
     pub metadata: Option<JsonValue>,
-} 
+}

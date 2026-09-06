@@ -1,5 +1,5 @@
-pub mod time;
 pub mod logging;
+pub mod time;
 
-pub use time::*;
 pub use logging::*;
+pub use time::*;

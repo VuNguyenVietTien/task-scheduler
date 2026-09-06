@@ -29,6 +29,7 @@ interface GraphQLTask {
   title: string;
   description?: string;
   assignee?: GraphQLTaskAssignee;
+  assignee_resource_member_id?: string | null;
   priority_order: number;
   start_date?: string;
   due_date?: string;
@@ -110,6 +111,7 @@ const transformGraphQLTask = (graphqlTask: GraphQLTask): Task => {
     title: graphqlTask.title,
     description: graphqlTask.description,
     assignee: transformAssignee(graphqlTask.assignee) as any,
+    assignee_resource_member_id: graphqlTask.assignee_resource_member_id,
     priority_order: graphqlTask.priority_order,
     start_date: graphqlTask.start_date,
     due_date: graphqlTask.due_date,

@@ -1,7 +1,7 @@
+use async_graphql::Enum;
 use serde::{Deserialize, Serialize};
 use sqlx::Type;
 use std::str::FromStr;
-use async_graphql::Enum;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type, Enum)]
 #[sqlx(type_name = "member_role", rename_all = "lowercase")]
@@ -207,7 +207,10 @@ mod tests {
 
     #[test]
     fn test_member_role_fromstr() {
-        assert_eq!(MemberRole::from_str("manager").unwrap(), MemberRole::Manager);
+        assert_eq!(
+            MemberRole::from_str("manager").unwrap(),
+            MemberRole::Manager
+        );
         assert_eq!(MemberRole::from_str("leader").unwrap(), MemberRole::Leader);
         assert_eq!(MemberRole::from_str("member").unwrap(), MemberRole::Member);
         assert_eq!(MemberRole::from_str("guest").unwrap(), MemberRole::Guest);
@@ -220,25 +223,52 @@ mod tests {
 
     #[test]
     fn test_project_status_fromstr() {
-        assert_eq!(ProjectStatus::from_str("active").unwrap(), ProjectStatus::Active);
-        assert_eq!(ProjectStatus::from_str("archived").unwrap(), ProjectStatus::Archived);
-        assert_eq!(ProjectStatus::from_str("completed").unwrap(), ProjectStatus::Completed);
+        assert_eq!(
+            ProjectStatus::from_str("active").unwrap(),
+            ProjectStatus::Active
+        );
+        assert_eq!(
+            ProjectStatus::from_str("archived").unwrap(),
+            ProjectStatus::Archived
+        );
+        assert_eq!(
+            ProjectStatus::from_str("completed").unwrap(),
+            ProjectStatus::Completed
+        );
         assert!(ProjectStatus::from_str("invalid").is_err());
     }
 
     #[test]
     fn test_project_priority_fromstr() {
-        assert_eq!(ProjectPriority::from_str("low").unwrap(), ProjectPriority::Low);
-        assert_eq!(ProjectPriority::from_str("medium").unwrap(), ProjectPriority::Medium);
-        assert_eq!(ProjectPriority::from_str("high").unwrap(), ProjectPriority::High);
+        assert_eq!(
+            ProjectPriority::from_str("low").unwrap(),
+            ProjectPriority::Low
+        );
+        assert_eq!(
+            ProjectPriority::from_str("medium").unwrap(),
+            ProjectPriority::Medium
+        );
+        assert_eq!(
+            ProjectPriority::from_str("high").unwrap(),
+            ProjectPriority::High
+        );
         assert!(ProjectPriority::from_str("invalid").is_err());
     }
 
     #[test]
     fn test_project_visibility_fromstr() {
-        assert_eq!(ProjectVisibility::from_str("public").unwrap(), ProjectVisibility::Public);
-        assert_eq!(ProjectVisibility::from_str("private").unwrap(), ProjectVisibility::Private);
-        assert_eq!(ProjectVisibility::from_str("team").unwrap(), ProjectVisibility::Team);
+        assert_eq!(
+            ProjectVisibility::from_str("public").unwrap(),
+            ProjectVisibility::Public
+        );
+        assert_eq!(
+            ProjectVisibility::from_str("private").unwrap(),
+            ProjectVisibility::Private
+        );
+        assert_eq!(
+            ProjectVisibility::from_str("team").unwrap(),
+            ProjectVisibility::Team
+        );
         assert!(ProjectVisibility::from_str("invalid").is_err());
     }
 

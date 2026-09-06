@@ -1,5 +1,5 @@
 pub mod auth;
-pub mod routes;
 pub mod media;
+pub mod routes;
 
 pub use routes::config;

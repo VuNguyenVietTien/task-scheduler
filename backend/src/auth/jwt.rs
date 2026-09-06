@@ -7,10 +7,10 @@ use crate::Config;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,      // Subject (user ID)
-    pub exp: usize,      // Expiration time (UTC timestamp)
-    pub iat: usize,      // Issued at (UTC timestamp)
-    pub email: String,   // User email
+    pub sub: String,   // Subject (user ID)
+    pub exp: usize,    // Expiration time (UTC timestamp)
+    pub iat: usize,    // Issued at (UTC timestamp)
+    pub email: String, // User email
 }
 
 impl Claims {
@@ -67,6 +67,7 @@ mod tests {
             email_smtp_port: 587,
             email_smtp_user: "".to_string(),
             email_smtp_pass: "".to_string(),
+            ..Default::default()
         }
     }
 

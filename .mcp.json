@@ -1,8 +1,27 @@
 {
   "mcpServers": {
+    "mempalace": {
+      "command": "/Users/TienVNV/.local/share/uv/tools/mempalace/bin/python3.13",
+      "args": [
+        "-m",
+        "mempalace.mcp_server",
+        "--palace",
+        "/Users/TienVNV/.mempalace/palace"
+      ]
+    },
     "supabase": {
       "type": "http",
-      "url": "https://mcp.supabase.com/mcp?project_ref=exzpugzznrosazpsdqpg"
+      "url": "https://mcp.supabase.com/mcp?project_ref=exzpugzznrosazpsdqpg&features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching"
+    },
+    "gitnexus": {
+      "command": "/Users/TienVNV/.nvm/versions/node/v24.13.0/bin/node",
+      "args": [
+        "/Users/TienVNV/.nvm/versions/node/v24.13.0/lib/node_modules/gitnexus/dist/cli/index.js",
+        "mcp"
+      ],
+      "env": {
+        "SCARF_ANALYTICS": "false"
+      }
     }
   }
 }

@@ -5,7 +5,6 @@ export const GET_PROJECT_MEMBERS = gql`
     project_members(project_id: $projectId) {
       role
       joined_at
-      position
       user {
         user_id
         email

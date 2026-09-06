@@ -1,7 +1,7 @@
-use sqlx::{PgPool, Row};
-use uuid::Uuid;
 use chrono::Utc;
 use serde_json::Value as JsonValue;
+use sqlx::{PgPool, Row};
+use uuid::Uuid;
 
 use crate::db::models::Comment;
 
@@ -16,13 +16,14 @@ pub struct PaginationParams {
     pub per_page: i64,
 }
 
-pub async fn get_comment_by_id(pool: &PgPool, comment_id: Uuid) -> Result<Option<Comment>, sqlx::Error> {
-    let row = sqlx::query(
-        "SELECT * FROM comments WHERE comment_id = $1 AND NOT is_deleted"
-    )
-    .bind(comment_id)
-    .fetch_optional(pool)
-    .await?;
+pub async fn get_comment_by_id(
+    pool: &PgPool,
+    comment_id: Uuid,
+) -> Result<Option<Comment>, sqlx::Error> {
+    let row = sqlx::query("SELECT * FROM comments WHERE comment_id = $1 AND NOT is_deleted")
+        .bind(comment_id)
+        .fetch_optional(pool)
+        .await?;
 
     Ok(row.map(|row| Comment {
         comment_id: row.get("comment_id"),
@@ -36,7 +37,10 @@ pub async fn get_comment_by_id(pool: &PgPool, comment_id: Uuid) -> Result<Option
     }))
 }
 
-pub async fn get_comment_replies(pool: &PgPool, parent_id: Uuid) -> Result<Vec<Comment>, sqlx::Error> {
+pub async fn get_comment_replies(
+    pool: &PgPool,
+    parent_id: Uuid,
+) -> Result<Vec<Comment>, sqlx::Error> {
     let rows = sqlx::query(
         "SELECT * FROM comments WHERE parent_comment_id = $1 AND NOT is_deleted ORDER BY created_at ASC"
     )
@@ -44,22 +48,26 @@ pub async fn get_comment_replies(pool: &PgPool, parent_id: Uuid) -> Result<Vec<C
     .fetch_all(pool)
     .await?;
 
-    Ok(rows.into_iter().map(|row| Comment {
-        comment_id: row.get("comment_id"),
-        task_id: row.get("task_id"),
-        user_id: row.get("user_id"),
-        content: row.get("content"),
-        parent_comment_id: row.get("parent_comment_id"),
-        created_at: row.get("created_at"),
-        updated_at: row.get("updated_at"),
-        is_deleted: row.get("is_deleted"),
-    }).collect())
+    Ok(rows
+        .into_iter()
+        .map(|row| Comment {
+            comment_id: row.get("comment_id"),
+            task_id: row.get("task_id"),
+            user_id: row.get("user_id"),
+            content: row.get("content"),
+            parent_comment_id: row.get("parent_comment_id"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+            is_deleted: row.get("is_deleted"),
+        })
+        .collect())
 }
 
-pub async fn list_comments(pool: &PgPool, filters: &CommentFilters) -> Result<Vec<Comment>, sqlx::Error> {
-    let mut query = String::from(
-        "SELECT * FROM comments WHERE NOT is_deleted"
-    );
+pub async fn list_comments(
+    pool: &PgPool,
+    filters: &CommentFilters,
+) -> Result<Vec<Comment>, sqlx::Error> {
+    let mut query = String::from("SELECT * FROM comments WHERE NOT is_deleted");
 
     if let Some(task_id) = filters.task_id {
         query.push_str(" AND task_id = $1");
@@ -70,8 +78,9 @@ pub async fn list_comments(pool: &PgPool, filters: &CommentFilters) -> Result<Ve
     query.push_str(" ORDER BY created_at DESC");
 
     if let Some(ref pagination) = filters.pagination {
-        query.push_str(&format!(" LIMIT {} OFFSET {}", 
-            pagination.per_page, 
+        query.push_str(&format!(
+            " LIMIT {} OFFSET {}",
+            pagination.per_page,
             (pagination.page - 1) * pagination.per_page
         ));
     }
@@ -83,36 +92,25 @@ pub async fn list_comments(pool: &PgPool, filters: &CommentFilters) -> Result<Ve
                 .bind(parent_id)
                 .fetch_all(pool)
                 .await?
-        },
-        (Some(task_id), None) => {
-            sqlx::query(&query)
-                .bind(task_id)
-                .fetch_all(pool)
-                .await?
-        },
-        (None, Some(parent_id)) => {
-            sqlx::query(&query)
-                .bind(parent_id)
-                .fetch_all(pool)
-                .await?
-        },
-        (None, None) => {
-            sqlx::query(&query)
-                .fetch_all(pool)
-                .await?
         }
+        (Some(task_id), None) => sqlx::query(&query).bind(task_id).fetch_all(pool).await?,
+        (None, Some(parent_id)) => sqlx::query(&query).bind(parent_id).fetch_all(pool).await?,
+        (None, None) => sqlx::query(&query).fetch_all(pool).await?,
     };
 
-    Ok(rows.into_iter().map(|row| Comment {
-        comment_id: row.get("comment_id"),
-        task_id: row.get("task_id"), 
-        user_id: row.get("user_id"),
-        content: row.get("content"),
-        parent_comment_id: row.get("parent_comment_id"),
-        created_at: row.get("created_at"),
-        updated_at: row.get("updated_at"),
-        is_deleted: row.get("is_deleted"),
-    }).collect())
+    Ok(rows
+        .into_iter()
+        .map(|row| Comment {
+            comment_id: row.get("comment_id"),
+            task_id: row.get("task_id"),
+            user_id: row.get("user_id"),
+            content: row.get("content"),
+            parent_comment_id: row.get("parent_comment_id"),
+            created_at: row.get("created_at"),
+            updated_at: row.get("updated_at"),
+            is_deleted: row.get("is_deleted"),
+        })
+        .collect())
 }
 
 pub async fn create_comment(pool: &PgPool, comment: Comment) -> Result<Comment, sqlx::Error> {
@@ -123,7 +121,7 @@ pub async fn create_comment(pool: &PgPool, comment: Comment) -> Result<Comment, 
             parent_comment_id, created_at, updated_at, is_deleted
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING *
-        "#
+        "#,
     )
     .bind(comment.comment_id)
     .bind(comment.task_id)
@@ -152,7 +150,7 @@ pub async fn create_notification(
     pool: &PgPool,
     user_id: Uuid,
     type_: String,
-    content: JsonValue
+    content: JsonValue,
 ) -> Result<(), sqlx::Error> {
     sqlx::query(
         r#"
@@ -160,7 +158,7 @@ pub async fn create_notification(
             notification_id, user_id, type, content,
             created_at
         ) VALUES ($1, $2, $3, $4, $5)
-        "#
+        "#,
     )
     .bind(Uuid::new_v4())
     .bind(user_id)

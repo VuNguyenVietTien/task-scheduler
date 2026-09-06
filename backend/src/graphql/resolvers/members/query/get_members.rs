@@ -1,5 +1,5 @@
 use async_graphql::{Context, Result, ID};
-use sqlx::{Row, postgres::PgRow};
+use sqlx::{postgres::PgRow, Row};
 use uuid::Uuid;
 
 use crate::auth::error::AuthError;
@@ -24,22 +24,25 @@ pub async fn project_members(ctx: &Context<'_>, project_id: ID) -> Result<Vec<Pr
         FROM project_members pm
         INNER JOIN users u ON pm.user_id = u.user_id
         WHERE project_id = $1
-        "#
+        "#,
     )
     .bind(project_id)
     .fetch_all(pool)
     .await
     .map_err(|e| AuthError::Database(e))?;
 
-    Ok(members.into_iter().map(|row: PgRow| ProjectMember {
-        role: row.get("role"),
-        joined_at: row.get("joined_at"),
-        user: User {
-            user_id: row.get("user_id"),
-            email: row.get("email"),
-            username: row.get("username"),
-            full_name: row.get("full_name"),
-            avatar_url: row.get::<Option<String>, _>("avatar_url"),
-        }
-    }).collect())
-} 
+    Ok(members
+        .into_iter()
+        .map(|row: PgRow| ProjectMember {
+            role: row.get("role"),
+            joined_at: row.get("joined_at"),
+            user: User {
+                user_id: row.get("user_id"),
+                email: row.get("email"),
+                username: row.get("username"),
+                full_name: row.get("full_name"),
+                avatar_url: row.get::<Option<String>, _>("avatar_url"),
+            },
+        })
+        .collect())
+}

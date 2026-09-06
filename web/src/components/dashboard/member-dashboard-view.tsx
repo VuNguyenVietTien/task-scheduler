@@ -49,7 +49,7 @@ export function MemberDashboardView({ activeTasks, tasksByStatus }: MemberDashbo
           { key: 'title', label: t('dashboard.colTask') },
           { key: 'status', label: t('dashboard.colStatus'), render: (v: string) => renderStatusBadge(statusLabel(v)) },
           { key: 'priority', label: t('dashboard.colPriority'), render: (v: string) => renderPriorityBadge(priorityLabel(v)) },
-          { key: 'dueDate', label: t('dashboard.colDeadline'), render: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
+          { key: 'due_date', label: t('dashboard.colDeadline'), render: (v: string) => v ? new Date(v).toLocaleDateString() : '-' },
         ]}
         maxRows={20}
         emptyMessage={t('dashboard.noTasks')}

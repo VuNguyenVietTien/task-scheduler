@@ -9,6 +9,8 @@ import {
   FileText
 } from 'lucide-react';
 import { DatePicker } from '../ui/date-picker';
+import { client } from '@/lib/apollo-client';
+import { CREATE_PROJECT } from '@/graphql/queries/project';
 import {
   Accordion,
   AccordionContent,
@@ -66,8 +68,38 @@ export default function ProjectForm({ initialData, mode }: ProjectFormProps) {
     setError(null);
 
     try {
-      const url = mode === 'create' ? '/api/projects' : `/api/projects/${initialData?.id}`;
-      const method = mode === 'create' ? 'POST' : 'PUT';
+      if (mode === 'create') {
+        // Rust contract: create_project(input: CreateProjectInput!) → ProjectResponse.project_id
+        const response = await client.mutate({
+          mutation: CREATE_PROJECT,
+          variables: {
+            input: {
+              name: formData.name,
+              description: formData.description || null,
+              // Rust ProjectStatus enum: ACTIVE/COMPLETED/ON_HOLD/CANCELLED (no NEW)
+              status: formData.status === 'NEW' ? 'ACTIVE' : formData.status,
+              priority: formData.priority,
+              visibility: formData.visibility,
+              tags: formData.tags,
+              category: formData.category || null,
+            },
+          },
+        });
+        if (response.errors?.length) {
+          throw new Error(response.errors[0].message);
+        }
+        const canonicalId = response.data?.create_project?.project_id;
+        if (!canonicalId) {
+          throw new Error('create_project response missing project_id');
+        }
+        router.push(`/projects/${canonicalId}`);
+        return;
+      }
+
+      // RESIDUAL (W3 audit): edit mode still uses same-origin REST PUT
+      // /api/projects/{id} — no update_project op exists in backend/schema.graphql.
+      const url = `/api/projects/${initialData?.id}`;
+      const method = 'PUT';
 
       const response = await fetch(url, {
         method,
@@ -83,7 +115,7 @@ export default function ProjectForm({ initialData, mode }: ProjectFormProps) {
         throw new Error(data.error || 'Something went wrong');
       }
 
-      // Navigate to projects list after successful creation/update
+      // Navigate to projects list after successful update
       router.push('/projects');
       router.refresh();
     } catch (err) {

@@ -1,8 +1,8 @@
-use uuid::Uuid;
+use crate::db::types::{ProjectPriority, ProjectStatus, ProjectVisibility};
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 use sqlx::types::JsonValue;
-use crate::db::types::{ProjectStatus, ProjectPriority, ProjectVisibility};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Project {

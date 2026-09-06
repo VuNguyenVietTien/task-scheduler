@@ -1,43 +1,37 @@
 export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/server';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function POST(request: Request) {
+import { backendFetch } from '../_session';
+
+/**
+ * W1 register: thin forward to the Rust backend `POST /api/v1/auth/register`
+ * ({email, password, name}). Password credential creation lives on the
+ * identity/backend side — no Supabase admin client, no service-role key.
+ */
+export async function POST(request: NextRequest) {
   try {
-    const { email, password, name } = await request.json();
+    const body = await request.json().catch(() => null);
+    const { email, password, name } = body ?? {};
 
     if (!email || !password || !name) {
-      return NextResponse.json({ error: 'Email, password and name are required' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'Email, password and name are required' },
+        { status: 400 },
+      );
     }
 
-    const supabaseAdmin = createAdminClient();
-
-    // Create auth user (email not auto-confirmed — user must verify)
-    const { data, error } = await supabaseAdmin.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: false,
-      user_metadata: { name },
+    const upstream = await backendFetch('/api/v1/auth/register', {
+      method: 'POST',
+      body: JSON.stringify({ email, password, name }),
     });
-
-    if (error) {
-      return NextResponse.json({ success: false, error: error.message }, { status: 400 });
-    }
-
-    // Insert profile into users table
-    const { error: profileError } = await supabaseAdmin
-      .from('users')
-      .insert({ id: data.user.id, email, name } as never);
-
-    if (profileError) {
-      console.error('Failed to create user profile:', profileError);
-      // Auth user created but profile failed — non-fatal, return success
-    }
-
-    return NextResponse.json({ success: true, message: 'Registration successful. Please verify your email.' });
+    const data = await upstream.json().catch(() => ({}));
+    return NextResponse.json(data, { status: upstream.status });
   } catch (error) {
-    console.error('Register error:', error);
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 });
+    console.error('[api/auth/register] error:', error);
+    return NextResponse.json(
+      { success: false, error: 'Registration failed' },
+      { status: 500 },
+    );
   }
 }

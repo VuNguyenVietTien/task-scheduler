@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { cloneTaskSubtree, type CloneSourceTask } from '@/utils/cloneTask';
 import { useTranslation } from 'react-i18next';
 import { Task, TaskStatus, Priority, TaskFilter, TaskStatuses, Priorities, UserBasic } from '@/types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
@@ -30,6 +31,19 @@ import {
   updateTaskDueDate
 } from '@/redux/features/tasksSlice';
 import { ProjectMember } from '@/hooks/useProject';
+import { useProjectTaxonomies } from '@/hooks/useProjectTaxonomies';
+import {
+  PhaseFilterSelect,
+  TaskPhaseSelect,
+  applyPhaseFilter,
+  type PhaseFilterValue,
+} from '@/components/projects/phase-controls';
+import { PhaseSettingsPanel } from '@/components/projects/PhaseSettingsPanel';
+import { TaskExcelGrid, type StagedEdit } from './TaskExcelGrid';
+import { useMutation, useQuery } from '@apollo/client';
+import { CREATE_TASK } from '@/graphql/mutations';
+import { RESOURCE_MEMBERS_QUERY } from '@/graphql/scheduling';
+import { toast } from 'sonner';
 
 interface TaskListViewProps {
   tasks: Task[];
@@ -54,6 +68,21 @@ interface SortConfig {
 // Tạo interface TaskAssignee từ UserBasic
 interface TaskAssignee extends UserBasic {
   // Không cần thêm gì vì UserBasic đã đủ
+}
+
+interface TaskAssigneeOption {
+  key: string;
+  label: string;
+  userId: string | null;
+  resourceMemberId: string | null;
+  avatarUrl?: string;
+  role?: string;
+}
+
+interface ResourceMemberRow {
+  resource_member_id: string;
+  display_name: string;
+  user_id: string | null;
 }
 
 // Task type badge colors following design system
@@ -117,6 +146,24 @@ export function TaskListView({
   const [editingCell, setEditingCell] = useState<{taskId: string, field: string} | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  // Requirement 7: normal ↔ Excel (staged bulk edit) list mode toggle.
+  const [listMode, setListMode] = useState<'normal' | 'excel'>('normal');
+  const [createTaskMut] = useMutation(CREATE_TASK);
+
+  // ── Increment 1: phase taxonomy (selector + filter + settings) ─────────────
+  const taxonomyProjectId = useMemo(
+    () => initialTasks.find((t) => t.project_id)?.project_id ?? tasks.find((t) => t.project_id)?.project_id ?? null,
+    [initialTasks, tasks]
+  );
+  const resourceMembersQ = useQuery(RESOURCE_MEMBERS_QUERY, {
+    variables: { project_id: taxonomyProjectId ?? '' },
+    skip: !taxonomyProjectId,
+    fetchPolicy: 'cache-and-network',
+  });
+  const { phases, loading: phasesLoading, ensureDefaultPhases, createPhase, updatePhase, archivePhase, setTaskPhase } =
+    useProjectTaxonomies(taxonomyProjectId);
+  const [phaseFilter, setPhaseFilter] = useState<PhaseFilterValue>('ALL');
+  const [showPhaseSettings, setShowPhaseSettings] = useState(false);
   
   // Khởi tạo Redux dispatch
   const dispatch = useAppDispatch();
@@ -209,6 +256,57 @@ export function TaskListView({
       projects: Array.from(uniqueProjects.values())
     };
   }, [tasks, reduxMembers]);
+
+  // Resource members without a linked user account cannot appear in the
+  // legacy project-members Redux slice. They use a distinct option value so
+  // saving can send assignee_resource_member_id instead of assignee_id.
+  const assigneeOptions = useMemo<TaskAssigneeOption[]>(() => {
+    const byKey = new Map<string, TaskAssigneeOption>();
+    for (const assignee of assignees) {
+      byKey.set(`user:${assignee.userId}`, {
+        key: `user:${assignee.userId}`,
+        label: assignee.username,
+        userId: assignee.userId,
+        resourceMemberId: null,
+        avatarUrl: assignee.avatarUrl,
+        role: assignee.role,
+      });
+    }
+    for (const member of (resourceMembersQ.data?.resource_members ?? []) as ResourceMemberRow[]) {
+      if (member.user_id) {
+        // Linked users keep the existing assignee_id behavior.
+        const key = `user:${member.user_id}`;
+        if (!byKey.has(key)) {
+          byKey.set(key, {
+            key,
+            label: member.display_name,
+            userId: member.user_id,
+            resourceMemberId: null,
+          });
+        }
+      } else {
+        byKey.set(`resource:${member.resource_member_id}`, {
+          key: `resource:${member.resource_member_id}`,
+          label: member.display_name,
+          userId: null,
+          resourceMemberId: member.resource_member_id,
+        });
+      }
+    }
+    return Array.from(byKey.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [assignees, resourceMembersQ.data?.resource_members]);
+
+  const assigneeOptionForTask = useCallback((task: Task): TaskAssigneeOption | undefined => {
+    if (task.assignee?.userId) {
+      return assigneeOptions.find((option) => option.userId === task.assignee?.userId);
+    }
+    if (task.assignee_resource_member_id) {
+      return assigneeOptions.find(
+        (option) => option.resourceMemberId === task.assignee_resource_member_id
+      );
+    }
+    return undefined;
+  }, [assigneeOptions]);
 
   // Đếm các task theo trạng thái
   const statusCounts = useMemo(() => {
@@ -376,6 +474,17 @@ export function TaskListView({
     }
     return displayedTasks;
   }, [displayedTasks, incompleteTasks, completedTasks, tasks]);
+
+  // Increment 1: gán phase cho task qua set_task_taxonomy (NULL = Unphased)
+  const handleSetTaskPhase = useCallback(async (taskId: string, phaseId: string | null) => {
+    try {
+      await setTaskPhase(taskId, phaseId);
+      updateSingleTaskInState(taskId, { phase_id: phaseId });
+      updateDisplayedTask(taskId, { phase_id: phaseId });
+    } catch (error) {
+      console.error('Không thể cập nhật phase của task:', error);
+    }
+  }, [setTaskPhase, updateSingleTaskInState, updateDisplayedTask]);
 
   const toggleTaskExpansion = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Ngăn sự kiện click lan ra và kích hoạt handleTaskClick
@@ -888,6 +997,86 @@ export function TaskListView({
   const updateTaskPriorityOrder = useUpdateTaskPriorityOrder();
   const { updateTask } = useUpdateTask();
 
+  // ── Requirement 7: clone task (RECURSIVE subtree via cloneTaskSubtree;
+  // cycle-safe, parent-remapping, partial-error reporting) ────────────────
+  const handleCloneTask = useCallback(async (taskId: string) => {
+    const source = tasks.find((t) => t.task_id === taskId);
+    if (!source) return;
+    const project = source.project_id || source.projectId || '';
+    const result = await cloneTaskSubtree(
+      {
+        createTask: async (input) => {
+          const s = input.source as unknown as typeof source;
+          const res = await createTaskMut({
+            variables: {
+              input: {
+                project_id: input.project_id || project,
+                parent_task_id: input.parent_task_id ?? undefined,
+                title: input.title,
+                description: (s.description as string) ?? '',
+                status: 'TODO',
+                priority: s.priority ?? 'MEDIUM',
+                priority_order: (s.priority_order as number) ?? 0,
+                effort: (s.effort as number) ?? 0,
+                due_date: s.due_date ? new Date(s.due_date as string).toISOString() : undefined,
+                assignee_id: (s.assignee as { userId?: string } | undefined)?.userId ?? null,
+                type_: s.type ?? null,
+                category: s.category ?? null,
+                tags: (s.tags as string[]) ?? [],
+              },
+            },
+          });
+          const id = res.data?.create_task?.task_id as string | undefined;
+          if (!id) throw new Error('create_task returned no id');
+          return id;
+        },
+      },
+      tasks as unknown as CloneSourceTask[],
+      taskId
+    );
+    if (result.ok) {
+      toast.success(`Cloned "${source.title}" + ${result.created.length - 1} subtasks`);
+    } else {
+      const failed = result.failures.map((f) => `"${f.title}": ${f.error}`).join('; ');
+      toast.error(
+        `Clone incomplete: ${result.created.length} created, ${result.failures.length} failed — ${failed}`
+      );
+    }
+  }, [tasks, createTaskMut]);
+
+  // Excel-mode staged edit persistence — reuses the exact per-field Redux
+  // thunks the inline editor uses; failures throw and stay staged in the grid.
+  const handleExcelSave = useCallback(async (edit: StagedEdit) => {
+    if (edit.field === 'status') {
+      await dispatch(updateTaskStatus({ taskId: edit.taskId, status: edit.value as TaskStatus })).unwrap();
+    } else if (edit.field === 'priority') {
+      await dispatch(updateTaskPriority({ taskId: edit.taskId, priority: edit.value as Priority })).unwrap();
+    } else if (edit.field === 'effort') {
+      await dispatch(updateTaskEffort({ taskId: edit.taskId, effort: parseFloat(edit.value) || 0 })).unwrap();
+    } else if (edit.field === 'due_date') {
+      await dispatch(updateTaskDueDate({ taskId: edit.taskId, dueDate: edit.value })).unwrap();
+    } else if (edit.field === 'assignee') {
+      // Resolve the typed username back to a user id (Excel cells show names).
+      if (edit.value.trim() === '') {
+        await dispatch(updateTaskAssignee({ taskId: edit.taskId, assigneeId: null })).unwrap();
+      } else {
+        const match = Array.from(
+          new Map(
+            tasks
+              .filter((t) => t.assignee?.userId)
+              .map((t) => [t.assignee!.username, t.assignee!.userId])
+          ).entries()
+        ).find(([username]) => username === edit.value);
+        if (!match) {
+          throw new Error(`Unknown assignee "${edit.value}" (no matching user in this project)`);
+        }
+        await dispatch(updateTaskAssignee({ taskId: edit.taskId, assigneeId: match[1] })).unwrap();
+      }
+    } else {
+      await updateTask(edit.taskId, { title: edit.value });
+    }
+  }, [dispatch, updateTask]);
+
   const handleFilterChange = (newFilters: TaskFilter) => {
     if (setFilters) {
       setFilters(newFilters);
@@ -1116,6 +1305,26 @@ export function TaskListView({
             </svg>
             {showCompletedTasks ? t('tasks.hideCompleted') : t('tasks.showCompleted')}
           </button>
+
+          {/* Requirement 7: Normal ↔ Excel mode toggle */}
+          <div className="inline-flex rounded-md border border-slate-300 overflow-hidden" role="group" aria-label="List mode">
+            <button
+              onClick={() => setListMode('normal')}
+              className={`px-3 py-2 text-sm font-medium ${listMode === 'normal' ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
+              aria-pressed={listMode === 'normal'}
+              data-testid="mode-normal-btn"
+            >
+              Normal
+            </button>
+            <button
+              onClick={() => setListMode('excel')}
+              className={`px-3 py-2 text-sm font-medium ${listMode === 'excel' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
+              aria-pressed={listMode === 'excel'}
+              data-testid="mode-excel-btn"
+            >
+              Excel
+            </button>
+          </div>
         </div>
         
         {/* Status Summary */}
@@ -1141,7 +1350,14 @@ export function TaskListView({
         )}
       </div>
 
-      {/* Task List */}
+      {/* Task List: normal table (requirement 7) or Excel staged-edit grid */}
+      {listMode === 'excel' ? (
+        <TaskExcelGrid
+          tasks={displayedTasks}
+          onSaveEdit={handleExcelSave}
+          onCloneTask={handleCloneTask}
+        />
+      ) : (
       <div className="overflow-x-auto grow border border-slate-200 rounded-lg bg-white min-h-0">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
@@ -1490,6 +1706,18 @@ export function TaskListView({
                       )}
                     </td>
                     <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                      <button
+                        className="text-slate-500 hover:text-blue-700 mr-2"
+                        title="Clone task"
+                        aria-label={`Clone ${task.title}`}
+                        data-testid={`clone-task-${task.task_id}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleCloneTask(task.task_id);
+                        }}
+                      >
+                        ⧉
+                      </button>
                       <button 
                         className="text-blue-600 hover:text-blue-900"
                         title="Thao tác khác"
@@ -1529,6 +1757,7 @@ export function TaskListView({
           </tbody>
         </table>
       </div>
+      )}
 
       {/* Pagination */}
       {pagination && pagination.totalPages > 0 && (

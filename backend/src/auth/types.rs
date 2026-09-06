@@ -33,12 +33,7 @@ pub struct Claims {
 }
 
 impl Claims {
-    pub fn new(
-        user_id: String,
-        email: String,
-        display_name: String,
-        duration: Duration,
-    ) -> Self {
+    pub fn new(user_id: String, email: String, display_name: String, duration: Duration) -> Self {
         let now = Utc::now();
         Self {
             sub: user_id,

@@ -29,7 +29,7 @@ pub async fn project_member(
         FROM project_members pm
         INNER JOIN users u ON pm.user_id = u.user_id
         WHERE pm.project_id = $1 AND pm.user_id = $2
-        "#
+        "#,
     )
     .bind(project_id)
     .bind(user_id)
@@ -47,8 +47,8 @@ pub async fn project_member(
                 username: row.get("username"),
                 full_name: row.get("full_name"),
                 avatar_url: row.get("avatar_url"),
-            }
+            },
         })),
-        None => Ok(None)
+        None => Ok(None),
     }
-} 
+}

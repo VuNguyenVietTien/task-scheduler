@@ -14,20 +14,15 @@ pub struct AccessToken {
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Claims {
-    pub sub: String,         // Subject (user ID)
-    pub exp: i64,           // Expiration time
-    pub iat: i64,           // Issued at
-    pub email: String,      // User email
+    pub sub: String,          // Subject (user ID)
+    pub exp: i64,             // Expiration time
+    pub iat: i64,             // Issued at
+    pub email: String,        // User email
     pub display_name: String, // User display name
 }
 
 impl Claims {
-    pub fn new(
-        user_id: Uuid,
-        email: String,
-        display_name: String,
-        duration: Duration,
-    ) -> Self {
+    pub fn new(user_id: Uuid, email: String, display_name: String, duration: Duration) -> Self {
         let now = Utc::now();
         Self {
             sub: user_id.to_string(),
@@ -52,7 +47,7 @@ pub fn create_access_token(
 ) -> Result<AccessToken, AuthError> {
     let expiry = Duration::seconds(config.jwt_expiry);
     let claims = Claims::new(user_id, email, name, expiry);
-    
+
     let token = encode(
         &Header::default(),
         &claims,
@@ -72,7 +67,12 @@ pub fn verify_access_token(token: &str, config: &Config) -> Result<Claims, AuthE
         &DecodingKey::from_secret(config.jwt_secret.as_bytes()),
         &Validation::default(),
     )
-    .map_err(|e| AuthError::TokenVerification(e.to_string()))?;
+    .map_err(|e| match e.kind() {
+        // Preserve the expired-token classification (mirrors auth::jwt::verify_token);
+        // previously this fell into TokenVerification and broke test_expired_token.
+        jsonwebtoken::errors::ErrorKind::ExpiredSignature => AuthError::TokenExpired,
+        _ => AuthError::TokenVerification(e.to_string()),
+    })?;
 
     let claims = token_data.claims;
 
@@ -101,6 +101,7 @@ mod tests {
             email_smtp_port: 587,
             email_smtp_user: "".to_string(),
             email_smtp_pass: "".to_string(),
+            ..Default::default()
         }
     }
 

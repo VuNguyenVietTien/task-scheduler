@@ -1,0 +1,45 @@
+# yaml-language-server: $schema=https://releases.agentkit.best/schemas/config/v1.json
+assertions: []
+coding_level: -1
+docs:
+    max_loc: 800
+gemini:
+    model: gemini-3-flash-preview
+hooks: {}
+locale:
+    response_language: null
+    thinking_language: null
+paths:
+    docs: docs
+    plans: plans
+plan:
+    date_format: YYMMDD-HHmm
+    issue_prefix: GH-
+    naming_format: '{date}-{issue}-{slug}'
+    reports_dir: reports
+    resolution:
+        branch_pattern: (?:feat|fix|chore|refactor|docs)/(?:[^/]+/)?(.+)
+        order:
+            - session
+            - branch
+    validation:
+        focus_areas:
+            - assumptions
+            - risks
+            - tradeoffs
+            - architecture
+        max_questions: 8
+        min_questions: 3
+        mode: prompt
+privacy_block: true
+project:
+    framework: auto
+    package_manager: auto
+    type: auto
+skills:
+    research:
+        use_gemini: true
+statusline: minimal
+trust:
+    enabled: false
+    passphrase: null

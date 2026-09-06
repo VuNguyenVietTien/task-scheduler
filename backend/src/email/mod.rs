@@ -1,13 +1,9 @@
 use async_trait::async_trait;
-use lettre::{
-    transport::smtp::authentication::Credentials,
-    AsyncSmtpTransport,
-    AsyncTransport,
-    Message,
-    message::header::ContentType,
-    Tokio1Executor,
-};
 use handlebars::Handlebars;
+use lettre::{
+    message::header::ContentType, transport::smtp::authentication::Credentials, AsyncSmtpTransport,
+    AsyncTransport, Message, Tokio1Executor,
+};
 use serde::Serialize;
 use std::error::Error;
 
@@ -49,10 +45,8 @@ impl EmailService {
             .build();
 
         let mut handlebars = Handlebars::new();
-        handlebars.register_template_string(
-            "verification",
-            include_str!("templates/verification.hbs"),
-        )?;
+        handlebars
+            .register_template_string("verification", include_str!("templates/verification.hbs"))?;
         handlebars.register_template_string(
             "password_reset",
             include_str!("templates/password_reset.hbs"),
@@ -103,16 +97,11 @@ impl EmailServiceTrait for EmailService {
         frontend_url: String,
     ) -> Result<(), Box<dyn Error>> {
         let verification_link = format!("{}/verify-email?token={}", frontend_url, token);
-        let data = VerificationTemplateData {
-            verification_link,
-        };
-        
+        let data = VerificationTemplateData { verification_link };
+
         let body = self.handlebars.render("verification", &data)?;
-        self.send_email(
-            to,
-            "Verify your email".to_string(),
-            body,
-        ).await
+        self.send_email(to, "Verify your email".to_string(), body)
+            .await
     }
 
     async fn send_password_reset(
@@ -122,16 +111,11 @@ impl EmailServiceTrait for EmailService {
         frontend_url: String,
     ) -> Result<(), Box<dyn Error>> {
         let reset_link = format!("{}/reset-password?token={}", frontend_url, token);
-        let data = PasswordResetTemplateData {
-            reset_link,
-        };
+        let data = PasswordResetTemplateData { reset_link };
 
         let body = self.handlebars.render("password_reset", &data)?;
-        self.send_email(
-            to,
-            "Reset your password".to_string(),
-            body,
-        ).await
+        self.send_email(to, "Reset your password".to_string(), body)
+            .await
     }
 }
 
@@ -144,9 +128,10 @@ mod tests {
         let email_service = EmailService::new(
             "localhost".to_string(),
             "test".to_string(),
-            "test".to_string(), 
+            "test".to_string(),
             "noreply@example.com".to_string(),
-        ).unwrap();
+        )
+        .unwrap();
 
         let result = email_service
             .send_verification_email(

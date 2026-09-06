@@ -42,6 +42,8 @@ export function SidebarProjectTreeItem({ project, isExpanded, onToggle }: Sideba
     { id: 'members', label: t('projects.viewMembers') },
     { id: 'report', label: t('projects.viewReport') },
     { id: 'documents', label: t('projects.viewDocuments') },
+    // Requirement 8: per-user timesheet (logwork) screen.
+    { id: 'timesheet', label: 'Timesheet' },
   ];
 
   return (

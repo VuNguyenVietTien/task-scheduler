@@ -4,11 +4,13 @@ use serde_json::Value as JsonValue;
 use uuid::Uuid;
 
 #[derive(SimpleObject)]
+#[graphql(rename_fields = "snake_case", complex)]
 pub struct Notification {
     pub notification_id: ID,
     pub user_id: ID,
     pub project_id: Option<ID>,
     pub sender_id: Option<ID>,
+    #[graphql(name = "type_")]
     pub type_: String,
     pub reference_type: String,
     pub reference_id: ID,
@@ -19,11 +21,22 @@ pub struct Notification {
     pub created_at: DateTime<Utc>,
 }
 
+/// D4 decision: expose BOTH `type_` (frontend/web-SDL) and `type` (plain alias).
+#[ComplexObject]
+impl Notification {
+    #[graphql(name = "type")]
+    async fn type_alias(&self) -> String {
+        self.type_.clone()
+    }
+}
+
 #[derive(InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct CreateNotificationInput {
     pub user_id: ID,
     pub project_id: Option<ID>,
     pub sender_id: Option<ID>,
+    #[graphql(name = "type_")]
     pub type_: String,
     pub reference_type: String,
     pub reference_id: ID,
@@ -33,6 +46,7 @@ pub struct CreateNotificationInput {
 }
 
 #[derive(SimpleObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct NotificationCount {
     pub total: i64,
     pub unread: i64,
@@ -52,7 +66,7 @@ impl From<crate::db::models::Notification> for Notification {
             action: notif.action,
             metadata: notif.metadata,
             is_read: notif.is_read,
-            created_at: notif.created_at
+            created_at: notif.created_at,
         }
     }
-} 
+}

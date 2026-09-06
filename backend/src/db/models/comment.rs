@@ -1,6 +1,6 @@
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Comment {
@@ -10,7 +10,7 @@ pub struct Comment {
     pub content: String,
     pub parent_comment_id: Option<Uuid>,
     pub created_at: DateTime<Utc>,
-    pub updated_at: DateTime<Utc>,  
+    pub updated_at: DateTime<Utc>,
     pub is_deleted: bool,
 }
 

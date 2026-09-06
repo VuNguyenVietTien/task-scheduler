@@ -1,15 +1,16 @@
-use async_graphql::{Context, Object, Result, InputObject, SimpleObject};
-use sqlx::{Pool, Postgres, FromRow};
-use uuid::Uuid;
+use async_graphql::{Context, InputObject, Object, Result, SimpleObject};
 use chrono::Utc;
-use serde_json::Value;
 use serde::Serialize;
+use serde_json::Value;
+use sqlx::{FromRow, Pool, Postgres};
+use uuid::Uuid;
 
-use crate::graphql::context::Context as AppContext;
 use crate::error::{AppError, IntoGraphQLResult};
+use crate::graphql::context::Context as AppContext;
 
 // Define simplified input types since we can't import from schema
 #[derive(InputObject, Serialize)]
+#[graphql(rename_fields = "snake_case")]
 struct CreatePlanInput {
     project_id: String,
     name: String,
@@ -18,11 +19,13 @@ struct CreatePlanInput {
 }
 
 #[derive(InputObject, Serialize)]
+#[graphql(rename_fields = "snake_case")]
 struct PlanDataInput {
     tasks: Vec<PlanTaskDataInput>,
 }
 
 #[derive(InputObject, Serialize)]
+#[graphql(rename_fields = "snake_case")]
 struct PlanTaskDataInput {
     task_id: String,
     priority_order: i32,
@@ -38,6 +41,7 @@ struct PlanTaskDataInput {
 }
 
 #[derive(InputObject, Serialize)]
+#[graphql(rename_fields = "snake_case")]
 struct UpdatePlanInput {
     id: String,
     name: Option<String>,
@@ -55,17 +59,19 @@ impl PlanMutation {
     async fn create_plan(&self, ctx: &Context<'_>, input: CreatePlanInput) -> Result<Plan> {
         let context = ctx.data::<AppContext>()?;
         let db = &context.db;
-        let user_id = context.auth.as_ref()
+        let user_id = context
+            .auth
+            .as_ref()
             .and_then(|auth| auth.user_id().ok())
             .ok_or_else(|| AppError::forbidden("Unauthorized").to_graphql_error())?;
-        
+
         let project_id = Uuid::parse_str(&input.project_id)
             .map_err(|_| AppError::validation("Invalid project ID"))?;
-        
+
         // Convert input plan_data to Value
         let plan_data = serde_json::to_value(&input.plan_data)
             .map_err(|e| AppError::validation(format!("Invalid plan data: {}", e)))?;
-        
+
         let plan = create_plan(
             db,
             project_id,
@@ -73,8 +79,9 @@ impl PlanMutation {
             input.description,
             user_id,
             plan_data,
-        ).await?;
-        
+        )
+        .await?;
+
         Ok(plan)
     }
 
@@ -82,24 +89,29 @@ impl PlanMutation {
     async fn update_plan(&self, ctx: &Context<'_>, input: UpdatePlanInput) -> Result<Plan> {
         let context = ctx.data::<AppContext>()?;
         let db = &context.db;
-        let user_id = context.auth.as_ref()
+        let user_id = context
+            .auth
+            .as_ref()
             .and_then(|auth| auth.user_id().ok())
             .ok_or_else(|| AppError::forbidden("Unauthorized").to_graphql_error())?;
-        
-        let plan_id = Uuid::parse_str(&input.id)
-            .map_err(|_| AppError::validation("Invalid plan ID"))?;
-        
+
+        let plan_id =
+            Uuid::parse_str(&input.id).map_err(|_| AppError::validation("Invalid plan ID"))?;
+
         // Check if plan exists and belongs to a project the user has access to
-        let existing_plan = get_plan_by_id(db, plan_id).await?
+        let existing_plan = get_plan_by_id(db, plan_id)
+            .await?
             .ok_or_else(|| AppError::not_found("Plan not found"))?;
-        
+
         // Convert input plan_data to Value if provided
         let plan_data = match input.plan_data {
-            Some(data) => Some(serde_json::to_value(&data)
-                .map_err(|e| AppError::validation(format!("Invalid plan data: {}", e)))?),
+            Some(data) => Some(
+                serde_json::to_value(&data)
+                    .map_err(|e| AppError::validation(format!("Invalid plan data: {}", e)))?,
+            ),
             None => None,
         };
-        
+
         let updated_plan = update_plan(
             db,
             plan_id,
@@ -107,8 +119,9 @@ impl PlanMutation {
             input.description,
             input.is_active,
             plan_data,
-        ).await?;
-        
+        )
+        .await?;
+
         Ok(updated_plan)
     }
 
@@ -116,19 +129,21 @@ impl PlanMutation {
     async fn delete_plan(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
         let context = ctx.data::<AppContext>()?;
         let db = &context.db;
-        let user_id = context.auth.as_ref()
+        let user_id = context
+            .auth
+            .as_ref()
             .and_then(|auth| auth.user_id().ok())
             .ok_or_else(|| AppError::forbidden("Unauthorized").to_graphql_error())?;
-        
-        let plan_id = Uuid::parse_str(&id)
-            .map_err(|_| AppError::validation("Invalid plan ID"))?;
-        
+
+        let plan_id = Uuid::parse_str(&id).map_err(|_| AppError::validation("Invalid plan ID"))?;
+
         // Check if plan exists and belongs to a project the user has access to
-        let existing_plan = get_plan_by_id(db, plan_id).await?
+        let existing_plan = get_plan_by_id(db, plan_id)
+            .await?
             .ok_or_else(|| AppError::not_found("Plan not found"))?;
-        
+
         let success = delete_plan(db, plan_id).await?;
-        
+
         Ok(success)
     }
 
@@ -136,20 +151,50 @@ impl PlanMutation {
     async fn set_plan_active(&self, ctx: &Context<'_>, id: String) -> Result<Plan> {
         let context = ctx.data::<AppContext>()?;
         let db = &context.db;
-        let user_id = context.auth.as_ref()
+        let user_id = context
+            .auth
+            .as_ref()
             .and_then(|auth| auth.user_id().ok())
             .ok_or_else(|| AppError::forbidden("Unauthorized").to_graphql_error())?;
-        
-        let plan_id = Uuid::parse_str(&id)
-            .map_err(|_| AppError::validation("Invalid plan ID"))?;
-        
+
+        let plan_id = Uuid::parse_str(&id).map_err(|_| AppError::validation("Invalid plan ID"))?;
+
         // Check if plan exists and belongs to a project the user has access to
-        let existing_plan = get_plan_by_id(db, plan_id).await?
+        let existing_plan = get_plan_by_id(db, plan_id)
+            .await?
             .ok_or_else(|| AppError::not_found("Plan not found"))?;
-        
+
         let plan = set_plan_active(db, plan_id).await?;
-        
+
         Ok(plan)
+    }
+
+    // D2 decision: dual aliases — frontend sends camelCase op names (createPlan,
+    // updatePlan, deletePlan, setPlanActive) while web SDL defines snake_case.
+    // Keep both surfaces pointing at the same behavior.
+
+    /// Alias of createPlan for snake_case (web SDL) clients
+    #[graphql(name = "create_plan")]
+    async fn create_plan_alias(&self, ctx: &Context<'_>, input: CreatePlanInput) -> Result<Plan> {
+        self.create_plan(ctx, input).await
+    }
+
+    /// Alias of updatePlan for snake_case (web SDL) clients
+    #[graphql(name = "update_plan")]
+    async fn update_plan_alias(&self, ctx: &Context<'_>, input: UpdatePlanInput) -> Result<Plan> {
+        self.update_plan(ctx, input).await
+    }
+
+    /// Alias of deletePlan for snake_case (web SDL) clients
+    #[graphql(name = "delete_plan")]
+    async fn delete_plan_alias(&self, ctx: &Context<'_>, id: String) -> Result<bool> {
+        self.delete_plan(ctx, id).await
+    }
+
+    /// Alias of setPlanActive for snake_case (web SDL) clients
+    #[graphql(name = "set_plan_active")]
+    async fn set_plan_active_alias(&self, ctx: &Context<'_>, id: String) -> Result<Plan> {
+        self.set_plan_active(ctx, id).await
     }
 }
 
@@ -163,7 +208,7 @@ pub async fn create_plan(
 ) -> Result<Plan> {
     // Bắt đầu transaction
     let mut tx = db.begin().await?;
-    
+
     // Tạo plan mới
     let plan = sqlx::query_as!(
         Plan,
@@ -195,10 +240,10 @@ pub async fn create_plan(
     )
     .fetch_one(&mut *tx)
     .await?;
-    
+
     // Commit transaction
     tx.commit().await?;
-    
+
     Ok(plan)
 }
 
@@ -212,25 +257,25 @@ pub async fn update_plan(
 ) -> Result<Plan, AppError> {
     // Bắt đầu transaction
     let mut tx = db.begin().await?;
-    
+
     // Cập nhật các trường được cung cấp
     let mut query = String::from("UPDATE plans SET updated_at = NOW()");
     let mut param_index = 1;
-    
+
     if let Some(name_val) = &name {
         query.push_str(&format!(", name = ${}", param_index));
         param_index += 1;
     }
-    
+
     if let Some(desc_val) = &description {
         query.push_str(&format!(", description = ${}", param_index));
         param_index += 1;
     }
-    
+
     if let Some(active_val) = &is_active {
         query.push_str(&format!(", is_active = ${}", param_index));
         param_index += 1;
-        
+
         // Nếu đặt is_active = true, cập nhật các plan khác trong project thành false
         if *active_val {
             sqlx::query!(
@@ -246,31 +291,28 @@ pub async fn update_plan(
             .await?;
         }
     }
-    
+
     if let Some(data_val) = &plan_data {
         query.push_str(&format!(", plan_data = ${}", param_index));
         param_index += 1;
     }
-    
+
     query.push_str(&format!(" WHERE plan_id = ${} RETURNING plan_id as id, project_id, name, description, created_by, created_at, updated_at, is_active, plan_data", param_index));
-    
+
     // Thực hiện truy vấn update
     let plan = sqlx::query_as::<_, Plan>(&query)
         // Không thể bind_all với params, thay thế bằng bind riêng lẻ
         .bind(plan_id)
         .fetch_one(&mut *tx)
         .await?;
-    
+
     // Commit transaction
     tx.commit().await?;
-    
+
     Ok(plan)
 }
 
-pub async fn delete_plan(
-    db: &Pool<Postgres>,
-    plan_id: Uuid,
-) -> Result<bool> {
+pub async fn delete_plan(db: &Pool<Postgres>, plan_id: Uuid) -> Result<bool> {
     let result = sqlx::query!(
         r#"
         DELETE FROM plans
@@ -280,17 +322,14 @@ pub async fn delete_plan(
     )
     .execute(db)
     .await?;
-    
+
     Ok(result.rows_affected() > 0)
 }
 
-pub async fn set_plan_active(
-    db: &Pool<Postgres>,
-    plan_id: Uuid,
-) -> Result<Plan> {
+pub async fn set_plan_active(db: &Pool<Postgres>, plan_id: Uuid) -> Result<Plan> {
     // Bắt đầu transaction
     let mut tx = db.begin().await?;
-    
+
     // Lấy project_id của plan
     let project_id = sqlx::query!(
         r#"
@@ -304,7 +343,7 @@ pub async fn set_plan_active(
     .await?
     .ok_or_else(|| AppError::not_found("Plan not found"))?
     .project_id;
-    
+
     // Đặt tất cả các plan khác trong project là không active
     sqlx::query!(
         r#"
@@ -316,7 +355,7 @@ pub async fn set_plan_active(
     )
     .execute(&mut *tx)
     .await?;
-    
+
     // Đặt plan này là active
     let plan = sqlx::query_as!(
         Plan,
@@ -339,15 +378,16 @@ pub async fn set_plan_active(
     )
     .fetch_one(&mut *tx)
     .await?;
-    
+
     // Commit transaction
     tx.commit().await?;
-    
+
     Ok(plan)
 }
 
 // DbPlan type for sqlx to avoid mapping errors
 #[derive(Debug, Clone, SimpleObject, FromRow)]
+#[graphql(rename_fields = "snake_case")]
 pub struct Plan {
     pub id: Uuid,
     pub project_id: Uuid,
@@ -381,6 +421,6 @@ async fn get_plan_by_id(db: &Pool<Postgres>, plan_id: Uuid) -> Result<Option<Pla
     )
     .fetch_optional(db)
     .await?;
-    
+
     Ok(plan)
-} 
+}

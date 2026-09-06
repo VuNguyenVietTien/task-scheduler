@@ -1,20 +1,39 @@
+/**
+ * W1 auth types — Firebase ID token carrier + Rust backend app user.
+ */
+
 export interface User {
   id: string;
   email: string;
   name: string;
   emailVerified: boolean;
   providerData: {
-    photoURL?: string | null;
+    providerId: string;
+    uid: string;
+    displayName: string | null;
+    email: string | null;
+    photoURL: string | null;
   }[];
 }
 
-export interface AuthContextType {
-  user: User | null;
-  loading: boolean;
-  error: string | null;
-  signInWithEmail: (email: string, password: string) => Promise<void>;
-  signInWithGoogle: () => Promise<void>;
-  signOut: () => Promise<void>;
-  sendVerificationEmail: () => Promise<void>;
-  logout: () => Promise<void>;
-} 
+/** App user row returned by the Rust backend (`/api/v1/auth/*`). */
+export interface AppUser {
+  id: string;
+  email: string;
+  name: string;
+  emailVerified?: boolean;
+}
+
+/** Body of `POST /api/auth/firebase/login` (contract of the Rust backend). */
+export interface FirebaseLoginInput {
+  firebase_token: string;
+  email: string;
+  name: string;
+  firebase_uid: string;
+}
+
+/** Response of the login proxy (Rust user + signed pm_session cookie). */
+export interface FirebaseLoginResponse {
+  success: boolean;
+  user: AppUser;
+}

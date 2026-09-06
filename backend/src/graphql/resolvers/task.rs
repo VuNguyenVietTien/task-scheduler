@@ -62,6 +62,7 @@ impl TaskQuery {
         let child_tasks = task[1..].iter().map(|row| Task {
             task_id: row.get("task_id"),
             project_id: row.get("project_id"),
+            assignee_resource_member_id: row.get("assignee_resource_member_id"),
             parent_task_id: row.get("parent_task_id"),
             title: row.get("title"),
             description: row.get("description"),
@@ -95,6 +96,7 @@ impl TaskQuery {
         Ok(Some(Task {
             task_id: parent_task.get("task_id"),
             project_id: parent_task.get("project_id"),
+            assignee_resource_member_id: parent_task.get("assignee_resource_member_id"),
             parent_task_id: parent_task.get("parent_task_id"),
             title: parent_task.get("title"),
             description: parent_task.get("description"),
@@ -187,6 +189,7 @@ impl TaskQuery {
             let task = Task {
                 task_id: row.get("task_id"),
                 project_id: row.get("project_id"),
+                assignee_resource_member_id: row.get("assignee_resource_member_id"),
                 parent_task_id: row.get("parent_task_id"),
                 title: row.get("title"),
                 description: row.get("description"),
@@ -294,6 +297,7 @@ impl TaskQuery {
             let task = Task {
                 task_id: row.get("task_id"),
                 project_id: row.get("project_id"),
+                assignee_resource_member_id: row.get("assignee_resource_member_id"),
                 parent_task_id: row.get("parent_task_id"),
                 title: row.get("title"),
                 description: row.get("description"),
@@ -349,6 +353,26 @@ impl TaskMutation {
         let assignee_id = input.assignee_id
             .map(|id| Uuid::parse_str(&id.to_string()))
             .transpose()?;
+        let assignee_resource_member_id = input.assignee_resource_member_id
+            .as_ref()
+            .map(|id| Uuid::parse_str(&id.to_string()))
+            .transpose()?;
+        if let Some(member_id) = assignee_resource_member_id {
+            let ok: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM resource_members WHERE resource_member_id = $1 AND project_id = $2)",
+            )
+            .bind(member_id)
+            .bind(project_id)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| AuthError::Database(e))?;
+            if !ok {
+                return Err(AuthError::Other(
+                    "assignee_resource_member_id does not belong to this project".to_string(),
+                )
+                .into());
+            }
+        }
 
         let created = sqlx::query(
             r#"
@@ -360,9 +384,9 @@ impl TaskMutation {
                     effort, progress, created_by,
                     created_at, updated_at, is_deleted,
                     assignee_id, actual_start_date, actual_end_date,
-                    type, category, progress_type, tags
+                    type, category, progress_type, tags, assignee_resource_member_id
                 )
-                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
                 RETURNING *
             )
             SELECT t.*, 
@@ -397,6 +421,7 @@ impl TaskMutation {
         .bind(input.category)
         .bind(input.progress_type)
         .bind(tags_json)
+        .bind(assignee_resource_member_id)
         .fetch_one(&mut *tx)
         .await
         .map_err(|e| AuthError::Database(e))?;
@@ -406,6 +431,7 @@ impl TaskMutation {
         Ok(Task {
             task_id: created.get("task_id"),
             project_id: created.get("project_id"),
+            assignee_resource_member_id: created.get("assignee_resource_member_id"),
             parent_task_id: created.get("parent_task_id"),
             title: created.get("title"),
             description: created.get("description"),
@@ -463,6 +489,31 @@ impl TaskMutation {
         let tags_json = input.tags.as_ref().map(|tags| json!(tags));
         let now = Utc::now();
 
+        let assignee_resource_member_id = input.assignee_resource_member_id
+            .as_ref()
+            .map(|id| Uuid::parse_str(&id.to_string()))
+            .transpose()?;
+        if let Some(member_id) = assignee_resource_member_id {
+            let existing_project: Uuid = existing
+                .as_ref()
+                .map(|row| row.get("project_id"))
+                .expect("task existence checked above");
+            let ok: bool = sqlx::query_scalar(
+                "SELECT EXISTS(SELECT 1 FROM resource_members WHERE resource_member_id = $1 AND project_id = $2)",
+            )
+            .bind(member_id)
+            .bind(existing_project)
+            .fetch_one(&mut *tx)
+            .await
+            .map_err(|e| AuthError::Database(e))?;
+            if !ok {
+                return Err(AuthError::Other(
+                    "assignee_resource_member_id does not belong to this project".to_string(),
+                )
+                .into());
+            }
+        }
+
         // Parse parent_task_id from input if provided
         let parent_task_id = input.parent_task_id
             .as_ref()
@@ -498,6 +549,7 @@ impl TaskMutation {
                     progress_type = COALESCE($16, progress_type),
                     tags = COALESCE($17, tags),
                     is_deleted = COALESCE($18, is_deleted),
+                    assignee_resource_member_id = $21,
                     updated_at = $19
                 WHERE task_id = $20
                 RETURNING *
@@ -529,6 +581,7 @@ impl TaskMutation {
         .bind(input.progress_type)
         .bind(tags_json)
         .bind(input.is_deleted)
+        .bind(assignee_resource_member_id)
         .bind(now)
         .bind(task_id)
         .fetch_one(&mut *tx)
@@ -540,6 +593,7 @@ impl TaskMutation {
         Ok(Task {
             task_id: updated.get("task_id"),
             project_id: updated.get("project_id"),
+            assignee_resource_member_id: updated.get("assignee_resource_member_id"),
             parent_task_id: updated.get("parent_task_id"),
             title: updated.get("title"),
             description: updated.get("description"),
@@ -629,6 +683,7 @@ impl TaskMutation {
             updated_tasks.push(Task {
                 task_id: updated.get("task_id"),
                 project_id: updated.get("project_id"),
+                assignee_resource_member_id: updated.get("assignee_resource_member_id"),
                 parent_task_id: updated.get("parent_task_id"),
                 title: updated.get("title"),
                 description: updated.get("description"),

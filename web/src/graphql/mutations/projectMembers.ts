@@ -1,10 +1,8 @@
 import { gql } from '@apollo/client';
 
 export const ADD_PROJECT_MEMBER = gql`
-  mutation AddProjectMember($projectId: ID!, $input: AddMemberInput!) {
-    add_project_member(project_id: $projectId, input: $input) {
-      member_id
-      user_id
+  mutation AddProjectMember($input: AddProjectMemberInput!) {
+    add_project_member(input: $input) {
       role
       joined_at
       user {
@@ -18,11 +16,11 @@ export const ADD_PROJECT_MEMBER = gql`
   }
 `;
 
+// update_member_role does not exist in the Rust schema; single-role updates use
+// update_project_member (positional args), mirrored here.
 export const UPDATE_MEMBER_ROLE = gql`
-  mutation UpdateMemberRole($projectId: ID!, $input: UpdateMemberRoleInput!) {
-    update_member_role(project_id: $projectId, input: $input) {
-      member_id
-      user_id
+  mutation UpdateMemberRole($project_id: ID!, $user_id: ID!, $role: MemberRole!) {
+    update_project_member(project_id: $project_id, user_id: $user_id, role: $role) {
       role
       joined_at
       user {
@@ -37,8 +35,8 @@ export const UPDATE_MEMBER_ROLE = gql`
 `;
 
 export const UPDATE_PROJECT_MEMBER_ROLE = gql`
-  mutation UpdateProjectMemberRole($input: UpdateProjectMemberInput!) {
-    update_project_member(input: $input) {
+  mutation UpdateProjectMemberRole($project_id: ID!, $user_id: ID!, $role: MemberRole!) {
+    update_project_member(project_id: $project_id, user_id: $user_id, role: $role) {
       user {
         user_id
         email
@@ -57,10 +55,11 @@ export const UPDATE_MULTIPLE_MEMBER_ROLES = gql`
     update_multiple_members(project_id: $projectId, updates: $updates) {
       success_count
       members {
+        user_id
         role
         joined_at
         user {
-          user_id
+          id
           email
           username
           full_name

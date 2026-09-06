@@ -1,0 +1,23 @@
+{
+  "herdrSocket": "/absolute/path/to/herdr.sock",
+  "queueDir": "/absolute/path/to/pm-event-bridge-state",
+  "managerThreadId": "replace-with-your-codex-thread-id",
+  "codexBin": "codex",
+  "codexPrefixArgs": [],
+  "model": "",
+  "reasoning": "",
+  "sandbox": "",
+  "extraArgs": [],
+  "dryRun": true,
+  "watchPrefix": "pm-",
+  "workspaceId": "",
+  "reportDirectory": "/absolute/path/to/plans/reports",
+  "defaultDeadline": "",
+  "maxAttempts": 3,
+  "retryBaseMs": 1000,
+  "retryMaxMs": 30000,
+  "reconnectBaseMs": 1000,
+  "reconnectMaxMs": 30000,
+  "maxBatchEvents": 100,
+  "requestTimeoutMs": 10000
+}

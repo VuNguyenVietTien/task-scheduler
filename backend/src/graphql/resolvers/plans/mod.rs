@@ -1,27 +1,19 @@
-pub mod query;
 pub mod mutation;
+pub mod query;
 
 // Export PlanQuery và PlanMutation từ submodules
-pub use query::PlanQuery;
 pub use mutation::PlanMutation;
+pub use query::PlanQuery;
 
 // --- GraphQL Object Type for Plan ---
 
-use async_graphql::{
-    Context,
-    Object,
-    InputObject,
-    ID,
-    Error as GraphQLError,
-    Json,
-    Result,
-};
-use uuid::Uuid;
+use async_graphql::{Context, Error as GraphQLError, InputObject, Json, Object, Result, ID};
 use sqlx::PgPool;
+use uuid::Uuid;
 
-use crate::error::{AppError};
-use crate::graphql::types::User;
 use crate::auth::error::AuthError;
+use crate::error::AppError;
+use crate::graphql::types::User;
 
 #[derive(Debug, Clone)]
 pub struct Plan {
@@ -54,6 +46,7 @@ impl Plan {
 // --- GraphQL Input Types ---
 
 #[derive(InputObject, Debug)]
+#[graphql(rename_fields = "snake_case")]
 pub struct CreatePlanInput {
     pub project_id: ID,
     pub name: String,
@@ -62,6 +55,7 @@ pub struct CreatePlanInput {
 }
 
 #[derive(InputObject, Debug)]
+#[graphql(rename_fields = "snake_case")]
 pub struct UpdatePlanInput {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -70,8 +64,8 @@ pub struct UpdatePlanInput {
 
 // Helper function (có thể sẽ được chuyển vào một helper module sau)
 fn get_user_uuid_from_session(session_user_id: Option<String>) -> Result<Uuid, GraphQLError> {
-    let user_id_str = session_user_id
-        .ok_or_else(|| GraphQLError::new("User not found in session"))?;
+    let user_id_str =
+        session_user_id.ok_or_else(|| GraphQLError::new("User not found in session"))?;
     Uuid::parse_str(&user_id_str)
         .map_err(|_| GraphQLError::new("Invalid user ID format in session"))
-} 
+}

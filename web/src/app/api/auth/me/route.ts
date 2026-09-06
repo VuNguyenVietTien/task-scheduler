@@ -1,50 +1,35 @@
 export const dynamic = 'force-dynamic';
 
-import { NextResponse } from 'next/server';
-import { cookies } from 'next/headers';
+import { NextRequest, NextResponse } from 'next/server';
 
-export async function GET() {
+import { backendFetch } from '../_session';
+
+/**
+ * W1 session check: forwards the client's Bearer token (Firebase ID token from
+ * the SDK) to the Rust backend `GET /api/v1/auth/me`, which verifies it
+ * cryptographically and returns a fresh `users` row.
+ *
+ * The legacy unsigned `user-session` cookie is deliberately NOT consulted —
+ * cookies alone are never an identity assertion in this architecture.
+ */
+export async function GET(request: NextRequest) {
+  const bearer =
+    request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') || null;
+
+  if (!bearer) {
+    return NextResponse.json({ user: null }, { status: 401 });
+  }
+
   try {
-    const cookieStore = cookies();
-    const authToken = cookieStore.get('auth-token');
-    const userSession = cookieStore.get('user-session');
+    const upstream = await backendFetch('/api/v1/auth/me', {
+      method: 'GET',
+      bearer,
+    });
 
-    if (!authToken || !userSession) {
-      return NextResponse.json({ user: null }, { status: 401 });
-    }
-
-    try {
-      // Parse the user session cookie
-      const sessionData = JSON.parse(userSession.value);
-
-      // In a real app, you would:
-      // 1. Verify the JWT token
-      // 2. Fetch fresh user data from database
-      // 3. Check token expiration
-
-      const user = {
-        id: sessionData.userId,
-        email: sessionData.email,
-        name: sessionData.name || sessionData.email.split('@')[0],
-        emailVerified: true
-      };
-
-      return NextResponse.json({ user });
-    } catch (parseError) {
-      console.error('Failed to parse user session:', parseError);
-      // Clear invalid cookies
-      cookieStore.delete('auth-token');
-      cookieStore.delete('user-session');
-      return NextResponse.json({ user: null }, { status: 401 });
-    }
+    const data = await upstream.json().catch(() => ({}));
+    return NextResponse.json(data, { status: upstream.status });
   } catch (error) {
-    console.error('Auth check error:', error);
-    return NextResponse.json(
-      { 
-        user: null,
-        error: 'Authentication check failed'
-      }, 
-      { status: 500 }
-    );
+    console.error('[api/auth/me] error:', error);
+    return NextResponse.json({ user: null }, { status: 502 });
   }
 }

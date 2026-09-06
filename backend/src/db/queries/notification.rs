@@ -1,19 +1,20 @@
-use sqlx::{PgPool, Row};
-use uuid::Uuid;
 use chrono::Utc;
 use serde_json::Value as JsonValue;
+use sqlx::{PgPool, Row};
+use uuid::Uuid;
 
-use crate::db::models::{Notification, CreateNotificationInput};
+use crate::db::models::{CreateNotificationInput, Notification};
 use crate::error::AppError;
 
 /// Get a notification by its ID
-pub async fn get_notification_by_id(pool: &PgPool, notification_id: Uuid) -> Result<Option<Notification>, sqlx::Error> {
-    let row = sqlx::query(
-        "SELECT * FROM notifications WHERE notification_id = $1"
-    )
-    .bind(notification_id)
-    .fetch_optional(pool)
-    .await?;
+pub async fn get_notification_by_id(
+    pool: &PgPool,
+    notification_id: Uuid,
+) -> Result<Option<Notification>, sqlx::Error> {
+    let row = sqlx::query("SELECT * FROM notifications WHERE notification_id = $1")
+        .bind(notification_id)
+        .fetch_optional(pool)
+        .await?;
 
     Ok(row.map(|row| Notification {
         notification_id: row.get("notification_id"),
@@ -27,7 +28,7 @@ pub async fn get_notification_by_id(pool: &PgPool, notification_id: Uuid) -> Res
         action: row.get("action"),
         metadata: row.get("metadata"),
         is_read: row.get("is_read"),
-        created_at: row.get("created_at")
+        created_at: row.get("created_at"),
     }))
 }
 
@@ -44,7 +45,7 @@ pub async fn get_user_notifications(
         WHERE user_id = $1 
         ORDER BY created_at DESC
         LIMIT $2 OFFSET $3
-        "#
+        "#,
     )
     .bind(user_id)
     .bind(limit)
@@ -52,20 +53,23 @@ pub async fn get_user_notifications(
     .fetch_all(pool)
     .await?;
 
-    Ok(rows.into_iter().map(|row| Notification {
-        notification_id: row.get("notification_id"),
-        user_id: row.get("user_id"),
-        project_id: row.get("project_id"),
-        sender_id: row.get("sender_id"),
-        type_: row.get("type"),
-        reference_type: row.get("reference_type"),
-        reference_id: row.get("reference_id"),
-        message: row.get("message"),
-        action: row.get("action"),
-        metadata: row.get("metadata"),
-        is_read: row.get("is_read"),
-        created_at: row.get("created_at")
-    }).collect())
+    Ok(rows
+        .into_iter()
+        .map(|row| Notification {
+            notification_id: row.get("notification_id"),
+            user_id: row.get("user_id"),
+            project_id: row.get("project_id"),
+            sender_id: row.get("sender_id"),
+            type_: row.get("type"),
+            reference_type: row.get("reference_type"),
+            reference_id: row.get("reference_id"),
+            message: row.get("message"),
+            action: row.get("action"),
+            metadata: row.get("metadata"),
+            is_read: row.get("is_read"),
+            created_at: row.get("created_at"),
+        })
+        .collect())
 }
 
 /// Get unread notifications count for a user
@@ -78,7 +82,7 @@ pub async fn get_unread_notifications_count(
         SELECT COUNT(*) as count 
         FROM notifications 
         WHERE user_id = $1 AND is_read = false
-        "#
+        "#,
     )
     .bind(user_id)
     .fetch_one(pool)
@@ -92,8 +96,10 @@ pub async fn create_notification(
     pool: &PgPool,
     input: CreateNotificationInput,
 ) -> Result<Notification, sqlx::Error> {
-    let metadata = input.metadata.unwrap_or(JsonValue::Object(serde_json::Map::new()));
-    
+    let metadata = input
+        .metadata
+        .unwrap_or(JsonValue::Object(serde_json::Map::new()));
+
     let row = sqlx::query(
         r#"
         INSERT INTO notifications (
@@ -102,7 +108,7 @@ pub async fn create_notification(
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
         RETURNING *
-        "#
+        "#,
     )
     .bind(input.user_id)
     .bind(input.project_id)
@@ -130,7 +136,7 @@ pub async fn create_notification(
         action: row.get("action"),
         metadata: row.get("metadata"),
         is_read: row.get("is_read"),
-        created_at: row.get("created_at")
+        created_at: row.get("created_at"),
     })
 }
 
@@ -146,7 +152,7 @@ pub async fn mark_notification_as_read(
         SET is_read = true
         WHERE notification_id = $1 AND user_id = $2
         RETURNING *
-        "#
+        "#,
     )
     .bind(notification_id)
     .bind(user_id)
@@ -165,7 +171,7 @@ pub async fn mark_notification_as_read(
         action: row.get("action"),
         metadata: row.get("metadata"),
         is_read: row.get("is_read"),
-        created_at: row.get("created_at")
+        created_at: row.get("created_at"),
     })
 }
 
@@ -179,11 +185,11 @@ pub async fn mark_all_notifications_as_read(
         UPDATE notifications
         SET is_read = true
         WHERE user_id = $1 AND is_read = false
-        "#
+        "#,
     )
     .bind(user_id)
     .execute(pool)
     .await?;
 
     Ok(())
-} 
+}

@@ -1,0 +1,10 @@
+# Pending manager review findings
+
+1. web/src/utils/recurring.ts expandCommitment WEEKLY currently requires elapsed%(7*interval)===0 AND cursor weekday===selected weekday. If startDate Monday and weekday Wednesday, no occurrence ever matches. Fix anchoring selected weekdays to recurrence weeks; add test Monday start -> Wednesday occurrences, interval2, from mid-rule.
+2. capacity.ts explicit date override precedes all days off; requirement project day off means whole project off. Ensure defined precedence doesn't revive project/group leave unintentionally from existing date override. UI claim setDateHours never emits day-off override is insufficient if leave added later. Add direct test date override8 + project leave => expected0 unless user explicitly defines exception semantics.
+3. expandCommitment guard maxOccurrences*2 limits scanned days, silently loses sparse weekly/monthly occurrences for longer horizons. Bound by explicit scheduling horizon and result count; report truncation instead of implying complete recurrence.
+
+4. Review at edge-case gate: TaskListView handleCloneTask claims recursive but actually loops direct children only; grandchildren omitted, cloning subtask doesn't preserve its parent, missing create_task ID can create roots, partial success error leaves copies unexplained. Requirement basic clone must at least preserve source hierarchy correctly; report limitations rather than recursive DONE.
+5. TaskExcelGrid handleSave snapshots edits then deletes all succeeded keys from current state, discarding newer edit to same cell made during in-flight request. Add deferred promise test and delete only if still same revision/value, or disable editing intentionally.
+6. TaskExcelGrid due_date accepts invalid calendar dates normalized by JS (2026-02-31), and empty assignee rejected despite handleExcelSave supporting unassign; Enter handler also blocks empty edits globally. Verify intended clear behavior.
+7. Excel typing input is sr-only + autofocus only; after toolbar clicks/cell changes ensure focus/paste works with real keyboard flow rather than tests directly dispatching to hidden input.

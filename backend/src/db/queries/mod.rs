@@ -1,19 +1,19 @@
 // Export all query modules
+pub mod comment;
+pub mod member;
+pub mod notification;
 pub mod project;
+pub mod reports;
 pub mod task;
 pub mod task_status;
-pub mod member;
-pub mod comment;
-pub mod notification;
 pub mod user;
-pub mod reports;
 
 // Re-export query functions
+pub use comment::*;
+pub use member::*;
+pub use notification::*;
 pub use project::*;
+pub use reports::*;
 pub use task::*;
 pub use task_status::*;
-pub use member::*;
-pub use comment::*;
-pub use notification::*;
 pub use user::*;
-pub use reports::*;

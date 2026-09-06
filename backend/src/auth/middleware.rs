@@ -19,7 +19,7 @@ pub async fn validator(
     config: &Config,
 ) -> Result<ServiceRequest, (Error, ServiceRequest)> {
     let token = credentials.token();
-    
+
     // Verify token
     match verify_access_token(token, config) {
         Ok(_) => Ok(req),
@@ -61,12 +61,12 @@ where
 
     fn call(&self, req: ServiceRequest) -> Self::Future {
         let auth_header = req.headers().get("Authorization");
-        
+
         if let Some(auth_header) = auth_header {
             if let Ok(auth_str) = auth_header.to_str() {
                 if auth_str.starts_with("Bearer ") {
                     let token = auth_str.trim_start_matches("Bearer ").trim();
-                    
+
                     match verify_access_token(token, &Config::from_env().unwrap()) {
                         Ok(_) => {
                             let fut = self.service.call(req);
@@ -86,7 +86,9 @@ where
         }
 
         Box::pin(async move {
-            Err(actix_web::error::ErrorUnauthorized("Missing or invalid authorization"))
+            Err(actix_web::error::ErrorUnauthorized(
+                "Missing or invalid authorization",
+            ))
         })
     }
 }
@@ -94,16 +96,13 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-    use actix_web::test;
     use actix_web::http::header::HeaderValue;
+    use actix_web::test;
 
     #[actix_rt::test]
     async fn test_extract_token() {
         let mut headers = HeaderMap::new();
-        headers.insert(
-            AUTHORIZATION,
-            HeaderValue::from_static("Bearer test-token"),
-        );
+        headers.insert(AUTHORIZATION, HeaderValue::from_static("Bearer test-token"));
 
         let token = extract_token(&headers);
         assert_eq!(token, Some("test-token".to_string()));

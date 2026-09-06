@@ -1,14 +1,14 @@
-use std::sync::Arc;
-use tokio::sync::{broadcast, RwLock};
-use serde::{Deserialize, Serialize};
 use actix::prelude::*;
 use actix_web_actors::ws;
+use serde::{Deserialize, Serialize};
+use std::sync::Arc;
+use tokio::sync::{broadcast, RwLock};
 use uuid::Uuid;
 
-mod message;
 mod connect;
-pub use message::*;
+mod message;
 pub use connect::*;
+pub use message::*;
 
 #[derive(Clone)]
 pub struct NotificationBroadcaster {
@@ -25,7 +25,10 @@ impl NotificationBroadcaster {
         self.sender.subscribe()
     }
 
-    pub fn send(&self, msg: NotificationMessage) -> Result<usize, broadcast::error::SendError<NotificationMessage>> {
+    pub fn send(
+        &self,
+        msg: NotificationMessage,
+    ) -> Result<usize, broadcast::error::SendError<NotificationMessage>> {
         self.sender.send(msg)
     }
 }
@@ -67,7 +70,10 @@ impl WebSocketState {
         connections.clone()
     }
 
-    pub fn broadcast(&self, msg: NotificationMessage) -> Result<usize, broadcast::error::SendError<NotificationMessage>> {
+    pub fn broadcast(
+        &self,
+        msg: NotificationMessage,
+    ) -> Result<usize, broadcast::error::SendError<NotificationMessage>> {
         self.broadcaster.send(msg)
     }
 }

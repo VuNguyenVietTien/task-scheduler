@@ -2,27 +2,16 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { signInWithGoogle, signInWithEmailPassword, setFirebasePassword, signOutUser } from '@/lib/firebase';
-import { loginUser, registerUser } from '@/lib/authApi';
-import { createBrowserClient } from '@/lib/supabase/client';
-
-interface ProviderData {
-  providerId: string;
-  uid: string;
-  displayName: string | null;
-  email: string | null;
-  phoneNumber: string | null;
-  photoURL: string | null;
-}
-
-export interface User {
-  id: string;
-  email: string;
-  name: string;
-  role: string;
-  emailVerified?: boolean;
-  providerData: ProviderData[];
-}
+import {
+  signInWithGoogle,
+  signInWithEmailPassword,
+  setFirebasePassword,
+  signOutUser,
+  getIdToken,
+  createUserWithName,
+  sendFirebaseVerificationEmail,
+} from '@/lib/firebase';
+import type { User, FirebaseLoginResponse } from '@/types/auth';
 
 export interface AuthContextType {
   user: User | null;
@@ -47,6 +36,16 @@ export function useAuth() {
   return context;
 }
 
+/**
+ * W1 AuthContext — Firebase ID token + Rust backend session carrier.
+ *
+ * - Identity is established by the Firebase SDK; the ID token is exchanged for
+ *   the app user via `POST /api/auth/firebase/login` (Rust verifies the token,
+ *   upserts `users`, proxy sets the signed `pm_session` cookie).
+ * - `checkAuth` re-verifies against Rust `GET /api/auth/me` with the Bearer
+ *   token on every mount — no unsigned cookie is ever trusted.
+ * - No Supabase client, no OTP magic-link step.
+ */
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
@@ -55,94 +54,81 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     checkAuth();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const checkAuth = async () => {
     try {
-      console.log('[Auth] Checking current authentication status...');
-      const response = await fetch('/api/auth/me');
+      const token = await getIdToken();
+      if (!token) return; // no Firebase session → stay logged out
+
+      const response = await fetch('/api/auth/me', {
+        headers: { Authorization: `Bearer ${token}` },
+        credentials: 'same-origin',
+      });
+
       if (response.ok) {
         const data = await response.json();
-        console.log('[Auth] Current user:', data.user);
-        setUser(data.user);
-        
-        // Redirect to dashboard if on auth page
-        if (window.location.pathname === '/auth') {
-          router.replace('/dashboard');
+        if (data?.user) {
+          setUser({
+            ...data.user,
+            providerData: data.user.providerData ?? [],
+          });
+          if (window.location.pathname === '/auth') {
+            router.replace('/dashboard');
+          }
         }
-      } else {
-        console.log('[Auth] No authenticated user found');
       }
-    } catch (error) {
-      console.error('[Auth] Authentication check failed:', error);
-      setError('Authentication check failed');
+    } catch (err) {
+      console.error('[Auth] Authentication check failed:', err);
     } finally {
       setLoading(false);
     }
   };
 
+  /** Exchange the Firebase ID token for the app user on the Rust backend. */
+  const syncBackend = async (
+    token: string,
+    email: string,
+    name: string,
+    uid: string,
+  ): Promise<void> => {
+    const response = await fetch('/api/auth/firebase/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        firebase_token: token,
+        email,
+        name,
+        firebase_uid: uid,
+      }),
+    });
+
+    const data: FirebaseLoginResponse & { error?: string } =
+      await response.json().catch(() => ({}));
+
+    if (!response.ok || !data?.user) {
+      await signOutUser();
+      throw new Error(data?.error || 'Login failed');
+    }
+
+    setUser({ ...data.user, providerData: [] });
+    window.location.href = '/dashboard';
+  };
+
   const loginWithGoogle = async () => {
     try {
       setLoading(true);
-      console.log('[Auth] Starting Google login process...');
-      
-      // Call Firebase for Google authentication
-      console.log('[Auth] Calling Firebase signInWithGoogle...');
       const { token, user: firebaseUser } = await signInWithGoogle();
-      console.log('[Auth] Firebase auth successful:', {
-        email: firebaseUser.email,
-        uid: firebaseUser.uid
-      });
-      
-      // Call our API endpoint
-      console.log('[Auth] Calling backend sync API...');
-      const apiUrl = '/api/auth/firebase/login';
-      
-      const response = await fetch(apiUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          firebase_token: token,
-          email: firebaseUser.email,
-          name: firebaseUser.displayName || 'Unnamed User',
-          firebase_uid: firebaseUser.uid
-        })
-      });
-
-      const data = await response.json();
-      
-      if (!response.ok) {
-        console.error('[Auth] Backend sync failed:', data.error);
-        // Sign out from Firebase if backend sync fails
-        await signOutUser();
-        throw new Error(data.error || 'Google login failed');
-      }
-
-      console.log('[Auth] Backend sync successful. User data:', data.user);
-
-      // Establish a Supabase session so middleware can validate the user
-      if (data.session?.properties?.email_otp) {
-        const supabase = createBrowserClient();
-        const { error: otpError } = await supabase.auth.verifyOtp({
-          email: firebaseUser.email!,
-          token: data.session.properties.email_otp,
-          type: 'email',
-        });
-        if (otpError) {
-          console.error('[Auth] Supabase OTP verification failed:', otpError.message);
-          throw new Error('Session establishment failed');
-        }
-      }
-
-      // Update local state
-      setUser(data.user);
-      console.log('[Auth] Local state updated, redirecting to dashboard');
-      window.location.href = '/dashboard';
-
-    } catch (error) {
-      console.error('[Auth] Google login error:', error);
+      await syncBackend(
+        token,
+        firebaseUser.email!,
+        firebaseUser.displayName || 'Unnamed User',
+        firebaseUser.uid,
+      );
+    } catch (err) {
+      console.error('[Auth] Google login error:', err);
       setError('Google login failed. Please try again.');
     } finally {
       setLoading(false);
@@ -152,43 +138,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const login = async (email: string, password: string) => {
     try {
       setLoading(true);
-      // Authenticate via Firebase email/password
-      const { token, user: firebaseUser } = await signInWithEmailPassword(email, password);
-
-      // Sync with backend (same flow as Google login)
-      const response = await fetch('/api/auth/firebase/login', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          firebase_token: token,
-          email: firebaseUser.email,
-          name: firebaseUser.displayName || email.split('@')[0],
-          firebase_uid: firebaseUser.uid,
-        }),
-      });
-
-      const data = await response.json();
-      if (!response.ok) {
-        await signOutUser();
-        throw new Error(data.error || 'Login failed');
-      }
-
-      // Establish Supabase session
-      if (data.session?.properties?.email_otp) {
-        const supabase = createBrowserClient();
-        const { error: otpError } = await supabase.auth.verifyOtp({
-          email: firebaseUser.email!,
-          token: data.session.properties.email_otp,
-          type: 'email',
-        });
-        if (otpError) throw new Error('Session establishment failed');
-      }
-
-      setUser(data.user);
-      window.location.href = '/dashboard';
-    } catch (error) {
-      console.error('[Auth] Login error:', error);
-      setError(error instanceof Error ? error.message : 'Invalid email or password');
+      const { token, user: firebaseUser } =
+        await signInWithEmailPassword(email, password);
+      await syncBackend(
+        token,
+        firebaseUser.email ?? email,
+        firebaseUser.displayName || email.split('@')[0],
+        firebaseUser.uid,
+      );
+    } catch (err) {
+      console.error('[Auth] Login error:', err);
+      setError(err instanceof Error ? err.message : 'Invalid email or password');
     } finally {
       setLoading(false);
     }
@@ -197,12 +157,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (email: string, password: string, name: string) => {
     try {
       setLoading(true);
-      const response = await registerUser({ email, password, name });
-      setUser(response.user as User);
-      window.location.href = '/dashboard';
-    } catch (error) {
-      console.error('[Auth] Registration error:', error);
-      setError('Registration failed. Please try again.');
+      // 1) Create the identity in Firebase, set the display name.
+      const { token, user: firebaseUser } = await createUserWithName(
+        email,
+        password,
+        name,
+      );
+
+      // 2) Persist the app user on the Rust backend.
+      const registerResponse = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name }),
+      });
+      const registerData = await registerResponse.json().catch(() => ({}));
+      if (!registerResponse.ok) {
+        await signOutUser();
+        throw new Error(registerData?.error || 'Registration failed');
+      }
+
+      // 3) Establish the app session (same path as login).
+      await syncBackend(token, firebaseUser.email ?? email, name, firebaseUser.uid);
+    } catch (err) {
+      console.error('[Auth] Registration error:', err);
+      setError(err instanceof Error ? err.message : 'Registration failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -211,19 +189,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = async () => {
     try {
       setLoading(true);
-      await signOutUser(); // Sign out from Firebase
-      const response = await fetch('/api/auth/logout', {
-        credentials: 'include',
-        method: 'POST'
+      const token = await getIdToken();
+      await fetch('/api/auth/logout', {
+        method: 'POST',
+        credentials: 'same-origin',
+        ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
       });
-
-      if (!response.ok) {
-        throw new Error('Logout failed');
-      }
-
+      await signOutUser();
       setUser(null);
       window.location.href = '/auth';
-    } catch (error) {
+    } catch (err) {
+      console.error('[Auth] Logout error:', err);
       setError('Logout failed');
     } finally {
       setLoading(false);
@@ -234,10 +210,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     try {
       setLoading(true);
       await setFirebasePassword(newPassword);
-    } catch (error) {
-      console.error('[Auth] Set password error:', error);
-      const msg = error instanceof Error ? error.message : 'Failed to set password';
-      // Firebase requires-recent-login error
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to set password';
       if (msg.includes('requires-recent-login') || msg.includes('recent')) {
         throw new Error('Please sign out and sign in again before changing your password.');
       }
@@ -250,20 +224,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const sendVerificationEmail = async () => {
     try {
       setLoading(true);
-      const response = await fetch('/api/auth/send-verification', {
-        method: 'POST',
-        credentials: 'include',
-        headers: {
-          'Content-Type': 'application/json',
-        }
-      });
-
-      if (!response.ok) {
-        throw new Error('Failed to send verification email');
-      }
-    } catch (error) {
+      await sendFirebaseVerificationEmail();
+    } catch (err) {
+      console.error('[Auth] Send verification error:', err);
       setError('Failed to send verification email. Please try again.');
-      throw error;
+      throw err;
     } finally {
       setLoading(false);
     }
@@ -281,7 +246,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout,
     setPassword,
     clearError,
-    sendVerificationEmail
+    sendVerificationEmail,
   };
 
   if (loading) {

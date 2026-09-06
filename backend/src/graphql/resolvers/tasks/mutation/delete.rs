@@ -14,7 +14,7 @@ pub async fn delete_task(ctx: &Context<'_>, task_id: ID) -> Result<bool, async_g
         UPDATE tasks 
         SET is_deleted = true 
         WHERE task_id = $1
-        "#
+        "#,
     )
     .bind(task_id)
     .execute(pool)

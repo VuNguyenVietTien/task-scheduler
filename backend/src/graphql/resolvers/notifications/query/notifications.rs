@@ -13,16 +13,18 @@ pub async fn notifications(
 ) -> Result<Vec<Notification>> {
     let context = ctx.data::<GraphQLContext>()?;
     let pool = &context.db;
-    let user_id = context.auth.as_ref()
+    let user_id = context
+        .auth
+        .as_ref()
         .ok_or_else(|| AuthError::Unauthorized("Not authenticated".to_string()))?
         .user_id()?;
-    
+
     let limit = limit.unwrap_or(20);
     let offset = offset.unwrap_or(0);
-    
+
     let notifications = get_user_notifications(pool, user_id, limit, offset)
         .await
         .map_err(|e| AuthError::Database(e))?;
-    
+
     Ok(notifications.into_iter().map(|n| n.into()).collect())
-} 
+}

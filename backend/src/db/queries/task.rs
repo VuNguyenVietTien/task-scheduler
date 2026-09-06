@@ -1,18 +1,13 @@
+use crate::db::{helpers::row_to_task, models::Task};
 use sqlx::{postgres::PgRow, PgPool, Row};
 use uuid::Uuid;
-use crate::db::{
-    models::Task,
-    helpers::row_to_task,
-};
 
 /// Get a task by its ID
 pub async fn get_task_by_id(pool: &PgPool, task_id: Uuid) -> Result<Option<Task>, sqlx::Error> {
-    let row = sqlx::query(
-        "SELECT * FROM tasks WHERE task_id = $1 AND NOT is_deleted"
-    )
-    .bind(task_id)
-    .fetch_optional(pool)
-    .await?;
+    let row = sqlx::query("SELECT * FROM tasks WHERE task_id = $1 AND NOT is_deleted")
+        .bind(task_id)
+        .fetch_optional(pool)
+        .await?;
 
     match row {
         Some(row) => row_to_task(row).map(Some),
@@ -34,7 +29,7 @@ pub async fn list_project_tasks(
         AND ($2::uuid IS NULL OR parent_task_id = $2)
         AND NOT is_deleted
         ORDER BY created_at DESC
-        "#
+        "#,
     )
     .bind(project_id)
     .bind(parent_task_id)
@@ -61,7 +56,7 @@ pub async fn create_task(pool: &PgPool, task: Task) -> Result<Task, sqlx::Error>
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
         RETURNING *
-        "#
+        "#,
     )
     .bind(task.task_id)
     .bind(task.project_id)
@@ -106,7 +101,7 @@ pub async fn update_task(pool: &PgPool, task: Task) -> Result<Task, sqlx::Error>
             updated_at = $13
         WHERE task_id = $1
         RETURNING *
-        "#
+        "#,
     )
     .bind(task.task_id)
     .bind(&task.title)
@@ -129,21 +124,19 @@ pub async fn update_task(pool: &PgPool, task: Task) -> Result<Task, sqlx::Error>
 
 /// Soft delete a task
 pub async fn delete_task(pool: &PgPool, task_id: Uuid) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "UPDATE tasks SET is_deleted = true WHERE task_id = $1"
-    )
-    .bind(task_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("UPDATE tasks SET is_deleted = true WHERE task_id = $1")
+        .bind(task_id)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
 
 /// Count tasks in a project
 pub async fn count_project_tasks(
-    pool: &PgPool, 
+    pool: &PgPool,
     project_id: Uuid,
-    parent_task_id: Option<Uuid>
+    parent_task_id: Option<Uuid>,
 ) -> Result<i64, sqlx::Error> {
     let row = sqlx::query(
         r#"
@@ -152,9 +145,10 @@ pub async fn count_project_tasks(
         WHERE project_id = $1
         AND ($2::uuid IS NULL OR parent_task_id = $2)
         AND NOT is_deleted
-        "#)
-        .bind(project_id)
-        .bind(parent_task_id)
+        "#,
+    )
+    .bind(project_id)
+    .bind(parent_task_id)
     .fetch_one(pool)
     .await?;
 

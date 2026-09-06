@@ -20,6 +20,7 @@ import {
 import { toBackendRole, toFrontendRole } from '@/lib/utils';
 import { RootState } from '@/redux/store';
 import { useTranslation } from 'react-i18next';
+import { SchedulingConfigPanel } from './SchedulingConfigPanel';
 
 // Định nghĩa các type cần thiết
 type Member = {
@@ -568,6 +569,10 @@ export function MembersView({ projectId, members: propMembers, currentUserRole, 
 
   return (
     <div className="space-y-6">
+      {/* Requirements 2/3/4/6: scheduling-side member management (placeholders,
+          capacity, days off, groups, recurring commitments). */}
+      <SchedulingConfigPanel projectId={projectId} canManage={canManageMembers} />
+
       <div className="flex justify-between items-center">
         <h2 className="text-xl font-semibold">{t('members.projectMembers')}</h2>
         {canManageMembers && (

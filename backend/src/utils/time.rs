@@ -50,12 +50,12 @@ mod tests {
     fn test_fixed_time() {
         let now = Utc::now();
         let fixed = now.to_fixed_offset();
-        
+
         assert_eq!(fixed.timestamp(), now.timestamp());
-        
+
         let later = now + Duration::hours(1);
         let fixed_later = later.to_fixed_offset();
-        
+
         assert!(fixed_later > fixed);
 
         // Test conversions

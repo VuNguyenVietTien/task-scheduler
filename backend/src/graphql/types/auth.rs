@@ -1,21 +1,24 @@
+use crate::graphql::types::project::User;
 use async_graphql::*;
 use serde::{Deserialize, Serialize};
-use crate::graphql::types::project::User;
 
 #[derive(Debug, Serialize, Deserialize, InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct RegisterInput {
     pub email: String,
     pub password: String,
     pub username: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize, InputObject)] 
+#[derive(Debug, Serialize, Deserialize, InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct LoginInput {
     pub email: String,
     pub password: String,
 }
 
 #[derive(Debug, SimpleObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct AuthResponse {
     pub token: String,
     pub expires_in: i64,
@@ -23,15 +26,17 @@ pub struct AuthResponse {
 }
 
 #[derive(Debug, Clone, SimpleObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct AuthUserResponse {
     pub id: String,
-    pub email: String, 
+    pub email: String,
     pub name: String,
     pub role: String,
     pub verified: bool,
 }
 
 #[derive(SimpleObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct AuthPayload {
     pub access_token: String,
     pub refresh_token: String,
@@ -39,15 +44,16 @@ pub struct AuthPayload {
 }
 
 impl From<crate::auth::types::User> for AuthUserResponse {
-    fn from(user: crate::auth::types::User) -> Self {  
+    fn from(user: crate::auth::types::User) -> Self {
         Self {
             id: user.id.to_string(),
             email: user.email,
             name: user.name,
             role: match user.role {
                 crate::auth::types::UserRole::Admin => "admin",
-                crate::auth::types::UserRole::User => "user", 
-            }.to_string(),
+                crate::auth::types::UserRole::User => "user",
+            }
+            .to_string(),
             verified: user.verified,
         }
     }

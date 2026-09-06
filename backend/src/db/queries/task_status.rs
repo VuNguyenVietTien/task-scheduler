@@ -1,17 +1,15 @@
+use crate::db::{helpers::row_to_task_status, models::TaskStatus};
 use sqlx::PgPool;
 use uuid::Uuid;
-use crate::db::{
-    models::TaskStatus,
-    helpers::row_to_task_status,
-};
 
-pub async fn get_task_status_by_id(pool: &PgPool, status_id: Uuid) -> Result<Option<TaskStatus>, sqlx::Error> {
-    let row = sqlx::query(
-        "SELECT * FROM task_statuses WHERE status_id = $1"
-    )
-    .bind(status_id)
-    .fetch_optional(pool)
-    .await?;
+pub async fn get_task_status_by_id(
+    pool: &PgPool,
+    status_id: Uuid,
+) -> Result<Option<TaskStatus>, sqlx::Error> {
+    let row = sqlx::query("SELECT * FROM task_statuses WHERE status_id = $1")
+        .bind(status_id)
+        .fetch_optional(pool)
+        .await?;
 
     match row {
         Some(row) => row_to_task_status(row).map(Some),
@@ -19,14 +17,17 @@ pub async fn get_task_status_by_id(pool: &PgPool, status_id: Uuid) -> Result<Opt
     }
 }
 
-pub async fn list_project_statuses(pool: &PgPool, project_id: Uuid) -> Result<Vec<TaskStatus>, sqlx::Error> {
+pub async fn list_project_statuses(
+    pool: &PgPool,
+    project_id: Uuid,
+) -> Result<Vec<TaskStatus>, sqlx::Error> {
     let rows = sqlx::query(
         r#"
         SELECT * 
         FROM task_statuses
         WHERE project_id = $1
         ORDER BY display_order ASC
-        "#
+        "#,
     )
     .bind(project_id)
     .fetch_all(pool)
@@ -39,7 +40,10 @@ pub async fn list_project_statuses(pool: &PgPool, project_id: Uuid) -> Result<Ve
     Ok(statuses)
 }
 
-pub async fn create_task_status(pool: &PgPool, status: TaskStatus) -> Result<TaskStatus, sqlx::Error> {
+pub async fn create_task_status(
+    pool: &PgPool,
+    status: TaskStatus,
+) -> Result<TaskStatus, sqlx::Error> {
     let row = sqlx::query(
         r#"
         INSERT INTO task_statuses (
@@ -49,7 +53,7 @@ pub async fn create_task_status(pool: &PgPool, status: TaskStatus) -> Result<Tas
         )
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
         RETURNING *
-        "#
+        "#,
     )
     .bind(status.status_id)
     .bind(status.project_id)
@@ -67,7 +71,10 @@ pub async fn create_task_status(pool: &PgPool, status: TaskStatus) -> Result<Tas
     row_to_task_status(row)
 }
 
-pub async fn update_task_status(pool: &PgPool, status: TaskStatus) -> Result<TaskStatus, sqlx::Error> {
+pub async fn update_task_status(
+    pool: &PgPool,
+    status: TaskStatus,
+) -> Result<TaskStatus, sqlx::Error> {
     let row = sqlx::query(
         r#"
         UPDATE task_statuses SET
@@ -80,7 +87,7 @@ pub async fn update_task_status(pool: &PgPool, status: TaskStatus) -> Result<Tas
             updated_at = $8
         WHERE status_id = $1
         RETURNING *
-        "#
+        "#,
     )
     .bind(status.status_id)
     .bind(&status.name)
@@ -97,12 +104,10 @@ pub async fn update_task_status(pool: &PgPool, status: TaskStatus) -> Result<Tas
 }
 
 pub async fn delete_task_status(pool: &PgPool, status_id: Uuid) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "DELETE FROM task_statuses WHERE status_id = $1"
-    )
-    .bind(status_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("DELETE FROM task_statuses WHERE status_id = $1")
+        .bind(status_id)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }

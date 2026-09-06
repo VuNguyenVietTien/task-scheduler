@@ -11,8 +11,9 @@ import { mockTasks } from "@/data/mockTasks";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProject } from "@/hooks/useProject";
 import { Combobox } from "@headlessui/react";
-import { useMutation } from "@apollo/client";
+import { useMutation, useQuery } from "@apollo/client";
 import { CREATE_TASK } from "@/graphql/mutations";
+import { RESOURCE_MEMBERS_QUERY } from "@/graphql/scheduling";
 
 import { AdvancedEditor } from "@/components/common/AdvancedEditor";
 
@@ -25,6 +26,8 @@ export interface TaskFormInputs {
   title: string;
   description: string;
   assignee: string;
+  /** Set only for a project member who does not have a linked user account. */
+  assigneeResourceMemberId?: string;
   startDate: string;
   dueDate: string;
   category: string;
@@ -45,6 +48,22 @@ export interface TaskFormInputs {
   | "ARCHIVED";
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT" | "CRITICAL";
   priorityOrder: number;
+}
+
+interface ResourceMemberRow {
+  resource_member_id: string;
+  display_name: string;
+  email: string | null;
+  user_id: string | null;
+  member_kind: string;
+}
+
+interface AssigneeOption {
+  key: string;
+  label: string;
+  userId: string | null;
+  resourceMemberId: string | null;
+  avatarUrl?: string | null;
 }
 
 interface ComboboxFieldProps {
@@ -141,10 +160,54 @@ function ComboboxField({
   );
 }
 
+// Rust TaskProgressType enum is lowercase (study/investigate/code/...);
+// NO uppercase transform — pass the select value through as-is.
+// Rust TaskStatus canonical values for task creation (review BD-3): restrict to
+// TODO/DOING/DONE/CLOSE regardless of broader SDL history.
+export const TASK_STATUS_OPTIONS: { value: string; label: string }[] = [
+  { value: 'TODO', label: 'Todo' },
+  { value: 'DOING', label: 'Doing' },
+  { value: 'DONE', label: 'Done' },
+  { value: 'CLOSE', label: 'Close' },
+];
+
+export function buildCreateTaskInput(
+  data: TaskFormInputs,
+  projectId: string,
+  parentTaskId?: string | null
+) {
+  return {
+    title: data.title,
+    description: data.description || '',
+    project_id: projectId,
+    parent_task_id: parentTaskId || data.parentTaskId || null,
+    status: data.status,
+    priority: data.priority,
+    // CreateTaskInput.priority_order is Int! (non-null) — BD-2
+    priority_order: data.priorityOrder ?? 0,
+    start_date: data.startDate ? new Date().toISOString() : null,
+    due_date: data.dueDate ? new Date(data.dueDate).toISOString() : null,
+    // An unlinked resource member has no user id. Passing its resource id is
+    // what allows the backend to retain the assignment until it is linked.
+    assignee_id: data.assigneeResourceMemberId ? null : data.assignee || null,
+    assignee_resource_member_id: data.assigneeResourceMemberId || null,
+    effort: data.effort || 0,
+    type_: data.type || null,
+    category: data.category || null,
+    progress_type: data.progressType ? data.progressType : null,
+    tags: data.tags || [],
+  };
+}
+
 export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProps) {
   const router = useRouter();
   const { user } = useAuth();
   const { data: projectData } = useProject(projectId);
+  const resourceMembersQ = useQuery(RESOURCE_MEMBERS_QUERY, {
+    variables: { project_id: projectId },
+    skip: !projectId,
+    fetchPolicy: 'cache-and-network',
+  });
   const [taskSearchQuery, setTaskSearchQuery] = useState("");
   const [selectedParentTask, setSelectedParentTask] = useState<Task | null>(
     null
@@ -191,35 +254,60 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
   });
 
   const selectedAssignee = watch("assignee");
-  // Filter project members based on search query
-  const filteredMembers = useMemo(() => {
-    const members = projectData?.project?.members || [];
-    let filtered = members;
-
-    if (assigneeSearchQuery) {
-      filtered = members.filter((member) =>
-        member && member.user && member.user.username &&
-        member.user.username.toLowerCase().includes(assigneeSearchQuery.toLowerCase())
-      );
+  const selectedAssigneeResourceMemberId = watch("assigneeResourceMemberId");
+  // A project member without an email/user account exists only in
+  // resource_members. Merge that list with ordinary project members, while
+  // retaining user-id assignment for linked members.
+  const assigneeOptions = useMemo<AssigneeOption[]>(() => {
+    const byKey = new Map<string, AssigneeOption>();
+    for (const member of projectData?.project?.members ?? []) {
+      if (!member?.user?.user_id) continue;
+      const label = member.user.username || member.user.full_name || member.user.email;
+      byKey.set(`user:${member.user.user_id}`, {
+        key: `user:${member.user.user_id}`,
+        label,
+        userId: member.user.user_id,
+        resourceMemberId: null,
+        avatarUrl: member.user.avatar_url,
+      });
     }
+    for (const member of (resourceMembersQ.data?.resource_members ?? []) as ResourceMemberRow[]) {
+      if (member.user_id) {
+        // Linked members keep the existing user-id mutation contract.
+        const key = `user:${member.user_id}`;
+        if (!byKey.has(key)) {
+          byKey.set(key, {
+            key,
+            label: member.display_name,
+            userId: member.user_id,
+            resourceMemberId: null,
+          });
+        }
+      } else {
+        byKey.set(`resource:${member.resource_member_id}`, {
+          key: `resource:${member.resource_member_id}`,
+          label: member.display_name,
+          userId: null,
+          resourceMemberId: member.resource_member_id,
+        });
+      }
+    }
+    return Array.from(byKey.values()).sort((a, b) => a.label.localeCompare(b.label));
+  }, [projectData?.project?.members, resourceMembersQ.data?.resource_members]);
 
-    // Sắp xếp thành viên theo tên người dùng
-    filtered = [...filtered].sort((a, b) => {
-      if (!a.user || !b.user || !a.user.username || !b.user.username) return 0;
-      return a.user.username.localeCompare(b.user.username);
-    });
+  const filteredMembers = useMemo(() => {
+    const query = assigneeSearchQuery.trim().toLowerCase();
+    return assigneeOptions
+      .filter((member) => !query || member.label.toLowerCase().includes(query))
+      .slice(0, 10);
+  }, [assigneeOptions, assigneeSearchQuery]);
 
-    // Limit the number of displayed members to 10
-    return filtered.slice(0, 10);
-  }, [projectData?.project?.members, assigneeSearchQuery]);
-
-  // Get selected assignee member
   const selectedAssigneeMember = useMemo(() => {
-    if (!selectedAssignee || !projectData?.project?.members) return null;
-    return projectData.project.members.find(
-      (m) => m.user.user_id === selectedAssignee
-    );
-  }, [selectedAssignee, projectData?.project?.members]);
+    if (selectedAssigneeResourceMemberId) {
+      return assigneeOptions.find((option) => option.resourceMemberId === selectedAssigneeResourceMemberId) ?? null;
+    }
+    return assigneeOptions.find((option) => option.userId === selectedAssignee) ?? null;
+  }, [assigneeOptions, selectedAssignee, selectedAssigneeResourceMemberId]);
 
   // Filter available parent tasks
   const availableParentTasks = useMemo(() => {
@@ -264,20 +352,7 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
     []
   );
 
-  const statusOpts = useMemo(
-    () => [
-      { value: "TODO", label: "Todo" },
-      { value: "DOING", label: "Doing" },
-      { value: "DONE", label: "Done" },
-      { value: "CLOSE", label: "Close" },
-      { value: "PENDING", label: "Pending" },
-      { value: "REVIEW", label: "Review" },
-      { value: "BLOCKED", label: "Blocked" },
-      { value: "REJECTED", label: "Rejected" },
-      { value: "ARCHIVED", label: "Archived" },
-    ],
-    []
-  );
+  const statusOpts = TASK_STATUS_OPTIONS;
 
   // Update progressTypeOpts to match backend enum
   const progressTypeOpts = useMemo(
@@ -298,23 +373,8 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
       // Hiển thị trạng thái loading
       console.log('Submitting task with data:', data);
 
-      // Chuẩn bị input cho GraphQL mutation
-      const createTaskInput = {
-        title: data.title,
-        description: data.description || '',
-        project_id: projectId,
-        parent_task_id: parentTaskId || data.parentTaskId || null,
-        status: data.status,
-        priority: data.priority,
-        start_date: data.startDate ? new Date().toISOString() : null,
-        due_date: data.dueDate ? new Date(data.dueDate).toISOString() : null,
-        assignee_id: data.assignee || null,
-        effort: data.effort || 0,
-        type_: data.type || null,
-        category: data.category || null,
-        progress_type: data.progressType ? data.progressType.toUpperCase() : null,
-        tags: data.tags || [],
-      };
+      // Chuẩn bị input cho GraphQL mutation (snake_case + lowercase progress_type)
+      const createTaskInput = buildCreateTaskInput(data, projectId, parentTaskId);
 
       // Gọi mutation để tạo task
       const result = await createTask({
@@ -346,8 +406,9 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
     setValue("parentTaskId", task.id);
   };
 
-  const handleAssigneeSelect = (userId: string, username: string) => {
-    setValue("assignee", userId);
+  const handleAssigneeSelect = (option: AssigneeOption) => {
+    setValue("assignee", option.userId ?? '');
+    setValue("assigneeResourceMemberId", option.resourceMemberId ?? undefined);
     setAssigneeSearchQuery("");
     setIsAssigneeDropdownOpen(false);
   };
@@ -368,11 +429,13 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
   const handleAssignToMe = () => {
     if (user) {
       setValue("assignee", user.id);
+      setValue("assigneeResourceMemberId", undefined);
     }
   };
 
   const handleClearAssignee = () => {
     setValue("assignee", "");
+    setValue("assigneeResourceMemberId", undefined);
     setAssigneeSearchQuery("");
   };
 
@@ -448,7 +511,7 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
                   {selectedAssigneeMember ? (
                     <div className="flex items-center justify-between w-full">
                       <div className="inline-flex items-center px-2 py-0.5 rounded bg-blue-100 text-blue-800">
-                        <span>{selectedAssigneeMember.user.username}</span>
+                        <span>{selectedAssigneeMember.label}</span>
                         <button
                           type="button"
                           onClick={(e) => {
@@ -511,21 +574,19 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
                     {filteredMembers.length > 0 ? (
                       filteredMembers.map((member) => (
                         <li
-                          key={member.user.user_id}
-                          onClick={() =>
-                            handleAssigneeSelect(member.user.user_id, member.user.username)
-                          }
+                          key={member.key}
+                          onClick={() => handleAssigneeSelect(member)}
                           className="relative cursor-pointer select-none py-2 px-3 hover:bg-blue-50"
                         >
                           <div className="flex items-center">
-                            {member.user.avatar_url && (
+                            {member.avatarUrl && (
                               <img
-                                src={member.user.avatar_url}
+                                src={member.avatarUrl}
                                 alt=""
                                 className="h-6 w-6 rounded-full mr-2"
                               />
                             )}
-                            <span>{member.user.username}</span>
+                            <span>{member.label}</span>
                           </div>
                         </li>
                       ))

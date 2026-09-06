@@ -3,6 +3,7 @@ use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 #[derive(SimpleObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct CommentResponse {
     pub id: ID,
     pub task_id: ID,
@@ -15,6 +16,7 @@ pub struct CommentResponse {
 }
 
 #[derive(InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct CreateCommentInput {
     pub task_id: ID,
     pub content: String,
@@ -40,13 +42,12 @@ impl From<CreateCommentInput> for crate::db::models::Comment {
     fn from(input: CreateCommentInput) -> Self {
         Self {
             comment_id: Uuid::new_v4(),
-            task_id: Uuid::parse_str(&input.task_id.to_string())
-                .expect("Invalid task ID format"),
+            task_id: Uuid::parse_str(&input.task_id.to_string()).expect("Invalid task ID format"),
             user_id: Uuid::new_v4(), // Will be set in resolver
             content: input.content,
-            parent_comment_id: input.parent_comment_id
-                .map(|id| Uuid::parse_str(&id.to_string())
-                    .expect("Invalid parent comment ID format")),
+            parent_comment_id: input.parent_comment_id.map(|id| {
+                Uuid::parse_str(&id.to_string()).expect("Invalid parent comment ID format")
+            }),
             created_at: Utc::now(),
             updated_at: Utc::now(),
             is_deleted: false,

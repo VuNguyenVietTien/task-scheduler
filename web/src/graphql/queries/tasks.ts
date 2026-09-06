@@ -7,6 +7,7 @@ export const GET_PROJECT_TASKS = gql`
       project_id
       parent_task_id
       title
+      assignee_resource_member_id
       assignee {
         user_id
         username
@@ -35,6 +36,7 @@ export const GET_PROJECT_TASKS = gql`
         project_id
         parent_task_id
         title
+        assignee_resource_member_id
         assignee {
           user_id
           username
@@ -73,6 +75,7 @@ export const GET_TASK_BY_ID = gql`
       updated_at
       project_id
       parent_task_id
+      assignee_resource_member_id
       assignee {
         user_id
         username
@@ -114,6 +117,7 @@ export const GET_PROJECT_TASKS_PAGINATED = gql`
         project_id
         parent_task_id
         title
+        assignee_resource_member_id
         assignee {
           user_id
           username
@@ -196,6 +200,7 @@ export const GET_TASK_SUBTASKS = gql`
       progress
       start_date
       due_date
+      assignee_resource_member_id
       assignee {
         user_id
         username

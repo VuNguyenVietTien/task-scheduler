@@ -1,11 +1,11 @@
-use sqlx::Row;
-use chrono::{DateTime, Utc};
-use uuid::Uuid;
 use crate::db::{
-    models::{Project, Task, ProjectMember, TaskStatus, Comment},
-    types::{ProjectStatus, ProjectPriority, ProjectVisibility, MemberRole},
+    models::{Comment, Project, ProjectMember, Task, TaskStatus},
+    types::{MemberRole, ProjectPriority, ProjectStatus, ProjectVisibility},
 };
+use chrono::{DateTime, Utc};
 use sqlx::postgres::PgRow;
+use sqlx::Row;
+use uuid::Uuid;
 
 pub fn row_to_project(row: PgRow) -> Result<Project, sqlx::Error> {
     Ok(Project {
@@ -18,21 +18,24 @@ pub fn row_to_project(row: PgRow) -> Result<Project, sqlx::Error> {
         status: row.try_get::<String, _>("status")?.parse().map_err(|e| {
             sqlx::Error::Decode(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Invalid status: {}", e)
+                format!("Invalid status: {}", e),
             )))
         })?,
         priority: row.try_get::<String, _>("priority")?.parse().map_err(|e| {
             sqlx::Error::Decode(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Invalid priority: {}", e)
+                format!("Invalid priority: {}", e),
             )))
         })?,
-        visibility: row.try_get::<String, _>("visibility")?.parse().map_err(|e| {
-            sqlx::Error::Decode(Box::new(std::io::Error::new(
-                std::io::ErrorKind::InvalidData,
-                format!("Invalid visibility: {}", e)
-            )))
-        })?,
+        visibility: row
+            .try_get::<String, _>("visibility")?
+            .parse()
+            .map_err(|e| {
+                sqlx::Error::Decode(Box::new(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Invalid visibility: {}", e),
+                )))
+            })?,
         tags: row.try_get("tags")?,
         progress: row.try_get("progress")?,
         category: row.try_get("category")?,
@@ -65,6 +68,8 @@ pub fn row_to_task(row: PgRow) -> Result<Task, sqlx::Error> {
         progress_type: row.try_get("progress_type")?,
         tags: row.try_get("tags")?,
         priority: row.try_get("priority")?,
+        phase_id: row.try_get("phase_id")?,
+        category_id: row.try_get("category_id")?,
     })
 }
 
@@ -76,7 +81,7 @@ pub fn row_to_member(row: PgRow) -> Result<ProjectMember, sqlx::Error> {
         role: row.try_get::<String, _>("role")?.parse().map_err(|e| {
             sqlx::Error::Decode(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidData,
-                format!("Invalid role: {}", e)
+                format!("Invalid role: {}", e),
             )))
         })?,
         joined_at: row.try_get("joined_at")?,

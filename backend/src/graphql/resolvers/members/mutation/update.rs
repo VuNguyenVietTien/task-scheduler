@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
-use crate::graphql::types::{ProjectMember, MemberRole, User};
+use crate::graphql::types::{MemberRole, ProjectMember, User};
 
 pub async fn update_member(
     ctx: &Context<'_>,
@@ -22,7 +22,7 @@ pub async fn update_member(
         SELECT user_id, email, username, full_name, avatar_url 
         FROM users 
         WHERE user_id = $1
-        "#
+        "#,
     )
     .bind(user_id)
     .fetch_optional(pool)
@@ -31,7 +31,7 @@ pub async fn update_member(
 
     let user_row = match user_info {
         Some(row) => row,
-        None => return Err("User not found".into())
+        None => return Err("User not found".into()),
     };
 
     let member = sqlx::query(
@@ -41,7 +41,7 @@ pub async fn update_member(
         WHERE project_id = $1 AND user_id = $2
         RETURNING 
             member_id, project_id, user_id, role, joined_at
-        "#
+        "#,
     )
     .bind(project_id)
     .bind(user_id)
@@ -60,8 +60,8 @@ pub async fn update_member(
                 username: user_row.get("username"),
                 full_name: user_row.get("full_name"),
                 avatar_url: user_row.get("avatar_url"),
-            }
+            },
         }),
-        None => Err("Project member not found".into())
+        None => Err("Project member not found".into()),
     }
-} 
+}

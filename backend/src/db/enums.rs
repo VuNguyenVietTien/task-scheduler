@@ -78,7 +78,7 @@ pub enum TaskProgressType {
     test,
     review_code,
     review_test_report,
-    release
+    release,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type, Display, EnumString)]

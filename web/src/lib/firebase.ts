@@ -4,6 +4,7 @@ import {
   signInWithPopup,
   signInWithEmailAndPassword,
   updatePassword,
+  sendEmailVerification,
   EmailAuthProvider,
   linkWithCredential,
   GoogleAuthProvider,
@@ -139,3 +140,41 @@ export async function getIdToken() {
 }
 
 export type { FirebaseUser, Auth };
+
+/**
+ * W1: send the Firebase verification email from the client SDK. Verification
+ * state is authoritative on the Rust backend (`/api/auth/me` returns
+ * `emailVerified` from the app users row).
+ */
+export async function sendFirebaseVerificationEmail(): Promise<void> {
+  const firebaseAuth = getFirebaseAuth();
+  const user = firebaseAuth?.currentUser;
+  if (!user) throw new Error('No signed-in Firebase user');
+  await sendEmailVerification(user);
+}
+
+/**
+ * W1: create an email/password identity with a display name and return the
+ * fresh ID token (the caller exchanges it for the app user on the Rust
+ * backend via /api/auth/firebase/login).
+ */
+export async function createUserWithName(
+  email: string,
+  password: string,
+  name: string,
+): Promise<{ token: string; user: FirebaseUser }> {
+  const {
+    createUserWithEmailAndPassword,
+    updateProfile,
+  } = await import('firebase/auth');
+  const firebaseAuth = getFirebaseAuth();
+  if (!firebaseAuth) throw new Error('Firebase is not configured');
+  const credential = await createUserWithEmailAndPassword(
+    firebaseAuth,
+    email,
+    password,
+  );
+  await updateProfile(credential.user, { displayName: name });
+  const token = await credential.user.getIdToken();
+  return { token, user: credential.user };
+}

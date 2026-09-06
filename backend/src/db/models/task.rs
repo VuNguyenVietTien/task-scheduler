@@ -1,8 +1,8 @@
+use crate::db::enums::{TaskPriority, TaskProgressType, TaskStatus};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use uuid::Uuid;
-use crate::db::enums::{TaskStatus, TaskPriority, TaskProgressType};
 
 #[derive(Debug, Serialize, Deserialize, FromRow)]
 pub struct Task {
@@ -29,6 +29,11 @@ pub struct Task {
     pub category: Option<String>,
     pub progress_type: Option<TaskProgressType>,
     pub tags: Option<serde_json::Value>,
+    /// Project-scoped workflow phase (task attribute only; NULL = Unphased).
+    /// Migration 20260901000100; composite FK binds it to the same project.
+    pub phase_id: Option<Uuid>,
+    /// Project-scoped category (task attribute only; NULL = uncategorised).
+    pub category_id: Option<Uuid>,
 }
 
 impl Task {

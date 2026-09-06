@@ -59,6 +59,8 @@ export interface Task {
   title: string;
   description?: string;
   assignee?: UserBasic;
+  /** Assignment target for a project member who has not linked a user yet. */
+  assignee_resource_member_id?: string | null;
   priority_order: number;
 
   // Dates
@@ -82,6 +84,8 @@ export interface Task {
   type?: TaskType;
   category?: TaskCategory;
   progress_type?: ProgressType;
+  /** Increment 1 scheduling taxonomy: assigned project phase (null/undefined = Unphased). */
+  phase_id?: string | null;
 
   // Additional info
   created_by: string | UserBasic;
@@ -103,6 +107,8 @@ export interface TaskFilter {
   projectId?: string;
   startDate?: string;
   endDate?: string;
+  /** Increment 1: 'UNPHASED' keeps tasks without a phase; otherwise a phase id. */
+  phaseId?: string;
 }
 
 export interface GanttFilter {

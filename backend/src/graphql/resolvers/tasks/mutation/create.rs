@@ -1,18 +1,24 @@
 use async_graphql::Context;
 use chrono::{DateTime, Utc};
+use log::error;
+use serde_json::{json, Value as JsonValue};
 use sqlx::Row;
 use uuid::Uuid;
-use serde_json::{json, Value as JsonValue};
-use log::error;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
-use crate::graphql::types::{Task, Assignee, CreateTaskInput};
+use crate::graphql::types::{Assignee, CreateTaskInput, Task};
 
-pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Task, async_graphql::Error> {
+pub async fn create_task(
+    ctx: &Context<'_>,
+    input: CreateTaskInput,
+) -> Result<Task, async_graphql::Error> {
     let context = ctx.data::<GraphQLContext>()?;
     let pool = &context.db;
-    let auth = context.auth.as_ref().ok_or_else(|| AuthError::InvalidCredentials)?;
+    let auth = context
+        .auth
+        .as_ref()
+        .ok_or_else(|| AuthError::InvalidCredentials)?;
     let user_id = auth.sub.clone();
 
     let mut tx = pool.begin().await.map_err(|e| AuthError::Database(e))?;
@@ -21,12 +27,54 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
     let task_id = Uuid::new_v4();
     let now = Utc::now();
     let project_id = Uuid::parse_str(&input.project_id.to_string())?;
-    let parent_task_id = input.parent_task_id
+    let parent_task_id = input
+        .parent_task_id
         .map(|id| Uuid::parse_str(&id.to_string()))
         .transpose()?;
-    let assignee_id = input.assignee_id
+    let assignee_id = input
+        .assignee_id
         .map(|id| Uuid::parse_str(&id.to_string()))
         .transpose()?;
+    let assignee_resource_member_id = input
+        .assignee_resource_member_id
+        .as_ref()
+        .map(|id| Uuid::parse_str(&id.to_string()))
+        .transpose()?;
+    // herdr-260906 R5: placeholder assignment must reference a resource
+    // member of the SAME project (placeholders allowed; authz = task write).
+    if let Some(member_id) = assignee_resource_member_id {
+        let ok: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM resource_members WHERE resource_member_id = $1 AND project_id = $2)",
+        )
+        .bind(member_id)
+        .bind(project_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(|e| AuthError::Database(e))?;
+        if !ok {
+            return Err(AuthError::Other(
+                "assignee_resource_member_id does not belong to this project".into(),
+            )
+            .into());
+        }
+    }
+
+    // Task 1.1: a new parent must be a non-deleted task of the SAME project
+    // (self/cycle cannot occur at creation; cross-project is rejected here).
+    if let Some(parent) = parent_task_id {
+        let same_project: Option<(Uuid,)> = sqlx::query_as(
+            "SELECT project_id FROM tasks WHERE task_id = $1 AND project_id = $2 \
+             AND NOT COALESCE(is_deleted, false)",
+        )
+        .bind(parent)
+        .bind(project_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        if same_project.is_none() {
+            return Err("parent_task_id must reference a task in the same project".into());
+        }
+    }
 
     let created = sqlx::query(
         r#"
@@ -38,12 +86,12 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
                 effort, progress, created_by,
                 created_at, updated_at, is_deleted,
                 assignee_id, actual_start_date, actual_end_date,
-                type, category, progress_type, tags
+                type, category, progress_type, tags, assignee_resource_member_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
             RETURNING *
         )
-        SELECT t.*, 
+        SELECT t.*,
                au.user_id as assignee_user_id,
                au.username as assignee_username,
                au.avatar_url as assignee_avatar_url,
@@ -58,7 +106,7 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
         "#
     )
     .bind(task_id)
-    .bind(project_id)  
+    .bind(project_id)
     .bind(parent_task_id)
     .bind(&input.title)
     .bind(input.description.as_ref())
@@ -80,6 +128,7 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
     .bind(input.category)
     .bind(input.progress_type)
     .bind(tags_json)
+    .bind(assignee_resource_member_id)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
@@ -92,15 +141,21 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
     Ok(Task {
         task_id: created.get("task_id"),
         project_id: created.get("project_id"),
+        assignee_resource_member_id: created.get("assignee_resource_member_id"),
         parent_task_id: created.get("parent_task_id"),
+        phase_id: created.get("phase_id"),
+        category_id: created.get("category_id"),
         title: created.get("title"),
         description: created.get("description"),
-        assignee: created.get::<Option<Uuid>, _>("assignee_user_id").map(|_| Assignee {
-            user_id: created.get("assignee_user_id"),
-            username: created.get("assignee_username"),
-            avatar_url: created.get("assignee_avatar_url"),
-            role: created.get("assignee_role")
-        }),
+        assignee: created
+            .get::<Option<Uuid>, _>("assignee_user_id")
+            .map(|_| Assignee {
+                user_id: created.get("assignee_user_id"),
+                full_name: None,
+                username: created.get("assignee_username"),
+                avatar_url: created.get("assignee_avatar_url"),
+                role: created.get("assignee_role"),
+            }),
         priority_order: created.get("priority_order"),
         start_date: created.get("start_date"),
         due_date: created.get("due_date"),
@@ -109,12 +164,15 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
         effort: created.get("effort"),
         progress: created.get("progress"),
         created_by: created.get("created_by"),
-        creator: created.get::<Option<Uuid>, _>("creator_user_id").map(|_| Assignee {
-            user_id: created.get("creator_user_id"),
-            username: created.get("creator_username"),
-            avatar_url: created.get("creator_avatar_url"),
-            role: created.get("creator_role")
-        }),
+        creator: created
+            .get::<Option<Uuid>, _>("creator_user_id")
+            .map(|_| Assignee {
+                user_id: created.get("creator_user_id"),
+                full_name: None,
+                username: created.get("creator_username"),
+                avatar_url: created.get("creator_avatar_url"),
+                role: created.get("creator_role"),
+            }),
         created_at: created.get("created_at"),
         updated_at: created.get("updated_at"),
         is_deleted: created.get("is_deleted"),
@@ -124,6 +182,6 @@ pub async fn create_task(ctx: &Context<'_>, input: CreateTaskInput) -> Result<Ta
         category: created.get("category"),
         progress_type: created.get("progress_type"),
         tags: created.get::<Option<JsonValue>, _>("tags"),
-        child_tasks: None
+        child_tasks: None,
     })
 }

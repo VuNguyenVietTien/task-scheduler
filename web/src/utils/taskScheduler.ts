@@ -1,5 +1,6 @@
 import { Task, TaskStatus } from '@/types/task';
 import { formatDateVN, isSameDay } from '@/lib/utils';
+import type { CapacityResolver } from '@/utils/capacity';
 import { TaskOrderItem } from '@/redux/features/taskOrderStore';
 import { AppDispatch } from '@/redux/store';
 import { initializeFromTasks, updateCalculatedDates, updateTaskOrderAndDates } from '@/redux/features/taskOrderStore';
@@ -7,6 +8,23 @@ import { initializeFromTasks, updateCalculatedDates, updateTaskOrderAndDates } f
 // Constants for worker effort scheduling
 export const WORK_HOURS_PER_DAY = 8; // Giờ làm việc trong ngày (8h)
 export const WEEKEND_DAYS = [0, 6]; // Chủ nhật (0) và thứ bảy (6)
+
+/**
+ * Capacity-aware scheduling options (requirements 3 & 6).
+ * - `capacity`: effective available hours per date for the assignee
+ *   (weekday/weekend defaults + date overrides + days off). When omitted the
+ *   legacy 8h weekday / 0h weekend rule applies.
+ * - `reservedHours`: per-date hours already reserved by recurring
+ *   commitments (meetings) for the assignee; subtracted BEFORE finite tasks
+ *   are allocated, so commitments always win over priority tasks.
+ */
+export interface ScheduleOptions {
+  capacity?: CapacityResolver;
+  reservedHours?: Record<string, number>;
+  /** Per-assignee overrides (preferred when members differ). */
+  capacityFor?: (assigneeId: string) => CapacityResolver | undefined;
+  reservedFor?: (assigneeId: string) => Record<string, number> | undefined;
+}
 
 export function calculateTaskDates(tasks: Task[]): Task[] {
   if (!tasks || !Array.isArray(tasks)) {
@@ -187,8 +205,9 @@ export const findNextAvailableStartDate = (
 export const calculateTaskSchedule = (
   startDate: Date,
   effort: number,
-  workSchedule: WorkSchedule = {}
-): { endDate: Date, updatedSchedule: WorkSchedule, hoursPerDay: Record<string, number> } => {
+  workSchedule: WorkSchedule = {},
+  capacity?: CapacityResolver
+): { endDate: Date, updatedSchedule: WorkSchedule, hoursPerDay: Record<string, number>, exhausted?: boolean } => {
   // Nếu effort là 0, task không chiếm thời gian làm việc nào
   if (effort <= 0) {
     return {
@@ -210,14 +229,31 @@ export const calculateTaskSchedule = (
 
   let currentDay = 0; // Số ngày đã xử lý
 
+  // R3 edge guard: a member with zero capacity for the whole reachable
+  // horizon (all days off / 0h overrides) must not loop forever. Bounded
+  // scan; exhaustion is REPORTED (exhausted: true), never a silent drop of
+  // remaining effort.
+  const MAX_SCHEDULING_DAYS = 730;
+  let exhausted = false;
+
   while (remainingEffort > 0) {
+    if (currentDay > MAX_SCHEDULING_DAYS) {
+      // Horizon exhausted with effort remaining — report, don't hang/drop silently.
+      console.warn(
+        `  ! Scheduling horizon exhausted after ${MAX_SCHEDULING_DAYS} days with ${remainingEffort}h remaining`
+      );
+      exhausted = true;
+      break;
+    }
     // Tạo bản sao của ngày hiện tại để tránh thay đổi trực tiếp
     const processingDate = new Date(currentDate);
     processingDate.setDate(processingDate.getDate() + currentDay);
 
-    if (isWeekend(processingDate)) {
+    // Ngày 0h (cuối tuần mặc định hoặc ngày nghỉ / override = 0): bỏ qua,
+    // KHÔNG có thanh task ngày đó (requirement 3).
+    if (capacity ? capacity(processingDate) <= 0 : isWeekend(processingDate)) {
       // Bỏ qua việc tính giờ làm cho ngày cuối tuần, tăng ngày và tiếp tục vòng lặp
-      console.log(`  - Bỏ qua ngày cuối tuần: ${formatDateVN(processingDate)}`);
+      console.log(`  - Bỏ qua ngày 0 giờ: ${formatDateVN(processingDate)}`);
       currentDay++;
       continue;
     }
@@ -225,10 +261,11 @@ export const calculateTaskSchedule = (
     const dateStr = formatDateVN(processingDate);
     lastWorkDate = new Date(processingDate); // Cập nhật ngày làm việc cuối cùng
 
-    // Số giờ còn lại trong ngày này (mặc định WORK_HOURS_PER_DAY nếu chưa có ai dùng)
+    // Số giờ còn lại trong ngày này (mặc định WORK_HOURS_PER_DAY nếu chưa có ai dùng,
+    // hoặc theo capacity resolver khi cấu hình theo member)
     const availableHoursInDay = updatedSchedule[dateStr] !== undefined
       ? updatedSchedule[dateStr]
-      : WORK_HOURS_PER_DAY;
+      : (capacity ? capacity(processingDate) : WORK_HOURS_PER_DAY);
 
     if (availableHoursInDay <= 0) {
       // Ngày đã hết giờ làm việc, chuyển sang ngày tiếp theo
@@ -267,7 +304,8 @@ export const calculateTaskSchedule = (
   return {
     endDate: lastWorkDate,
     updatedSchedule,
-    hoursPerDay
+    hoursPerDay,
+    ...(exhausted ? { exhausted: true } : {})
   };
 };
 
@@ -369,7 +407,8 @@ export const updateReduxStore = (
 export const processTasksAndUpdateStore = (
   inputTasks: Task[],
   keepOrder: boolean = false,
-  dispatch: AppDispatch
+  dispatch: AppDispatch,
+  options?: ScheduleOptions
 ): Task[] => {
   // Sử dụng trực tiếp inputTasks mà không sắp xếp lại
   let tasksToProcess: Task[] = [...inputTasks];
@@ -444,13 +483,23 @@ export const processTasksAndUpdateStore = (
     };
   });
 
-  // Tạo hàm helper để tìm ngày làm việc tiếp theo
-  const findNextWorkDay = (date: Date): Date => {
+  // Tạo hàm helper để tìm ngày làm việc tiếp theo (0 giờ được bỏ qua:
+  // cuối tuần mặc định hoặc capacity = 0 theo cấu hình member)
+  const capacityOf = (assigneeId: string): CapacityResolver | undefined =>
+    options?.capacityFor?.(assigneeId) ?? options?.capacity;
+  const reservedOf = (assigneeId: string): Record<string, number> | undefined =>
+    options?.reservedFor?.(assigneeId) ?? options?.reservedHours;
+  const dayHoursFor = (assigneeId: string) => (date: Date): number => {
+    const cap = capacityOf(assigneeId);
+    return cap ? cap(date) : (isWeekend(date) ? 0 : WORK_HOURS_PER_DAY);
+  };
+  const findNextWorkDay = (date: Date, assigneeId: string): Date => {
+    const dayHours = dayHoursFor(assigneeId);
     const nextDay = new Date(date);
     nextDay.setDate(nextDay.getDate() + 1);
 
-    // Bỏ qua ngày cuối tuần
-    while (isWeekend(nextDay)) {
+    // Bỏ qua ngày 0 giờ (cuối tuần legacy hoặc capacity = 0)
+    while (dayHours(nextDay) <= 0) {
       nextDay.setDate(nextDay.getDate() + 1);
     }
     return nextDay;
@@ -469,10 +518,12 @@ export const processTasksAndUpdateStore = (
       return existingDay;
     }
 
-    // Tạo workDay mới
+    // Tạo workDay mới: capacity theo cấu hình (mặc định 8h), trừ đi giờ đã
+    // đặt trước bởi recurring commitments (meetings) của assignee này.
+    const reserved = reservedOf(assigneeId)?.[formatDateVN(date)] ?? 0;
     const newWorkDay: WorkDay = {
       date: new Date(date),
-      remainingHours: WORK_HOURS_PER_DAY // Mặc định 8h một ngày
+      remainingHours: Math.max(0, dayHoursFor(assigneeId)(date) - reserved)
     };
 
     schedule.workDays.push(newWorkDay);
@@ -518,17 +569,17 @@ export const processTasksAndUpdateStore = (
 
         if (lastWorkDay && lastWorkDay.remainingHours <= 0) {
           // Nếu ngày này đã hết giờ làm việc, chuyển sang ngày tiếp theo
-          startDate = findNextWorkDay(startDate);
+          startDate = findNextWorkDay(startDate, assigneeId);
           console.log(`- Ngày cuối cùng đã hết giờ, chuyển đến: ${formatDateVN(startDate)}`);
         }
       } else {
         // Nếu không có lịch sử, bắt đầu từ ngày hiện tại
         startDate = new Date(currentDate);
 
-        // Nếu là cuối tuần, chuyển sang ngày làm việc tiếp theo
-        if (isWeekend(startDate)) {
-          startDate = findNextWorkDay(startDate);
-          console.log(`- Ngày hiện tại là cuối tuần, chuyển đến: ${formatDateVN(startDate)}`);
+        // Nếu là ngày 0 giờ (cuối tuần / ngày nghỉ), chuyển sang ngày làm việc tiếp theo
+        if (dayHoursFor(assigneeId)(startDate) <= 0) {
+          startDate = findNextWorkDay(startDate, assigneeId);
+          console.log(`- Ngày hiện tại là 0 giờ, chuyển đến: ${formatDateVN(startDate)}`);
         }
       }
     }
@@ -550,9 +601,9 @@ export const processTasksAndUpdateStore = (
       let currentDay = startDate;
 
       while (remainingEffort > 0) {
-        // Bỏ qua ngày cuối tuần
-        if (isWeekend(currentDay)) {
-          currentDay = findNextWorkDay(currentDay);
+        // Bỏ qua ngày 0 giờ (cuối tuần legacy / capacity 0 / ngày nghỉ)
+        if (dayHoursFor(assigneeId)(currentDay) <= 0) {
+          currentDay = findNextWorkDay(currentDay, assigneeId);
           continue;
         }
 
@@ -564,7 +615,7 @@ export const processTasksAndUpdateStore = (
 
         if (hoursForThisDay <= 0) {
           // Ngày này đã hết giờ, chuyển sang ngày tiếp theo
-          currentDay = findNextWorkDay(currentDay);
+          currentDay = findNextWorkDay(currentDay, assigneeId);
           continue;
         }
 
@@ -583,7 +634,7 @@ export const processTasksAndUpdateStore = (
 
         // Nếu còn effort, chuyển sang ngày tiếp theo
         if (remainingEffort > 0) {
-          currentDay = findNextWorkDay(currentDay);
+          currentDay = findNextWorkDay(currentDay, assigneeId);
         }
       }
     }

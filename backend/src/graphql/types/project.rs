@@ -1,13 +1,13 @@
 use async_graphql::*;
 use chrono::{DateTime, NaiveDate, NaiveDateTime, Utc};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use sqlx::Type;
 use std::str::FromStr;
 use uuid::Uuid;
-use serde_json::Value;
 
 #[derive(SimpleObject, Clone, Debug, Serialize, Deserialize)]
-#[graphql(rename_fields = "camelCase")]
+#[graphql(rename_fields = "snake_case")]
 pub struct User {
     pub user_id: Uuid,
     pub email: String,
@@ -17,7 +17,7 @@ pub struct User {
 }
 
 #[derive(SimpleObject, Debug, Serialize, Deserialize)]
-#[graphql(rename_fields = "camelCase")]
+#[graphql(rename_fields = "snake_case")]
 pub struct Project {
     pub project_id: Uuid,
     pub name: String,
@@ -43,7 +43,7 @@ pub struct Project {
 }
 
 #[derive(SimpleObject)]
-#[graphql(rename_fields = "camelCase")]
+#[graphql(rename_fields = "snake_case")]
 pub struct Projects {
     pub project_id: Uuid,
     pub name: String,
@@ -60,29 +60,29 @@ pub struct Projects {
 }
 
 #[derive(SimpleObject, Debug)]
-#[graphql(rename_fields = "camelCase")]
+#[graphql(rename_fields = "snake_case")]
 pub struct ProjectResponse {
-    pub projectId: Uuid,                     // NO NULL
-    pub name: String,                         // NO NULL
-    pub description: Option<String>,          // YES NULL
-    pub startDate: Option<NaiveDate>,        // YES NULL
-    pub endDate: Option<NaiveDate>,          // YES NULL
-    pub status: ProjectStatus,                // NO NULL
-    pub owner: User,                          // owner_id NO NULL
-    pub progress: f64,                        // NO NULL
-    pub category: Option<String>,             // YES NULL
-    pub priority: ProjectPriority,            // NO NULL
-    pub visibility: ProjectVisibility,        // NO NULL
-    pub iconUrl: Option<String>,              // YES NULL
-    pub createdAt: DateTime<Utc>,            // NO NULL
-    pub metadata: Option<Value>,              // YES NULL
-    pub isPublic: bool,                       // NO NULL
-    pub tags: Option<Vec<String>>,           // YES NULL
-    pub members: Vec<ProjectMember>,          // Related table
+    pub projectId: Uuid,               // NO NULL
+    pub name: String,                  // NO NULL
+    pub description: Option<String>,   // YES NULL
+    pub startDate: Option<NaiveDate>,  // YES NULL
+    pub endDate: Option<NaiveDate>,    // YES NULL
+    pub status: ProjectStatus,         // NO NULL
+    pub owner: User,                   // owner_id NO NULL
+    pub progress: f64,                 // NO NULL
+    pub category: Option<String>,      // YES NULL
+    pub priority: ProjectPriority,     // NO NULL
+    pub visibility: ProjectVisibility, // NO NULL
+    pub iconUrl: Option<String>,       // YES NULL
+    pub createdAt: DateTime<Utc>,      // NO NULL
+    pub metadata: Option<Value>,       // YES NULL
+    pub isPublic: bool,                // NO NULL
+    pub tags: Option<Vec<String>>,     // YES NULL
+    pub members: Vec<ProjectMember>,   // Related table
 }
 
 #[derive(SimpleObject, Debug, Clone, Serialize, Deserialize)]
-#[graphql(rename_fields = "camelCase")]
+#[graphql(rename_fields = "snake_case")]
 pub struct ProjectMember {
     pub role: MemberRole,
     pub joined_at: Option<DateTime<Utc>>,
@@ -93,9 +93,9 @@ pub struct ProjectMember {
 #[sqlx(rename_all = "lowercase", type_name = "project_priority")]
 pub enum ProjectPriority {
     Low,
-    Medium, 
+    Medium,
     High,
-    Urgent
+    Urgent,
 }
 
 impl FromStr for ProjectPriority {
@@ -106,7 +106,7 @@ impl FromStr for ProjectPriority {
             "medium" => Ok(ProjectPriority::Medium),
             "high" => Ok(ProjectPriority::High),
             "urgent" => Ok(ProjectPriority::Urgent),
-            _ => Err(format!("Invalid project priority: {}", s))
+            _ => Err(format!("Invalid project priority: {}", s)),
         }
     }
 }
@@ -122,7 +122,7 @@ impl From<String> for ProjectPriority {
 pub enum ProjectVisibility {
     Public,
     Private,
-    Team
+    Team,
 }
 
 impl FromStr for ProjectVisibility {
@@ -132,7 +132,7 @@ impl FromStr for ProjectVisibility {
             "public" => Ok(ProjectVisibility::Public),
             "private" => Ok(ProjectVisibility::Private),
             "team" => Ok(ProjectVisibility::Team),
-            _ => Err(format!("Invalid project visibility: {}", s))
+            _ => Err(format!("Invalid project visibility: {}", s)),
         }
     }
 }
@@ -149,7 +149,7 @@ pub enum ProjectStatus {
     Active,
     Completed,
     OnHold,
-    Cancelled
+    Cancelled,
 }
 
 impl FromStr for ProjectStatus {
@@ -160,7 +160,7 @@ impl FromStr for ProjectStatus {
             "completed" => Ok(ProjectStatus::Completed),
             "on_hold" => Ok(ProjectStatus::OnHold),
             "cancelled" => Ok(ProjectStatus::Cancelled),
-            _ => Err(format!("Invalid project status: {}", s))
+            _ => Err(format!("Invalid project status: {}", s)),
         }
     }
 }
@@ -220,7 +220,7 @@ impl From<String> for MemberRole {
 #[sqlx(rename_all = "lowercase", type_name = "user_role")]
 pub enum UserRole {
     Admin,
-    User
+    User,
 }
 
 impl FromStr for UserRole {
@@ -229,7 +229,7 @@ impl FromStr for UserRole {
         match s.to_lowercase().as_str() {
             "admin" => Ok(UserRole::Admin),
             "user" => Ok(UserRole::User),
-            _ => Err("Invalid user role".into())
+            _ => Err("Invalid user role".into()),
         }
     }
 }
@@ -245,7 +245,7 @@ impl From<String> for UserRole {
 pub enum AuthProvider {
     Email,
     Google,
-    Github
+    Github,
 }
 
 impl FromStr for AuthProvider {
@@ -255,7 +255,7 @@ impl FromStr for AuthProvider {
             "email" => Ok(AuthProvider::Email),
             "google" => Ok(AuthProvider::Google),
             "github" => Ok(AuthProvider::Github),
-            _ => Err("Invalid auth provider".into())
+            _ => Err("Invalid auth provider".into()),
         }
     }
 }
@@ -268,7 +268,7 @@ impl From<String> for AuthProvider {
 
 // Input types
 #[derive(InputObject)]
-#[graphql(rename_fields = "camelCase")]
+#[graphql(rename_fields = "snake_case")]
 pub struct CreateProjectInput {
     pub name: String,
     pub description: Option<String>,
@@ -280,11 +280,11 @@ pub struct CreateProjectInput {
     pub start_date: Option<NaiveDate>,
     pub end_date: Option<NaiveDate>,
     pub icon_url: Option<String>,
-    pub metadata: Option<serde_json::Value>
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(InputObject)]
-#[graphql(rename_fields = "camelCase")]
+#[graphql(rename_fields = "snake_case")]
 pub struct UpdateProjectInput {
     pub name: Option<String>,
     pub description: Option<String>,
@@ -297,19 +297,21 @@ pub struct UpdateProjectInput {
     pub is_public: Option<bool>,
     pub status: Option<ProjectStatus>,
     pub tags: Option<Vec<String>>,
-    pub metadata: Option<serde_json::Value>
+    pub metadata: Option<serde_json::Value>,
 }
 
 #[derive(InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct AddProjectMemberInput {
     pub project_id: String,
     pub user_id: String,
-    pub role: MemberRole
+    pub role: MemberRole,
 }
 
 #[derive(InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct UpdateProjectMemberInput {
     pub project_id: String,
     pub user_id: String,
-    pub role: MemberRole
+    pub role: MemberRole,
 }

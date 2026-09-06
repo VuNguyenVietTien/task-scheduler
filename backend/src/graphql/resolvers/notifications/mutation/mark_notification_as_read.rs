@@ -12,15 +12,17 @@ pub async fn mark_notification_as_read(
 ) -> Result<Notification> {
     let context = ctx.data::<GraphQLContext>()?;
     let pool = &context.db;
-    let user_id = context.auth.as_ref()
+    let user_id = context
+        .auth
+        .as_ref()
         .ok_or_else(|| AuthError::Unauthorized("Not authenticated".to_string()))?
         .user_id()?;
-    
+
     let notification_id = Uuid::parse_str(&notification_id)?;
-    
+
     let notification = db_mark_notification_as_read(pool, notification_id, user_id)
         .await
         .map_err(|e| AuthError::Database(e))?;
-    
+
     Ok(notification.into())
-} 
+}

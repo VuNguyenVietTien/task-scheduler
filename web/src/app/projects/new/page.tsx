@@ -72,7 +72,12 @@ export default function NewProjectPage() {
         }
       });
 
-      router.push(`/projects/${data.createProject.projectId}`);
+      // Rust schema: create_project returns ProjectResponse with project_id (snake_case)
+      const canonicalId = data?.create_project?.project_id;
+      if (!canonicalId) {
+        throw new Error('create_project response missing project_id');
+      }
+      router.push(`/projects/${canonicalId}`);
     } catch (err) {
       if (err instanceof Error && err.name === 'AuthenticationError') {
         router.push('/auth');

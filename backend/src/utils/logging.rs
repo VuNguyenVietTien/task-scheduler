@@ -1,7 +1,7 @@
+use chrono::Local;
 use env_logger::Builder;
 use log::LevelFilter;
 use std::io::Write;
-use chrono::Local;
 
 pub fn setup_logging() {
     Builder::new()

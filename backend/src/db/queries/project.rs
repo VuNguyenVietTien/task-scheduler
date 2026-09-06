@@ -1,18 +1,15 @@
+use crate::db::{helpers::row_to_project, models::Project, types::PaginationParams};
 use sqlx::{postgres::PgRow, PgPool, Row};
 use uuid::Uuid;
-use crate::db::{
-    models::Project,
-    types::PaginationParams,
-    helpers::row_to_project,
-};
 
-pub async fn get_project_by_id(pool: &PgPool, project_id: Uuid) -> Result<Option<Project>, sqlx::Error> {
-    let row = sqlx::query(
-        "SELECT * FROM projects WHERE project_id = $1"
-    )
-    .bind(project_id)
-    .fetch_optional(pool)
-    .await?;
+pub async fn get_project_by_id(
+    pool: &PgPool,
+    project_id: Uuid,
+) -> Result<Option<Project>, sqlx::Error> {
+    let row = sqlx::query("SELECT * FROM projects WHERE project_id = $1")
+        .bind(project_id)
+        .fetch_optional(pool)
+        .await?;
 
     match row {
         Some(row) => row_to_project(row).map(Some),
@@ -33,7 +30,7 @@ pub async fn list_user_projects(
         WHERE pm.user_id = $1
         ORDER BY p.updated_at DESC
         LIMIT $2 OFFSET $3
-        "#
+        "#,
     )
     .bind(user_id)
     .bind(pagination.limit())
@@ -118,12 +115,10 @@ pub async fn update_project(pool: &PgPool, project: Project) -> Result<Project, 
 }
 
 pub async fn delete_project(pool: &PgPool, project_id: Uuid) -> Result<(), sqlx::Error> {
-    sqlx::query(
-        "DELETE FROM projects WHERE project_id = $1"
-    )
-    .bind(project_id)
-    .execute(pool)
-    .await?;
+    sqlx::query("DELETE FROM projects WHERE project_id = $1")
+        .bind(project_id)
+        .execute(pool)
+        .await?;
 
     Ok(())
 }
@@ -135,8 +130,9 @@ pub async fn count_user_projects(pool: &PgPool, user_id: Uuid) -> Result<i64, sq
         FROM projects p
         INNER JOIN project_members pm ON pm.project_id = p.project_id
         WHERE pm.user_id = $1
-        "#
-    ).bind(user_id)
+        "#,
+    )
+    .bind(user_id)
     .fetch_one(pool)
     .await?;
 

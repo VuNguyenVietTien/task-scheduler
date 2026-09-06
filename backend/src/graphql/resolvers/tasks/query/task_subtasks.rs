@@ -44,6 +44,7 @@ pub async fn task_subtasks(ctx: &Context<'_>, task_id: ID) -> Result<Vec<Task>> 
             .get::<Option<Uuid>, _>("assignee_user_id")
             .map(|_| Assignee {
                 user_id: row.get("assignee_user_id"),
+                full_name: None,
                 username: row.get("assignee_username"),
                 avatar_url: row.get("assignee_avatar_url"),
                 role: row.get("assignee_role"),
@@ -53,6 +54,7 @@ pub async fn task_subtasks(ctx: &Context<'_>, task_id: ID) -> Result<Vec<Task>> 
             .get::<Option<Uuid>, _>("creator_user_id")
             .map(|_| Assignee {
                 user_id: row.get("creator_user_id"),
+                full_name: None,
                 username: row.get("creator_username"),
                 avatar_url: row.get("creator_avatar_url"),
                 role: row.get("creator_role"),
@@ -61,7 +63,10 @@ pub async fn task_subtasks(ctx: &Context<'_>, task_id: ID) -> Result<Vec<Task>> 
         let task = Task {
             task_id: row.get("task_id"),
             project_id: row.get("project_id"),
+            assignee_resource_member_id: row.get("assignee_resource_member_id"),
             parent_task_id: row.get("parent_task_id"),
+            phase_id: row.get("phase_id"),
+            category_id: row.get("category_id"),
             title: row.get("title"),
             description: row.get("description"),
             assignee,

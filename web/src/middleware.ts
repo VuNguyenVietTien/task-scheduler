@@ -1,46 +1,55 @@
-import { updateSession } from '@/lib/supabase/middleware';
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
-const publicPaths = [
-  '/auth',
-  '/api/auth',
-  '/_next',
-  '/favicon.ico',
-];
+import { SESSION_COOKIE, verifySession } from '@/app/api/auth/_session';
+
+/**
+ * W1 middleware — Firebase + Rust backend session carrier.
+ *
+ * Contract (architecture review §5.1, middleware finding N/P1):
+ * - NEVER trusts the unsigned legacy `user-session` cookie.
+ * - Fails CLOSED for protected pages: missing/tampered/expired `pm_session`
+ *   → redirect to /auth with a `next` return path.
+ * - Public surfaces stay untouched: /auth pages, ALL /api/* routes (API auth
+ *   is enforced server-side by the Rust backend — the middleware is a
+ *   convenience gate only, per the reviewed topology), Next internals and
+ *   static assets (excluded by the matcher below).
+ * - No Supabase runtime dependency, no env-var fail-open branch.
+ */
+
+const PUBLIC_PREFIXES = ['/auth', '/api', '/_next'];
+const PUBLIC_FILES = ['/favicon.ico', '/robots.txt', '/manifest.json'];
+
+function isPublic(pathname: string): boolean {
+  if (PUBLIC_PREFIXES.some((p) => pathname === p || pathname.startsWith(`${p}/`))) {
+    return true;
+  }
+  if (PUBLIC_FILES.includes(pathname)) return true;
+  // Static assets that slip past the matcher (fonts, icons, etc.).
+  if (/\.(?:svg|png|jpg|jpeg|gif|webp|ico|txt|json|woff2?)$/.test(pathname)) {
+    return true;
+  }
+  return false;
+}
 
 export async function middleware(request: NextRequest) {
-  // Allow public paths without auth
-  if (publicPaths.some(path => request.nextUrl.pathname.startsWith(path))) {
+  const { pathname, search } = request.nextUrl;
+
+  if (isPublic(pathname)) {
     return NextResponse.next();
   }
 
-  // Guard: if Supabase env vars not set, skip auth check
-  if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
+  const session = await verifySession(request.cookies.get(SESSION_COOKIE)?.value);
+  if (session) {
     return NextResponse.next();
   }
 
-  try {
-    // Refresh Supabase session and check auth
-    const { user, supabaseResponse } = await updateSession(request);
-
-    if (!user) {
-      // Fallback: accept custom auth cookies from Firebase/Google login
-      const authToken = request.cookies.get('auth-token');
-      const userSession = request.cookies.get('user-session');
-      if (authToken && userSession) {
-        return NextResponse.next();
-      }
-
-      const redirectUrl = new URL('/auth', request.url);
-      return NextResponse.redirect(redirectUrl);
-    }
-
-    return supabaseResponse;
-  } catch {
-    // If Supabase middleware fails, allow request through
-    return NextResponse.next();
+  const loginUrl = new URL('/auth', request.url);
+  const target = `${pathname}${search}`;
+  if (target && target !== '/auth') {
+    loginUrl.searchParams.set('next', target);
   }
+  return NextResponse.redirect(loginUrl);
 }
 
 export const config = {

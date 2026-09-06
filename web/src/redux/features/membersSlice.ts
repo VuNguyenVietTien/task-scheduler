@@ -10,7 +10,7 @@ import {
 import { REMOVE_MULTIPLE_PROJECT_MEMBERS, UPDATE_MULTIPLE_MEMBER_ROLES } from '@/graphql/mutations/projectMembers';
 import { ProjectMember } from '@/hooks/useProject';
 import { MemberRole, Member } from '@/types/members';
-import { toFrontendRole } from '@/lib/utils';
+import { toFrontendRole, toBackendRole } from '@/lib/utils';
 
 interface MembersState {
   members: Member[];
@@ -66,32 +66,33 @@ export const fetchProjectMembers = createAsyncThunk(
   }
 );
 
-// Async thunk để xóa nhiều members cùng lúc
+// Async thunk để xóa nhiều members cùng lúc (GraphQL: remove_multiple_project_members)
 export const removeMultipleMembers = createAsyncThunk(
   'members/removeMultipleMembers',
   async ({ projectId, memberIds }: { projectId: string, memberIds: string[] }, { rejectWithValue }) => {
     try {
-      const response = await fetch(`/api/projects/${projectId}/members/bulk`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ memberIds }),
+      const response = await client.mutate({
+        mutation: REMOVE_MULTIPLE_PROJECT_MEMBERS,
+        variables: { projectId, memberIds },
       });
-      
-      if (!response.ok) {
-        throw new Error('Failed to remove members');
+
+      if (response.errors) {
+        return rejectWithValue(response.errors[0].message);
       }
-      
-      const data = await response.json();
-      return { memberIds, data };
+
+      const result = response.data?.remove_multiple_project_members;
+      return {
+        memberIds,
+        successCount: result?.success_count ?? memberIds.length,
+        failedCount: result?.failed_count ?? 0,
+      };
     } catch (error: any) {
-      return rejectWithValue(error.message);
+      return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi xóa nhiều thành viên');
     }
   }
 );
 
-// Async thunk để cập nhật vai trò của nhiều members cùng lúc
+// Async thunk để cập nhật vai trò của nhiều members cùng lúc (GraphQL: update_multiple_members)
 export const updateMultipleMemberRoles = createAsyncThunk(
   'members/updateMultipleMemberRoles',
   async (
@@ -99,22 +100,33 @@ export const updateMultipleMemberRoles = createAsyncThunk(
     { rejectWithValue }
   ) => {
     try {
-      const response = await fetch(`/api/projects/${projectId}/members/roles`, {
-        method: 'PATCH',
-        headers: {
-          'Content-Type': 'application/json',
+      // Rust schema MemberRoleUpdate: { user_id: ID!, role: ProjectMemberRole(lowercase) }
+      const response = await client.mutate({
+        mutation: UPDATE_MULTIPLE_MEMBER_ROLES,
+        variables: {
+          projectId,
+          updates: updates.map((u) => ({ user_id: u.userId, role: toBackendRole(u.role) })),
         },
-        body: JSON.stringify({ updates }),
       });
-      
-      if (!response.ok) {
-        throw new Error('Failed to update member roles');
+
+      if (response.errors) {
+        return rejectWithValue(response.errors[0].message);
       }
-      
-      const data = await response.json();
-      return data;
+
+      const result = response.data?.update_multiple_members;
+      const updatedMembers = updates.map((update) => ({
+        userId: update.userId,
+        role: toFrontendRole(
+          result?.members?.find((m: any) => m.user_id === update.userId)?.role || update.role
+        ),
+      }));
+
+      return {
+        members: updatedMembers,
+        successCount: result?.success_count ?? updates.length,
+      };
     } catch (error: any) {
-      return rejectWithValue(error.message);
+      return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi cập nhật vai trò thành viên');
     }
   }
 );
@@ -137,7 +149,7 @@ export const addMemberByEmail = createAsyncThunk(
         variables: {
           project_id: projectId,
           email,
-          role,
+          role: toBackendRole(role as MemberRole),
         }
       });
 
@@ -145,8 +157,8 @@ export const addMemberByEmail = createAsyncThunk(
         return rejectWithValue(response.errors[0].message);
       }
 
-      // Chuyển đổi dữ liệu từ API sang định dạng Member
-      const addedMember = response.data.invite_project_member;
+      // Rust op: add_project_member_by_email → ProjectMember
+      const addedMember = response.data?.add_project_member_by_email;
       const newMember: Member = {
         memberId: `member-${addedMember.user.user_id}`,
         userId: addedMember.user.user_id,
@@ -223,14 +235,13 @@ export const removeMultipleProjectMembers = createAsyncThunk(
         return rejectWithValue(response.errors[0].message);
       }
       
-      // Trích xuất thông tin từ response
-      const result = response.data.remove_multiple_project_members;
+      const result = response.data?.remove_multiple_project_members;
 
       // Trả về kết quả để cập nhật store
       return {
         userIds: memberIds.map(memberId => memberId.replace('member-', '')),
-        successCount: result.success_count,
-        failedCount: result.failed_count
+        successCount: result?.success_count,
+        failedCount: result?.failed_count
       };
     } catch (error: any) {
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi xóa nhiều thành viên');
@@ -271,7 +282,9 @@ export const updateProjectMemberRole = createAsyncThunk(
       const response = await client.mutate({
         mutation: UPDATE_PROJECT_MEMBER_ROLE,
         variables: {
-          input: { project_id: projectId, user_id: userId, role }
+          project_id: projectId,
+          user_id: userId,
+          role: toBackendRole(role as MemberRole),
         }
       });
 
@@ -280,7 +293,7 @@ export const updateProjectMemberRole = createAsyncThunk(
       }
 
       // Lấy thông tin từ response
-      const updatedMember = response.data.update_project_member;
+      const updatedMember = response.data?.update_project_member;
       
       // Trả về đối tượng cập nhật để cập nhật store
       return {
@@ -306,11 +319,12 @@ export const updateMultipleProjectMemberRoles = createAsyncThunk(
     try {
       console.log('Sending updates to API:', updates); // Debug log
       
+      // Rust schema MemberRoleUpdate: { user_id: ID!, role: lowercase enum }
       const response = await client.mutate({
         mutation: UPDATE_MULTIPLE_MEMBER_ROLES,
         variables: { 
           projectId, 
-          updates 
+          updates: updates.map((u) => ({ user_id: u.userId, role: toBackendRole(u.role as MemberRole) }))
         }
       });
       
@@ -319,13 +333,13 @@ export const updateMultipleProjectMemberRoles = createAsyncThunk(
       }
       
       // Lấy thông tin từ response
-      const result = response.data.update_multiple_members;
+      const result = response.data?.update_multiple_members;
 
       // Chuyển đổi dữ liệu từ response, giữ nguyên cấu trúc như updates gửi đi
       const updatedMembers = updates.map(update => ({
         userId: update.userId,
         role: toFrontendRole(
-          result.members.find((m: any) => m.user.user_id === update.userId)?.role || update.role
+          result.members.find((m: any) => m.user_id === update.userId)?.role || update.role
         )
       }));
 

@@ -1,6 +1,6 @@
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TaskStatus {
@@ -17,12 +17,7 @@ pub struct TaskStatus {
 }
 
 impl TaskStatus {
-    pub fn new(
-        project_id: Uuid,
-        name: String,
-        color: String,
-        display_order: i32,
-    ) -> Self {
+    pub fn new(project_id: Uuid, name: String, color: String, display_order: i32) -> Self {
         let now = Utc::now();
         Self {
             status_id: Uuid::new_v4(),

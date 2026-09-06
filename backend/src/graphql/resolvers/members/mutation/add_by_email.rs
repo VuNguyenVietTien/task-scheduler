@@ -5,13 +5,13 @@ use uuid::Uuid;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
-use crate::graphql::types::{ProjectMember, MemberRole, User};
+use crate::graphql::types::{MemberRole, ProjectMember, User};
 
 pub async fn add_member_by_email(
     ctx: &Context<'_>,
     project_id: ID,
     email: String,
-    role: MemberRole
+    role: MemberRole,
 ) -> Result<ProjectMember> {
     let context = ctx.data::<GraphQLContext>()?;
     let pool = &context.db;
@@ -29,15 +29,17 @@ pub async fn add_member_by_email(
     }
 
     // Find user by email
-    let user = sqlx::query("SELECT user_id, email, username, full_name, avatar_url FROM users WHERE email = $1")
-        .bind(&email)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| AuthError::Database(e))?;
+    let user = sqlx::query(
+        "SELECT user_id, email, username, full_name, avatar_url FROM users WHERE email = $1",
+    )
+    .bind(&email)
+    .fetch_optional(pool)
+    .await
+    .map_err(|e| AuthError::Database(e))?;
 
     let user_row = match user {
         Some(row) => row,
-        None => return Err("User with this email not found".into())
+        None => return Err("User with this email not found".into()),
     };
 
     let user_id: Uuid = user_row.get("user_id");
@@ -47,7 +49,7 @@ pub async fn add_member_by_email(
         r#"
         SELECT member_id FROM project_members 
         WHERE project_id = $1 AND user_id = $2
-        "#
+        "#,
     )
     .bind(project_id)
     .bind(user_id)
@@ -60,14 +62,15 @@ pub async fn add_member_by_email(
     }
 
     // Kiểm tra số lượng thành viên hiện tại
-    let member_count = sqlx::query("SELECT COUNT(*) as count FROM project_members WHERE project_id = $1")
-        .bind(project_id)
-        .fetch_one(pool)
-        .await
-        .map_err(|e| AuthError::Database(e))?;
-    
+    let member_count =
+        sqlx::query("SELECT COUNT(*) as count FROM project_members WHERE project_id = $1")
+            .bind(project_id)
+            .fetch_one(pool)
+            .await
+            .map_err(|e| AuthError::Database(e))?;
+
     let count: i64 = member_count.get("count");
-    
+
     // Giới hạn số lượng thành viên (có thể thay đổi theo cấu hình)
     let max_members = 20;
     if count >= max_members {
@@ -87,7 +90,7 @@ pub async fn add_member_by_email(
         VALUES ($1, $2, $3, $4, $5)
         RETURNING 
             member_id, project_id, user_id, role, joined_at
-        "#
+        "#,
     )
     .bind(member_id)
     .bind(project_id)
@@ -107,8 +110,8 @@ pub async fn add_member_by_email(
             username: user_row.get("username"),
             full_name: user_row.get("full_name"),
             avatar_url: user_row.get("avatar_url"),
-        }
+        },
     };
 
     Ok(result)
-} 
+}

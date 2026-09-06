@@ -1,31 +1,52 @@
 import { ApolloClient, InMemoryCache, createHttpLink, ApolloLink, Operation, FetchResult } from '@apollo/client';
 import { Observable } from '@apollo/client/utilities';
-import { createBrowserClient } from '@/lib/supabase/client';
+// W2 transport switch (2026-08-31): auth is the Firebase ID token via the
+// cached getAuthToken helper. The active path must NOT read the Supabase
+// session (architecture review §5.1 — bearer-first, no app auth cookie).
+import { getAuthToken } from '../apollo/get-auth-token';
 
 const isBrowser = typeof window !== 'undefined';
 
-// Single unified endpoint — same-origin, no CORS needed
+/**
+ * GraphQL endpoint of the Rust backend (W2 transport switch, 2026-08-31).
+ *
+ * - Base origin: NEXT_PUBLIC_BACKEND_URL, defaulting to the production
+ *   Cloudflare-proxied Rust API (https://pm-api.khampha.dpdns.org).
+ * - Path: /graphql.
+ * - Trailing slashes on the env value are trimmed so we never emit
+ *   "https://host//graphql".
+ *
+ * Exported so tests (and tooling) can assert the active endpoint.
+ */
+export const BACKEND_GRAPHQL_URL = `${(
+  process.env.NEXT_PUBLIC_BACKEND_URL || 'https://pm-api.khampha.dpdns.org'
+).replace(/\/+$/, '')}/graphql`;
+
+// Cross-origin endpoint on the Rust backend. The Bearer header (Firebase ID
+// token) is the credential; cookies are NOT needed, so we explicitly omit them
+// (avoids CSRF and third-party-cookie problems on cross-origin API calls).
 const httpLink = createHttpLink({
-  uri: '/api/graphql',
-  credentials: 'same-origin',
+  uri: BACKEND_GRAPHQL_URL,
+  credentials: 'omit',
 });
 
-// Auth middleware — injects Supabase session token
+// Auth middleware — injects the Firebase ID token (cached + deduped by
+// getAuthToken, 10-min cache) as a Bearer header. Replaces the former
+// Supabase createBrowserClient().auth.getSession() lookup.
 const authMiddleware = new ApolloLink((operation, forward) => {
   if (!isBrowser) {
     return forward(operation);
   }
 
   return new Observable(observer => {
-    const supabase = createBrowserClient();
-    supabase.auth.getSession()
-      .then(({ data: { session } }) => {
+    getAuthToken()
+      .then(token => {
         const headers: Record<string, string> = {
           'Content-Type': 'application/json',
         };
 
-        if (session?.access_token) {
-          headers.Authorization = `Bearer ${session.access_token}`;
+        if (token) {
+          headers.Authorization = `Bearer ${token}`;
         }
 
         operation.setContext({ headers });
@@ -37,7 +58,7 @@ const authMiddleware = new ApolloLink((operation, forward) => {
         });
       })
       .catch(error => {
-        console.error('[Apollo Auth] Error getting session:', error);
+        console.error('[Apollo Auth] Error getting Firebase ID token:', error);
         observer.error(error);
       });
   });
@@ -97,7 +118,7 @@ const devLoggerMiddleware = new ApolloLink((operation: Operation, forward) => {
   });
 });
 
-// Error handling — clear session on auth errors
+// Error handling — warn on auth errors
 const errorMiddleware = new ApolloLink((operation, forward) => {
   return forward(operation).map(response => {
     if (isBrowser && response.errors?.some(error =>

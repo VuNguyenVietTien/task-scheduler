@@ -1,7 +1,7 @@
 use async_graphql::*;
-use uuid::Uuid;
-use sqlx::{PgPool, Row};
 use serde;
+use sqlx::{PgPool, Row};
+use uuid::Uuid;
 
 #[derive(Enum, Copy, Clone, Eq, PartialEq, sqlx::Type, Debug)]
 #[graphql(name = "ProjectMemberRole")]
@@ -39,16 +39,17 @@ impl<'de> serde::Deserialize<'de> for MemberRole {
         D: serde::Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        MemberRole::from_str_case_insensitive(&s)
-            .ok_or_else(|| {
-                serde::de::Error::custom(format!(
-                    "Invalid MemberRole: {}. Accepted: manager/leader/member/guest", s
-                ))
-            })
+        MemberRole::from_str_case_insensitive(&s).ok_or_else(|| {
+            serde::de::Error::custom(format!(
+                "Invalid MemberRole: {}. Accepted: manager/leader/member/guest",
+                s
+            ))
+        })
     }
 }
 
 #[derive(SimpleObject)]
+#[graphql(rename_fields = "snake_case")]
 #[graphql(name = "ResolverProjectMember")]
 pub struct ProjectMember {
     pub member_id: String,
@@ -61,6 +62,7 @@ pub struct ProjectMember {
 }
 
 #[derive(SimpleObject)]
+#[graphql(rename_fields = "snake_case")]
 #[graphql(name = "MemberUserResponse")]
 pub struct UserResponse {
     pub id: String,
@@ -80,7 +82,9 @@ impl TryFrom<sqlx::postgres::PgRow> for ProjectMember {
             user_id: row.get::<Uuid, _>("user_id").to_string(),
             role: row.get("role"),
             joined_at: row.get("joined_at"),
-            invited_by: row.get::<Option<Uuid>, _>("invited_by").map(|id| id.to_string()),
+            invited_by: row
+                .get::<Option<Uuid>, _>("invited_by")
+                .map(|id| id.to_string()),
             user: UserResponse {
                 id: row.get::<Uuid, _>("user_id").to_string(),
                 email: row.get("email"),
@@ -93,12 +97,14 @@ impl TryFrom<sqlx::postgres::PgRow> for ProjectMember {
 }
 
 #[derive(InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct AddMemberInput {
     pub email: String,
     pub role: MemberRole,
 }
 
 #[derive(InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct UpdateMemberRoleInput {
     pub member_id: String,
     pub role: MemberRole,
@@ -107,19 +113,22 @@ pub struct UpdateMemberRoleInput {
 // Định nghĩa mới cho các hoạt động hàng loạt
 
 #[derive(InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct MemberRoleUpdate {
     pub user_id: ID,
     pub role: MemberRole,
 }
 
 #[derive(SimpleObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct BulkUpdateResponse {
     pub success_count: i32,
     pub members: Vec<ProjectMember>,
 }
 
 #[derive(SimpleObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct BulkRemoveResponse {
     pub success_count: i32,
     pub failed_count: i32,
-} 
+}

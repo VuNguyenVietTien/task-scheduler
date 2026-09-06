@@ -1,7 +1,7 @@
-use sqlx::{Error, PgPool, types::Json as SqlxJson};
-use uuid::Uuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::{types::Json as SqlxJson, Error, PgPool};
+use uuid::Uuid;
 // Sử dụng std::result::Result để tránh xung đột với sqlx::Result
 use std::result::Result;
 
@@ -14,7 +14,7 @@ pub struct Plan {
     pub description: Option<String>,
     pub created_by: Uuid,
     pub plan_data: SqlxJson<PlanData>,
-    pub is_active: bool, 
+    pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -57,7 +57,6 @@ pub struct UpdatePlanDbInput {
     pub is_active: Option<bool>,
 }
 
-
 // --- Database Operations ---
 
 pub async fn create(pool: &PgPool, user_id: Uuid, input: CreatePlanDbInput) -> Result<Plan, Error> {
@@ -67,7 +66,7 @@ pub async fn create(pool: &PgPool, user_id: Uuid, input: CreatePlanDbInput) -> R
         INSERT INTO plans (project_id, name, description, created_by, plan_data, is_active)
         VALUES ($1, $2, $3, $4, $5, false)
         RETURNING *
-        "#
+        "#,
     )
     .bind(input.project_id)
     .bind(input.name)
@@ -78,7 +77,11 @@ pub async fn create(pool: &PgPool, user_id: Uuid, input: CreatePlanDbInput) -> R
     .await
 }
 
-pub async fn update(pool: &PgPool, plan_id: Uuid, input: UpdatePlanDbInput) -> Result<Option<Plan>, Error> {
+pub async fn update(
+    pool: &PgPool,
+    plan_id: Uuid,
+    input: UpdatePlanDbInput,
+) -> Result<Option<Plan>, Error> {
     // Corrected: Concatenate SQL string
     sqlx::query_as::<_, Plan>(
         r#"
@@ -90,7 +93,7 @@ pub async fn update(pool: &PgPool, plan_id: Uuid, input: UpdatePlanDbInput) -> R
           updated_at = NOW()
         WHERE id = $5
         RETURNING *
-        "#
+        "#,
     )
     .bind(&input.name)
     .bind(&input.description)
@@ -115,11 +118,16 @@ pub async fn find_by_project_id(pool: &PgPool, project_id: Uuid) -> Result<Vec<P
         .await
 }
 
-pub async fn find_latest_by_project_id(pool: &PgPool, project_id: Uuid) -> Result<Option<Plan>, Error> {
-    sqlx::query_as::<_, Plan>("SELECT * FROM plans WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1")
-        .bind(project_id)
-        .fetch_optional(pool)
-        .await
+pub async fn find_latest_by_project_id(
+    pool: &PgPool,
+    project_id: Uuid,
+) -> Result<Option<Plan>, Error> {
+    sqlx::query_as::<_, Plan>(
+        "SELECT * FROM plans WHERE project_id = $1 ORDER BY created_at DESC LIMIT 1",
+    )
+    .bind(project_id)
+    .fetch_optional(pool)
+    .await
 }
 
 pub async fn delete(pool: &PgPool, plan_id: Uuid) -> Result<u64, Error> {
@@ -136,10 +144,11 @@ pub async fn set_active(pool: &PgPool, plan_id: Uuid) -> Result<Plan, Error> {
     let mut tx = pool.begin().await?;
 
     // Find the project_id for the given plan_id
-    let project_id: Option<Uuid> = sqlx::query_scalar("SELECT project_id FROM plans WHERE plan_id = $1")
-        .bind(plan_id)
-        .fetch_optional(&mut *tx)
-        .await?;
+    let project_id: Option<Uuid> =
+        sqlx::query_scalar("SELECT project_id FROM plans WHERE plan_id = $1")
+            .bind(plan_id)
+            .fetch_optional(&mut *tx)
+            .await?;
 
     let project_id = project_id.ok_or_else(|| sqlx::Error::RowNotFound)?; // Return error if plan not found
 
@@ -161,4 +170,4 @@ pub async fn set_active(pool: &PgPool, plan_id: Uuid) -> Result<Plan, Error> {
     tx.commit().await?;
 
     Ok(updated_plan)
-} 
+}

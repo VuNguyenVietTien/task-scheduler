@@ -10,6 +10,9 @@ pub enum AuthError {
     #[error("Invalid user ID")]
     InvalidUserId,
 
+    #[error("Email already exists")]
+    EmailExists,
+
     #[error("Unauthorized: {0}")]
     Unauthorized(String),
 
@@ -55,6 +58,7 @@ impl ResponseError for AuthError {
         match self {
             AuthError::InvalidCredentials => StatusCode::UNAUTHORIZED,
             AuthError::InvalidUserId => StatusCode::BAD_REQUEST,
+            AuthError::EmailExists => StatusCode::BAD_REQUEST,
             AuthError::Unauthorized(_) => StatusCode::UNAUTHORIZED,
             AuthError::Forbidden(_) => StatusCode::FORBIDDEN,
             AuthError::Database(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -73,10 +77,11 @@ impl ResponseError for AuthError {
         let code = match self {
             AuthError::InvalidCredentials => "INVALID_CREDENTIALS",
             AuthError::InvalidUserId => "INVALID_USER_ID",
+            AuthError::EmailExists => "EMAIL_EXISTS",
             AuthError::Unauthorized(_) => "UNAUTHORIZED",
             AuthError::Forbidden(_) => "FORBIDDEN",
             AuthError::Database(_) => "DATABASE_ERROR",
-            AuthError::TokenCreation(_) => "TOKEN_CREATION_ERROR", 
+            AuthError::TokenCreation(_) => "TOKEN_CREATION_ERROR",
             AuthError::TokenVerification(_) => "TOKEN_VERIFICATION_ERROR",
             AuthError::InvalidToken(_) => "INVALID_TOKEN",
             AuthError::TokenExpired => "TOKEN_EXPIRED",
@@ -108,6 +113,10 @@ mod tests {
             StatusCode::BAD_REQUEST
         );
         assert_eq!(
+            AuthError::EmailExists.status_code(),
+            StatusCode::BAD_REQUEST
+        );
+        assert_eq!(
             AuthError::Unauthorized("test".into()).status_code(),
             StatusCode::UNAUTHORIZED
         );
@@ -115,10 +124,7 @@ mod tests {
             AuthError::Forbidden("test".into()).status_code(),
             StatusCode::FORBIDDEN
         );
-        assert_eq!(
-            AuthError::UserNotFound.status_code(),
-            StatusCode::NOT_FOUND
-        );
+        assert_eq!(AuthError::UserNotFound.status_code(), StatusCode::NOT_FOUND);
         assert_eq!(
             AuthError::ValidationError("test".into()).status_code(),
             StatusCode::BAD_REQUEST

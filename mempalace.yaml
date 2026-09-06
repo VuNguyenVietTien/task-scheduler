@@ -1,0 +1,75 @@
+wing: projectmanager
+rooms:
+- name: tasks
+  description: Files from tasks/
+  keywords:
+  - tasks
+  - tasks
+- name: frontend
+  description: Files from frontend/
+  keywords:
+  - frontend
+  - frontend
+- name: plans
+  description: Files from plans/
+  keywords:
+  - plans
+  - plans
+- name: web
+  description: Files from web/
+  keywords:
+  - web
+  - web
+- name: backend
+  description: Files from backend/
+  keywords:
+  - backend
+  - backend
+- name: documentation
+  description: Files from docs/
+  keywords:
+  - documentation
+  - docs
+- name: rule
+  description: Files from rule/
+  keywords:
+  - rule
+  - rule
+- name: task_scheduler_frontend
+  description: Files from task-scheduler-frontend/
+  keywords:
+  - task_scheduler_frontend
+  - task-scheduler-frontend
+- name: nginx
+  description: Files from nginx/
+  keywords:
+  - nginx
+  - nginx
+- name: design_doc_service
+  description: Files from design-doc-service/
+  keywords:
+  - design_doc_service
+  - design-doc-service
+- name: rich_text_editor
+  description: Files from rich_text_editor/
+  keywords:
+  - rich_text_editor
+  - rich_text_editor
+- name: media
+  description: Files from media/
+  keywords:
+  - media
+  - media
+- name: scripts
+  description: Files from scripts/
+  keywords:
+  - scripts
+  - scripts
+- name: configuration
+  description: Files from config/
+  keywords:
+  - configuration
+  - config
+- name: general
+  description: Files that don't fit other rooms
+  keywords: []

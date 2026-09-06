@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 /// For general user data
 #[derive(SimpleObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct UserResponse {
     pub id: ID,
     pub email: String,
@@ -14,4 +15,3 @@ pub struct UserResponse {
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
-

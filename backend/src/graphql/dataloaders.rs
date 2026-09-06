@@ -1,11 +1,11 @@
-use std::collections::HashMap;
 use async_graphql::{Object, SimpleObject};
 use futures_util::future::BoxFuture;
+use serde_json::Value as JsonValue;
 use sqlx::{PgPool, Row};
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
-use serde_json::Value as JsonValue;
 
 #[derive(Debug, Clone, SimpleObject)]
 pub struct UserInfo {
@@ -42,7 +42,11 @@ where
         }
     }
 
-    pub async fn load_one(&self, key: K, loader: impl Fn(K) -> BoxFuture<'static, Option<V>>) -> Option<V> {
+    pub async fn load_one(
+        &self,
+        key: K,
+        loader: impl Fn(K) -> BoxFuture<'static, Option<V>>,
+    ) -> Option<V> {
         if let Some(value) = self.cache.read().await.get(&key) {
             return Some(value.clone());
         }
@@ -107,7 +111,7 @@ impl UserLoader {
                 let pool = pool.clone();
                 Box::pin(async move {
                     sqlx::query(
-                        "SELECT user_id, email, name, avatar_url FROM users WHERE user_id = $1"
+                        "SELECT user_id, email, name, avatar_url FROM users WHERE user_id = $1",
                     )
                     .bind(id)
                     .map(|row| UserInfo {
@@ -149,7 +153,7 @@ impl ProjectLoader {
                     sqlx::query(
                         "SELECT project_id, name, description, owner_id, workspace_id,
                                 icon_url, metadata, is_public
-                         FROM projects WHERE project_id = $1"
+                         FROM projects WHERE project_id = $1",
                     )
                     .bind(id)
                     .map(|row| ProjectInfo {
@@ -157,7 +161,8 @@ impl ProjectLoader {
                         name: row.get("name"),
                         description: row.get("description"),
                         owner_id: row.get::<Uuid, _>("owner_id").to_string(),
-                        workspace_id: row.get::<Option<Uuid>, _>("workspace_id")
+                        workspace_id: row
+                            .get::<Option<Uuid>, _>("workspace_id")
                             .map(|id| id.to_string()),
                         icon_url: row.get("icon_url"),
                         metadata: row.get("metadata"),

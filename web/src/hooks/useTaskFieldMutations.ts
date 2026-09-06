@@ -389,15 +389,27 @@ export function useUpdateTaskAssignee() {
   const [error, setError] = useState<Error | null>(null);
   const apolloClient = useApolloClient();
 
-  const updateAssignee = useCallback(async (taskId: string, assigneeId: string | null) => {
+  const updateAssignee = useCallback(async (
+    taskId: string,
+    assignment: string | null | {
+      assigneeId?: string | null;
+      assigneeResourceMemberId?: string | null;
+    }
+  ) => {
     setIsUpdating(true);
     setError(null);
     
     try {
-      // Input chỉ chứa taskId và assigneeId
+      const resourceAssignment = typeof assignment === 'object' && assignment !== null
+        ? assignment
+        : null;
+      const assigneeId = resourceAssignment ? resourceAssignment.assigneeId ?? null : assignment;
+      const assigneeResourceMemberId = resourceAssignment?.assigneeResourceMemberId ?? null;
+
       const input = {
         task_id: taskId,
-        assignee_id: assigneeId === '' ? null : assigneeId
+        assignee_id: assigneeId === '' ? null : assigneeId,
+        assignee_resource_member_id: assigneeResourceMemberId,
       };
       
       console.log(`Đang cập nhật người được giao: ${assigneeId}`);
@@ -412,6 +424,7 @@ export function useUpdateTaskAssignee() {
             __typename: 'Task',
             task_id: taskId,
             assignee_id: input.assignee_id,
+            assignee_resource_member_id: input.assignee_resource_member_id,
           }
         }
       });

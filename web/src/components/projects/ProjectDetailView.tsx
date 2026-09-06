@@ -8,6 +8,7 @@ import { KanbanBoard } from '@/components/tasks/KanbanBoard';
 import { MembersView } from '@/components/projects/MembersView';
 import { ProjectReportView } from '@/components/reports/ProjectReportView';
 import { DocumentsTab } from '@/components/projects/DocumentsTab';
+import TimesheetPage from '@/app/projects/[id]/timesheet/page';
 import { useUsers } from '@/hooks/useUsers';
 import { useProject } from '@/hooks/useProject';
 import type { ProjectData } from '@/types/project';
@@ -20,8 +21,8 @@ import { processTasksAndUpdateStore, processTasksBasedOnPlan } from '@/utils/tas
 import { selectPlans } from '@/redux/features/plansSlice';
 import { updateAutoSort } from '@/redux/features/taskOrderStore';
 
-type ViewType = 'list' | 'kanban' | 'gantt' | 'members' | 'report' | 'documents';
-const VALID_VIEWS: ViewType[] = ['list', 'kanban', 'gantt', 'members', 'report', 'documents'];
+type ViewType = 'list' | 'kanban' | 'gantt' | 'members' | 'report' | 'documents' | 'timesheet';
+const VALID_VIEWS: ViewType[] = ['list', 'kanban', 'gantt', 'members', 'report', 'documents', 'timesheet'];
 function toViewType(tab?: string): ViewType {
   return VALID_VIEWS.includes(tab as ViewType) ? (tab as ViewType) : 'list';
 }
@@ -327,6 +328,8 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
           <ProjectReportView projectId={project.id} />
         ) : activeView === 'documents' ? (
           <DocumentsTab projectId={project.id} />
+        ) : activeView === 'timesheet' ? (
+          <TimesheetPage />
         ) : isLoading ? (
           <LoadingState />
         ) : !displayedTasks.length ? (

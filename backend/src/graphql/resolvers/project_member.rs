@@ -1,20 +1,24 @@
 use async_graphql::{Context, Object, Result, ID};
 use chrono::Utc;
-use sqlx::{Row, postgres::PgRow};
-use uuid::Uuid;
 use serde_json::json;
+use sqlx::{postgres::PgRow, Row};
+use uuid::Uuid;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
-use crate::graphql::types::{ProjectMember, MemberRole, User};
+use crate::graphql::types::{MemberRole, ProjectMember, User};
 
 #[derive(Default)]
 pub struct ProjectMemberQuery;
 
-#[Object]
+#[Object(rename_fields = "snake_case", rename_args = "snake_case")]
 impl ProjectMemberQuery {
     /// Get project members with optional filters
-    async fn project_members(&self, ctx: &Context<'_>, project_id: ID) -> Result<Vec<ProjectMember>> {
+    async fn project_members(
+        &self,
+        ctx: &Context<'_>,
+        project_id: ID,
+    ) -> Result<Vec<ProjectMember>> {
         let context = ctx.data::<GraphQLContext>()?;
         let pool = &context.db;
         let project_id = Uuid::parse_str(&project_id)?;
@@ -32,27 +36,30 @@ impl ProjectMemberQuery {
             FROM project_members pm
             INNER JOIN users u ON pm.user_id = u.user_id
             WHERE project_id = $1
-            "#
+            "#,
         )
         .bind(project_id)
         .fetch_all(pool)
         .await
         .map_err(|e| AuthError::Database(e))?;
 
-        Ok(members.into_iter().map(|row: PgRow| ProjectMember {
-            role: row.get("role"),
-            joined_at: row.get("joined_at"),
-            user: User {
-                user_id: row.get("user_id"),
-                email: row.get("email"),
-                username: row.get("username"),
-                full_name: row.get("full_name"),
-                avatar_url: row.get::<Option<String>, _>("avatar_url"),
-            }
-        }).collect())
+        Ok(members
+            .into_iter()
+            .map(|row: PgRow| ProjectMember {
+                role: row.get("role"),
+                joined_at: row.get("joined_at"),
+                user: User {
+                    user_id: row.get("user_id"),
+                    email: row.get("email"),
+                    username: row.get("username"),
+                    full_name: row.get("full_name"),
+                    avatar_url: row.get::<Option<String>, _>("avatar_url"),
+                },
+            })
+            .collect())
     }
 
-    /// Get specific project member 
+    /// Get specific project member
     async fn project_member(
         &self,
         ctx: &Context<'_>,
@@ -76,7 +83,7 @@ impl ProjectMemberQuery {
             FROM project_members pm
             INNER JOIN users u ON pm.user_id = u.user_id
             WHERE project_id = $1 AND u.user_id = $2
-            "#
+            "#,
         )
         .bind(project_id)
         .bind(user_id)
@@ -93,28 +100,31 @@ impl ProjectMemberQuery {
                 username: row.get("username"),
                 full_name: row.get("full_name"),
                 avatar_url: row.get::<Option<String>, _>("avatar_url"),
-            }
+            },
         }))
     }
 }
 
-#[derive(Default)] 
+#[derive(Default)]
 pub struct ProjectMemberMutation;
 
-#[Object]
+#[Object(rename_fields = "snake_case", rename_args = "snake_case")]
 impl ProjectMemberMutation {
     /// Add member to project
     async fn add_project_member(
         &self,
         ctx: &Context<'_>,
-        input: AddProjectMemberInput
+        input: AddProjectMemberInput,
     ) -> Result<ProjectMember> {
         eprintln!("\n=== Add Project Member Request ===");
-        eprintln!("Input Data: {}", json!({
-            "projectId": &input.project_id,
-            "userId": &input.user_id,
-            "role": &input.role
-        }));
+        eprintln!(
+            "Input Data: {}",
+            json!({
+                "projectId": &input.project_id,
+                "userId": &input.user_id,
+                "role": &input.role
+            })
+        );
         eprintln!("==============================\n");
 
         let context = ctx.data::<GraphQLContext>()?;
@@ -134,15 +144,17 @@ impl ProjectMemberMutation {
         }
 
         // Verify user exists
-        let user = sqlx::query("SELECT user_id, email, username, full_name, avatar_url FROM users WHERE user_id = $1")
-            .bind(user_id)
-            .fetch_optional(pool)
-            .await
-            .map_err(|e| AuthError::Database(e))?;
+        let user = sqlx::query(
+            "SELECT user_id, email, username, full_name, avatar_url FROM users WHERE user_id = $1",
+        )
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(|e| AuthError::Database(e))?;
 
         let user_row = match user {
             Some(row) => row,
-            None => return Err("User not found".into())
+            None => return Err("User not found".into()),
         };
 
         // Check if member already exists
@@ -150,7 +162,7 @@ impl ProjectMemberMutation {
             r#"
             SELECT member_id FROM project_members 
             WHERE project_id = $1 AND user_id = $2
-            "#
+            "#,
         )
         .bind(project_id)
         .bind(user_id)
@@ -175,7 +187,7 @@ impl ProjectMemberMutation {
             VALUES ($1, $2, $3, $4, $5)
             RETURNING 
                 member_id, project_id, user_id, role, joined_at
-            "#
+            "#,
         )
         .bind(member_id)
         .bind(project_id)
@@ -195,7 +207,7 @@ impl ProjectMemberMutation {
                 username: user_row.get("username"),
                 full_name: user_row.get("full_name"),
                 avatar_url: user_row.get("avatar_url"),
-            }
+            },
         };
 
         eprintln!("\n=== Add Project Member Response ===");
@@ -223,7 +235,7 @@ impl ProjectMemberMutation {
             SELECT user_id, email, username, full_name, avatar_url 
             FROM users 
             WHERE user_id = $1
-            "#
+            "#,
         )
         .bind(user_id)
         .fetch_optional(pool)
@@ -232,7 +244,7 @@ impl ProjectMemberMutation {
 
         let user_row = match user_info {
             Some(row) => row,
-            None => return Err("User not found".into())
+            None => return Err("User not found".into()),
         };
 
         let member = sqlx::query(
@@ -242,7 +254,7 @@ impl ProjectMemberMutation {
             WHERE project_id = $1 AND user_id = $2
             RETURNING 
                 member_id, project_id, user_id, role, joined_at
-            "#
+            "#,
         )
         .bind(project_id)
         .bind(user_id)
@@ -261,9 +273,9 @@ impl ProjectMemberMutation {
                     username: user_row.get("username"),
                     full_name: user_row.get("full_name"),
                     avatar_url: user_row.get("avatar_url"),
-                }
+                },
             }),
-            None => Err("Project member not found".into())
+            None => Err("Project member not found".into()),
         }
     }
 
@@ -272,7 +284,7 @@ impl ProjectMemberMutation {
         &self,
         ctx: &Context<'_>,
         project_id: ID,
-        user_id: ID
+        user_id: ID,
     ) -> Result<bool> {
         let context = ctx.data::<GraphQLContext>()?;
         let pool = &context.db;
@@ -282,7 +294,7 @@ impl ProjectMemberMutation {
             r#"
             DELETE FROM project_members 
             WHERE project_id = $1 AND user_id = $2
-            "#
+            "#,
         )
         .bind(project_id)
         .bind(user_id)
@@ -295,6 +307,7 @@ impl ProjectMemberMutation {
 }
 
 #[derive(async_graphql::InputObject)]
+#[graphql(rename_fields = "snake_case")]
 pub struct AddProjectMemberInput {
     pub project_id: ID,
     pub user_id: ID,
