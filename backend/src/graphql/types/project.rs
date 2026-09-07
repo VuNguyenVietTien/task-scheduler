@@ -185,6 +185,15 @@ pub enum MemberRole {
 }
 
 impl MemberRole {
+    /// Read the text projection of a stored role without changing its DB value.
+    /// Unknown, NULL or missing columns are errors, never a default access grant.
+    pub fn from_database_row(row: &sqlx::postgres::PgRow) -> Result<Self> {
+        use sqlx::Row;
+        row.try_get::<String, _>("role")?
+            .parse()
+            .map_err(Error::new)
+    }
+
     pub fn from_str_case_insensitive(s: &str) -> Option<Self> {
         let lowercase = s.to_lowercase();
         match lowercase.as_str() {

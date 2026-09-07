@@ -4,6 +4,7 @@ use uuid::Uuid;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
+use crate::graphql::resolvers::project_authz;
 use crate::graphql::types::{MemberRole, ProjectMember, User};
 
 pub async fn update_member(
@@ -15,6 +16,10 @@ pub async fn update_member(
     let context = ctx.data::<GraphQLContext>()?;
     let pool = &context.db;
     let (project_id, user_id) = (Uuid::parse_str(&project_id)?, Uuid::parse_str(&user_id)?);
+    let caller = project_authz::require_user(context)?;
+    let mut tx = pool.begin().await.map_err(AuthError::Database)?;
+    project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+    project_authz::require_access_target_tx(&mut tx, caller, project_id, user_id).await?;
 
     // Get user info
     let user_info = sqlx::query(
@@ -25,7 +30,7 @@ pub async fn update_member(
         "#,
     )
     .bind(user_id)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|e| AuthError::Database(e))?;
 
@@ -46,10 +51,11 @@ pub async fn update_member(
     .bind(project_id)
     .bind(user_id)
     .bind(role)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *tx)
     .await
     .map_err(|e| AuthError::Database(e))?;
 
+    tx.commit().await.map_err(AuthError::Database)?;
     match member {
         Some(row) => Ok(ProjectMember {
             role: row.get("role"),

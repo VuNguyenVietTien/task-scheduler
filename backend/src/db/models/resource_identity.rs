@@ -10,6 +10,7 @@ use uuid::Uuid;
 /// Row of `resource_members`.
 #[derive(Debug, Clone, sqlx::FromRow, serde::Serialize, serde::Deserialize)]
 pub struct ResourceMember {
+    pub member_id: Uuid,
     pub resource_member_id: Uuid,
     pub project_id: Uuid,
     pub display_name: String,
@@ -19,6 +20,9 @@ pub struct ResourceMember {
     /// MEMBER | COMPANY | GROUP (TEXT + CHECK in SQL).
     pub member_kind: String,
     pub linked_at: Option<DateTime<Utc>>,
+    pub access_role: Option<String>,
+    pub joined_at: Option<DateTime<Utc>>,
+    pub invited_by: Option<Uuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }

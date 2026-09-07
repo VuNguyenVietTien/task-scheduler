@@ -3,40 +3,25 @@ use uuid::Uuid;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
+use crate::graphql::resolvers::project_authz;
 
 pub async fn remove_member(ctx: &Context<'_>, project_id: ID, user_id: ID) -> Result<bool> {
     let context = ctx.data::<GraphQLContext>()?;
-    let pool = &context.db;
     let (project_id, user_id) = (Uuid::parse_str(&project_id)?, Uuid::parse_str(&user_id)?);
-
-    // Check if the user is trying to remove an admin
-    let is_admin = sqlx::query(
-        r#"
-        SELECT 1 FROM project_members 
-        WHERE project_id = $1 AND user_id = $2 AND role IN ('manager', 'leader', 'admin')
-        "#,
-    )
-    .bind(project_id)
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| AuthError::Database(e))?;
-
-    if is_admin.is_some() {
-        return Err("Cannot remove a project admin".into());
-    }
-
+    let caller = project_authz::require_user(context)?;
+    let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
+    project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+    project_authz::require_access_target_tx(&mut tx, caller, project_id, user_id).await?;
+    // Revoke only access; retain identity, link, task assignment and configuration.
     let result = sqlx::query(
-        r#"
-        DELETE FROM project_members 
-        WHERE project_id = $1 AND user_id = $2
-        "#,
+        "UPDATE project_members SET role = NULL, updated_at = now() \
+         WHERE project_id = $1 AND user_id = $2 AND role IS NOT NULL",
     )
     .bind(project_id)
     .bind(user_id)
-    .execute(pool)
+    .execute(&mut *tx)
     .await
-    .map_err(|e| AuthError::Database(e))?;
-
+    .map_err(AuthError::Database)?;
+    tx.commit().await.map_err(AuthError::Database)?;
     Ok(result.rows_affected() > 0)
 }

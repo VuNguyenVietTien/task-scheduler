@@ -1,8 +1,10 @@
-use async_graphql::Context;
+use crate::graphql::resolvers::project_authz;
+use async_graphql::{Context, ErrorExtensions};
 use chrono::Utc;
 use log::error;
 use serde_json::Value as JsonValue;
 use sqlx::Row;
+use std::collections::HashSet;
 use uuid::Uuid;
 
 use crate::auth::error::AuthError;
@@ -20,6 +22,48 @@ pub async fn reorder_tasks(
     let mut tx = pool.begin().await.map_err(|e| AuthError::Database(e))?;
 
     let project_id = Uuid::parse_str(&input.project_id.to_string())?;
+    let caller = project_authz::require_user(context)?;
+    project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+    crate::domain::taxonomy::lock_project_hierarchy(&mut *tx, project_id).await?;
+    let current: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT task_id FROM tasks WHERE project_id = $1 AND NOT COALESCE(is_deleted, false) \
+         ORDER BY priority_order, task_id FOR UPDATE",
+    )
+    .bind(project_id)
+    .fetch_all(&mut *tx)
+    .await
+    .map_err(AuthError::Database)?;
+    let invalid = || {
+        async_graphql::Error::new(
+            "reorder requires every live project task once with unique nonnegative ranks",
+        )
+        .extend_with(|_, e| e.set("code", "BAD_USER_INPUT"))
+    };
+    let ids: HashSet<Uuid> = input
+        .tasks
+        .iter()
+        .map(|t| Uuid::parse_str(&t.task_id))
+        .collect::<Result<_, _>>()?;
+    let ranks: HashSet<i32> = input.tasks.iter().map(|t| t.priority_order).collect();
+    if ids.len() != input.tasks.len()
+        || ranks.len() != input.tasks.len()
+        || input.tasks.iter().any(|t| t.priority_order < 0)
+        || ids != current.iter().copied().collect()
+    {
+        return Err(invalid());
+    }
+    if let Some(expected) = &input.expected_order {
+        let expected: Vec<Uuid> = expected
+            .iter()
+            .map(|id| Uuid::parse_str(id))
+            .collect::<Result<_, _>>()?;
+        if expected != current {
+            return Err(
+                async_graphql::Error::new("task order changed; refresh before retrying")
+                    .extend_with(|_, e| e.set("code", "CONFLICT")),
+            );
+        }
+    }
 
     for order in input.tasks.iter() {
         let task_id = Uuid::parse_str(&order.task_id.to_string())?;
@@ -62,9 +106,9 @@ pub async fn reorder_tasks(
             task_id: updated_task.get("task_id"),
             project_id: updated_task.get("project_id"),
             assignee_resource_member_id: updated_task.get("assignee_resource_member_id"),
-        parent_task_id: updated_task.get("parent_task_id"),
-        phase_id: updated_task.get("phase_id"),
-        category_id: updated_task.get("category_id"),
+            parent_task_id: updated_task.get("parent_task_id"),
+            phase_id: updated_task.get("phase_id"),
+            category_id: updated_task.get("category_id"),
             title: updated_task.get("title"),
             description: updated_task.get("description"),
             assignee: updated_task

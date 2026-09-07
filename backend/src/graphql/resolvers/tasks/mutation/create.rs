@@ -6,7 +6,9 @@ use sqlx::Row;
 use uuid::Uuid;
 
 use crate::auth::error::AuthError;
+use crate::domain::project_member_identity::{self, Field};
 use crate::graphql::context::Context as GraphQLContext;
+use crate::graphql::resolvers::project_authz;
 use crate::graphql::types::{Assignee, CreateTaskInput, Task};
 
 pub async fn create_task(
@@ -31,33 +33,29 @@ pub async fn create_task(
         .parent_task_id
         .map(|id| Uuid::parse_str(&id.to_string()))
         .transpose()?;
-    let assignee_id = input
-        .assignee_id
-        .map(|id| Uuid::parse_str(&id.to_string()))
-        .transpose()?;
-    let assignee_resource_member_id = input
-        .assignee_resource_member_id
-        .as_ref()
-        .map(|id| Uuid::parse_str(&id.to_string()))
-        .transpose()?;
-    // herdr-260906 R5: placeholder assignment must reference a resource
-    // member of the SAME project (placeholders allowed; authz = task write).
-    if let Some(member_id) = assignee_resource_member_id {
-        let ok: bool = sqlx::query_scalar(
-            "SELECT EXISTS(SELECT 1 FROM resource_members WHERE resource_member_id = $1 AND project_id = $2)",
-        )
-        .bind(member_id)
-        .bind(project_id)
-        .fetch_one(&mut *tx)
-        .await
-        .map_err(|e| AuthError::Database(e))?;
-        if !ok {
-            return Err(AuthError::Other(
-                "assignee_resource_member_id does not belong to this project".into(),
-            )
-            .into());
-        }
-    }
+    let caller_id = Uuid::parse_str(&user_id)?;
+    project_authz::require_project_write_tx(&mut tx, caller_id, project_id).await?;
+    crate::domain::taxonomy::lock_project_hierarchy(&mut *tx, project_id).await?;
+    let assignment = project_member_identity::normalize_task_assignment(
+        &mut tx,
+        project_id,
+        input
+            .assignee_resource_member_id
+            .map(|id| Uuid::parse_str(&id.to_string()))
+            .transpose()?
+            .map_or(Field::Omitted, Field::Value),
+        input
+            .assignee_id
+            .map(|id| Uuid::parse_str(&id.to_string()))
+            .transpose()?
+            .map_or(Field::Omitted, Field::Value),
+    )
+    .await
+    .map_err(|error| async_graphql::Error::new(error.to_string()))?;
+    let (assignee_resource_member_id, assignee_id) = match assignment {
+        None | Some(None) => (None, None),
+        Some(Some(value)) => (Some(value.resource_member_id), value.user_id),
+    };
 
     // Task 1.1: a new parent must be a non-deleted task of the SAME project
     // (self/cycle cannot occur at creation; cross-project is rejected here).
@@ -117,7 +115,7 @@ pub async fn create_task(
     .bind(input.due_date)
     .bind(input.effort)
     .bind(0f64) // Default progress to 0
-    .bind(Uuid::parse_str(&user_id)?)
+    .bind(caller_id)
     .bind(now)
     .bind(now)
     .bind(false)

@@ -263,15 +263,30 @@ pub struct UpdateTaskInput {
     pub actual_end_date: Option<DateTime<Utc>>,
     pub effort: Option<f64>,
     pub progress: Option<f64>,
-    pub assignee_id: Option<ID>,
-    pub assignee_resource_member_id: Option<ID>,
-    pub parent_task_id: Option<ID>,
+    pub assignee_id: MaybeUndefined<ID>,
+    pub assignee_resource_member_id: MaybeUndefined<ID>,
+    pub parent_task_id: MaybeUndefined<ID>,
     #[graphql(name = "type_")]
     pub type_: Option<String>,
     pub category: Option<String>,
     pub tags: Option<Vec<String>>,
     pub progress_type: Option<TaskProgressType>,
     pub is_deleted: Option<bool>,
+}
+
+#[derive(InputObject)]
+#[graphql(rename_fields = "snake_case")]
+pub struct CloneTaskSubtreeInput {
+    pub source_task_id: ID,
+    pub selected_descendant_ids: Vec<ID>,
+    pub quantity: i32,
+}
+
+#[derive(SimpleObject)]
+#[graphql(rename_fields = "snake_case")]
+pub struct CloneTaskSubtreePayload {
+    pub root_task_ids: Vec<ID>,
+    pub created_task_ids: Vec<ID>,
 }
 
 #[derive(InputObject)]
@@ -295,6 +310,8 @@ fn validate_task_status(status: &String) -> Result<(), String> {
 pub struct ReorderTasksInput {
     pub project_id: ID,
     pub tasks: Vec<TaskOrderInput>,
+    /// Full current order; omitted by legacy clients for serialized last-writer behavior.
+    pub expected_order: Option<Vec<ID>>,
 }
 
 #[derive(InputObject)]

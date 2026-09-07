@@ -1,7 +1,8 @@
 use async_graphql::{Context, Object, Result, ID};
 
 use crate::graphql::types::{
-    CreateTaskInput, ReorderTasksInput, Task, UpdateTaskInput, UpdateTaskStatusInput,
+    CloneTaskSubtreeInput, CloneTaskSubtreePayload, CreateTaskInput, ReorderTasksInput, Task,
+    UpdateTaskInput, UpdateTaskStatusInput,
 };
 use mutation::update_effort::UpdateTaskEffortInput;
 
@@ -27,6 +28,10 @@ impl TaskQuery {
     ) -> Result<Vec<Task>> {
         query::tasks(ctx, project_id, status, assignee_id).await
     }
+
+    async fn task_tree_rows(&self, ctx: &Context<'_>, project_id: ID) -> Result<Vec<Task>> {
+        query::task_tree_rows(ctx, project_id).await
+    }
 }
 
 #[derive(Default)]
@@ -36,6 +41,14 @@ pub struct TaskMutation;
 impl TaskMutation {
     async fn create_task(&self, ctx: &Context<'_>, input: CreateTaskInput) -> Result<Task> {
         mutation::create::create_task(ctx, input).await
+    }
+
+    async fn clone_task_subtree(
+        &self,
+        ctx: &Context<'_>,
+        input: CloneTaskSubtreeInput,
+    ) -> Result<CloneTaskSubtreePayload> {
+        mutation::clone::clone_task_subtree(ctx, input).await
     }
 
     async fn update_task(&self, ctx: &Context<'_>, input: UpdateTaskInput) -> Result<Task> {

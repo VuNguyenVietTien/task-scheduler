@@ -14,7 +14,7 @@
 //!   hour + duration. Expansion into occurrences is bounded and happens in
 //!   the scheduling client; the API only stores/validates rules.
 
-use async_graphql::{Context, ID, Object, Result};
+use async_graphql::{Context, Object, Result, ID};
 use chrono::NaiveDate;
 use uuid::Uuid;
 
@@ -281,7 +281,11 @@ impl SchedulingQuery {
     }
 
     /// Member groups with their member ids (R4).
-    async fn resource_groups(&self, ctx: &Context<'_>, project_id: ID) -> Result<Vec<ResourceGroup>> {
+    async fn resource_groups(
+        &self,
+        ctx: &Context<'_>,
+        project_id: ID,
+    ) -> Result<Vec<ResourceGroup>> {
         let context = ctx.data::<GraphQLContext>()?;
         let project_id = parse_id(&project_id, "project_id")?;
         let user_id = project_authz::require_user(context)?;
@@ -406,13 +410,14 @@ impl SchedulingMutation {
         {
             return Err(async_graphql::Error::new("hours must be within 0..=24"));
         }
-        let project_id: Uuid =
-            sqlx::query_scalar("SELECT project_id FROM resource_members WHERE resource_member_id = $1")
-                .bind(member_id)
-                .fetch_optional(&context.db)
-                .await
-                .map_err(db_err)?
-                .ok_or_else(|| async_graphql::Error::new("unknown resource member"))?;
+        let project_id: Uuid = sqlx::query_scalar(
+            "SELECT project_id FROM resource_members WHERE resource_member_id = $1",
+        )
+        .bind(member_id)
+        .fetch_optional(&context.db)
+        .await
+        .map_err(db_err)?
+        .ok_or_else(|| async_graphql::Error::new("unknown resource member"))?;
         project_authz::require_project_write(&context.db, caller, project_id).await?;
         let row: MemberCapacityRow = sqlx::query_as(
             "INSERT INTO member_capacity_settings (resource_member_id, weekday_hours, weekend_hours) \
@@ -448,13 +453,14 @@ impl SchedulingMutation {
         if !(0.0..=24.0).contains(&input.hours) {
             return Err(async_graphql::Error::new("hours must be within 0..=24"));
         }
-        let project_id: Uuid =
-            sqlx::query_scalar("SELECT project_id FROM resource_members WHERE resource_member_id = $1")
-                .bind(member_id)
-                .fetch_optional(&context.db)
-                .await
-                .map_err(db_err)?
-                .ok_or_else(|| async_graphql::Error::new("unknown resource member"))?;
+        let project_id: Uuid = sqlx::query_scalar(
+            "SELECT project_id FROM resource_members WHERE resource_member_id = $1",
+        )
+        .bind(member_id)
+        .fetch_optional(&context.db)
+        .await
+        .map_err(db_err)?
+        .ok_or_else(|| async_graphql::Error::new("unknown resource member"))?;
         project_authz::require_project_write(&context.db, caller, project_id).await?;
         sqlx::query(
             "INSERT INTO member_capacity_overrides (resource_member_id, override_date, hours) \
@@ -671,12 +677,13 @@ impl SchedulingMutation {
             .await
             .map_err(db_err)?;
         }
-        let size: i32 =
-            sqlx::query_scalar("SELECT count(*)::int FROM resource_group_members WHERE group_id = $1")
-                .bind(group_id)
-                .fetch_one(&mut *tx)
-                .await
-                .map_err(db_err)?;
+        let size: i32 = sqlx::query_scalar(
+            "SELECT count(*)::int FROM resource_group_members WHERE group_id = $1",
+        )
+        .bind(group_id)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(db_err)?;
         tx.commit().await.map_err(db_err)?;
         Ok(size)
     }
@@ -730,13 +737,13 @@ impl SchedulingMutation {
                 .await
                 .map_err(db_err)?
                 .ok_or_else(|| async_graphql::Error::new("unknown group"))?;
-        project_authz::require_project_write(&context.db, caller, project_id).await?;
         let role = role.unwrap_or(MemberRole::Member);
         let mut tx = context.db.begin().await.map_err(db_err)?;
+        project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
         let users: Vec<Uuid> = sqlx::query_scalar(
             "SELECT rm.user_id FROM resource_group_members gm \
-             JOIN resource_members rm ON rm.resource_member_id = gm.resource_member_id \
-             WHERE gm.group_id = $1 AND rm.user_id IS NOT NULL",
+             JOIN project_members rm ON rm.resource_member_id = gm.resource_member_id \
+             WHERE gm.group_id = $1 AND rm.user_id IS NOT NULL AND rm.role IS NULL ORDER BY rm.user_id",
         )
         .bind(group_id)
         .fetch_all(&mut *tx)
@@ -744,9 +751,12 @@ impl SchedulingMutation {
         .map_err(db_err)?;
         let mut added = 0i32;
         for user_id in users {
+            project_authz::require_access_target_tx(&mut tx, caller, project_id, user_id).await?;
+            // Group members already have the canonical identity referenced by
+            // the group. Grant access on that row; do not create a second row.
             let res = sqlx::query(
-                "INSERT INTO project_members (project_id, user_id, role, invited_by) \
-                 VALUES ($1, $2, $3, $4) ON CONFLICT (project_id, user_id) DO NOTHING",
+                "UPDATE project_members SET role = $3, invited_by = $4, updated_at = now() \
+                 WHERE project_id = $1 AND user_id = $2 AND role IS NULL",
             )
             .bind(project_id)
             .bind(user_id)
@@ -779,7 +789,9 @@ impl SchedulingMutation {
             return Err(async_graphql::Error::new("start_hour must be 0..=23"));
         }
         if !(0.0..=24.0).contains(&input.duration_hours) || input.duration_hours <= 0.0 {
-            return Err(async_graphql::Error::new("duration_hours must be in (0, 24]"));
+            return Err(async_graphql::Error::new(
+                "duration_hours must be in (0, 24]",
+            ));
         }
         if let Some(end) = input.end_date {
             if end < input.start_date {
@@ -857,15 +869,14 @@ impl SchedulingMutation {
         let context = ctx.data::<GraphQLContext>()?;
         let caller = project_authz::require_user(context)?;
         let commitment_id = parse_id(&id, "id")?;
-        let project_id: Uuid =
-            sqlx::query_scalar(
-                "SELECT project_id FROM recurring_commitments WHERE commitment_id = $1",
-            )
-            .bind(commitment_id)
-            .fetch_optional(&context.db)
-            .await
-            .map_err(db_err)?
-            .ok_or_else(|| async_graphql::Error::new("unknown commitment"))?;
+        let project_id: Uuid = sqlx::query_scalar(
+            "SELECT project_id FROM recurring_commitments WHERE commitment_id = $1",
+        )
+        .bind(commitment_id)
+        .fetch_optional(&context.db)
+        .await
+        .map_err(db_err)?
+        .ok_or_else(|| async_graphql::Error::new("unknown commitment"))?;
         project_authz::require_project_write(&context.db, caller, project_id).await?;
         sqlx::query("DELETE FROM recurring_commitments WHERE commitment_id = $1")
             .bind(commitment_id)

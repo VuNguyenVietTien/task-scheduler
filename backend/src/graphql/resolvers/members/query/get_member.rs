@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
-use crate::graphql::types::{ProjectMember, User};
+use crate::graphql::types::{MemberRole, ProjectMember, User};
 
 pub async fn project_member(
     ctx: &Context<'_>,
@@ -15,11 +15,14 @@ pub async fn project_member(
     let pool = &context.db;
     let project_id = Uuid::parse_str(&project_id)?;
     let user_id = Uuid::parse_str(&user_id)?;
+    let caller = crate::graphql::resolvers::project_authz::require_user(context)?;
+    crate::graphql::resolvers::project_authz::require_project_read(pool, caller, project_id)
+        .await?;
 
     let member = sqlx::query(
         r#"
         SELECT
-            pm.role,
+            pm.role::text AS role,
             pm.joined_at,
             u.user_id,
             u.username,
@@ -28,7 +31,7 @@ pub async fn project_member(
             u.avatar_url
         FROM project_members pm
         INNER JOIN users u ON pm.user_id = u.user_id
-        WHERE pm.project_id = $1 AND pm.user_id = $2
+        WHERE pm.project_id = $1 AND pm.user_id = $2 AND pm.role IS NOT NULL
         "#,
     )
     .bind(project_id)
@@ -39,7 +42,7 @@ pub async fn project_member(
 
     match member {
         Some(row) => Ok(Some(ProjectMember {
-            role: row.get("role"),
+            role: MemberRole::from_database_row(&row)?,
             joined_at: row.get("joined_at"),
             user: User {
                 user_id: row.get("user_id"),

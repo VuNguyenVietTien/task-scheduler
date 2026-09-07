@@ -19,8 +19,9 @@ pub use self::project::{
 
 // Re-export task types
 pub use self::task::{
-    Assignee, CreateTaskInput, ReorderTasksInput, Task, TaskOrderInput, TaskPriority,
-    TaskProgressType, TaskStatus, UpdateTaskInput, UpdateTaskStatusInput,
+    Assignee, CloneTaskSubtreeInput, CloneTaskSubtreePayload, CreateTaskInput, ReorderTasksInput,
+    Task, TaskOrderInput, TaskPriority, TaskProgressType, TaskStatus, UpdateTaskInput,
+    UpdateTaskStatusInput,
 };
 
 // Re-export auth types

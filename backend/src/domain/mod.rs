@@ -4,5 +4,6 @@
 //! concerns. Task 1.1 introduces project taxonomy (phases/categories) and the
 //! real-task hierarchy rules (design doc §4/§6).
 
-pub mod taxonomy;
+pub mod project_member_identity;
 pub mod resource_identity;
+pub mod taxonomy;

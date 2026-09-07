@@ -5,6 +5,7 @@ use uuid::Uuid;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
+use crate::graphql::resolvers::project_authz;
 use crate::graphql::types::{MemberRole, ProjectMember, User};
 
 pub async fn add_member_by_email(
@@ -17,57 +18,29 @@ pub async fn add_member_by_email(
     let pool = &context.db;
     let project_id = Uuid::parse_str(&project_id)?;
 
-    // Verify project exists
-    let project = sqlx::query("SELECT project_id FROM projects WHERE project_id = $1")
-        .bind(project_id)
-        .fetch_optional(pool)
-        .await
-        .map_err(|e| AuthError::Database(e))?;
-
-    if project.is_none() {
-        return Err("Dự án không tồn tại".into());
-    }
+    let caller = project_authz::require_user(context)?;
+    let mut tx = pool.begin().await.map_err(AuthError::Database)?;
+    project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
 
     // Find user by email
-    let user = sqlx::query(
-        "SELECT user_id, email, username, full_name, avatar_url FROM users WHERE email = $1",
+    let users = sqlx::query(
+        "SELECT user_id, email, username, full_name, avatar_url FROM users WHERE lower(btrim(email)) = lower(btrim($1)) LIMIT 2",
     )
-    .bind(&email)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| AuthError::Database(e))?;
-
-    let user_row = match user {
-        Some(row) => row,
-        None => return Err("User with this email not found".into()),
+    .bind(&email).fetch_all(&mut *tx).await.map_err(AuthError::Database)?;
+    let [user_row] = users.as_slice() else {
+        return Err("Email must identify exactly one existing user".into());
     };
-
     let user_id: Uuid = user_row.get("user_id");
-
-    // Check if member already exists
-    let existing = sqlx::query(
-        r#"
-        SELECT member_id FROM project_members 
-        WHERE project_id = $1 AND user_id = $2
-        "#,
-    )
-    .bind(project_id)
-    .bind(user_id)
-    .fetch_optional(pool)
-    .await
-    .map_err(|e| AuthError::Database(e))?;
-
-    if existing.is_some() {
-        return Err("User is already a member of this project".into());
-    }
+    project_authz::require_access_target_tx(&mut tx, caller, project_id, user_id).await?;
 
     // Kiểm tra số lượng thành viên hiện tại
-    let member_count =
-        sqlx::query("SELECT COUNT(*) as count FROM project_members WHERE project_id = $1")
-            .bind(project_id)
-            .fetch_one(pool)
-            .await
-            .map_err(|e| AuthError::Database(e))?;
+    let member_count = sqlx::query(
+        "SELECT COUNT(*) as count FROM project_members WHERE project_id = $1 AND role IS NOT NULL",
+    )
+    .bind(project_id)
+    .fetch_one(&mut *tx)
+    .await
+    .map_err(|e| AuthError::Database(e))?;
 
     let count: i64 = member_count.get("count");
 
@@ -77,29 +50,41 @@ pub async fn add_member_by_email(
         return Err("Dự án đã đạt giới hạn số lượng thành viên tối đa".into());
     }
 
-    // Add member
+    // Create a canonical identity, or reuse an existing linked/no-access row.
     let member_id = Uuid::new_v4();
+    let resource_member_id = Uuid::new_v4();
     let now = Utc::now();
+    let display_name = [
+        user_row.get::<Option<String>, _>("full_name"),
+        user_row.get::<Option<String>, _>("username"),
+    ]
+    .into_iter()
+    .flatten()
+    .find(|name| !name.trim().is_empty())
+    .unwrap_or_else(|| user_row.get("email"));
 
     let member = sqlx::query(
         r#"
-        INSERT INTO project_members (
-            member_id, project_id, user_id, role,
-            joined_at
-        )
-        VALUES ($1, $2, $3, $4, $5)
-        RETURNING 
-            member_id, project_id, user_id, role, joined_at
+        INSERT INTO project_members
+            (member_id, resource_member_id, project_id, display_name, user_id, role, joined_at)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        ON CONFLICT (project_id, user_id) DO UPDATE
+        SET role = EXCLUDED.role, joined_at = COALESCE(project_members.joined_at, EXCLUDED.joined_at), updated_at = now()
+        WHERE project_members.role IS NULL
+        RETURNING member_id, project_id, user_id, role, joined_at
         "#,
     )
     .bind(member_id)
+    .bind(resource_member_id)
     .bind(project_id)
+    .bind(display_name)
     .bind(user_id)
     .bind(role)
     .bind(now)
-    .fetch_one(pool)
+    .fetch_optional(&mut *tx)
     .await
-    .map_err(|e| AuthError::Database(e))?;
+    .map_err(|e| AuthError::Database(e))?
+    .ok_or_else(|| async_graphql::Error::new("User is already a member of this project"))?;
 
     let result = ProjectMember {
         role: member.get("role"),
@@ -113,5 +98,6 @@ pub async fn add_member_by_email(
         },
     };
 
+    tx.commit().await.map_err(AuthError::Database)?;
     Ok(result)
 }

@@ -65,6 +65,17 @@ input CapacityDateOverrideInput {
 	hours: Float!
 }
 
+input CloneTaskSubtreeInput {
+	source_task_id: ID!
+	selected_descendant_ids: [ID!]!
+	quantity: Int!
+}
+
+type CloneTaskSubtreePayload {
+	root_task_ids: [ID!]!
+	created_task_ids: [ID!]!
+}
+
 type CommentResponse {
 	id: String!
 	content: String!
@@ -323,13 +334,11 @@ type Mutation {
 	Unregister FCM token
 	"""
 	unregister_fcm_token(token: String!): Boolean!
-	"""
-	Add member to project
-	"""
 	add_project_member(input: AddProjectMemberInput!): ProjectMember!
 	update_project_member(project_id: ID!, user_id: ID!, role: MemberRole!): ProjectMember!
 	remove_project_member(project_id: ID!, user_id: ID!): Boolean!
 	create_task(input: CreateTaskInput!): Task!
+	clone_task_subtree(input: CloneTaskSubtreeInput!): CloneTaskSubtreePayload!
 	update_task(input: UpdateTaskInput!): Task!
 	update_task_status(input: UpdateTaskStatusInput!): Task!
 	update_task_effort(input: UpdateTaskEffortInput!): Task!
@@ -420,6 +429,16 @@ type Mutation {
 	changes; a duplicate linked user (same project) is an explicit error.
 	"""
 	link_resource_member_user(resource_member_id: ID!, user_id: ID!): ResourceMemberType!
+	"""
+	Link by an existing account email. This intentionally does not grant
+	access: `role` stays NULL until the explicit access mutation is used.
+	"""
+	link_resource_member_by_email(resource_member_id: ID!, email: String!): ResourceMemberType!
+	"""
+	Explicitly set/revoke project access without deleting the scheduling
+	identity. A NULL role revokes access only.
+	"""
+	set_project_member_access(resource_member_id: ID!, role: String): ResourceMemberType!
 	"""
 	Classify a concrete MEMBER by a COMPANY/GROUP of the same project.
 	Classification only: no assignment/capacity semantics.
@@ -683,6 +702,7 @@ type Query {
 	task(task_id: ID!): Task
 	task_subtasks(task_id: ID!): [Task!]!
 	tasks(project_id: ID, status: String, assignee_id: ID): [Task!]!
+	task_tree_rows(project_id: ID!): [Task!]!
 	"""
 	Get the current user's role in a specific project
 	"""
@@ -812,6 +832,10 @@ input RegisterInput {
 input ReorderTasksInput {
 	project_id: ID!
 	tasks: [TaskOrderInput!]!
+	"""
+	Full current order; omitted by legacy clients for serialized last-writer behavior.
+	"""
+	expected_order: [ID!]
 }
 
 type ResolverProjectMember {
@@ -832,6 +856,7 @@ type ResourceGroup {
 }
 
 type ResourceMemberType {
+	member_id: ID!
 	resource_member_id: ID!
 	project_id: ID!
 	display_name: String!
@@ -845,6 +870,9 @@ type ResourceMemberType {
 	"""
 	member_kind: String!
 	linked_at: DateTime
+	access_role: String
+	joined_at: DateTime
+	invited_by: ID
 }
 
 input SavePlanSnapshotInput {

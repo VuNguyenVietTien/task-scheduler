@@ -4,4 +4,4 @@ mod tasks;
 
 pub use task::task;
 pub use task_subtasks::task_subtasks;
-pub use tasks::tasks;
+pub use tasks::{task_tree_rows, tasks};

@@ -15,6 +15,12 @@ pub mod scheduling;
 pub mod taxonomies;
 pub mod timesheet;
 
+/// Stable GraphQL codes at the existing project/member error boundary.
+pub(crate) fn coded_error(message: impl Into<String>, code: &str) -> async_graphql::Error {
+    use async_graphql::ErrorExtensions;
+    async_graphql::Error::new(message).extend_with(|_, extensions| extensions.set("code", code))
+}
+
 /// Shared project-scoped authorization guards for the Increment 1 scheduling
 /// resolvers (taxonomies, resource_members, schedule_projection).
 /// Reuses the established project-role model verbatim — writes: project
@@ -23,6 +29,7 @@ pub mod timesheet;
 /// `project_members` row (same predicate as the `project` query resolver).
 /// No bypasses: every guard runs before any project-scoped read/write.
 pub mod project_authz {
+    use super::coded_error;
     use async_graphql::Result;
     use sqlx::PgPool;
     use uuid::Uuid;
@@ -51,7 +58,8 @@ pub mod project_authz {
               AND (p.owner_id = $2 \
                    OR EXISTS (\
                        SELECT 1 FROM project_members pm \
-                       WHERE pm.project_id = p.project_id AND pm.user_id = $2\
+                       WHERE pm.project_id = p.project_id AND pm.user_id = $2 \
+                         AND pm.role IS NOT NULL\
                    )))";
 
     /// Authenticated caller id — the login gate for every mounted op.
@@ -60,7 +68,12 @@ pub mod project_authz {
             .auth
             .as_ref()
             .and_then(|claims| claims.user_id().ok())
-            .ok_or_else(|| AuthError::Unauthorized("You must be logged in".into()).into())
+            .ok_or_else(|| {
+                coded_error(
+                    AuthError::Unauthorized("You must be logged in".into()).to_string(),
+                    "UNAUTHENTICATED",
+                )
+            })
     }
 
     /// Write authorization: caller must own or manage the project. Runs
@@ -77,10 +90,68 @@ pub mod project_authz {
             .await
             .map_err(AuthError::Database)?;
         if !allowed {
-            return Err(AuthError::Forbidden(
-                "You must be a manager of this project".into(),
-            )
-            .into());
+            return Err(coded_error(
+                AuthError::Forbidden("You must be a manager of this project".into()).to_string(),
+                "FORBIDDEN",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Touched writes lock the project BEFORE hierarchy/member/task rows.
+    /// Recheck in a separate statement after waiting (READ COMMITTED snapshot),
+    /// so a committed revocation cannot leave stale authorization behind.
+    pub async fn require_project_write_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        user_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<()> {
+        sqlx::query("SELECT project_id FROM projects WHERE project_id = $1 FOR UPDATE")
+            .bind(project_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(AuthError::Database)?;
+        let allowed: bool = sqlx::query_scalar(PROJECT_WRITE_ROLE_SQL)
+            .bind(project_id)
+            .bind(user_id)
+            .fetch_one(&mut **tx)
+            .await
+            .map_err(AuthError::Database)?;
+        if !allowed {
+            return Err(coded_error(
+                AuthError::Forbidden("You must be a manager of this project".into()).to_string(),
+                "FORBIDDEN",
+            ));
+        }
+        Ok(())
+    }
+
+    /// Accepted access policy, shared by canonical and retained single/bulk
+    /// mutations. Caller has already acquired the project write gate above.
+    pub async fn require_access_target_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        caller: Uuid,
+        project_id: Uuid,
+        target: Uuid,
+    ) -> Result<()> {
+        let protected: bool = sqlx::query_scalar(
+            "SELECT p.owner_id = $2 OR $2 = $3 OR EXISTS (\
+             SELECT 1 FROM project_members pm WHERE pm.project_id = p.project_id \
+             AND pm.user_id = $2 AND pm.role::text IN ('manager','leader','admin')) \
+             FROM projects p WHERE p.project_id = $1",
+        )
+        .bind(project_id)
+        .bind(target)
+        .bind(caller)
+        .fetch_one(&mut **tx)
+        .await
+        .map_err(AuthError::Database)?;
+        if protected {
+            return Err(coded_error(
+                AuthError::Forbidden("Cannot change own, owner or privileged member access".into())
+                    .to_string(),
+                "FORBIDDEN",
+            ));
         }
         Ok(())
     }
@@ -99,10 +170,10 @@ pub mod project_authz {
             .await
             .map_err(AuthError::Database)?;
         if !allowed {
-            return Err(AuthError::Forbidden(
-                "You don't have access to this project".into(),
-            )
-            .into());
+            return Err(coded_error(
+                AuthError::Forbidden("You don't have access to this project".into()).to_string(),
+                "FORBIDDEN",
+            ));
         }
         Ok(())
     }
@@ -122,6 +193,6 @@ pub use plans::{PlanMutation, PlanQuery};
 pub use project::{ProjectMutation, ProjectQuery};
 pub use project_member::{ProjectMemberMutation, ProjectMemberQuery};
 pub use scheduling::{SchedulingMutation, SchedulingQuery};
-pub use timesheet::{TimesheetMutation, TimesheetQuery};
 pub use tasks::{TaskMutation, TaskQuery};
+pub use timesheet::{TimesheetMutation, TimesheetQuery};
 pub use user::{UserMutation, UserQuery};

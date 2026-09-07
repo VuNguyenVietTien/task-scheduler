@@ -18,16 +18,14 @@
 //! - companies/groups classify concrete members only and are never
 //!   assignable (`is_assignable` is exposed for assignment surfaces).
 
-use async_graphql::{Context, ID, Object, Result};
+use async_graphql::{Context, ErrorExtensions, MaybeUndefined, Object, Result, ID};
 use chrono::{DateTime, Utc};
 use uuid::Uuid;
 
 use crate::auth::error::AuthError;
-use crate::domain::resource_identity::{
-    self, ResourceIdentityError, ResourceMemberKind,
-};
+use crate::domain::resource_identity::{self, ResourceIdentityError, ResourceMemberKind};
 use crate::graphql::context::Context as GraphQLContext;
-use crate::graphql::resolvers::project_authz;
+use crate::graphql::resolvers::{coded_error, project_authz};
 
 fn parse_id(id: &ID, field: &str) -> Result<Uuid> {
     Uuid::parse_str(&id.to_string())
@@ -35,7 +33,13 @@ fn parse_id(id: &ID, field: &str) -> Result<Uuid> {
 }
 
 fn map_err(e: ResourceIdentityError) -> async_graphql::Error {
+    let code = if matches!(e, ResourceIdentityError::DuplicateLinkedUser { .. }) {
+        "CONFLICT"
+    } else {
+        "BAD_USER_INPUT"
+    };
     async_graphql::Error::new(e.to_string())
+        .extend_with(|_, extensions| extensions.set("code", code))
 }
 
 /* --------------------------------- types --------------------------------- */
@@ -43,6 +47,7 @@ fn map_err(e: ResourceIdentityError) -> async_graphql::Error {
 #[derive(async_graphql::SimpleObject)]
 #[graphql(rename_fields = "snake_case")]
 pub struct ResourceMemberType {
+    pub member_id: ID,
     pub resource_member_id: ID,
     pub project_id: ID,
     pub display_name: String,
@@ -52,6 +57,9 @@ pub struct ResourceMemberType {
     /// MEMBER | COMPANY | GROUP. Only MEMBER is assignable.
     pub member_kind: String,
     pub linked_at: Option<DateTime<Utc>>,
+    pub access_role: Option<String>,
+    pub joined_at: Option<DateTime<Utc>>,
+    pub invited_by: Option<ID>,
 }
 
 /// Row shape shared by reads/writes (canonical DB model).
@@ -60,6 +68,7 @@ use crate::db::models::ResourceMember as ResourceMemberRow;
 impl From<ResourceMemberRow> for ResourceMemberType {
     fn from(row: ResourceMemberRow) -> Self {
         Self {
+            member_id: row.member_id.into(),
             resource_member_id: row.resource_member_id.into(),
             project_id: row.project_id.into(),
             display_name: row.display_name,
@@ -67,6 +76,9 @@ impl From<ResourceMemberRow> for ResourceMemberType {
             user_id: row.user_id.map(ID::from),
             member_kind: row.member_kind,
             linked_at: row.linked_at,
+            access_role: row.access_role,
+            joined_at: row.joined_at,
+            invited_by: row.invited_by.map(ID::from),
         }
     }
 }
@@ -76,14 +88,17 @@ fn kind_from_str(raw: &str) -> Result<ResourceMemberKind> {
         "MEMBER" => Ok(ResourceMemberKind::Member),
         "COMPANY" => Ok(ResourceMemberKind::Company),
         "GROUP" => Ok(ResourceMemberKind::Group),
-        other => Err(async_graphql::Error::new(format!("invalid member_kind: {other}"))),
+        other => Err(async_graphql::Error::new(format!(
+            "invalid member_kind: {other}"
+        ))),
     }
 }
 
 async fn fetch_member(pool: &sqlx::PgPool, member_id: Uuid) -> Result<ResourceMemberRow> {
     sqlx::query_as::<_, ResourceMemberRow>(
-            "SELECT resource_member_id, project_id, display_name, email, user_id, member_kind, \
-             linked_at, created_at, updated_at FROM resource_members WHERE resource_member_id = $1",
+            "SELECT member_id, resource_member_id, project_id, display_name, email, user_id, member_kind, \
+             linked_at, role::text AS access_role, joined_at, invited_by, created_at, updated_at \
+             FROM project_members WHERE resource_member_id = $1",
         )
     .bind(member_id)
     .fetch_optional(pool)
@@ -111,8 +126,9 @@ impl ResourceMemberQuery {
         let user_id = project_authz::require_user(context)?;
         project_authz::require_project_read(&context.db, user_id, project_id).await?;
         let rows = sqlx::query_as::<_, ResourceMemberRow>(
-            "SELECT resource_member_id, project_id, display_name, email, user_id, member_kind, \
-             linked_at, created_at, updated_at FROM resource_members WHERE project_id = $1",
+            "SELECT member_id, resource_member_id, project_id, display_name, email, user_id, member_kind, \
+             linked_at, role::text AS access_role, joined_at, invited_by, created_at, updated_at \
+             FROM project_members WHERE project_id = $1",
         )
         .bind(project_id)
         .fetch_all(&context.db)
@@ -120,18 +136,27 @@ impl ResourceMemberQuery {
         .map_err(AuthError::Database)?;
         // Deterministic order without an order column: kind, then name.
         let mut rows = rows;
-        rows.sort_by(|a, b| (&a.member_kind, &a.display_name).cmp(&(&b.member_kind, &b.display_name)));
+        rows.sort_by(|a, b| {
+            (&a.member_kind, &a.display_name).cmp(&(&b.member_kind, &b.display_name))
+        });
         Ok(rows
             .into_iter()
             .filter(|r| {
-                !only_assignable.unwrap_or(false) || resource_identity::is_assignable(kind_from_str(&r.member_kind).expect("DB CHECK enforces kind"))
+                !only_assignable.unwrap_or(false)
+                    || resource_identity::is_assignable(
+                        kind_from_str(&r.member_kind).expect("DB CHECK enforces kind"),
+                    )
             })
             .map(ResourceMemberType::from)
             .collect())
     }
 
     /// One resource member by stable ID.
-    async fn resource_member(&self, ctx: &Context<'_>, resource_member_id: ID) -> Result<ResourceMemberType> {
+    async fn resource_member(
+        &self,
+        ctx: &Context<'_>,
+        resource_member_id: ID,
+    ) -> Result<ResourceMemberType> {
         let context = ctx.data::<GraphQLContext>()?;
         let user_id = project_authz::require_user(context)?;
         let member = fetch_member(
@@ -173,27 +198,34 @@ impl ResourceMemberMutation {
         let context = ctx.data::<GraphQLContext>()?;
         let project_id = parse_id(&input.project_id, "project_id")?;
         let user_id = project_authz::require_user(context)?;
-        project_authz::require_project_write(&context.db, user_id, project_id).await?;
+        let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
+        project_authz::require_project_write_tx(&mut tx, user_id, project_id).await?;
         let kind = match input.member_kind.as_deref() {
             None => ResourceMemberKind::Member,
             Some(raw) => kind_from_str(raw)?,
         };
         // Pure rule validation before any write.
-        resource_identity::new_placeholder_member(project_id, &input.display_name, input.email.as_deref())
-            .map_err(map_err)?;
+        resource_identity::new_placeholder_member(
+            project_id,
+            &input.display_name,
+            input.email.as_deref(),
+        )
+        .map_err(map_err)?;
         let row = sqlx::query_as::<_, ResourceMemberRow>(
-            "INSERT INTO resource_members (project_id, display_name, email, member_kind) \
-             VALUES ($1, $2, $3, $4) \
-             RETURNING resource_member_id, project_id, display_name, email, user_id, member_kind, \
-             linked_at, created_at, updated_at",
+            "INSERT INTO project_members \
+             (member_id, resource_member_id, project_id, display_name, email, member_kind) \
+             VALUES (uuid_generate_v4(), uuid_generate_v4(), $1, $2, NULLIF($3, ''), $4) \
+             RETURNING member_id, resource_member_id, project_id, display_name, email, user_id, member_kind, \
+             linked_at, role::text AS access_role, joined_at, invited_by, created_at, updated_at",
         )
         .bind(project_id)
         .bind(input.display_name.trim())
         .bind(input.email.as_deref().map(str::trim))
         .bind(kind.as_str())
-        .fetch_one(&context.db)
+        .fetch_one(&mut *tx)
         .await
         .map_err(AuthError::Database)?;
+        tx.commit().await.map_err(AuthError::Database)?;
         Ok(row.into())
     }
 
@@ -209,25 +241,46 @@ impl ResourceMemberMutation {
         let caller_id = project_authz::require_user(context)?;
         let member_id = parse_id(&resource_member_id, "resource_member_id")?;
         let user_id = parse_id(&user_id, "user_id")?;
-        let mut tx = context
-            .db
-            .begin()
+        let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
+        let scope = fetch_member(&context.db, member_id).await?.project_id;
+        project_authz::require_project_write_tx(&mut tx, caller_id, scope).await?;
+        // Project first, then member, then assigned task mirrors.
+        let (project_id, linked_user_id, member_kind): (Uuid, Option<Uuid>, String) =
+            sqlx::query_as(
+                "SELECT project_id, user_id, member_kind FROM project_members \
+             WHERE resource_member_id = $1 FOR UPDATE",
+            )
+            .bind(member_id)
+            .fetch_optional(&mut *tx)
             .await
-            .map_err(AuthError::Database)?;
-        // Serialize per-project link decisions.
-        let project_id: Uuid = sqlx::query_scalar(
-            "SELECT project_id FROM resource_members WHERE resource_member_id = $1 FOR UPDATE",
-        )
-        .bind(member_id)
-        .fetch_optional(&mut *tx)
-        .await
-        .map_err(AuthError::Database)?
-        .ok_or_else(|| async_graphql::Error::new("unknown resource member"))?;
-        // Caller must be able to write this member's project (same gate as
-        // every other project-scoped mutation) before any link decision.
-        project_authz::require_project_write(&context.db, caller_id, project_id).await?;
+            .map_err(AuthError::Database)?
+            .ok_or_else(|| async_graphql::Error::new("unknown resource member"))?;
+        if project_id != scope {
+            return Err(async_graphql::Error::new("member project changed"));
+        }
+        if member_kind != "MEMBER" {
+            return Err(async_graphql::Error::new("only MEMBER rows can be linked"));
+        }
+        if let Some(existing) = linked_user_id {
+            if existing == user_id {
+                tx.commit().await.map_err(AuthError::Database)?;
+                return Ok(fetch_member(&context.db, member_id).await?.into());
+            }
+            return Err(async_graphql::Error::new(
+                "resource member is already linked to another user",
+            ));
+        }
+        let user_exists: bool =
+            sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM users WHERE user_id = $1)")
+                .bind(user_id)
+                .fetch_one(&mut *tx)
+                .await
+                .map_err(AuthError::Database)?;
+        if !user_exists {
+            return Err(async_graphql::Error::new("unknown user"));
+        }
         let conflicting: Option<Uuid> = sqlx::query_scalar(
-            "SELECT resource_member_id FROM resource_members \
+            "SELECT resource_member_id FROM project_members \
              WHERE project_id = $1 AND user_id = $2 AND resource_member_id <> $3",
         )
         .bind(project_id)
@@ -243,11 +296,180 @@ impl ResourceMemberMutation {
             }));
         }
         sqlx::query(
-            "UPDATE resource_members SET user_id = $2, linked_at = now(), updated_at = now() \
-             WHERE resource_member_id = $1",
+            "UPDATE project_members SET user_id = $2, linked_at = COALESCE(linked_at, now()), updated_at = now() \
+             WHERE resource_member_id = $1 AND user_id IS NULL AND member_kind = 'MEMBER'"
         )
         .bind(member_id)
         .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        // Keep the task account mirror synchronized in this transaction while
+        // retaining the stable resource-member assignment identity.
+        sqlx::query(
+            "UPDATE tasks SET assignee_id = $2 WHERE project_id = $3 AND assignee_resource_member_id = $1",
+        )
+        .bind(member_id)
+        .bind(user_id)
+        .bind(project_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        tx.commit().await.map_err(AuthError::Database)?;
+        Ok(fetch_member(&context.db, member_id).await?.into())
+    }
+
+    /// Link by an existing account email. This intentionally does not grant
+    /// access: `role` stays NULL until the explicit access mutation is used.
+    async fn link_resource_member_by_email(
+        &self,
+        ctx: &Context<'_>,
+        resource_member_id: ID,
+        email: String,
+    ) -> Result<ResourceMemberType> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let caller_id = project_authz::require_user(context)?;
+        let member_id = parse_id(&resource_member_id, "resource_member_id")?;
+        resource_identity::new_placeholder_member(Uuid::nil(), "email validation", Some(&email))
+            .map_err(map_err)?;
+        let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
+        let scope = fetch_member(&context.db, member_id).await?.project_id;
+        project_authz::require_project_write_tx(&mut tx, caller_id, scope).await?;
+        let (project_id, linked_user_id, kind): (Uuid, Option<Uuid>, String) = sqlx::query_as(
+            "SELECT project_id, user_id, member_kind FROM project_members \
+             WHERE resource_member_id = $1 FOR UPDATE",
+        )
+        .bind(member_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?
+        .ok_or_else(|| async_graphql::Error::new("unknown resource member"))?;
+        if project_id != scope {
+            return Err(async_graphql::Error::new("member project changed"));
+        }
+        if kind != "MEMBER" {
+            return Err(async_graphql::Error::new("only MEMBER rows can be linked"));
+        }
+        let users: Vec<Uuid> = sqlx::query_scalar(
+            "SELECT user_id FROM users WHERE lower(btrim(email)) = lower(btrim($1)) LIMIT 2",
+        )
+        .bind(email.trim())
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        let [user_id] = users.as_slice() else {
+            return Err(if users.is_empty() {
+                coded_error("no account has this email", "NOT_FOUND")
+            } else {
+                coded_error("email matches multiple accounts", "CONFLICT")
+            });
+        };
+        if let Some(existing) = linked_user_id {
+            if existing == *user_id {
+                tx.commit().await.map_err(AuthError::Database)?;
+                return Ok(fetch_member(&context.db, member_id).await?.into());
+            }
+            return Err(async_graphql::Error::new(
+                "resource member is already linked to another user",
+            ));
+        }
+        let conflict: Option<Uuid> = sqlx::query_scalar(
+            "SELECT resource_member_id FROM project_members \
+             WHERE project_id = $1 AND user_id = $2 AND resource_member_id <> $3",
+        )
+        .bind(project_id)
+        .bind(*user_id)
+        .bind(member_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        if conflict.is_some() {
+            return Err(
+                async_graphql::Error::new("account is already linked in this project")
+                    .extend_with(|_, extensions| extensions.set("code", "CONFLICT")),
+            );
+        }
+        sqlx::query(
+            "UPDATE project_members SET user_id = $2, email = (SELECT email FROM users WHERE user_id = $2), \
+             linked_at = COALESCE(linked_at, now()), updated_at = now() \
+             WHERE resource_member_id = $1",
+        )
+        .bind(member_id)
+        .bind(*user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        // Linking by email is the same canonical transition as linking by ID:
+        // task user mirrors must move atomically with the member link.
+        sqlx::query(
+            "UPDATE tasks SET assignee_id = $2 WHERE project_id = $3 AND assignee_resource_member_id = $1",
+        )
+        .bind(member_id)
+        .bind(*user_id)
+        .bind(project_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        tx.commit().await.map_err(AuthError::Database)?;
+        Ok(fetch_member(&context.db, member_id).await?.into())
+    }
+
+    /// Explicitly set/revoke project access without deleting the scheduling
+    /// identity. A NULL role revokes access only.
+    async fn set_project_member_access(
+        &self,
+        ctx: &Context<'_>,
+        resource_member_id: ID,
+        role: MaybeUndefined<String>,
+    ) -> Result<ResourceMemberType> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let caller_id = project_authz::require_user(context)?;
+        let member_id = parse_id(&resource_member_id, "resource_member_id")?;
+        let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
+        let scope = fetch_member(&context.db, member_id).await?.project_id;
+        project_authz::require_project_write_tx(&mut tx, caller_id, scope).await?;
+        let (project_id, user_id, kind): (Uuid, Option<Uuid>, String) = sqlx::query_as(
+            "SELECT project_id, user_id, member_kind FROM project_members \
+             WHERE resource_member_id = $1 FOR UPDATE",
+        )
+        .bind(member_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?
+        .ok_or_else(|| async_graphql::Error::new("unknown resource member"))?;
+        if project_id != scope {
+            return Err(async_graphql::Error::new("member project changed"));
+        }
+        if let Some(target) = user_id {
+            project_authz::require_access_target_tx(&mut tx, caller_id, project_id, target).await?;
+        }
+        let role = match role {
+            MaybeUndefined::Undefined => {
+                return Err(coded_error(
+                    "role must be explicitly set or null",
+                    "BAD_USER_INPUT",
+                ));
+            }
+            MaybeUndefined::Null => None,
+            MaybeUndefined::Value(value) => Some(value.to_ascii_lowercase()),
+        };
+        if let Some(ref value) = role {
+            if user_id.is_none()
+                || kind != "MEMBER"
+                || !matches!(value.as_str(), "manager" | "leader" | "member" | "guest")
+            {
+                return Err(coded_error(
+                    "invalid access role for this member",
+                    "BAD_USER_INPUT",
+                ));
+            }
+        }
+        sqlx::query(
+            "UPDATE project_members SET role = $2::member_role, updated_at = now() \
+             WHERE resource_member_id = $1",
+        )
+        .bind(member_id)
+        .bind(role)
         .execute(&mut *tx)
         .await
         .map_err(AuthError::Database)?;
@@ -266,8 +488,10 @@ impl ResourceMemberMutation {
         let context = ctx.data::<GraphQLContext>()?;
         let caller_id = project_authz::require_user(context)?;
         let member_id = parse_id(&resource_member_id, "resource_member_id")?;
-        let classifier_id =
-            parse_id(&classified_by_resource_member_id, "classified_by_resource_member_id")?;
+        let classifier_id = parse_id(
+            &classified_by_resource_member_id,
+            "classified_by_resource_member_id",
+        )?;
         let (member, classifier) = {
             let member = fetch_member(&context.db, member_id).await?;
             let classifier = fetch_member(&context.db, classifier_id).await?;

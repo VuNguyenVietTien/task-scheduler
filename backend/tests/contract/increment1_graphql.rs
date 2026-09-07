@@ -60,11 +60,16 @@ fn sdl_taxonomy_reads_and_writes() {
 #[test]
 fn sdl_task_taxonomy_assignment_contract() {
     let sdl = sdl();
-    let start = sdl.find("set_task_taxonomy(").expect("set_task_taxonomy missing");
+    let start = sdl
+        .find("set_task_taxonomy(")
+        .expect("set_task_taxonomy missing");
     let body = &sdl[start..start + 220];
     assert!(body.contains("task_id:"), "task_id arg missing:\n{body}");
     assert!(body.contains("phase_id:"), "phase_id arg missing:\n{body}");
-    assert!(body.contains("category_id:"), "category_id arg missing:\n{body}");
+    assert!(
+        body.contains("category_id:"),
+        "category_id arg missing:\n{body}"
+    );
 }
 
 #[test]
@@ -77,7 +82,10 @@ fn sdl_resource_member_reads_and_writes() {
         "link_resource_member_user(",
         "classify_resource_member(",
     ] {
-        assert!(sdl.contains(op), "resource member op `{op}` missing:\n{sdl}");
+        assert!(
+            sdl.contains(op),
+            "resource member op `{op}` missing:\n{sdl}"
+        );
     }
     assert!(
         sdl.contains("input CreateResourceMemberInput"),
@@ -110,7 +118,9 @@ fn sdl_import_dry_run_query() {
         );
     }
     // Decimal truth is a string in GraphQL.
-    let start = sdl.find("type DryRunIssue1139Check").expect("DryRunIssue1139Check missing");
+    let start = sdl
+        .find("type DryRunIssue1139Check")
+        .expect("DryRunIssue1139Check missing");
     assert!(
         sdl[start..].contains("effort_hours: String"),
         "issue_1139 effort_hours must be a decimal String"
@@ -125,7 +135,13 @@ fn sdl_project_schedule_projection_query() {
         "project_schedule_projection query missing:\n{sdl}"
     );
     let block = type_block(&sdl, "ProjectScheduleProjection");
-    for field in ["project_id:", "source:", "phase_groups:", "wbs_rows:", "totals:"] {
+    for field in [
+        "project_id:",
+        "source:",
+        "phase_groups:",
+        "wbs_rows:",
+        "totals:",
+    ] {
         assert!(
             block.contains(field),
             "ProjectScheduleProjection.{field} missing:\n{block}"
@@ -145,7 +161,13 @@ fn sdl_projection_source_enum_and_unphased_group() {
         "CURRENT_TASK_FIELDS value missing"
     );
     let group = type_block(&sdl, "SchedulePhaseGroup");
-    for field in ["phase_id:", "phase_key:", "is_unphased:", "task_ids:", "totals:"] {
+    for field in [
+        "phase_id:",
+        "phase_key:",
+        "is_unphased:",
+        "task_ids:",
+        "totals:",
+    ] {
         assert!(
             group.contains(field),
             "SchedulePhaseGroup.{field} missing:\n{group}"
@@ -188,7 +210,10 @@ fn sdl_source_heading_is_distinct_with_no_task_identity() {
         "progress:",
         "depth:",
     ] {
-        assert!(task.contains(field), "ScheduleTaskEntry.{field} missing:\n{task}");
+        assert!(
+            task.contains(field),
+            "ScheduleTaskEntry.{field} missing:\n{task}"
+        );
     }
 }
 
@@ -215,7 +240,11 @@ fn sdl_has_no_schedule_engine_dependency() {
     // increment 1: the projection + resource-member + taxonomy blocks must
     // not gain allocation/segment/meeting/capacity fields. Assert on those
     // blocks only, instead of the whole SDL.
-    for block_name in ["ProjectScheduleProjection", "ScheduleSourceHeading", "ResourceMemberType"] {
+    for block_name in [
+        "ProjectScheduleProjection",
+        "ScheduleSourceHeading",
+        "ResourceMemberType",
+    ] {
         let block = extract_type_block(&operative, block_name)
             .unwrap_or_else(|| panic!("missing type block {block_name} in SDL"));
         for forbidden in [
@@ -280,10 +309,7 @@ fn task(
 fn projection_phase_groups_exact_order_plus_explicit_unphased_last() {
     let project = Uuid::new_v4();
     let (p1, p2) = (Uuid::new_v4(), Uuid::new_v4());
-    let phases = vec![
-        phase(p2, "try-s-review-1", 20),
-        phase(p1, "creation", 10),
-    ];
+    let phases = vec![phase(p2, "try-s-review-1", 20), phase(p1, "creation", 10)];
     // Task with an UNKNOWN/archived phase id falls into Unphased, never dropped.
     let tasks = vec![
         task(Uuid::new_v4(), None, Some(p2), Some(1.0), Some(10)),
@@ -292,7 +318,11 @@ fn projection_phase_groups_exact_order_plus_explicit_unphased_last() {
     ];
     let out = build_projection(project, &tasks, &phases, &[]);
     assert_eq!(out.phase_groups.len(), 3, "two phases + explicit Unphased");
-    let keys: Vec<&str> = out.phase_groups.iter().map(|g| g.phase_key.as_str()).collect();
+    let keys: Vec<&str> = out
+        .phase_groups
+        .iter()
+        .map(|g| g.phase_key.as_str())
+        .collect();
     assert_eq!(keys, vec!["creation", "try-s-review-1", "unphased"]);
     assert!(out.phase_groups[0].phase_id == Some(p1));
     assert!(out.phase_groups[2].is_unphased && out.phase_groups[2].phase_id.is_none());
@@ -373,8 +403,7 @@ fn projection_wbs_rows_headings_and_tasks_nested() {
         },
     ];
     let (root_task, grouped, nested) = (Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4());
-    let mut t_grouped =
-        task(grouped, None, None, Some(40.0), None);
+    let mut t_grouped = task(grouped, None, None, Some(40.0), None);
     t_grouped.wbs_group_id = Some(h1);
     let mut t_nested = task(nested, None, None, None, None);
     t_nested.wbs_group_id = Some(h2);
@@ -400,8 +429,16 @@ fn projection_wbs_rows_headings_and_tasks_nested() {
     assert_eq!(rows["1115"], (0, false), "root heading at depth 0");
     assert_eq!(rows["1116"], (1, false), "nested heading under parent");
     assert_eq!(rows[&root_task.to_string()], (0, true));
-    assert_eq!(rows[&grouped.to_string()], (1, true), "task under its heading");
-    assert_eq!(rows[&nested.to_string()], (2, true), "task under nested heading");
+    assert_eq!(
+        rows[&grouped.to_string()],
+        (1, true),
+        "task under its heading"
+    );
+    assert_eq!(
+        rows[&nested.to_string()],
+        (2, true),
+        "task under nested heading"
+    );
 }
 
 #[test]
@@ -594,16 +631,28 @@ fn authz_guard_sql_locks_established_role_pattern() {
     use task_scheduler_backend::graphql::resolvers::project_authz;
 
     let write_sql = project_authz::PROJECT_WRITE_ROLE_SQL;
-    assert!(write_sql.contains("owner_id"), "write gate must honor project owner");
+    assert!(
+        write_sql.contains("owner_id"),
+        "write gate must honor project owner"
+    );
     assert!(
         write_sql.contains("role::text IN ('manager', 'leader', 'admin')"),
         "write gate must reuse the member-admin role set"
     );
 
     let read_sql = project_authz::PROJECT_READ_MEMBER_SQL;
-    assert!(read_sql.contains("owner_id"), "read gate must honor project owner");
-    assert!(read_sql.contains("project_members"), "read gate must accept members");
-    assert!(!read_sql.contains("role::text"), "read gate must not filter by role");
+    assert!(
+        read_sql.contains("owner_id"),
+        "read gate must honor project owner"
+    );
+    assert!(
+        read_sql.contains("project_members"),
+        "read gate must accept members"
+    );
+    assert!(
+        !read_sql.contains("role::text"),
+        "read gate must not filter by role"
+    );
 }
 
 /// Guards must be wired into every mounted mutation in scope — the source
@@ -612,11 +661,13 @@ fn authz_guard_sql_locks_established_role_pattern() {
 #[test]
 fn authz_guards_are_wired_into_every_scheduling_resolver() {
     use std::fs;
-    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("src/graphql/resolvers");
+    let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/graphql/resolvers");
     for (file, write_guard_count, read_guard_count) in [
         ("taxonomies/mod.rs", 5, 1),
-        ("resource_members/mod.rs", 3, 2),
+        // Five mounted writes: create, both link variants, explicit access,
+        // and classification. The per-operation assertions below keep this
+        // count from becoming a blind number as APIs evolve.
+        ("resource_members/mod.rs", 5, 2),
         ("schedule_projection/mod.rs", 0, 1),
     ] {
         let src = fs::read_to_string(base.join(file))
@@ -632,6 +683,34 @@ fn authz_guards_are_wired_into_every_scheduling_resolver() {
             "{file} must call require_project_read exactly {read_guard_count} times (got {reads})"
         );
     }
+
+    let resource = fs::read_to_string(base.join("resource_members/mod.rs"))
+        .expect("read resource member resolver");
+    let method = |name: &str| {
+        let start = resource
+            .find(&format!("async fn {name}"))
+            .unwrap_or_else(|| panic!("resource resolver {name} missing"));
+        let body = &resource[start..];
+        &body[..body.find("\n    async fn ").unwrap_or(body.len())]
+    };
+    for name in [
+        "create_resource_member",
+        "link_resource_member_user",
+        "link_resource_member_by_email",
+        "set_project_member_access",
+        "classify_resource_member",
+    ] {
+        assert!(
+            method(name).contains("require_project_write"),
+            "resource mutation {name} must retain a project write guard"
+        );
+    }
+    for name in ["resource_members", "resource_member"] {
+        assert!(
+            method(name).contains("require_project_read"),
+            "resource query {name} must retain a project read guard"
+        );
+    }
 }
 
 #[test]
@@ -642,8 +721,16 @@ fn assemble_forest_returns_orphan_and_self_parent_rows_as_roots() {
     let b = Uuid::new_v4();
     let missing = Uuid::new_v4();
     let forest = assemble_forest(vec![
-        ForestRow { task_id: a, parent_task_id: Some(missing), payload: "orphan" },
-        ForestRow { task_id: b, parent_task_id: Some(b), payload: "self" },
+        ForestRow {
+            task_id: a,
+            parent_task_id: Some(missing),
+            payload: "orphan",
+        },
+        ForestRow {
+            task_id: b,
+            parent_task_id: Some(b),
+            payload: "self",
+        },
     ]);
     let mut payloads: Vec<&str> = forest.iter().map(|t| t.payload).collect();
     payloads.sort_unstable();

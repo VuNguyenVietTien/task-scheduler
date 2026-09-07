@@ -368,6 +368,46 @@ const FP_V8_TABLES: &[&str] = &[
     "wbs_groups",
 ];
 
+/// v8 after member consolidation. `resource_members` is now a view, so it
+/// must not be accepted as a second base table.
+const FP_V9_TABLES: &[&str] = &[
+    "activity_logs",
+    "attachments",
+    "bugs",
+    "comment_mentions",
+    "comments",
+    "external_import_runs",
+    "member_capacity_overrides",
+    "member_capacity_settings",
+    "member_days_off",
+    "notifications",
+    "plans",
+    "project_categories",
+    "project_category_translations",
+    "project_members",
+    "project_phase_translations",
+    "project_phases",
+    "projects",
+    "recurring_commitments",
+    "report_tasks",
+    "reports",
+    "resource_group_members",
+    "resource_groups",
+    "resource_member_classifications",
+    "snapshots",
+    "tags",
+    "task_durations",
+    "task_snapshots",
+    "task_status_history",
+    "task_statuses",
+    "task_tags",
+    "tasks",
+    "timesheet_entries",
+    "users",
+    "wbs_groups",
+];
+const MEMBER_CONSOLIDATION_VERSION: i64 = 20_260_907_000_001;
+
 /// Cumulative per version; order matches `BOOTSTRAP_ORDER` (dependency order).
 const VERSIONED_FINGERPRINTS: &[SchemaFingerprint] = &[
     SchemaFingerprint {
@@ -602,6 +642,25 @@ const VERSIONED_FINGERPRINTS: &[SchemaFingerprint] = &[
             ("task_status", "TODO"),
         ],
     },
+    SchemaFingerprint {
+        version: MEMBER_CONSOLIDATION_VERSION,
+        tables: FP_V9_TABLES,
+        columns: &[
+            ("project_members", "resource_member_id"),
+            ("project_members", "display_name"),
+            ("project_members", "member_kind"),
+            ("tasks", "assignee_resource_member_id"),
+            ("plans", "revision"),
+            ("plans", "config_fingerprint"),
+            ("plans", "parent_plan_id"),
+        ],
+        enum_values: &[
+            ("member_role", "manager"),
+            ("member_role", "leader"),
+            ("member_role", "guest"),
+            ("task_status", "TODO"),
+        ],
+    },
 ];
 
 /// Migration set a matched fingerprint certifies: the dependency prefix
@@ -633,6 +692,41 @@ fn prefix_expressible(index: usize) -> bool {
 /// returned as the index into [`VERSIONED_FINGERPRINTS`], or `None` when the
 /// schema matches no embedded version (including the empty database case —
 /// no `users` table fails even the first fingerprint).
+async fn canonical_member_relations(conn: &mut PgConnection) -> Result<bool, sqlx::Error> {
+    let count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace \
+         WHERE n.nspname = 'public' AND (c.relname = 'project_members' AND c.relkind = 'r' \
+           OR c.relname = 'resource_members' AND c.relkind = 'v')",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    if count != 2 {
+        return Ok(false);
+    }
+    let column_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM information_schema.columns WHERE table_schema = 'public' \
+         AND table_name = 'project_members' AND ((column_name IN ('resource_member_id', 'display_name') AND is_nullable = 'NO') \
+         OR (column_name IN ('user_id', 'role') AND is_nullable = 'YES'))",
+    )
+    .fetch_one(&mut *conn)
+    .await?;
+    if column_count != 4 {
+        return Ok(false);
+    }
+    let constraint_count: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM pg_constraint WHERE conrelid = 'project_members'::regclass \
+         AND conname = ANY($1)",
+    )
+    .bind(vec![
+        "project_members_resource_member_id_key",
+        "project_members_project_resource_key",
+        "project_members_access_requires_linked_member",
+    ])
+    .fetch_one(&mut *conn)
+    .await?;
+    Ok(constraint_count == 3)
+}
+
 async fn represented_version(conn: &mut PgConnection) -> Result<Option<usize>, sqlx::Error> {
     'outer: for (index, fingerprint) in VERSIONED_FINGERPRINTS.iter().enumerate().rev() {
         let table_count: i64 = sqlx::query_scalar(
@@ -672,6 +766,11 @@ async fn represented_version(conn: &mut PgConnection) -> Result<Option<usize>, s
             if !present {
                 continue 'outer;
             }
+        }
+        if fingerprint.version == MEMBER_CONSOLIDATION_VERSION
+            && !canonical_member_relations(conn).await?
+        {
+            continue;
         }
         return Ok(Some(index));
     }
@@ -1020,6 +1119,12 @@ pub async fn probe_state(pool: &PgPool) -> Result<MigrationState, sqlx::Error> {
     .await?;
     if table_count != latest_tables.len() as i64 {
         return Ok(MigrationState::PartialSchema);
+    }
+    if latest == MEMBER_CONSOLIDATION_VERSION {
+        let mut conn = pool.acquire().await?;
+        if !canonical_member_relations(&mut *conn).await? {
+            return Ok(MigrationState::PartialSchema);
+        }
     }
 
     Ok(MigrationState::Current { version: latest })

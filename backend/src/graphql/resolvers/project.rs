@@ -39,8 +39,9 @@ impl ProjectQuery {
                     p.owner_id = $2 
                     OR EXISTS (
                         SELECT 1 FROM project_members pm 
-                        WHERE pm.project_id = p.project_id 
+                        WHERE pm.project_id = p.project_id
                         AND pm.user_id = $2
+                        AND pm.role IS NOT NULL
                     )
                 )
             )
@@ -65,11 +66,12 @@ impl ProjectQuery {
             WITH project_members_count AS (
                 SELECT project_id, COUNT(*) as member_count
                 FROM project_members
+                WHERE role IS NOT NULL
                 GROUP BY project_id
             )
             SELECT 
                 p.*,
-                pmc.member_count,
+                COALESCE(pmc.member_count, 0) AS member_count,
                 u.user_id as owner_id,
                 u.email as owner_email,
                 u.username as owner_name,
@@ -90,7 +92,7 @@ impl ProjectQuery {
         let members = sqlx::query(
             r#"
             SELECT
-                pm.role,
+                pm.role::text AS role,
                 pm.joined_at,
                 u.user_id,
                 u.username,
@@ -99,7 +101,7 @@ impl ProjectQuery {
                 u.full_name
             FROM project_members pm
             INNER JOIN users u ON pm.user_id = u.user_id
-            WHERE pm.project_id = $1
+            WHERE pm.project_id = $1 AND pm.role IS NOT NULL
             "#,
         )
         .bind(project_id)
@@ -110,24 +112,26 @@ impl ProjectQuery {
         // Map members data
         let project_members: Vec<ProjectMember> = members
             .into_iter()
-            .map(|row: PgRow| ProjectMember {
-                role: row.get("role"),
-                joined_at: row.get("joined_at"),
-                user: User {
-                    user_id: row.get("user_id"),
-                    email: row.get("email"),
-                    username: row.get("username"),
-                    full_name: row.get("full_name"),
-                    avatar_url: row.get::<Option<String>, _>("avatar_url"),
-                },
+            .map(|row: PgRow| {
+                Ok(ProjectMember {
+                    role: MemberRole::from_database_row(&row)?,
+                    joined_at: row.get("joined_at"),
+                    user: User {
+                        user_id: row.get("user_id"),
+                        email: row.get("email"),
+                        username: row.get("username"),
+                        full_name: row.get("full_name"),
+                        avatar_url: row.get::<Option<String>, _>("avatar_url"),
+                    },
+                })
             })
-            .collect();
+            .collect::<Result<_>>()?;
 
         // Lấy thông tin vai trò của user hiện tại trong project
         let user_role = sqlx::query(
             r#"
-            SELECT role FROM project_members
-            WHERE project_id = $1 AND user_id = $2
+            SELECT role::text AS role FROM project_members
+            WHERE project_id = $1 AND user_id = $2 AND role IS NOT NULL
             "#,
         )
         .bind(project_id)
@@ -136,7 +140,10 @@ impl ProjectQuery {
         .await
         .map_err(|e| AuthError::Database(e))?;
 
-        let user_role = user_role.map(|row| row.get::<MemberRole, _>("role"));
+        let user_role = user_role
+            .as_ref()
+            .map(MemberRole::from_database_row)
+            .transpose()?;
 
         // In ra log để debug
         match &user_role {
@@ -215,6 +222,7 @@ impl ProjectQuery {
             WITH project_members_count AS (
             SELECT project_id, COUNT(*) as member_count
             FROM project_members
+            WHERE role IS NOT NULL
             GROUP BY project_id
             )
             SELECT 
@@ -231,17 +239,19 @@ impl ProjectQuery {
             p.priority,
             p.visibility,
             p.icon_url,
-            pmc.member_count,
+            COALESCE(pmc.member_count, 0) AS member_count,
             u.user_id as owner_id,
             u.email as owner_email,
             u.username as owner_name,
             u.full_name as owner_full_name,
             u.avatar_url as owner_avatar_url
             FROM projects p
-            INNER JOIN project_members pm ON p.project_id = pm.project_id
             INNER JOIN users u ON p.owner_id = u.user_id
             LEFT JOIN project_members_count pmc ON p.project_id = pmc.project_id
-            WHERE pm.user_id = $1
+            WHERE p.owner_id = $1 OR EXISTS (
+                SELECT 1 FROM project_members pm
+                WHERE pm.project_id = p.project_id AND pm.user_id = $1 AND pm.role IS NOT NULL
+            )
             ORDER BY p.created_at DESC
             "#,
         )
@@ -460,17 +470,30 @@ impl ProjectMutation {
             AuthError::Database(e)
         })?;
 
-        // Add owner as a member with ADMIN role
+        // Create the owner's canonical resource identity and access together.
         let member_id = Uuid::new_v4();
+        let resource_member_id = Uuid::new_v4();
+        let display_name = [
+            project_row.get::<Option<String>, _>("owner_full_name"),
+            project_row.get::<Option<String>, _>("owner_name"),
+        ]
+        .into_iter()
+        .flatten()
+        .find(|name| !name.trim().is_empty())
+        .unwrap_or_else(|| project_row.get("owner_email"));
         sqlx::query(
             r#"
-            INSERT INTO project_members (member_id, project_id, user_id, role)
-            VALUES ($1, $2, $3, 'manager')
+            INSERT INTO project_members
+                (member_id, resource_member_id, project_id, display_name, user_id, role, joined_at)
+            VALUES ($1, $2, $3, $4, $5, 'manager', $6)
             "#,
         )
         .bind(member_id)
+        .bind(resource_member_id)
         .bind(project_id)
+        .bind(display_name)
         .bind(owner_id)
+        .bind(now)
         .execute(&mut *tx)
         .await
         .map_err(|e| AuthError::Database(e))?;

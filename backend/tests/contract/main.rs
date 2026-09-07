@@ -41,6 +41,7 @@ fn snake_case_root_operation_names() {
     for op in [
         "task(",  // exact fn `task` (word boundary via paren)
         "tasks(", // asserted with args below too
+        "task_tree_rows(",
         "task_subtasks(",
         "task_comments(",
         "project_members(",
@@ -51,6 +52,7 @@ fn snake_case_root_operation_names() {
         "notification_count:",
         "notifications(",
         "create_task(input:",
+        "clone_task_subtree(input:",
         "update_task(input:",
         "update_task_status(input:",
         "update_task_effort(input:",
@@ -197,12 +199,51 @@ fn plans_mutations_dual_aliases() {
 }
 
 #[test]
+fn clone_tree_contract_is_additive_and_non_nullable() {
+    let sdl = sdl();
+    let input_start = sdl
+        .find("input CloneTaskSubtreeInput {")
+        .expect("CloneTaskSubtreeInput missing");
+    let input = &sdl[input_start..input_start + 220];
+    for field in [
+        "source_task_id: ID!",
+        "selected_descendant_ids: [ID!]!",
+        "quantity: Int!",
+    ] {
+        assert!(input.contains(field), "{field} missing:\n{input}");
+    }
+    let payload_start = sdl
+        .find("type CloneTaskSubtreePayload {")
+        .expect("CloneTaskSubtreePayload missing");
+    let payload = &sdl[payload_start..payload_start + 180];
+    for field in ["root_task_ids: [ID!]!", "created_task_ids: [ID!]!"] {
+        assert!(payload.contains(field), "{field} missing:\n{payload}");
+    }
+    let query = type_block(&sdl, "Query");
+    assert!(
+        query.contains("task_tree_rows(project_id: ID!): [Task!]!"),
+        "task_tree_rows must be an authenticated flat non-null Task list:\n{query}"
+    );
+    let mutation = type_block(&sdl, "Mutation");
+    assert!(
+        mutation.contains(
+            "clone_task_subtree(input: CloneTaskSubtreeInput!): CloneTaskSubtreePayload!"
+        ),
+        "clone_task_subtree mount/nullability changed:\n{mutation}"
+    );
+}
+
+#[test]
 fn reorder_input_shape_matches_frontend() {
     let sdl = sdl();
     let start = sdl
         .find("input ReorderTasksInput")
         .expect("ReorderTasksInput missing");
     let body = &sdl[start..start + 300];
+    assert!(
+        body.contains("expected_order: [ID!]\n"),
+        "optional optimistic reorder contract missing: {body}"
+    );
     assert!(
         body.contains("project_id:"),
         "ReorderTasksInput.project_id missing:\n{body}"
