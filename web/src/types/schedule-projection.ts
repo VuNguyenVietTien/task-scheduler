@@ -86,6 +86,28 @@ export interface PhaseRollupSummary {
   progress_percent?: number;
 }
 
+/**
+ * Allocation-authoritative Master Schedule row. Unlike PhaseRollupSummary,
+ * this is built from the selected plan's direct daily allocations, not the
+ * current-field Rust projection used by WBS Detail.
+ */
+export interface MasterPhaseRow {
+  /** Project catalog item ID; null is the explicit Unclassified / not recorded row. */
+  phase_id: string | null;
+  name: string;
+  display_order: number;
+  is_unphased: boolean;
+  task_ids: string[];
+  task_count: number;
+  /** Sum of known positive direct daily allocations; undefined when no known hours exist. */
+  total_hours?: number;
+  hours_per_day: Record<string, number>;
+  start?: string;
+  end?: string;
+  /** Stored history has a missing/foreign classification or missing daily vectors. */
+  history_incomplete?: boolean;
+}
+
 /** Full pure projection consumed by Gantt mode renderers. */
 export interface ProjectScheduleProjection {
   source: ProjectionSource;

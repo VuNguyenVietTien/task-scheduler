@@ -1,17 +1,4 @@
-import { gql } from '@apollo/client';
-
-// Dashboard query: fetch tasks with optional assignee filter
-// PM: no assigneeId (all tasks), Member: assigneeId = user.id
-export const GET_DASHBOARD_TASKS = gql`
-  query GetDashboardTasks($assigneeId: ID) {
-    tasks(assignee_id: $assigneeId) {
-      task_id
-      title
-      project_id
-      status
-      priority
-      type_
-      due_date
-    }
-  }
-`;
+// The Rust `tasks` query starts at roots, so the dashboard uses the existing
+// authorized project list plus the flat, all-depth task read model.
+export { GET_PROJECTS as GET_DASHBOARD_PROJECTS } from './projects';
+export { TASK_TREE_ROWS as GET_DASHBOARD_TASK_ROWS } from './tasks';

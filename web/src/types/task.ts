@@ -84,6 +84,9 @@ export interface Task {
   type?: TaskType;
   category?: TaskCategory;
   progress_type?: ProgressType;
+  progressCatalogItemId?: string | null;
+  categoryCatalogItemId?: string | null;
+  taskTypeCatalogItemId?: string | null;
   /** Increment 1 scheduling taxonomy: assigned project phase (null/undefined = Unphased). */
   phase_id?: string | null;
 

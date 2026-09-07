@@ -32,6 +32,9 @@ export const GET_PROJECT_TASKS = gql`
       category
       tags
       progress_type
+      progress_catalog_item_id
+      category_catalog_item_id
+      task_type_catalog_item_id
       child_tasks {
         priority_order
         task_id
@@ -54,6 +57,9 @@ export const GET_PROJECT_TASKS = gql`
         priority
         type_
         category
+        progress_catalog_item_id
+        category_catalog_item_id
+        task_type_catalog_item_id
       }
     }
   }
@@ -92,6 +98,9 @@ export const TASK_TREE_ROWS = gql`
       category
       tags
       progress_type
+      progress_catalog_item_id
+      category_catalog_item_id
+      task_type_catalog_item_id
     }
   }
 `;
@@ -133,6 +142,9 @@ export const GET_TASK_BY_ID = gql`
       type_
       category
       progress_type
+      progress_catalog_item_id
+      category_catalog_item_id
+      task_type_catalog_item_id
       tags
     }
   }
@@ -180,6 +192,9 @@ export const GET_PROJECT_TASKS_PAGINATED = gql`
         category
         tags
         progress_type
+        progress_catalog_item_id
+        category_catalog_item_id
+        task_type_catalog_item_id
         child_tasks {
           task_id
           project_id
@@ -201,6 +216,9 @@ export const GET_PROJECT_TASKS_PAGINATED = gql`
           priority
           type_
           category
+          progress_catalog_item_id
+          category_catalog_item_id
+          task_type_catalog_item_id
         }
       }
       pagination {
@@ -251,6 +269,9 @@ export const GET_TASK_SUBTASKS = gql`
       priority_order
       type_
       category
+      progress_catalog_item_id
+      category_catalog_item_id
+      task_type_catalog_item_id
     }
   }
 `;

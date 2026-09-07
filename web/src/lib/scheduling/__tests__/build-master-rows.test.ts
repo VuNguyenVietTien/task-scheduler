@@ -1,4 +1,5 @@
 import {
+  buildMasterPhaseRows,
   buildMasterRows,
   masterRowsFromProjection,
   type ProjectionWbsRowInput,
@@ -278,5 +279,62 @@ describe('buildMasterRows', () => {
 
     expect(tasks).toEqual(tasksSnapshot);
     expect(phases).toEqual(phasesSnapshot);
+  });
+});
+
+describe('buildMasterPhaseRows (selected-plan allocation authority)', () => {
+  const catalog = [
+    { catalog_item_id: 'catalog-build', project_id: 'project', kind: 'PROGRESS_TYPE' as const, display_order: 1, labels: [{ locale: 'en', name: 'Build' }] },
+    { catalog_item_id: 'catalog-review', project_id: 'project', kind: 'PROGRESS_TYPE' as const, display_order: 2, labels: [{ locale: 'en', name: 'Review' }] },
+  ];
+
+  it('sums each direct positive allocation once, keeps gaps blank, and retains empty configured phases', () => {
+    const rows = buildMasterPhaseRows([
+      { taskId: 'parent', progressCatalogItemId: 'catalog-build', hoursPerDay: { '2026-09-07': 8, '2026-09-09': 2 } },
+      { taskId: 'child', progressCatalogItemId: 'catalog-build', hoursPerDay: { '2026-09-07': 3 } },
+      { taskId: 'child', progressCatalogItemId: 'catalog-review', hoursPerDay: { '2026-09-07': 99 } },
+    ], catalog, 'en');
+
+    expect(rows.map((row) => row.name)).toEqual(['Build', 'Review']);
+    expect(rows[0]).toMatchObject({
+      task_ids: ['parent', 'child'], total_hours: 13,
+      hours_per_day: { '2026-09-07': 11, '2026-09-09': 2 },
+      start: '2026-09-07', end: '2026-09-09',
+    });
+    expect(rows[0].hours_per_day['2026-09-08']).toBeUndefined();
+    expect(rows[1]).toMatchObject({ task_count: 0, hours_per_day: {} });
+  });
+
+  it('accounts null, missing, and foreign IDs in a truthful Unclassified row', () => {
+    const rows = buildMasterPhaseRows([
+      { taskId: 'known-null', progressCatalogItemId: null, hoursPerDay: { '2026-09-07': 2 } },
+      { taskId: 'missing', hoursPerDay: { '2026-09-08': 3 } },
+      { taskId: 'foreign', progressCatalogItemId: 'other-project', hoursPerDay: { '2026-09-09': 4 } },
+      { taskId: 'legacy-hours', progressCatalogItemId: 'catalog-build', hoursPerDay: {}, allocationKnown: false },
+    ], catalog, 'en');
+
+    const unclassified = rows.at(-1)!;
+    expect(unclassified).toMatchObject({
+      phase_id: null,
+      task_ids: ['known-null', 'missing', 'foreign'],
+      total_hours: 9,
+      history_incomplete: true,
+    });
+    expect(rows[0]).toMatchObject({ task_ids: ['legacy-hours'], history_incomplete: true });
+    expect(rows[0].total_hours).toBeUndefined();
+    expect(rows[0].start).toBeUndefined();
+  });
+
+  it('uses stable catalog IDs for allocations while labels and display order change', () => {
+    const allocation = [{ taskId: 'task', progressCatalogItemId: 'catalog-build', hoursPerDay: { '2026-09-07': 5 } }];
+    const renamed = [
+      { ...catalog[1], display_order: 0, labels: [{ locale: 'en', name: 'Review renamed' }] },
+      { ...catalog[0], display_order: 1, labels: [{ locale: 'en', name: 'Build renamed' }] },
+    ];
+
+    expect(buildMasterPhaseRows(allocation, renamed, 'en')).toEqual(expect.arrayContaining([
+      expect.objectContaining({ phase_id: 'catalog-build', name: 'Build renamed', hours_per_day: { '2026-09-07': 5 } }),
+    ]));
+    expect(buildMasterPhaseRows(allocation, renamed, 'en').map((row) => row.name)).toEqual(['Review renamed', 'Build renamed']);
   });
 });

@@ -27,6 +27,12 @@ jest.mock('@/hooks/useProjectSchedulingConfig', () => ({
 jest.mock('@/hooks/useProjectTaxonomies', () => ({
   useProjectTaxonomies: () => ({ phases: [] }),
 }));
+jest.mock('@/hooks/useProjectCatalogs', () => ({
+  useProjectCatalogs: () => ({ items: [
+    { catalog_item_id: '00000000-0000-0000-0000-000000000001', project_id: 'proj-1', kind: 'PROGRESS_TYPE', display_order: 1, labels: [{ locale: 'en', name: 'Creation' }] },
+    { catalog_item_id: '00000000-0000-0000-0000-000000000002', project_id: 'proj-1', kind: 'PROGRESS_TYPE', display_order: 2, labels: [{ locale: 'en', name: 'Review' }] },
+  ], loading: false, error: undefined, refetch: jest.fn() }),
+}));
 jest.mock('@/hooks/useScheduleProjection', () => ({
   useScheduleProjection: () => ({
     wbsRows: mockProjectionRows,
@@ -187,19 +193,18 @@ describe('Authority regression wiring R1-R11', () => {
     expect(mockReorderMutation.mock.calls.at(-1)[0].taskOrders.map((t: any) => t.taskId)).toEqual(['open', 'hidden', 'closed']);
     expect(screen.getAllByTestId('gantt-name-row').map(r => r.textContent)).toEqual([expect.stringContaining('Match open'), expect.stringContaining('Match closed')]);
   });
-  it.each(['wbs', 'master'])('R6 %s uses local authoritative hierarchy/order, preserves empty groups', async mode => {
+  // Master task-tree assertion was superseded: Master is phase-only; WBS remains hierarchical.
+  it.each(['wbs'])('R6 %s uses local authoritative hierarchy/order', async mode => {
     const tasks = [{ ...liveTasks[0], title: 'Parent' }, { ...liveTasks[1], title: 'Child', parent_task_id: 'parent' }];
     mockProjectionRows = tasks.slice().reverse().map(task => ({ kind: 'TASK', row_id: task.task_id, depth: 0, task: { ...task, priority_order: 1 } } as WbsRow));
     mockPhaseGroups = [{ phase_id: 'phase', name: 'Creation', task_ids: ['child', 'parent'], task_count: 2 }, { phase_id: 'empty', name: 'Empty Review', task_ids: [], task_count: 0 }] as PhaseRollupSummary[];
     renderTimeline(lifecycle(), tasks);
-    if (mode === 'master') fireEvent.click(screen.getByRole('button', { name: /master/i }));
     const rows = screen.getAllByTestId('gantt-name-row');
     const parent = rows.find(r => r.textContent?.includes('Parent'))!; const child = rows.find(r => r.textContent?.includes('Child'))!;
     expect(Number(child.dataset.depth)).toBe(Number(parent.dataset.depth) + 1);
     expect(parent.compareDocumentPosition(child) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     fireEvent.click(parent.querySelector('button')!);
     expect(screen.queryByRole('button', { name: 'Child' })).not.toBeInTheDocument();
-    if (mode === 'master') expect(screen.getAllByText('Empty Review').length).toBeGreaterThan(0);
   });
   it('R7 saved columns use first/last positive keys rather than padded spans', async () => {
     renderTimeline(savedLifecycle());

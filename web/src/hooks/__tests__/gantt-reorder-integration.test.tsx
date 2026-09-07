@@ -48,7 +48,8 @@ const schema = buildSchema(`
     start_date: String due_date: String actual_start_date: String actual_end_date: String
     effort: Float progress: Float created_by: ID created_at: String updated_at: String
     is_deleted: Boolean status: String priority: String type_: String category: String
-    tags: [String!] progress_type: String child_tasks: [Task!]
+    tags: [String!] progress_type: String progress_catalog_item_id: ID
+    category_catalog_item_id: ID task_type_catalog_item_id: ID child_tasks: [Task!]
   }
   input TaskOrderInput { task_id: ID! priority_order: Int! }
   input ReorderTasksInput { project_id: ID! tasks: [TaskOrderInput!]! expected_order: [ID!] }

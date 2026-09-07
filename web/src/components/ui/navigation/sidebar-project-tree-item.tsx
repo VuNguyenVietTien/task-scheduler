@@ -25,6 +25,7 @@ const SUB_TAB_ICONS = {
   members: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
   report: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
   documents: 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z',
+  settings: 'M12 15.5a3.5 3.5 0 100-7 3.5 3.5 0 000 7zM19.4 15a1.7 1.7 0 00.34 1.88l.06.06-2.12 2.12-.06-.06a1.7 1.7 0 00-1.88-.34 1.7 1.7 0 00-1.03 1.56V20h-3v-.08a1.7 1.7 0 00-1.03-1.56 1.7 1.7 0 00-1.88.34l-.06.06-2.12-2.12.06-.06A1.7 1.7 0 007 14.7a1.7 1.7 0 00-1.56-1.03H5v-3h.08A1.7 1.7 0 006.64 9.6a1.7 1.7 0 00-.34-1.88l-.06-.06 2.12-2.12.06.06a1.7 1.7 0 001.88.34A1.7 1.7 0 0011.33 4.4V4h3v.08a1.7 1.7 0 001.03 1.56 1.7 1.7 0 001.88-.34l.06-.06 2.12 2.12-.06.06A1.7 1.7 0 0019 9.3a1.7 1.7 0 001.56 1.03H21v3h-.08A1.7 1.7 0 0019.4 15z',
 };
 
 export function SidebarProjectTreeItem({ project, isExpanded, onToggle }: SidebarProjectTreeItemProps) {
@@ -42,6 +43,7 @@ export function SidebarProjectTreeItem({ project, isExpanded, onToggle }: Sideba
     { id: 'members', label: t('projects.viewMembers') },
     { id: 'report', label: t('projects.viewReport') },
     { id: 'documents', label: t('projects.viewDocuments') },
+    { id: 'settings', label: t('settings.title') },
     // Requirement 8: per-user timesheet (logwork) screen.
     { id: 'timesheet', label: 'Timesheet' },
   ];
@@ -72,7 +74,7 @@ export function SidebarProjectTreeItem({ project, isExpanded, onToggle }: Sideba
       {/* Sub-tabs (expanded) */}
       <div
         className={`overflow-hidden transition-all duration-200 ${
-          isExpanded ? 'max-h-72 opacity-100' : 'max-h-0 opacity-0'
+          isExpanded ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
         <div className="pl-8 pb-1">

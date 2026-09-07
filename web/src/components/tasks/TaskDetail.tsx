@@ -17,6 +17,8 @@ import { AdvancedEditor } from '@/components/common/AdvancedEditor';
 import { isTiptapContentEmpty } from '@/utils/mentionUtils';
 import { imageService } from '@/services/imageService';
 import { Member } from '@/types/members';
+import { ProjectCatalogSelect } from '@/components/projects/ProjectCatalogSettingsPanel';
+import type { ProjectCatalogKind } from '@/types/project-catalog';
 
 interface TaskDetailProps {
   task: Task;
@@ -143,6 +145,9 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
         case 'actual_end_date': updates.actual_end_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : null; break;
         case 'tags': updates.tags = Array.isArray(val) ? val : []; break;
         case 'assignee': (updates as any).assignee = val !== undefined ? val : null; break;
+        case 'progressCatalogItemId': updates.progressCatalogItemId = val ?? null; break;
+        case 'categoryCatalogItemId': updates.categoryCatalogItemId = val ?? null; break;
+        case 'taskTypeCatalogItemId': updates.taskTypeCatalogItemId = val ?? null; break;
         default: return;
       }
 
@@ -382,6 +387,34 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
     );
   };
 
+  const renderCatalogField = (
+    label: string,
+    fieldName: 'progressCatalogItemId' | 'categoryCatalogItemId' | 'taskTypeCatalogItemId',
+    kind: ProjectCatalogKind,
+    legacyLabel?: string | null,
+  ) => (
+    <div>
+      <span className="text-xs text-slate-500 block mb-1">{label}</span>
+      <ProjectCatalogSelect
+        projectId={editedTask.project_id}
+        kind={kind}
+        label={label}
+        value={editedTask[fieldName]}
+        legacyLabel={legacyLabel}
+        disabled={editingField !== fieldName || isSaving}
+        onChange={(value) => setEditedTask({ ...editedTask, [fieldName]: value })}
+      />
+      {editingField === fieldName ? (
+        <div className="flex mt-1.5 gap-1">
+          <button type="button" onClick={() => void saveField(fieldName)} disabled={isSaving} aria-label={`Save ${label}`} className="p-1 text-green-600 disabled:opacity-50"><CheckIcon className="h-4 w-4" /></button>
+          <button type="button" onClick={cancelEdit} aria-label={`Cancel ${label}`} className="p-1 text-red-500"><XMarkIcon className="h-4 w-4" /></button>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setEditingField(fieldName)} className="mt-1 text-xs text-blue-600">Edit {label.toLowerCase()}</button>
+      )}
+    </div>
+  );
+
   return (
     <Dialog
       open={isOpen}
@@ -575,6 +608,9 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
               <span className="text-xs text-slate-700">{v || 0}%</span>
             </div>
           ))}
+          {renderCatalogField(t('tasks.fields.progressType'), 'progressCatalogItemId', 'PROGRESS_TYPE', editedTask.progress_type)}
+          {renderCatalogField(t('tasks.fields.category'), 'categoryCatalogItemId', 'CATEGORY', editedTask.category)}
+          {renderCatalogField(t('tasks.fields.taskType'), 'taskTypeCatalogItemId', 'TASK_TYPE', editedTask.type)}
 
           {/* Created at (read-only) */}
           <div>

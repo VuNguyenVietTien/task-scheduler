@@ -312,8 +312,14 @@ export const updateTaskDueDate = createAsyncThunk(
   }
 );
 
+const catalogIdFromAPI = (apiTask: any, snakeCase: string, camelCase: string): string | null | undefined => {
+  if (Object.prototype.hasOwnProperty.call(apiTask, snakeCase)) return apiTask[snakeCase];
+  if (Object.prototype.hasOwnProperty.call(apiTask, camelCase)) return apiTask[camelCase];
+  return undefined;
+};
+
 // Hàm tiện ích để chuyển đổi task từ snake_case (API) sang dạng dùng trong UI
-const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
+export const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
   if (!apiTask) return {};
 
   return {
@@ -348,6 +354,9 @@ const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
     type: apiTask.type_ ?? apiTask.type,
     category: apiTask.category,
     progress_type: apiTask.progress_type,
+    progressCatalogItemId: catalogIdFromAPI(apiTask, 'progress_catalog_item_id', 'progressCatalogItemId'),
+    categoryCatalogItemId: catalogIdFromAPI(apiTask, 'category_catalog_item_id', 'categoryCatalogItemId'),
+    taskTypeCatalogItemId: catalogIdFromAPI(apiTask, 'task_type_catalog_item_id', 'taskTypeCatalogItemId'),
     // Normalize JSONB tags to string[] (handles null, array, or legacy object shapes)
     tags: Array.isArray(apiTask.tags)
       ? apiTask.tags.filter((t: unknown): t is string => typeof t === 'string')

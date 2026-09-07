@@ -39,6 +39,8 @@ export interface SnapshotTask {
   title?: string;
   parentTaskId?: string | null;
   status?: string;
+  /** Stable progress catalog ID at save time; absent means historical unknown. */
+  progressCatalogItemId?: string | null;
 }
 
 export interface PlanSnapshot {
@@ -147,6 +149,9 @@ function draftFromOrderedTasks(
         title: typeof t.title === 'string' ? t.title : undefined,
         parentTaskId: typeof t.parent_task_id === 'string' ? t.parent_task_id : null,
         status: typeof t.status === 'string' ? t.status : undefined,
+        ...((t as { progressCatalogItemId?: string | null }).progressCatalogItemId !== undefined
+          ? { progressCatalogItemId: (t as { progressCatalogItemId?: string | null }).progressCatalogItemId }
+          : {}),
       } satisfies SnapshotTask;
     })
     .filter((st) => st !== null);
@@ -234,6 +239,24 @@ function isCalendarDate(value: unknown): value is string {
   return parsed.getFullYear() === year && parsed.getMonth() === month - 1 && parsed.getDate() === day;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function parseProgressCatalogItemId(fields: Record<string, unknown>, index: number): { present: boolean; value?: string | null } {
+  const canonical = Object.prototype.hasOwnProperty.call(fields, 'progressCatalogItemId');
+  const legacy = Object.prototype.hasOwnProperty.call(fields, 'progress_catalog_item_id');
+  const canonicalValue = fields.progressCatalogItemId;
+  const legacyValue = fields.progress_catalog_item_id;
+  if (canonical && legacy && canonicalValue !== legacyValue) {
+    throw new Error(`plan_data.tasks[${index}] has conflicting progress catalog aliases`);
+  }
+  if (!canonical && !legacy) return { present: false };
+  const value = canonical ? canonicalValue : legacyValue;
+  if (value !== null && (typeof value !== 'string' || !UUID.test(value))) {
+    throw new Error(`plan_data.tasks[${index}] has invalid progress catalog item id`);
+  }
+  return { present: true, value: value as string | null };
+}
+
 export function parsePlanSnapshot(planData: unknown): PlanSnapshot {
   if (typeof planData === 'string') {
     planData = JSON.parse(planData);
@@ -264,6 +287,7 @@ export function parsePlanSnapshot(planData: unknown): PlanSnapshot {
       }
       const taskId = legacy.taskId ?? legacy.task_id;
       if (!taskId) throw new Error(`plan_data.tasks[${index}] has no task id`);
+      const progressCatalog = parseProgressCatalogItemId(fields, index);
       const startDate = legacy.startDate || legacy.start_date || '';
       return {
         taskId,
@@ -276,6 +300,7 @@ export function parsePlanSnapshot(planData: unknown): PlanSnapshot {
         priorityOrder: legacy.priorityOrder ?? legacy.priority_order ?? index + 1,
         title: legacy.title,
         status: legacy.status,
+        ...(progressCatalog.present ? { progressCatalogItemId: progressCatalog.value } : {}),
       } satisfies SnapshotTask;
     });
     return parsePlanSnapshot({ version: 2, tasks: legacyTasks, meta: { savedAt: '', legacyHoursMissing: true } });
@@ -287,7 +312,8 @@ export function parsePlanSnapshot(planData: unknown): PlanSnapshot {
   const orders = new Set<number>();
   const parsedTasks: SnapshotTask[] = tasks.map((raw, index) => {
     const t = raw as Partial<SnapshotTask> | null;
-    if (!t || typeof t.taskId !== 'string' || !t.taskId || ids.has(t.taskId)) {
+    const fields = raw as Record<string, unknown> | null;
+    if (!t || !fields || typeof t.taskId !== 'string' || !t.taskId || ids.has(t.taskId)) {
       throw new Error(`plan_data.tasks[${index}] has an invalid or duplicate taskId`);
     }
     ids.add(t.taskId);
@@ -316,7 +342,13 @@ export function parsePlanSnapshot(planData: unknown): PlanSnapshot {
         throw new Error(`plan_data.tasks[${index}] has invalid daily hours`);
       }
     }
-    return { ...t, hoursPerDay: { ...t.hoursPerDay } } as SnapshotTask;
+    const progressCatalog = parseProgressCatalogItemId(fields, index);
+    const { progress_catalog_item_id: _legacyProgressCatalogItemId, ...canonical } = fields;
+    return {
+      ...canonical,
+      hoursPerDay: { ...t.hoursPerDay },
+      ...(progressCatalog.present ? { progressCatalogItemId: progressCatalog.value } : {}),
+    } as SnapshotTask;
   });
   const meta = { ...(obj.meta as PlanSnapshot['meta']) };
   if (meta.contextTasks !== undefined) {

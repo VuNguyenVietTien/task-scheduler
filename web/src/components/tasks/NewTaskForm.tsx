@@ -4,18 +4,20 @@ import React, { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { taskFormSchema, progressTypeOptions } from "@/schemas/taskForm";
-import { TASK_TYPES, TASK_CATEGORIES, Task } from "@/types/task";
+import { z } from 'zod';
+import { taskFormSchema } from "@/schemas/taskForm";
+import { Task } from "@/types/task";
 import { TagInput } from "@/components/ui/tag-input";
 import { mockTasks } from "@/data/mockTasks";
 import { useAuth } from "@/contexts/AuthContext";
 import { useProject } from "@/hooks/useProject";
 import { Combobox } from "@headlessui/react";
 import { useMutation, useQuery } from "@apollo/client";
-import { CREATE_TASK } from "@/graphql/mutations";
+import { CREATE_TASK } from "@/graphql/mutations/tasks";
 import { RESOURCE_MEMBERS_QUERY } from "@/graphql/scheduling";
 
 import { AdvancedEditor } from "@/components/common/AdvancedEditor";
+import { ProjectCatalogSelect } from '@/components/projects/ProjectCatalogSettingsPanel';
 
 interface NewTaskFormProps {
   projectId: string;
@@ -30,10 +32,10 @@ export interface TaskFormInputs {
   assigneeResourceMemberId?: string;
   startDate: string;
   dueDate: string;
-  category: string;
-  type: string;
+  categoryCatalogItemId: string;
+  taskTypeCatalogItemId: string;
   effort?: number;
-  progressType: string;
+  progressCatalogItemId: string;
   tags: string[];
   parentTaskId?: string;
   status:
@@ -160,8 +162,14 @@ function ComboboxField({
   );
 }
 
-// Rust TaskProgressType enum is lowercase (study/investigate/code/...);
-// NO uppercase transform — pass the select value through as-is.
+const catalogTaskFormSchema = taskFormSchema
+  .omit({ category: true, type: true, progressType: true })
+  .extend({
+    categoryCatalogItemId: z.string(),
+    taskTypeCatalogItemId: z.string(),
+    progressCatalogItemId: z.string(),
+  });
+
 // Rust TaskStatus canonical values for task creation (review BD-3): restrict to
 // TODO/DOING/DONE/CLOSE regardless of broader SDL history.
 export const TASK_STATUS_OPTIONS: { value: string; label: string }[] = [
@@ -192,9 +200,9 @@ export function buildCreateTaskInput(
     assignee_id: data.assigneeResourceMemberId ? null : data.assignee || null,
     assignee_resource_member_id: data.assigneeResourceMemberId || null,
     effort: data.effort || 0,
-    type_: data.type || null,
-    category: data.category || null,
-    progress_type: data.progressType ? data.progressType : null,
+    task_type_catalog_item_id: data.taskTypeCatalogItemId || null,
+    category_catalog_item_id: data.categoryCatalogItemId || null,
+    progress_catalog_item_id: data.progressCatalogItemId || null,
     tags: data.tags || [],
   };
 }
@@ -240,12 +248,12 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
     setValue,
     watch,
   } = useForm<TaskFormInputs>({
-    resolver: zodResolver(taskFormSchema),
+    resolver: zodResolver(catalogTaskFormSchema),
     defaultValues: {
       tags: [],
-      type: "",
-      category: "",
-      progressType: "study", // Default to first progress type
+      taskTypeCatalogItemId: "",
+      categoryCatalogItemId: "",
+      progressCatalogItemId: "",
       effort: 0,
       status: "TODO", // Default to first status
       priority: "MEDIUM",
@@ -323,24 +331,6 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
     });
   }, [taskSearchQuery, projectId]);
 
-  const categoryOpts = useMemo(
-    () =>
-      TASK_CATEGORIES.map((category) => ({
-        value: category,
-        label: category,
-      })),
-    []
-  );
-
-  const typeOpts = useMemo(
-    () =>
-      TASK_TYPES.map((type) => ({
-        value: type,
-        label: type,
-      })),
-    []
-  );
-
   const priorityOpts = useMemo(
     () => [
       { value: "LOW", label: "Low" },
@@ -353,20 +343,6 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
   );
 
   const statusOpts = TASK_STATUS_OPTIONS;
-
-  // Update progressTypeOpts to match backend enum
-  const progressTypeOpts = useMemo(
-    () => [
-      { value: "study", label: "Study" },
-      { value: "investigate", label: "Investigate" },
-      { value: "code", label: "Code" },
-      { value: "test", label: "Test" },
-      { value: "review_code", label: "Review Code" },
-      { value: "review_test_report", label: "Review Test Report" },
-      { value: "release", label: "Release" },
-    ],
-    []
-  );
 
   const onSubmit = async (data: TaskFormInputs) => {
     try {
@@ -383,7 +359,8 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
         }
       });
 
-      if (result.data?.create_task) {
+      if (!result.data?.create_task) throw new Error('Task creation returned no task result.');
+      {
         console.log('Task created successfully:', result.data.create_task);
 
         // Hiển thị thông báo thành công
@@ -725,21 +702,16 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
           </label>
           <div className="mt-1">
             <Controller
-              name="progressType"
+              name="progressCatalogItemId"
               control={control}
               render={({ field }) => (
-                <ComboboxField
-                  options={progressTypeOpts}
-                  value={field.value}
-                  onChange={field.onChange}
-                  placeholder="Select progress type"
-                />
+                <ProjectCatalogSelect projectId={projectId} kind="PROGRESS_TYPE" label="Progress type" value={field.value || null} onChange={(value) => field.onChange(value || '')} />
               )}
             />
           </div>
-          {errors.progressType && (
+          {errors.progressCatalogItemId && (
             <p className="mt-1 text-sm text-red-600">
-              {errors.progressType.message as string}
+              {errors.progressCatalogItemId.message as string}
             </p>
           )}
         </div>
@@ -782,21 +754,16 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
           </label>
           <div className="mt-1">
             <Controller
-              name="category"
+              name="categoryCatalogItemId"
               control={control}
               render={({ field }) => (
-                <ComboboxField
-                  options={categoryOpts}
-                  value={field.value}
-                  onChange={field.onChange}
-                  placeholder="Select category"
-                />
+                <ProjectCatalogSelect projectId={projectId} kind="CATEGORY" label="Category" value={field.value || null} onChange={(value) => field.onChange(value || '')} />
               )}
             />
           </div>
-          {errors.category && (
+          {errors.categoryCatalogItemId && (
             <p className="mt-1 text-sm text-red-600">
-              {errors.category.message as string}
+              {errors.categoryCatalogItemId.message as string}
             </p>
           )}
         </div>
@@ -810,21 +777,16 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
           </label>
           <div className="mt-1">
             <Controller
-              name="type"
+              name="taskTypeCatalogItemId"
               control={control}
               render={({ field }) => (
-                <ComboboxField
-                  options={typeOpts}
-                  value={field.value}
-                  onChange={field.onChange}
-                  placeholder="Select type"
-                />
+                <ProjectCatalogSelect projectId={projectId} kind="TASK_TYPE" label="Task type" value={field.value || null} onChange={(value) => field.onChange(value || '')} />
               )}
             />
           </div>
-          {errors.type && (
+          {errors.taskTypeCatalogItemId && (
             <p className="mt-1 text-sm text-red-600">
-              {errors.type.message as string}
+              {errors.taskTypeCatalogItemId.message as string}
             </p>
           )}
         </div>

@@ -8,6 +8,7 @@ import { KanbanBoard } from '@/components/tasks/KanbanBoard';
 import { MembersView } from '@/components/projects/MembersView';
 import { ProjectReportView } from '@/components/reports/ProjectReportView';
 import { DocumentsTab } from '@/components/projects/DocumentsTab';
+import { ProjectCatalogSettingsPanel } from '@/components/projects/ProjectCatalogSettingsPanel';
 import TimesheetPage from '@/app/projects/[id]/timesheet/page';
 import { useUsers } from '@/hooks/useUsers';
 import { useProject } from '@/hooks/useProject';
@@ -21,8 +22,8 @@ import { processTasksAndUpdateStore, processTasksBasedOnPlan } from '@/utils/tas
 import { selectPlans } from '@/redux/features/plansSlice';
 import { updateAutoSort } from '@/redux/features/taskOrderStore';
 
-type ViewType = 'list' | 'kanban' | 'gantt' | 'members' | 'report' | 'documents' | 'timesheet';
-const VALID_VIEWS: ViewType[] = ['list', 'kanban', 'gantt', 'members', 'report', 'documents', 'timesheet'];
+type ViewType = 'list' | 'kanban' | 'gantt' | 'members' | 'report' | 'documents' | 'settings' | 'timesheet';
+const VALID_VIEWS: ViewType[] = ['list', 'kanban', 'gantt', 'members', 'report', 'documents', 'settings', 'timesheet'];
 function toViewType(tab?: string): ViewType {
   return VALID_VIEWS.includes(tab as ViewType) ? (tab as ViewType) : 'list';
 }
@@ -208,6 +209,15 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
       type: task.type,
       category: task.category,
       progress_type: task.progressType,
+      progressCatalogItemId: Object.prototype.hasOwnProperty.call(task, 'progressCatalogItemId')
+        ? task.progressCatalogItemId
+        : task.progress_catalog_item_id,
+      categoryCatalogItemId: Object.prototype.hasOwnProperty.call(task, 'categoryCatalogItemId')
+        ? task.categoryCatalogItemId
+        : task.category_catalog_item_id,
+      taskTypeCatalogItemId: Object.prototype.hasOwnProperty.call(task, 'taskTypeCatalogItemId')
+        ? task.taskTypeCatalogItemId
+        : task.task_type_catalog_item_id,
       tags: task.tags,
       child_tasks: task.childTasks ? task.childTasks.map(transformTask) : undefined
     };
@@ -270,9 +280,10 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
 
   // Tabs are now driven by sidebar navigation (Phase 1) via initialTab prop
 
+  const isTaskView = activeView === 'list' || activeView === 'kanban' || activeView === 'gantt';
   const retainTaskView = (activeView === 'list' || activeView === 'gantt') && loadedTasksProjectId === project.id;
 
-  if (error && !retainTaskView) {
+  if (error && isTaskView && !retainTaskView) {
     return (
       <div className="p-6">
         <div className="bg-red-50 p-4 rounded-lg text-red-700">
@@ -340,15 +351,17 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
           ) : (
             <LoadingState />
           )
+        ) : activeView === 'settings' ? (
+          <ProjectCatalogSettingsPanel projectId={project.id} canManage={canManageProject} />
         ) : activeView === 'report' ? (
           <ProjectReportView projectId={project.id} />
         ) : activeView === 'documents' ? (
           <DocumentsTab projectId={project.id} />
         ) : activeView === 'timesheet' ? (
           <TimesheetPage />
-        ) : isLoading && !retainTaskView ? (
+        ) : isTaskView && isLoading && !retainTaskView ? (
           <LoadingState />
-        ) : !displayedTasks.length && activeView !== 'gantt' ? (
+        ) : isTaskView && !displayedTasks.length && activeView !== 'gantt' ? (
           <EmptyState />
         ) : (
           <>

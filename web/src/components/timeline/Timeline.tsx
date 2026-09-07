@@ -1,6 +1,8 @@
 'use client';
 
 import { useTranslation } from 'react-i18next';
+import { buildMasterPhaseRows, type MasterPhaseAllocation } from '@/lib/scheduling/build-master-rows';
+import { useProjectCatalogs } from '@/hooks/useProjectCatalogs';
 import { computeTaskAllocations, positiveWorkBounds, schedulingHorizon, type TaskAllocation } from '@/utils/taskAllocations';
 import { PlanLifecycleBar } from '@/components/timeline/PlanLifecycleBar';
 import { MemberDailyEffortMatrix } from '@/components/timeline/MemberDailyEffortMatrix';
@@ -21,7 +23,7 @@ import { WbsSourceHeadingRow } from './WbsSourceHeadingRow';
 import { useProjectTaxonomies } from '@/hooks/useProjectTaxonomies';
 import { useScheduleProjection } from '@/hooks/useScheduleProjection';
 import type { ScheduleDisplayMode, WbsSourceHeading, PhaseDescriptor } from '@/types/taxonomy';
-import type { PhaseRollupSummary } from '@/types/schedule-projection';
+import type { MasterPhaseRow } from '@/types/schedule-projection';
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { getDatesBetween, formatDateVN, debugDate, isSameDay } from '@/lib/utils';
 import {
@@ -97,7 +99,7 @@ type ViewMode = 'project' | 'user';
  * summary rows are NON-DRAGGABLE display rows with no task callbacks. */
 type ScheduleGridRow =
   | { key: string; kind: 'HEADING'; heading: WbsSourceHeading }
-  | { key: string; kind: 'PHASE'; group: PhaseRollupSummary }
+  | { key: string; kind: 'PHASE'; group: MasterPhaseRow }
   | { key: string; kind: 'TASK'; task: Task; depth: number };
 
 interface DateRange {
@@ -190,7 +192,7 @@ function SortableGanttTaskRow({
 }
 
 export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }: TimelineProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const ganttContentRef = useRef<HTMLDivElement>(null);
   const ganttHeaderRef = useRef<HTMLDivElement>(null);
@@ -444,8 +446,12 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
       })),
     [projectPhases]
   );
-  const { wbsRows: projectionWbsRows, masterRows, loading: projectionLoading } =
+  const { wbsRows: projectionWbsRows } =
     useScheduleProjection(currentProjectId || null, phaseDescriptors);
+  const progressCatalog = useProjectCatalogs(
+    scheduleMode === 'MASTER_SCHEDULE' ? currentProjectId || undefined : undefined,
+    'PROGRESS_TYPE'
+  );
 
   /** Fallback Task built from a projection entry when Redux has no full task. */
   const taskFromProjection = useCallback(
@@ -771,6 +777,55 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
     });
   }, [currentProjectId, orderedTasks, planLifecycle.draft, planLifecycle.loadedSnapshot, planLifecycle.mode, tasks]);
 
+  // Live allocations are explicit and viewport-independent. Draft/saved views
+  // use only their stored selected-plan vectors; they never merge live rows.
+  const taskAllocationResult = useMemo(
+    () => calculationsUnavailable ? { allocations: {}, exhaustedTaskIds: [] } :
+      computeTaskAllocations(
+        planLifecycleScheduling.tasks,
+        {
+          capacityFor: (key) => schedulingConfig.capacityFor(key),
+          reservedFor: (key, from, to) => schedulingConfig.reservedFor(key, from, to),
+          memberKeyFor: (userId) => schedulingConfig.memberKeyFor(userId),
+        },
+        allocationHorizon,
+        today
+      ),
+    [calculationsUnavailable, planLifecycleScheduling.tasks, schedulingConfig, allocationHorizon, today]
+  );
+  const taskAllocations = useMemo(() => {
+    if (!displayedBarsOverride) return taskAllocationResult.allocations;
+    return Object.fromEntries(Object.entries(displayedBarsOverride).map(([taskId, bar]) => [
+      taskId,
+      { start: new Date(bar.start), end: new Date(bar.end), hoursPerDay: bar.hoursPerDay },
+    ])) as Record<string, TaskAllocation>;
+  }, [displayedBarsOverride, taskAllocationResult.allocations]);
+
+  // Master consumes direct selected-plan task allocations only. In particular,
+  // snapshot contextTasks remain WBS display metadata and never enter this sum.
+  const masterAllocationInputs = useMemo<MasterPhaseAllocation[]>(() => {
+    if (selectedSnapshot) {
+      const allocationKnown = selectedSnapshot.meta.legacyHoursMissing !== true;
+      return selectedSnapshot.tasks.map((task) => ({
+        taskId: task.taskId,
+        progressCatalogItemId: task.progressCatalogItemId,
+        hoursPerDay: taskAllocations[task.taskId]?.hoursPerDay ?? task.hoursPerDay,
+        allocationKnown,
+      }));
+    }
+    return planLifecycleScheduling.tasks.map((task) => ({
+      taskId: task.task_id || task.id || '',
+      progressCatalogItemId: (task as { progressCatalogItemId?: string | null }).progressCatalogItemId,
+      hoursPerDay: taskAllocations[task.task_id || task.id || '']?.hoursPerDay ?? {},
+    }));
+  }, [planLifecycleScheduling.tasks, selectedSnapshot, taskAllocations]);
+  const masterRows = useMemo(
+    () => progressCatalog.loading || progressCatalog.error
+      ? []
+      : buildMasterPhaseRows(masterAllocationInputs, progressCatalog.items, i18n.resolvedLanguage ?? i18n.language ?? 'en'),
+    [i18n.language, i18n.resolvedLanguage, masterAllocationInputs, progressCatalog.error, progressCatalog.items, progressCatalog.loading]
+  );
+
   // Handle task bar click: left click -> modal, ctrl/middle -> new tab
   // Use full Redux tasks (not orderedTasks) to get complete task data for the modal
   const handleTaskBarClick = useCallback((taskId: string, event?: React.MouseEvent) => {
@@ -910,22 +965,13 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
       }
       return sections.flat();
     }
-    // Phase is presentation only: children stay with their authoritative parent.
-    const groups = [...masterRows.phase_groups, masterRows.unphased_group];
-    const groupById = new Map(groups.flatMap(group => group.task_ids.map(id => [id, group.phase_id] as const)));
-    const rowsByGroup = new Map<string | null, typeof taskRows>();
-    let rootGroup: string | null = null;
-    for (const row of taskRows) {
-      if (row.depth === 0) rootGroup = groupById.get(row.task.task_id) ?? null;
-      const groupRows = rowsByGroup.get(rootGroup) ?? [];
-      groupRows.push({ ...row, depth: row.depth + 1 });
-      rowsByGroup.set(rootGroup, groupRows);
-    }
-    return groups.flatMap(group => {
-      const children = rowsByGroup.get(group.phase_id ?? null) ?? [];
-      return [{ key: group.phase_id ? `phase:${group.phase_id}` : 'phase:unphased', kind: 'PHASE' as const,
-        group: { ...group, task_ids: children.map(row => row.task.task_id), task_count: children.length } }, ...children];
-    });
+    // Master is phase-only. It deliberately does not reuse WBS task rows or
+    // the current-field Rust projection's phase totals.
+    return masterRows.map((group) => ({
+      key: group.phase_id ? `phase:${group.phase_id}` : 'phase:unclassified',
+      kind: 'PHASE' as const,
+      group,
+    }));
   }, [scheduleMode, projectionWbsRows, masterRows, visibleTasks]);
 
   // ── Requirement 1: parent/child expand/collapse over the grid rows ────────
@@ -1109,30 +1155,6 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   const days = lifecycleDays;
   const dayWidth = Math.max(80, dimensions.width / days.length);
   const rowHeight = 48;
-  // Live allocations are explicit and viewport-independent. Draft/saved views
-  // replace this map with their snapshot vectors; they never merge live rows.
-  const taskAllocationResult = useMemo(
-    () => calculationsUnavailable ? { allocations: {}, exhaustedTaskIds: [] } :
-      computeTaskAllocations(
-        planLifecycleScheduling.tasks,
-        {
-          capacityFor: (key) => schedulingConfig.capacityFor(key),
-          reservedFor: (key, from, to) => schedulingConfig.reservedFor(key, from, to),
-          memberKeyFor: (userId) => schedulingConfig.memberKeyFor(userId),
-        },
-        allocationHorizon,
-        today
-      ),
-    [calculationsUnavailable, planLifecycleScheduling.tasks, schedulingConfig, allocationHorizon, today]
-  );
-  const taskAllocations = useMemo(() => {
-    if (!displayedBarsOverride) return taskAllocationResult.allocations;
-    return Object.fromEntries(Object.entries(displayedBarsOverride).map(([taskId, bar]) => [
-      taskId,
-      { start: new Date(bar.start), end: new Date(bar.end), hoursPerDay: bar.hoursPerDay },
-    ])) as Record<string, TaskAllocation>;
-  }, [displayedBarsOverride, taskAllocationResult.allocations]);
-
   const displayedTaskEfforts = useMemo<DisplayedTaskEffort[]>(
     () => selectedPlanTasks.filter(task => !contextTaskIds.has(task.task_id)).map((task) => ({
       unknownSpan: selectedSnapshot?.meta.legacyHoursMissing === true
@@ -1484,6 +1506,18 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
           </div>
         </div>
 
+        {scheduleMode === 'MASTER_SCHEDULE' && (
+          <div className="mb-2 text-sm" data-testid="master-catalog-state">
+            {progressCatalog.loading ? (
+              <span>Loading progress types…</span>
+            ) : progressCatalog.error ? (
+              <span className="text-red-700">Unable to load progress types. Master totals are unavailable.</span>
+            ) : progressCatalog.items.length === 0 ? (
+              <span>No progress types configured. <a className="underline" href={`/projects/${currentProjectId}?tab=settings`}>Open project settings</a>.</span>
+            ) : null}
+          </div>
+        )}
+
         {/* One hierarchy/grid is the shared row source for labels and bars. */}
         <DndContext
           sensors={sensors}
@@ -1675,7 +1709,27 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                               {row.kind === 'HEADING' ? (
                                 <WbsSourceHeadingRow heading={row.heading} />
                               ) : (
-                                <PhaseScheduleRow group={row.group} />
+                                <>
+                                  <PhaseScheduleRow group={row.group} />
+                                  {Object.entries(row.group.hours_per_day)
+                                    .filter(([, hours]) => Number.isFinite(hours) && hours > 0)
+                                    .map(([dateKey, hours]) => {
+                                      const index = days.findIndex((day) => formatDateVN(day) === dateKey);
+                                      return index < 0 ? null : (
+                                        <div
+                                          key={`${row.key}-${dateKey}`}
+                                          data-testid="master-phase-day-segment"
+                                          data-phase-id={row.group.phase_id ?? 'unclassified'}
+                                          data-date={dateKey}
+                                          data-hours={hours}
+                                          className="absolute flex items-center justify-center rounded-sm border border-indigo-200 bg-indigo-100 text-[0.65rem] font-medium text-gray-800"
+                                          style={{ left: `${index * dayWidth + 4}px`, top: '6px', width: `${dayWidth - 8}px`, height: '36px' }}
+                                        >
+                                          {Math.round(hours * 10) / 10}h
+                                        </div>
+                                      );
+                                    })}
+                                </>
                               )}
                             </div>
                           );

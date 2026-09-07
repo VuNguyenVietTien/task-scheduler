@@ -67,7 +67,8 @@ test('R6 keeps two source sections associated with their own full task subtrees'
   expect(labels).toEqual(['Heading A', 'Section A root', 'A child', 'A grandchild', 'Heading B', 'Section B root']);
 });
 
-test.each(['wbs', 'master'])('multiple sections retain deep hierarchy and collapse in %s mode', async mode => {
+// Master tree/collapse assertions were superseded by phase-only Master rows.
+test.each(['wbs'])('multiple sections retain deep hierarchy and collapse in %s mode', async mode => {
   const tasks = [task('A root', 1), task('A child', 2, 'A root'), task('A grandchild', 3, 'A child'), task('A depth3', 4, 'A grandchild'), task('B root', 5)];
   const entry = (t: Task) => ({ kind: 'TASK', row_id: t.task_id, depth: 0, task: t });
   mockRows = [heading('Heading A'), ...tasks.slice(0, 4).reverse().map(entry), heading('Heading B'), entry(tasks[4])];

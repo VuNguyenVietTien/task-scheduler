@@ -39,6 +39,8 @@ import TaskDetailSubtasks from './TaskDetailSubtasks';
 import CommentsTab from './tabs/CommentsTab';
 import { isTiptapContentEmpty } from '@/utils/mentionUtils';
 import { toast } from "sonner";
+import { ProjectCatalogSelect } from '@/components/projects/ProjectCatalogSettingsPanel';
+import type { ProjectCatalogKind } from '@/types/project-catalog';
 
 interface TaskDetailPageProps {
   task: Task;
@@ -148,6 +150,11 @@ export function TaskDetailPage({
   
   // Dữ liệu từ Redux store
   const taskDetailState = useAppSelector(state => state.taskDetail);
+  const { data: latestTaskData } = useQuery(GET_TASK_BY_ID, {
+    variables: { taskId },
+    skip: !taskId,
+    fetchPolicy: 'cache-and-network',
+  });
   
   // State cho parent task search
   const [availableParentTasks, setAvailableParentTasks] = useState<Task[]>([]);
@@ -825,6 +832,38 @@ export function TaskDetailPage({
     );
   };
 
+  const renderCatalogEditableField = (
+    label: string,
+    fieldName: 'progressCatalogItemId' | 'categoryCatalogItemId' | 'taskTypeCatalogItemId',
+    kind: ProjectCatalogKind,
+    legacyLabel?: string | null,
+  ) => (
+    <div className="py-1.5 rounded-md hover:bg-gray-50 mb-2">
+      <div className="flex items-start gap-3">
+        <div className="w-1/3 pt-2 text-sm font-medium text-gray-700">{label}:</div>
+        <div className="flex-1">
+          <ProjectCatalogSelect
+            projectId={projectId}
+            kind={kind}
+            label={label}
+            value={editedTask[fieldName]}
+            legacyLabel={legacyLabel}
+            disabled={editingField !== fieldName || isSaving}
+            onChange={(value) => setEditedTask({ ...editedTask, [fieldName]: value })}
+          />
+          {editingField === fieldName ? (
+            <div className="mt-2 flex gap-2">
+              <button type="button" onClick={() => void saveField(fieldName)} disabled={isSaving} className="rounded bg-blue-600 px-3 py-1.5 text-sm text-white disabled:opacity-50">{isSaving ? t('tasks.actions.saving') : t('tasks.actions.save')}</button>
+              <button type="button" onClick={cancelEditing} className="rounded bg-gray-200 px-3 py-1.5 text-sm text-gray-700">{t('tasks.actions.cancel')}</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => startEditing(fieldName)} className="mt-1 text-xs text-blue-600">Edit {label.toLowerCase()}</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+
   // Cập nhật hàm handleCommentChange
   const handleCommentChange = useCallback((content: string) => {
     console.log('Comment changed:', content?.substring(0, 50));
@@ -1143,10 +1182,21 @@ export function TaskDetailPage({
     }
   }, [commentsData]);
 
-  // Cập nhật editedTask khi task thay đổi
+  // Parent-page normalization predates catalog IDs. Merge the mounted task query
+  // without collapsing explicit null (clear) into undefined (omitted).
   useEffect(() => {
-    setEditedTask(task);
-  }, [task]);
+    const apiTask = latestTaskData?.task?.task_id === taskId ? latestTaskData.task : undefined;
+    const catalogValue = (snakeCase: string, camelCase: keyof Task) => {
+      if (apiTask && Object.prototype.hasOwnProperty.call(apiTask, snakeCase)) return apiTask[snakeCase];
+      return task[camelCase];
+    };
+    setEditedTask({
+      ...task,
+      progressCatalogItemId: catalogValue('progress_catalog_item_id', 'progressCatalogItemId'),
+      categoryCatalogItemId: catalogValue('category_catalog_item_id', 'categoryCatalogItemId'),
+      taskTypeCatalogItemId: catalogValue('task_type_catalog_item_id', 'taskTypeCatalogItemId'),
+    });
+  }, [task, taskId, latestTaskData]);
 
   // Xử lý cập nhật task
   const handleSaveTask = async (fieldName?: string) => {
@@ -1193,14 +1243,14 @@ export function TaskDetailPage({
           case 'actual_end_date':
             updates.actual_end_date = editedTask.actual_end_date;
             break;
-          case 'type':
-            updates.type = editedTask.type;
+          case 'progressCatalogItemId':
+            updates.progressCatalogItemId = editedTask.progressCatalogItemId ?? null;
             break;
-          case 'category':
-            updates.category = editedTask.category;
+          case 'categoryCatalogItemId':
+            updates.categoryCatalogItemId = editedTask.categoryCatalogItemId ?? null;
             break;
-          case 'progress_type':
-            updates.progress_type = editedTask.progress_type;
+          case 'taskTypeCatalogItemId':
+            updates.taskTypeCatalogItemId = editedTask.taskTypeCatalogItemId ?? null;
             break;
           case 'tags':
             updates.tags = editedTask.tags;
@@ -1221,6 +1271,9 @@ export function TaskDetailPage({
         if (JSON.stringify(editedTask.assignee) !== JSON.stringify(task.assignee)) updates.assignee = editedTask.assignee;
         if (editedTask.actual_start_date !== task.actual_start_date) updates.actual_start_date = editedTask.actual_start_date;
         if (editedTask.actual_end_date !== task.actual_end_date) updates.actual_end_date = editedTask.actual_end_date;
+        if (editedTask.progressCatalogItemId !== task.progressCatalogItemId) updates.progressCatalogItemId = editedTask.progressCatalogItemId ?? null;
+        if (editedTask.categoryCatalogItemId !== task.categoryCatalogItemId) updates.categoryCatalogItemId = editedTask.categoryCatalogItemId ?? null;
+        if (editedTask.taskTypeCatalogItemId !== task.taskTypeCatalogItemId) updates.taskTypeCatalogItemId = editedTask.taskTypeCatalogItemId ?? null;
       }
       
       // Gọi hàm update từ props
@@ -1230,6 +1283,8 @@ export function TaskDetailPage({
         setIsEditing(false);
         setIsDescriptionEditing(false);
         setEditingField(null);
+      } else {
+        setError('Không thể cập nhật công việc. Vui lòng thử lại sau.');
       }
     } catch (error) {
       console.error('Error updating task:', error);
@@ -1273,9 +1328,8 @@ export function TaskDetailPage({
     setEditedTask(task); // Reset các thay đổi
   };
 
-  const saveField = (field: string) => {
-    handleSaveTask(field);
-    setEditingField(null);
+  const saveField = async (field: string) => {
+    await handleSaveTask(field);
   };
 
   // Thêm hàm xử lý bình luận với url localhost:3000 thành localhost:8080
@@ -2076,28 +2130,8 @@ export function TaskDetailPage({
                   <div className="mt-6 border-t border-gray-200 pt-4">
                     <h3 className="text-base font-medium text-gray-900 mb-3">{t('tasks.sections.classification')}</h3>
 
-                    {/* Task type */}
-                    {renderEditableField(t('tasks.fields.taskType'), 'type', 'select',
-                      [
-                        { value: '', label: t('common.unknown') },
-                        { value: 'Feature', label: 'Feature' },
-                        { value: 'Bug', label: 'Bug' },
-                        { value: 'Enhancement', label: 'Enhancement' },
-                        { value: 'Documentation', label: 'Documentation' }
-                      ]
-                    )}
-                    
-                    {/* Danh mục */}
-                    {renderEditableField(t('tasks.fields.category'), 'category', 'select',
-                      [
-                        { value: '', label: t('common.unknown') },
-                        { value: 'Frontend', label: 'Frontend' },
-                        { value: 'Backend', label: 'Backend' },
-                        { value: 'Design', label: 'Design' },
-                        { value: 'Testing', label: 'Testing' },
-                        { value: 'DevOps', label: 'DevOps' }
-                      ]
-                    )}
+                    {renderCatalogEditableField(t('tasks.fields.taskType'), 'taskTypeCatalogItemId', 'TASK_TYPE', editedTask.type)}
+                    {renderCatalogEditableField(t('tasks.fields.category'), 'categoryCatalogItemId', 'CATEGORY', editedTask.category)}
 
                     {/* Tags — editable chip input */}
                     <div className="flex items-start py-1.5 rounded-md hover:bg-gray-50 mb-2">
@@ -2147,19 +2181,7 @@ export function TaskDetailPage({
                       )}
                     </div>
 
-                    {/* Progress type */}
-                    {renderEditableField(t('tasks.fields.progressType'), 'progress_type', 'select',
-                      [
-                        { value: '', label: t('tasks.progressTypes.notSet') },
-                        { value: 'study', label: t('tasks.progressTypes.study') },
-                        { value: 'investigate', label: t('tasks.progressTypes.investigate') },
-                        { value: 'code', label: t('tasks.progressTypes.code') },
-                        { value: 'test', label: t('tasks.progressTypes.test') },
-                        { value: 'review_code', label: t('tasks.progressTypes.review_code') },
-                        { value: 'review_test_report', label: t('tasks.progressTypes.review_test_report') },
-                        { value: 'release', label: t('tasks.progressTypes.release') }
-                      ]
-                    )}
+                    {renderCatalogEditableField(t('tasks.fields.progressType'), 'progressCatalogItemId', 'PROGRESS_TYPE', editedTask.progress_type)}
                   </div>
 
                   {/* Other info */}

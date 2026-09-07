@@ -33,6 +33,9 @@ export const UPDATE_TASK_STATUS = gql`
       category
       tags
       progress_type
+      progress_catalog_item_id
+      category_catalog_item_id
+      task_type_catalog_item_id
     }
   }
 `;
@@ -70,6 +73,9 @@ export const UPDATE_TASK_EFFORT = gql`
       category
       tags
       progress_type
+      progress_catalog_item_id
+      category_catalog_item_id
+      task_type_catalog_item_id
     }
   }
 `;
@@ -107,6 +113,35 @@ export const UPDATE_TASK = gql`
       category
       tags
       progress_type
+      progress_catalog_item_id
+      category_catalog_item_id
+      task_type_catalog_item_id
+    }
+  }
+`;
+
+export const CREATE_TASK = gql`
+  mutation CreateTask($input: CreateTaskInput!) {
+    create_task(input: $input) {
+      task_id
+      project_id
+      parent_task_id
+      title
+      description
+      status
+      priority
+      priority_order
+      assignee_resource_member_id
+      effort
+      start_date
+      due_date
+      type_
+      category
+      progress_type
+      progress_catalog_item_id
+      category_catalog_item_id
+      task_type_catalog_item_id
+      tags
     }
   }
 `;

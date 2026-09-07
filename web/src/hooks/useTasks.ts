@@ -95,7 +95,7 @@ export const useUpdateTaskPriorityOrder = () => {
 export const useReorderTasks = () => useMutation(reorderTasksApi);
 
 // API interface for updating task
-const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
+export const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
   try {
     // Input uses snake_case to match backend schema
     const input: Record<string, any> = {
@@ -144,44 +144,21 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
     if (updates.progress_type !== undefined) {
       input.progress_type = String(updates.progress_type).toLowerCase();
     }
-    
+    if (updates.progressCatalogItemId !== undefined) input.progress_catalog_item_id = updates.progressCatalogItemId;
+    if (updates.categoryCatalogItemId !== undefined) input.category_catalog_item_id = updates.categoryCatalogItemId;
+    if (updates.taskTypeCatalogItemId !== undefined) input.task_type_catalog_item_id = updates.taskTypeCatalogItemId;
     if (updates.tags !== undefined) input.tags = updates.tags;
 
     console.log("Input gửi đến GraphQL:", input);
 
-    const optimisticResponse = {
-      update_task: {
-        __typename: 'Task',
-        ...input,
-        task_id: taskId,
-      }
-    };
-
-    // Gọi API GraphQL thực tế
     const response = await client.mutate({
       mutation: UPDATE_TASK,
       variables: { input },
-      errorPolicy: 'all', // Cho phép vẫn nhận được response kể cả khi có lỗi
-      optimisticResponse
+      errorPolicy: 'all',
     });
 
-    if (response.errors) {
-      console.warn("GraphQL errors:", response.errors);
-      // Vẫn tiếp tục xử lý nếu có dữ liệu
-      if (!response.data) {
-        throw new Error(response.errors[0].message);
-      }
-    }
-
-    // Dự phòng nếu không nhận được dữ liệu từ API
-    if (!response.data || !response.data.update_task) {
-      // Trả về dữ liệu cục bộ đã được cập nhật
-      console.warn("Không nhận được dữ liệu từ API, sử dụng dữ liệu cục bộ");
-      return {
-        ...updates,
-        task_id: taskId
-      } as Task;
-    }
+    if (response.errors?.length) throw new Error(response.errors.map((error) => error.message).join('; '));
+    if (!response.data?.update_task) throw new Error('Task update returned no task result.');
 
     // Result is already snake_case from backend
     const result = response.data.update_task;
@@ -214,6 +191,9 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
       type: result.type_,
       category: result.category,
       progress_type: result.progress_type?.toLowerCase() as any,
+      progressCatalogItemId: result.progress_catalog_item_id,
+      categoryCatalogItemId: result.category_catalog_item_id,
+      taskTypeCatalogItemId: result.task_type_catalog_item_id,
       tags: result.tags,
     };
 
@@ -224,13 +204,7 @@ const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
     return formattedResult as Task;
   } catch (error) {
     console.error('Không thể cập nhật công việc:', error);
-    // Vẫn trả về dữ liệu cục bộ đã cập nhật để UI có thể hiển thị
-    const fallbackResult = {
-      ...updates,
-      task_id: taskId
-    };
-    console.log("Sử dụng dữ liệu dự phòng:", fallbackResult);
-    return fallbackResult as Task;
+    throw error instanceof Error ? error : new Error('Task update failed.');
   }
 };
 

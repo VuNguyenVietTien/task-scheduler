@@ -96,7 +96,7 @@ function projectElement(store: any, projectId = 'project-1', initialTab = 'list'
 }
 
 async function mountActualProject() {
-  (client.query as jest.Mock).mockResolvedValue({data:{tasks:[root]}});
+  (client.query as jest.Mock).mockResolvedValue({data:{task_tree_rows:[root]}});
   const store=configureStore({reducer:{tasks:tasksReducer,members:(state={members:[],loading:false})=>state,plans:(state={plans:[]})=>state}});
   projectView = render(projectElement(store));
   await waitFor(()=>expect(screen.getByTestId('clone-task-root')).toBeInTheDocument());
@@ -112,7 +112,7 @@ test('actual ProjectDetailView must retain committed-refresh-failure recovery ac
   fireEvent.click(screen.getByTestId('clone-task-root'));
   submitClone();
   await waitFor(()=>expect(client.query).toHaveBeenCalledTimes(2));
-  await act(async()=>{completeQuery({data:{tasks:[root]}});});
+  await act(async()=>{completeQuery({data:{task_tree_rows:[root]}});});
   await waitFor(()=>expect(screen.getByTestId('clone-task-root')).toBeInTheDocument());
   // Reopening must not discard unresolved committed state.
   fireEvent.click(screen.getByTestId('clone-task-root'));
@@ -140,7 +140,7 @@ test.each(['committed', 'unknown'] as const)('%s recovery survives each refresh 
     if (outcome === 'committed') cloneMutation.mockResolvedValue({ data: { clone_task_subtree: { created_task_ids: ['new'], root_task_ids: ['new'] } } });
     else cloneMutation.mockRejectedValue({ networkError: new Error('connection lost') });
     refetch.mockImplementation(async () => { if (failure === 'tree') throw new Error('tree offline'); return { data: { task_tree_rows: [root] } }; });
-    (client.query as jest.Mock).mockImplementation(async () => { if (failure === 'redux') throw new Error('redux offline'); return { data: { tasks: [root] } }; });
+    (client.query as jest.Mock).mockImplementation(async () => { if (failure === 'redux') throw new Error('redux offline'); return { data: { task_tree_rows: [root] } }; });
     fireEvent.click(screen.getByTestId('clone-task-root'));
     submitClone();
     await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh task list' })).toBeEnabled());
@@ -162,7 +162,7 @@ test.each(['committed', 'unknown'] as const)('%s recovery survives each refresh 
     expect(screen.getByRole('dialog')).toHaveTextContent(truth);
     expect(screen.getByRole('button', { name: 'Create 1 copy (1 task)' })).toBeDisabled();
     refetch.mockResolvedValue({ data: { task_tree_rows: [root] } });
-    (client.query as jest.Mock).mockResolvedValue({ data: { tasks: [root] } });
+    (client.query as jest.Mock).mockResolvedValue({ data: { task_tree_rows: [root] } });
     fireEvent.click(screen.getByRole('button', { name: 'Refresh task list' }));
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
     fireEvent.click(screen.getByTestId('clone-task-root'));
@@ -180,12 +180,12 @@ test('project-scoped recovery does not lock an unrelated project and is retained
   submitClone();
   await waitFor(() => expect(screen.getByRole('button', { name: 'Refresh task list' })).toBeEnabled());
   const other = { ...root, task_id: 'other', project_id: 'project-2' };
-  (client.query as jest.Mock).mockResolvedValue({ data: { tasks: [other] } });
+  (client.query as jest.Mock).mockResolvedValue({ data: { task_tree_rows: [other] } });
   treeQuery = { data: { task_tree_rows: [other] }, loading: false, refetch };
   projectView.rerender(projectElement(store, 'project-2'));
   fireEvent.click(await screen.findByTestId('clone-task-other'));
   expect(screen.getByRole('button', { name: 'Create 1 copy (1 task)' })).toBeEnabled();
-  (client.query as jest.Mock).mockResolvedValue({ data: { tasks: [root] } });
+  (client.query as jest.Mock).mockResolvedValue({ data: { task_tree_rows: [root] } });
   treeQuery = { data: { task_tree_rows: [root] }, loading: false, refetch };
   projectView.rerender(projectElement(store));
   fireEvent.click(await screen.findByTestId('clone-task-root'));
@@ -216,7 +216,7 @@ test('Gantt mounts for empty live tasks and preserves selected history during pe
   const store = configureStore({ reducer: { tasks: tasksReducer, members: (state={members:[],loading:false})=>state, plans: (state={plans:[]})=>state } });
   projectView = render(projectElement(store, 'project-1', 'gantt'));
   expect(screen.queryByRole('combobox', { name: 'Saved history' })).not.toBeInTheDocument();
-  await act(async () => finishInitial({ data: { tasks: [] } }));
+  await act(async () => finishInitial({ data: { task_tree_rows: [] } }));
   const selector = await screen.findByRole('combobox', { name: 'Saved history' });
   fireEvent.change(selector, { target: { value: 'saved' } });
   let rejectRefresh!: (reason: Error) => void;
@@ -229,7 +229,7 @@ test('Gantt mounts for empty live tasks and preserves selected history during pe
   expect(screen.getByRole('alert')).toHaveTextContent('refresh offline');
   expect(screen.getByRole('combobox', { name: 'Saved history' })).toBe(selector);
   expect(selector).toHaveValue('saved');
-  (client.query as jest.Mock).mockResolvedValue({ data: { tasks: [] } });
+  (client.query as jest.Mock).mockResolvedValue({ data: { task_tree_rows: [] } });
   await act(async () => { await store.dispatch(fetchProjectTasks('project-1')); });
   expect(selector).toHaveValue('saved');
   projectView.rerender(projectElement(store));
@@ -244,8 +244,7 @@ test('actual parent counts every descendant once without flattening or paginatin
     ...root, task_id: `child-${index}`, parent_task_id: 'root', title: `Count child ${index}`,
     status: index === 0 ? 'DOING' : 'TODO', child_tasks: index === 0 ? [grandchild] : [],
   }));
-  const tree = { ...root, child_tasks: children };
-  (client.query as jest.Mock).mockResolvedValue({ data: { tasks: [tree] } });
+  (client.query as jest.Mock).mockResolvedValue({ data: { task_tree_rows: [root, children[0], grandchild, ...children.slice(1)] } });
   treeQuery = { data: { task_tree_rows: [root, children[0], grandchild, ...children.slice(1)] }, loading: false, refetch };
   await act(async () => { await store.dispatch(fetchProjectTasks('project-1')); });
   expect(screen.getByTestId('total-task-count')).toHaveTextContent('Total tasks: 13 (including descendants)');
@@ -276,7 +275,7 @@ test('actual parent labels root-based pagination separately from all-task totals
   const roots = Array.from({ length: 11 }, (_, index) => ({
     ...root, task_id: `root-${index}`, title: `Count root ${index}`, child_tasks: index === 0 ? [child] : [],
   }));
-  (client.query as jest.Mock).mockResolvedValue({ data: { tasks: roots } });
+  (client.query as jest.Mock).mockResolvedValue({ data: { task_tree_rows: [roots[0], child, ...roots.slice(1)] } });
   await act(async () => { await store.dispatch(fetchProjectTasks('project-1')); });
   expect(screen.getByTestId('total-task-count')).toHaveTextContent('Total tasks: 12 (including descendants)');
   expect(screen.getByTestId('displayed-root-count')).toHaveTextContent('Displayed roots: 11');

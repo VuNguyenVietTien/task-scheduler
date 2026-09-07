@@ -25,6 +25,7 @@ import {
   type GqlProjectScheduleProjection,
 } from '@/graphql/queries/scheduleProjection';
 import { GET_PROJECT_PHASES } from '@/graphql/queries/taxonomies';
+import { PROJECT_CATALOG_ITEMS } from '@/graphql/queries/catalogs';
 import { CAPACITY_SETTINGS_QUERY, RESOURCE_GROUPS_QUERY, RECURRING_COMMITMENTS_QUERY, RESOURCE_MEMBERS_QUERY } from '@/graphql/scheduling';
 import { TaskPhaseSelect, PhaseFilterSelect, applyPhaseFilter } from '@/components/projects/phase-controls';
 import type { Task } from '@/types/task';
@@ -76,6 +77,7 @@ const apiTasks = [
     progress: 100,
     start_date: '2026-09-01',
     due_date: '2026-09-08',
+    progressCatalogItemId: '00000000-0000-0000-0000-000000000001',
   },
   {
     task_id: 't-child',
@@ -89,6 +91,7 @@ const apiTasks = [
     progress: 50,
     start_date: '2026-09-02',
     due_date: '2026-09-10',
+    progressCatalogItemId: '00000000-0000-0000-0000-000000000001',
   },
 ];
 
@@ -142,6 +145,10 @@ const apolloMocks = [
   ].map(([query, data]) => ({ request: { query: query as import('graphql').DocumentNode, variables: { project_id: 'proj-1' } }, result: { data } })),
   { request: { query: GET_PROJECT_PHASES, variables: { projectId: 'proj-1', includeArchived: false } }, result: { data: phasesMock[0] } },
   { request: { query: GET_PROJECT_SCHEDULE_PROJECTION, variables: { projectId: 'proj-1' } }, result: { data: projectionResult } },
+  { request: { query: PROJECT_CATALOG_ITEMS, variables: { projectId: 'proj-1', kind: 'PROGRESS_TYPE' } }, result: { data: { project_catalog_items: [
+    { catalog_item_id: '00000000-0000-0000-0000-000000000001', project_id: 'proj-1', kind: 'PROGRESS_TYPE', display_order: 1, labels: [{ locale: 'en', name: 'Creation' }] },
+    { catalog_item_id: '00000000-0000-0000-0000-000000000002', project_id: 'proj-1', kind: 'PROGRESS_TYPE', display_order: 2, labels: [{ locale: 'en', name: 'Review' }] },
+  ] } } },
   // NOTE: no mutation mocks on purpose — any mutation fired by mode switching
   // would surface as an Apollo "No more mocked responses" error and fail below.
 ];
@@ -210,7 +217,7 @@ describe('Increment 1 — Timeline schedule modes', () => {
     expect(row.querySelector('[data-task-id]')).toBeNull();
   });
 
-  it('MASTER_SCHEDULE renders phase groups in exact display order with Unphased ALWAYS last, all non-draggable', async () => {
+  it('MASTER_SCHEDULE renders only ordered catalog phase rows, including empty phases', async () => {
     renderTimeline();
 
     await waitFor(() => {
@@ -219,31 +226,18 @@ describe('Increment 1 — Timeline schedule modes', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /master/i }));
 
-    // Phase titles also appear in the task-name column (requirement 1);
-    // pick the instances that are the phase summary rows.
-    const creation = (await screen.findAllByText('Creation')).find(
-      (el) => el.closest('[data-phase-summary="true"]') !== null
-    )!;
-    const review = (await screen.findAllByText('Review')).find(
-      (el) => el.closest('[data-phase-summary="true"]') !== null
-    )!;
-    const unphased = await screen.getAllByText(/unphased/i).at(-1)!;
+    const rows = await screen.findAllByTestId('gantt-name-row');
+    expect(rows.map((row) => row.textContent)).toEqual([
+      expect.stringContaining('Creation'),
+      expect.stringContaining('Review'),
+    ]);
+    expect(screen.queryByTestId('task-bar-t-root')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('task-bar-t-child')).not.toBeInTheDocument();
+    expect(screen.getAllByTestId('master-phase-day-segment').length).toBeGreaterThan(0);
 
-    const rows = [creation, review, unphased].map(
-      (el) => el.closest('[data-phase-summary="true"]') as HTMLElement
-    );
-    for (const row of rows) {
-      expect(row).not.toBeNull();
-      expect(row).toHaveAttribute('data-nondraggable', 'true');
-      expect(row.getAttribute('draggable')).not.toBe('true');
-    }
-    // DOM order: configured phases first, Unphased last
-    expect(rows[0].compareDocumentPosition(rows[1]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    expect(rows[1].compareDocumentPosition(rows[2]) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-
-    // Rollups rendered from current fields
-    expect(screen.getAllByText('30h').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('67%').length).toBeGreaterThan(0);
+    fireEvent.click(screen.getByRole('button', { name: /wbs/i }));
+    expect(await screen.findByTestId('task-bar-t-root')).toBeInTheDocument();
+    expect(screen.getByTestId('task-bar-t-child')).toBeInTheDocument();
   });
 
   it('switching modes performs no mutation (queries only; no GraphQL write errors)', async () => {

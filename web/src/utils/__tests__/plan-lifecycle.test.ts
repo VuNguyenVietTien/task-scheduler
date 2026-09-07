@@ -209,6 +209,26 @@ describe('Save/load: snapshot stability + viewport independence', () => {
     })).toThrow();
   });
 
+  it('preserves canonical progress IDs, accepts the snake alias, and distinguishes missing from null', () => {
+    const base = { taskId: 't1', startDate: '2026-09-07', endDate: '2026-09-07', hoursPerDay: { '2026-09-07': 1 }, priorityOrder: 1 };
+    const id = '00000000-0000-0000-0000-000000000001';
+    expect(parsePlanSnapshot({ version: 2, meta: {}, tasks: [{ ...base, progressCatalogItemId: id }] }).tasks[0].progressCatalogItemId).toBe(id);
+    expect(parsePlanSnapshot({ version: 2, meta: {}, tasks: [{ ...base, progress_catalog_item_id: id }] }).tasks[0].progressCatalogItemId).toBe(id);
+    expect(parsePlanSnapshot({ version: 2, meta: {}, tasks: [{ ...base, progressCatalogItemId: null }] }).tasks[0]).toHaveProperty('progressCatalogItemId', null);
+    expect(parsePlanSnapshot({ version: 2, meta: {}, tasks: [base] }).tasks[0]).not.toHaveProperty('progressCatalogItemId');
+    expect(() => parsePlanSnapshot({ version: 2, meta: {}, tasks: [{ ...base, progressCatalogItemId: id, progress_catalog_item_id: null }] })).toThrow(/conflicting progress catalog aliases/);
+    expect(() => parsePlanSnapshot({ version: 2, meta: {}, tasks: [{ ...base, progressCatalogItemId: 'not-a-uuid' }] })).toThrow(/invalid progress catalog item id/);
+  });
+
+  it('captures a live progress catalog ID in a new snapshot without changing saved bytes', () => {
+    const draft = draftFromCurrentTasks({
+      tasks: [{ task_id: 'catalogued', title: 'catalogued', status: 'TODO', effort: 1, priority_order: 1, progressCatalogItemId: '00000000-0000-0000-0000-000000000001' }],
+      config: makeConfig(), horizon: HORIZON, today: TODAY,
+    });
+    expect(draft.snapshot.tasks[0].progressCatalogItemId).toBe('00000000-0000-0000-0000-000000000001');
+    expect(parsePlanSnapshot(draft.snapshot).tasks[0].progressCatalogItemId).toBe('00000000-0000-0000-0000-000000000001');
+  });
+
   it('reorders a draft snapshot locally without changing its allocations or source snapshot', () => {
     const source: PlanSnapshot = {
       version: 2,

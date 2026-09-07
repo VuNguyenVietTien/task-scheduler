@@ -69,7 +69,8 @@ test('collapsing a task subtree preserves the following sibling source heading',
 
 // Both modes use the real projection adapters and Redux normalizer, not
 // hand-built presentation rows. Source depth and task depth are independent.
-test.each(['wbs', 'master'])('mixed ancestry collapse/expand boundaries in %s', mode => {
+// Master tree/collapse assertions were superseded by phase-only Master rows.
+test.each(['wbs'])('mixed ancestry collapse/expand boundaries in %s', mode => {
   jest.clearAllMocks();
   const tasks = [task('A root', 1), task('A child', 2, 'A root'),
     task('A grandchild', 3, 'A child'), task('A depth3', 4, 'A grandchild'),

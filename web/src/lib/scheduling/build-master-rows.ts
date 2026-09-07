@@ -7,9 +7,12 @@
  * dates for unscheduled effort.
  */
 import type {
+  MasterPhaseRow,
   PhaseRollupSummary,
   TaskScheduleItem,
 } from '@/types/schedule-projection';
+import type { ProjectCatalogItem } from '@/types/project-catalog';
+import { resolveProjectCatalogLabel } from '@/utils/project-catalog';
 import type { PhaseDescriptor } from '@/types/taxonomy';
 import { taskScheduleItemFromEntry, type ProjectionWbsRowInput } from './build-wbs-rows';
 
@@ -23,6 +26,87 @@ export interface MasterScheduleRows {
 }
 
 const UNPHASED_NAME = 'Unphased';
+const UNCLASSIFIED_NAME = 'Unclassified / not recorded';
+
+export interface MasterPhaseAllocation {
+  taskId: string;
+  /** undefined is historical classification missing; null is known unclassified. */
+  progressCatalogItemId?: string | null;
+  hoursPerDay: Record<string, number>;
+  /** False only when a legacy snapshot has no authoritative daily vector. */
+  allocationKnown?: boolean;
+}
+
+/**
+ * Builds phase-only Master rows from direct selected-plan allocations.
+ * It intentionally has no task-tree or current-field projection input.
+ */
+export function buildMasterPhaseRows(
+  allocations: readonly MasterPhaseAllocation[],
+  catalogItems: readonly ProjectCatalogItem[],
+  locale: string
+): MasterPhaseRow[] {
+  const configured = [...catalogItems]
+    .sort((a, b) => a.display_order - b.display_order || a.catalog_item_id.localeCompare(b.catalog_item_id))
+    .filter((item, index, items) => index === 0 || item.catalog_item_id !== items[index - 1].catalog_item_id);
+  const configuredById = new Map(configured.map((item) => [item.catalog_item_id, item]));
+  const buckets = new Map<string | null, {
+    taskIds: string[];
+    hoursPerDay: Record<string, number>;
+    hasKnownHours: boolean;
+    historyIncomplete: boolean;
+  }>();
+  const bucketFor = (id: string | null) => {
+    let bucket = buckets.get(id);
+    if (!bucket) {
+      bucket = { taskIds: [], hoursPerDay: {}, hasKnownHours: false, historyIncomplete: false };
+      buckets.set(id, bucket);
+    }
+    return bucket;
+  };
+  const seenTaskIds = new Set<string>();
+
+  for (const allocation of allocations) {
+    if (!allocation.taskId || seenTaskIds.has(allocation.taskId)) continue;
+    seenTaskIds.add(allocation.taskId);
+    const item = allocation.progressCatalogItemId ? configuredById.get(allocation.progressCatalogItemId) : undefined;
+    const id = item ? item.catalog_item_id : null;
+    const bucket = bucketFor(id);
+    bucket.taskIds.push(allocation.taskId);
+    bucket.historyIncomplete ||= allocation.allocationKnown === false || allocation.progressCatalogItemId === undefined || (typeof allocation.progressCatalogItemId === 'string' && !item);
+    if (allocation.allocationKnown === false) continue;
+    for (const [date, hours] of Object.entries(allocation.hoursPerDay)) {
+      if (!Number.isFinite(hours) || hours <= 0) continue;
+      bucket.hoursPerDay[date] = (bucket.hoursPerDay[date] ?? 0) + hours;
+      bucket.hasKnownHours = true;
+    }
+  }
+
+  const rowFor = (item: ProjectCatalogItem | null): MasterPhaseRow => {
+    const bucket = buckets.get(item?.catalog_item_id ?? null) ?? {
+      taskIds: [], hoursPerDay: {}, hasKnownHours: false, historyIncomplete: false,
+    };
+    const dates = Object.keys(bucket.hoursPerDay).sort();
+    return {
+      phase_id: item?.catalog_item_id ?? null,
+      name: item ? resolveProjectCatalogLabel(item, locale) : UNCLASSIFIED_NAME,
+      display_order: item?.display_order ?? Number.MAX_SAFE_INTEGER,
+      is_unphased: item === null,
+      task_ids: bucket.taskIds,
+      task_count: bucket.taskIds.length,
+      ...(bucket.hasKnownHours
+        ? { total_hours: Object.values(bucket.hoursPerDay).reduce((total, hours) => total + hours, 0) }
+        : {}),
+      hours_per_day: bucket.hoursPerDay,
+      ...(dates.length ? { start: dates[0], end: dates[dates.length - 1] } : {}),
+      ...(bucket.historyIncomplete ? { history_incomplete: true } : {}),
+    };
+  };
+
+  const rows = configured.map((item) => rowFor(item));
+  const unclassified = rowFor(null);
+  return unclassified.task_count > 0 || unclassified.history_incomplete ? [...rows, unclassified] : rows;
+}
 
 /**
  * Build Master Schedule phase summary rows.
