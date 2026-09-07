@@ -89,6 +89,12 @@ Backend runtime:
 
 Do not commit secret values. The server-side Firebase verifier can validate Google/Firebase ID tokens using public signing keys. Full Firebase Admin credentials are still required for service-account operations such as OAuth-backed FCM sending.
 
+## Release artifact assembly
+
+- Build release artifacts from a committed Git archive, not from implicit working-tree line-ending conversion.
+- Keep `backend/migrations/*.sql` as LF through the repository `.gitattributes`; verify archived historical migration bytes against deployed SQLx checksums before building.
+- Include the committed `backend/Cargo.lock` that matches `backend/Cargo.toml`, and use `cargo build --locked`. Do not regenerate or upgrade dependencies during release assembly.
+
 ## Health checks
 
 ```bash

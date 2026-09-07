@@ -88,7 +88,7 @@ The ProjectManager system is transitioning from a distributed microservice archi
 - **Key Features**:
   - Dashboard and project views with role-based UI rendering
   - Task management interface
-  - Gantt chart visualization
+  - Gantt planning from the selected live or saved plan: one synchronized task hierarchy, allocation-only daily bars, and a member/day effort matrix using the same authoritative plan vectors
   - Real-time notifications
   - **Dual Apollo Clients**:
     - Primary client for task-scheduler-backend (port 8080)
