@@ -79,4 +79,12 @@ describe('computeTaskAllocations viewport-independence (R3/R6)', () => {
     expect(r.allocations.t1.hoursPerDay['2026-09-08']).toBe(8);
     expect(r.allocations.t1.hoursPerDay['2026-09-09']).toBe(2);
   });
+
+  it('does not consume member capacity twice when a selected task id is duplicated', () => {
+    const r = computeTaskAllocations([
+      { ...task, assignee_user_id: 'u1' },
+      { ...task, effort: 99, assignee_user_id: 'u1' },
+    ], makeConfig(), schedulingHorizon(today), today);
+    expect(r.allocations.t1.hoursPerDay).toEqual({ '2026-09-07': 8, '2026-09-08': 2 });
+  });
 });

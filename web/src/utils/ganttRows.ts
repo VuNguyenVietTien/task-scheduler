@@ -11,7 +11,6 @@
 export interface GanttRowTaskLike {
   task_id: string;
   parent_task_id?: string | null;
-  [k: string]: unknown;
 }
 
 export interface GanttTaskRow<T extends GanttRowTaskLike> {
@@ -22,6 +21,118 @@ export interface GanttTaskRow<T extends GanttRowTaskLike> {
 }
 
 export type GanttRow<T extends GanttRowTaskLike> = GanttTaskRow<T>;
+
+/**
+ * Reorders only direct siblings. A moved parent is emitted with its complete
+ * subtree, while filtered/collapsed siblings retain their original slots.
+ */
+export function reorderGanttSiblingTaskIds<T extends GanttRowTaskLike>(
+  tasks: readonly T[],
+  activeTaskId: string,
+  overTaskId: string,
+  draggableTaskIds: ReadonlySet<string>
+): string[] {
+  const ordered = uniqueTasks(tasks);
+  const byId = new Map(ordered.map((task) => [task.task_id, task]));
+  const parentOf = (taskId: string): string | null | undefined => {
+    const parentId = byId.get(taskId)?.parent_task_id;
+    return parentId == null ? null : byId.has(parentId) ? parentId : undefined;
+  };
+  const activeParent = parentOf(activeTaskId);
+  const overParent = parentOf(overTaskId);
+  if (
+    activeParent === undefined ||
+    overParent === undefined ||
+    activeParent !== overParent ||
+    !draggableTaskIds.has(activeTaskId) ||
+    !draggableTaskIds.has(overTaskId)
+  ) {
+    return ordered.map((task) => task.task_id);
+  }
+
+  const children = childIdsByParent(ordered, byId);
+  const siblings = children.get(activeParent) ?? [];
+  const visibleSiblings = siblings.filter((taskId) => draggableTaskIds.has(taskId));
+  const from = visibleSiblings.indexOf(activeTaskId);
+  const to = visibleSiblings.indexOf(overTaskId);
+  if (from < 0 || to < 0 || from === to) return ordered.map((task) => task.task_id);
+
+  const moved = [...visibleSiblings];
+  moved.splice(to, 0, moved.splice(from, 1)[0]);
+  let replacement = 0;
+  children.set(
+    activeParent,
+    siblings.map((taskId) => draggableTaskIds.has(taskId) ? moved[replacement++] : taskId)
+  );
+  return flattenHierarchy(ordered, children);
+}
+
+/** Stable priority sort within every sibling set; completed tasks remain last. */
+export function sortGanttSiblingTaskIds<T extends GanttRowTaskLike & { priority?: string; status?: string }>(
+  tasks: readonly T[],
+  matchingTaskIds: ReadonlySet<string> = new Set(tasks.map(task => task.task_id))
+): string[] {
+  const ordered = uniqueTasks(tasks);
+  const byId = new Map(ordered.map((task) => [task.task_id, task]));
+  const children = childIdsByParent(ordered, byId);
+  const persistedIndex = new Map(ordered.map((task, index) => [task.task_id, index]));
+  const priorityRank: Record<string, number> = {
+    CRITICAL: 0, URGENT: 1, HIGH: 2, MEDIUM: 3, LOW: 4,
+  };
+
+  for (const siblingIds of Array.from(children.values())) {
+    const sorted = siblingIds.filter(id => matchingTaskIds.has(id)).sort((a, b) => {
+      const aTask = byId.get(a)!;
+      const bTask = byId.get(b)!;
+      const aDone = aTask.status === 'DONE' || aTask.status === 'CLOSE';
+      const bDone = bTask.status === 'DONE' || bTask.status === 'CLOSE';
+      if (aDone !== bDone) return aDone ? 1 : -1;
+      const priority = (priorityRank[aTask.priority?.toUpperCase() ?? 'MEDIUM'] ?? 3) -
+        (priorityRank[bTask.priority?.toUpperCase() ?? 'MEDIUM'] ?? 3);
+      if (priority !== 0) return priority;
+      return (persistedIndex.get(a)! - persistedIndex.get(b)!) || a.localeCompare(b);
+    });
+    let index = 0;
+    siblingIds.forEach((id, slot) => { if (matchingTaskIds.has(id)) siblingIds[slot] = sorted[index++]; });
+  }
+  return flattenHierarchy(ordered, children);
+}
+
+function uniqueTasks<T extends GanttRowTaskLike>(tasks: readonly T[]): T[] {
+  const ids = new Set<string>();
+  return tasks.filter((task) => Boolean(task.task_id) && !ids.has(task.task_id) && (ids.add(task.task_id), true));
+}
+
+function childIdsByParent<T extends GanttRowTaskLike>(
+  tasks: readonly T[],
+  byId: ReadonlyMap<string, T>
+): Map<string | null, string[]> {
+  const children = new Map<string | null, string[]>();
+  for (const task of tasks) {
+    const parent = task.parent_task_id == null ? null : byId.has(task.parent_task_id) ? task.parent_task_id : null;
+    const siblingIds = children.get(parent) ?? [];
+    siblingIds.push(task.task_id);
+    children.set(parent, siblingIds);
+  }
+  return children;
+}
+
+function flattenHierarchy<T extends GanttRowTaskLike>(
+  tasks: readonly T[],
+  children: ReadonlyMap<string | null, readonly string[]>
+): string[] {
+  const emitted = new Set<string>();
+  const result: string[] = [];
+  const emit = (taskId: string) => {
+    if (emitted.has(taskId)) return;
+    emitted.add(taskId);
+    result.push(taskId);
+    for (const childId of children.get(taskId) ?? []) emit(childId);
+  };
+  for (const rootId of children.get(null) ?? []) emit(rootId);
+  for (const task of tasks) emit(task.task_id); // orphan/cycle safety
+  return result;
+}
 
 /**
  * Build task rows from a parent/child map with, in order:

@@ -25,6 +25,7 @@ import {
   type GqlProjectScheduleProjection,
 } from '@/graphql/queries/scheduleProjection';
 import { GET_PROJECT_PHASES } from '@/graphql/queries/taxonomies';
+import { CAPACITY_SETTINGS_QUERY, RESOURCE_GROUPS_QUERY, RECURRING_COMMITMENTS_QUERY, RESOURCE_MEMBERS_QUERY } from '@/graphql/scheduling';
 import { TaskPhaseSelect, PhaseFilterSelect, applyPhaseFilter } from '@/components/projects/phase-controls';
 import type { Task } from '@/types/task';
 
@@ -133,6 +134,12 @@ const projectionResult: { project_schedule_projection: GqlProjectScheduleProject
 };
 
 const apolloMocks = [
+  ...[
+    [CAPACITY_SETTINGS_QUERY, { capacity_settings: [], day_offs: [] }],
+    [RESOURCE_GROUPS_QUERY, { resource_groups: [] }],
+    [RECURRING_COMMITMENTS_QUERY, { recurring_commitments: [] }],
+    [RESOURCE_MEMBERS_QUERY, { resource_members: [] }],
+  ].map(([query, data]) => ({ request: { query: query as import('graphql').DocumentNode, variables: { project_id: 'proj-1' } }, result: { data } })),
   { request: { query: GET_PROJECT_PHASES, variables: { projectId: 'proj-1', includeArchived: false } }, result: { data: phasesMock[0] } },
   { request: { query: GET_PROJECT_SCHEDULE_PROJECTION, variables: { projectId: 'proj-1' } }, result: { data: projectionResult } },
   // NOTE: no mutation mocks on purpose — any mutation fired by mode switching
@@ -167,15 +174,16 @@ describe('Increment 1 — Timeline schedule modes', () => {
     });
 
     // Plan controls preserved
-    expect(screen.getByTitle('Select plan')).toBeInTheDocument();
-    expect(screen.getByTitle('New Plan')).toBeInTheDocument();
-    expect(screen.getByTitle(/Save plan/)).toBeInTheDocument();
+    expect(screen.getByTestId('plan-select')).toBeInTheDocument();
+    expect(screen.getByTestId('new-plan-btn')).toBeInTheDocument();
+    expect(screen.queryByTestId('save-plan-btn')).not.toBeInTheDocument(); // Save requires an explicit draft.
     expect(screen.getByTitle('Auto sort tasks by priority')).toBeInTheDocument();
 
     // Date range + filters preserved
     expect(screen.getByLabelText('Start date')).toBeInTheDocument();
     expect(screen.getByLabelText('End date')).toBeInTheDocument();
-    expect(screen.getByTestId('priority-task-list')).toBeInTheDocument();
+    expect(screen.getByTestId('gantt-name-column')).toBeInTheDocument();
+    expect(screen.queryByTestId('priority-task-list')).not.toBeInTheDocument();
 
     // Mode control present
     expect(screen.getByTestId('schedule-mode-control')).toBeInTheDocument();

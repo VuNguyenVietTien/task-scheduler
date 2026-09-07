@@ -1,15 +1,20 @@
 'use client';
 
 import { useTranslation } from 'react-i18next';
-import { computeTaskAllocations, schedulingHorizon, type TaskAllocation } from '@/utils/taskAllocations';
+import { computeTaskAllocations, positiveWorkBounds, schedulingHorizon, type TaskAllocation } from '@/utils/taskAllocations';
 import { PlanLifecycleBar } from '@/components/timeline/PlanLifecycleBar';
-import { buildGanttTaskRows } from '@/utils/ganttRows';
+import { MemberDailyEffortMatrix } from '@/components/timeline/MemberDailyEffortMatrix';
+import { usePlanLifecycle } from '@/hooks/usePlanLifecycle';
+import {
+  buildGanttTaskRows,
+  reorderGanttSiblingTaskIds,
+  sortGanttSiblingTaskIds,
+} from '@/utils/ganttRows';
+import type { DisplayedTaskEffort } from '@/utils/member-daily-effort';
 import { Task, Priority, GanttFilter } from '@/types/task';
 import { GanttFilterBar } from './gantt-filter-bar';
 import { AssignedUser } from '@/types/user';
-import { TaskBar } from './TaskBar';
 import { TimelineSkeleton } from './TimelineSkeleton';
-import { PriorityTaskList } from './PriorityTaskList';
 import { ScheduleModeControl } from './ScheduleModeControl';
 import { PhaseScheduleRow } from './PhaseScheduleRow';
 import { WbsSourceHeadingRow } from './WbsSourceHeadingRow';
@@ -29,11 +34,12 @@ import {
   useSensors
 } from '@dnd-kit/core';
 import {
-  arrayMove,
   sortableKeyboardCoordinates,
   SortableContext,
-  verticalListSortingStrategy
+  verticalListSortingStrategy,
+  useSortable,
 } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useReorderTasks } from '@/hooks/useTasks';
 import { useProject } from '@/hooks/useProject';
 import { Button } from '@/components/ui/Button';
@@ -42,7 +48,6 @@ import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { updateTaskPriority } from '@/redux/features/tasksSlice';
 import {
   createPlan,
-  updatePlan,
   deletePlan,
   setActivePlan,
   selectPlans,
@@ -56,10 +61,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { Plan, PlanData, PlanTaskData, CreatePlanInput, CreatePlanDataInput, CreatePlanTaskDataInput } from '@/types/plan';
 import { ChevronDownIcon, ChevronRightIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import {
-  updateTaskOrder,
-  updateTasksWithDates,
-  initializeFromTasks,
-  updateCalculatedDates,
   selectOrderedTasks,
   selectCalculatedTaskDates,
   selectIsPlanLoaded,
@@ -71,8 +72,6 @@ import { convertTaskOrderToTask, isWeekend, getNextWorkDay, findNextAvailableSta
 import { useProjectSchedulingConfig } from '@/hooks/useProjectSchedulingConfig';
 import { useParams } from 'next/navigation';
 import { ArrowUpDown } from 'lucide-react';
-import { batch } from 'react-redux';
-import { sortTasksByPriority } from '@/utils/taskScheduler';
 
 interface TimelineBarsOverride {
   start: string;
@@ -106,11 +105,104 @@ interface DateRange {
   endDate: Date;
 }
 
+interface SortableGanttTaskRowProps {
+  row: Extract<ScheduleGridRow, { kind: 'TASK' }>;
+  rowIndex: number;
+  rowHeight: number;
+  hasChildren: boolean;
+  collapsed: boolean;
+  startLabel: string;
+  endLabel: string;
+  onToggle: (key: string) => void;
+  onTaskClick: (taskId: string) => void;
+  draggable: boolean;
+}
+
+function SortableGanttTaskRow({
+  row,
+  rowIndex,
+  rowHeight,
+  hasChildren,
+  collapsed,
+  startLabel,
+  endLabel,
+  onToggle,
+  onTaskClick,
+  draggable,
+}: SortableGanttTaskRowProps) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: row.task.task_id,
+    disabled: !draggable,
+  });
+
+  return (
+    <div
+      ref={setNodeRef}
+      className={`absolute left-0 right-0 grid grid-cols-[22px_18px_minmax(0,1fr)_76px_76px] items-center gap-1 px-2 border-b border-slate-100 ${isDragging ? 'z-20 bg-slate-50 shadow' : ''}`}
+      style={{
+        top: `${rowIndex * rowHeight}px`,
+        height: `${rowHeight}px`,
+        transform: CSS.Transform.toString(transform),
+        transition,
+      }}
+      data-testid="gantt-name-row"
+      data-depth={row.depth}
+    >
+      {hasChildren ? (
+        <button
+          type="button"
+          aria-label={collapsed ? 'Expand' : 'Collapse'}
+          aria-expanded={!collapsed}
+          data-testid="gantt-row-toggle"
+          onClick={(event) => {
+            event.stopPropagation();
+            onToggle(row.key);
+          }}
+          className="p-0.5 rounded hover:bg-slate-200 text-slate-600"
+        >
+          {collapsed ? <ChevronRightIcon className="h-3.5 w-3.5" /> : <ChevronDownIcon className="h-3.5 w-3.5" />}
+        </button>
+      ) : <span />}
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        onClick={(event) => event.stopPropagation()}
+        className={`text-slate-400 ${draggable ? 'cursor-grab hover:text-slate-600' : 'cursor-not-allowed opacity-40'}`}
+        aria-label={`Reorder ${row.task.title}`}
+        disabled={!draggable}
+      >
+        <ArrowUpDown className="h-3 w-3" />
+      </button>
+      <button
+        type="button"
+        className="truncate text-left text-xs text-slate-700"
+        style={{ paddingLeft: `${row.depth * 14}px` }}
+        title={row.task.title}
+        onClick={() => onTaskClick(row.task.task_id)}
+      >
+        {row.task.title}
+      </button>
+      <span className="truncate text-[0.65rem] text-slate-500" data-testid="gantt-row-start">{startLabel}</span>
+      <span className="truncate text-[0.65rem] text-slate-500" data-testid="gantt-row-end">{endLabel}</span>
+    </div>
+  );
+}
+
 export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }: TimelineProps) {
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const ganttContentRef = useRef<HTMLDivElement>(null);
   const ganttHeaderRef = useRef<HTMLDivElement>(null);
+  const matrixScrollRef = useRef<HTMLDivElement>(null);
+  const scrollLeftRef = useRef(0);
+  const syncDateScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
+    const left = event.currentTarget.scrollLeft;
+    scrollLeftRef.current = left;
+    for (const element of [ganttContentRef.current, ganttHeaderRef.current, matrixScrollRef.current]) {
+      if (element && element.scrollLeft !== left) element.scrollLeft = left;
+    }
+  }, []);
   const [dimensions, setDimensions] = useState({ width: 0, height: 0 });
   const [planName, setPlanName] = useState<string>('');
   const [showSavePlanDialog, setShowSavePlanDialog] = useState(false);
@@ -565,54 +657,107 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   // Tối ưu lại orderedTasks với memo chi tiết hơn
   const orderedTasks = useMemo(() => {
     console.log('🔄 Recalculating orderedTasks');
-    let result = orderedTaskItems.map(item => convertTaskOrderToTask(item, currentProjectId || ''));
-
-    // Có plan: luôn ưu tiên giữ nguyên thứ tự từ orderedTaskItems (từ plan)
-    if (activePlan) {
-      console.log('Có active plan, giữ nguyên thứ tự tasks từ plan');
-      console.log('Task order from plan:', result.map(t =>
-        `${t.title} (${t.priority}) - Order: ${t.priority_order}`
-      ));
-      return result;
-    }
-
-    // Không có plan: sort theo priority nếu autoSort = true
-    if (autoSort) {
-      console.log('Sắp xếp tasks theo priority vì autoSort=true và không có plan');
-      const priorityOrder: Record<string, number> = {
-        CRITICAL: 0,
-        URGENT: 1,
-        HIGH: 2,
-        MEDIUM: 3,
-        LOW: 4
-      };
-
-      result = [...result].sort((a, b) => {
-        // 1. Sort by status: Active first, Done last
-        const isDoneA = a.status === 'DONE';
-        const isDoneB = b.status === 'DONE';
-        if (isDoneA && !isDoneB) return 1;
-        if (!isDoneA && isDoneB) return -1;
-
-        // 2. Sort by priority
-        const aPriority = priorityOrder[a.priority?.toUpperCase() || 'MEDIUM'] ?? 3;
-        const bPriority = priorityOrder[b.priority?.toUpperCase() || 'MEDIUM'] ?? 3;
-        return aPriority - bPriority;
-      });
-
-      console.log('Task order after priority sort:', result.map(t =>
-        `${t.title} (${t.priority}) - Order: ${t.priority_order}`
-      ));
-    } else {
-      // autoSort=false: giữ nguyên thứ tự từ Redux store
-      console.log('GIỮ NGUYÊN thứ tự tasks từ Redux store vì autoSort=false');
-      console.log('Task order from store:', result.map(t =>
-        `${t.title} (${t.priority}) - Order: ${t.priority_order}`
-      ));
-    }
-
+    const liveById = new Map(tasks.map(task => [task.task_id, task]));
+    const result = orderedTaskItems.filter(item => liveById.has(item.taskId)).map(item => ({
+      ...convertTaskOrderToTask(item, currentProjectId || ''), ...liveById.get(item.taskId)!, priority_order: item.priorityOrder,
+    }));
+    for (const task of tasks) if (!result.some(t => t.task_id === task.task_id)) result.push(task);
     return result;
-  }, [orderedTaskItems, currentProjectId, autoSort, activePlan]);
+  }, [orderedTaskItems, currentProjectId, tasks]);
+
+  const matchesTaskFilter = useCallback((task: Task) => {
+    if (viewMode === 'user' && selectedUserId && task.assignee?.userId !== selectedUserId) return false;
+    const { searchQuery, status, priority, type, tags } = ganttFilter;
+    if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+    if (status && task.status !== status || priority && task.priority !== priority || type && task.type !== type) return false;
+    return !tags?.length || tags.some(tag => (task.tags ?? []).some(value => value.toLowerCase() === tag.toLowerCase()));
+  }, [ganttFilter, selectedUserId, viewMode]);
+  const calculationsUnavailable = schedulingConfig.loading ? 'Loading member capacity data' : schedulingConfig.error;
+
+  const lifecycleDays = getDatesBetween(dateRange.startDate, dateRange.endDate);
+  const allocationHorizon = useMemo(
+    () => schedulingHorizon(today, lifecycleDays[0], lifecycleDays[lifecycleDays.length - 1]),
+    [today, lifecycleDays]
+  );
+  const planLifecycleScheduling = useMemo(
+    () => ({
+      tasks: orderedTasks.map((task) => {
+        const live = tasks.find((candidate) => candidate.task_id === task.task_id);
+        return {
+          ...task,
+          parent_task_id: live?.parent_task_id ?? task.parent_task_id,
+          assignee_resource_member_id: live?.assignee_resource_member_id ?? task.assignee_resource_member_id,
+          assignee_user_id: task.assignee?.userId ?? null,
+        };
+      }),
+      selectedTaskIds: new Set(orderedTasks.filter(matchesTaskFilter).map(task => task.task_id)),
+      unavailableReason: calculationsUnavailable,
+      config: {
+        capacityFor: (key: string) => schedulingConfig.capacityFor(key),
+        reservedFor: (key: string, from: string, to: string) => schedulingConfig.reservedFor(key, from, to),
+        memberKeyFor: (userId?: string | null) => schedulingConfig.memberKeyFor(userId),
+      },
+      horizon: allocationHorizon,
+      today,
+    }),
+    [allocationHorizon, orderedTasks, schedulingConfig, tasks, today, matchesTaskFilter, calculationsUnavailable]
+  );
+  const planLifecycle = usePlanLifecycle(currentProjectId || undefined, planLifecycleScheduling);
+  const displayedBarsOverride = planLifecycle.overrideBars ?? barsOverride;
+  const selectedSnapshot = planLifecycle.mode === 'draft' ? planLifecycle.draft?.snapshot : planLifecycle.mode === 'saved' ? planLifecycle.loadedSnapshot : null;
+  const contextTaskIds = useMemo(() => new Set(selectedSnapshot?.meta.contextTasks?.map(task => task.taskId) ?? []), [selectedSnapshot]);
+  const selectedPlanTasks = useMemo(() => {
+    const snapshot = planLifecycle.mode === 'draft'
+      ? planLifecycle.draft?.snapshot
+      : planLifecycle.mode === 'saved'
+        ? planLifecycle.loadedSnapshot
+        : null;
+    const liveById = new Map(tasks.map((task) => [task.task_id, task]));
+    if (!snapshot) {
+      return orderedTasks.map((task) => ({
+        ...task,
+        parent_task_id: liveById.get(task.task_id)?.parent_task_id,
+        assignee_resource_member_id: liveById.get(task.task_id)?.assignee_resource_member_id,
+      }));
+    }
+
+    return [...snapshot.tasks, ...(snapshot.meta.contextTasks ?? [])].sort((a, b) => a.priorityOrder - b.priorityOrder).map((snapshotTask) => {
+      const assignment = snapshot.tasks.find(task => task.taskId === snapshotTask.taskId);
+      const live = liveById.get(snapshotTask.taskId);
+      const hasParent = Object.prototype.hasOwnProperty.call(snapshotTask, 'parentTaskId');
+      const hasResourceAssignment = Object.prototype.hasOwnProperty.call(snapshotTask, 'assigneeResourceMemberId');
+      const hasUserAssignment = Object.prototype.hasOwnProperty.call(snapshotTask, 'assigneeUserId');
+      const historical = !live;
+      return {
+        ...(live ?? {
+          task_id: snapshotTask.taskId,
+          id: snapshotTask.taskId,
+          project_id: currentProjectId || '',
+          title: `Historical task ${snapshotTask.taskId.slice(0, 8)}`,
+          status: 'TODO' as const,
+          priority: 'MEDIUM' as const,
+          priority_order: snapshotTask.priorityOrder,
+          created_by: '',
+        }),
+        task_id: snapshotTask.taskId,
+        id: snapshotTask.taskId,
+        project_id: currentProjectId || live?.project_id || '',
+        title: snapshotTask.title ?? live?.title ?? `Historical task ${snapshotTask.taskId.slice(0, 8)}`,
+        parent_task_id: hasParent ? snapshotTask.parentTaskId ?? undefined : live?.parent_task_id,
+        status: assignment?.status ?? live?.status ?? 'TODO',
+        priority_order: snapshotTask.priorityOrder,
+        assignee_resource_member_id: hasResourceAssignment || hasUserAssignment
+          ? assignment?.assigneeResourceMemberId ?? null
+          : live?.assignee_resource_member_id ?? null,
+        assignee: hasUserAssignment || hasResourceAssignment
+          ? assignment?.assigneeUserId
+            ? { userId: assignment.assigneeUserId, username: live?.assignee?.userId === assignment.assigneeUserId ? live.assignee.username : 'Historical member' }
+            : undefined
+          : live?.assignee,
+        ...(historical ? { description: 'Historical saved-plan task; current task metadata is unavailable.' } : {}),
+      } as Task;
+    });
+  }, [currentProjectId, orderedTasks, planLifecycle.draft, planLifecycle.loadedSnapshot, planLifecycle.mode, tasks]);
 
   // Handle task bar click: left click -> modal, ctrl/middle -> new tab
   // Use full Redux tasks (not orderedTasks) to get complete task data for the modal
@@ -651,11 +796,9 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   const filteredTasks = useMemo(() => {
     console.log('🔄 Recalculating filteredTasks');
 
-    // Nếu không có tasks, return empty array
-    if (!orderedTasks.length) return [];
-
-    // Bắt đầu với orderedTasks đã được sắp xếp
-    let result = orderedTasks;
+    // Selected live/draft/saved plan owns the displayed task collection.
+    if (!selectedPlanTasks.length) return [];
+    let result = selectedPlanTasks;
 
     // Chỉ filter theo user nếu cần
     if (viewMode === 'user' && selectedUserId) {
@@ -667,86 +810,97 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
 
     return result;
   }, [
-    orderedTasks,   // Chỉ recalculate khi orderedTasks thay đổi
-    viewMode,       // Hoặc khi view mode thay đổi
+    selectedPlanTasks,
+    viewMode,
     selectedUserId  // Hoặc khi user được chọn thay đổi
   ]);
 
-  // Apply gantt-specific filters on top of filteredTasks (type/tags require full task data lookup)
+  // Apply filters while retaining every matching task's ancestor chain. This
+  // keeps a filtered child in its real hierarchy instead of promoting it root.
   const visibleTasks = useMemo(() => {
     const { searchQuery, status, priority, type, tags } = ganttFilter;
-    const hasFilter = searchQuery || status || priority || type || tags?.length;
-    if (!hasFilter) return filteredTasks;
+    const hasGanttFilter = Boolean(searchQuery || status || priority || type || tags?.length);
+    const hasUserFilter = viewMode === 'user' && Boolean(selectedUserId);
+    if (!hasGanttFilter && !hasUserFilter) return filteredTasks;
 
-    return filteredTasks.filter(task => {
+    const matching = filteredTasks.filter(task => {
       if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       if (status && task.status !== status) return false;
       if (priority && task.priority !== priority) return false;
-
-      // type/tags are not in taskOrderStore — look up full task data
-      if (type || tags?.length) {
-        // Match by task_id or id to handle different ID formats
-        const fullTask = tasks.find(t => t.task_id === task.task_id || t.id === task.task_id);
-        if (!fullTask) return false; // exclude tasks not yet in Redux state
-        if (type && fullTask.type !== type) return false;
-        // Case-insensitive OR match: task must have at least one of the filter tags
-        if (tags?.length) {
-          const taskTags = fullTask.tags || [];
-          const lowerTaskTags = taskTags.map(t => t.toLowerCase());
-          if (!tags.some(tag => lowerTaskTags.includes(tag.toLowerCase()))) return false;
-        }
-      }
-
-      return true;
+      if (!type && !tags?.length) return true;
+      const fullTask = tasks.find(t => t.task_id === task.task_id || t.id === task.task_id);
+      if (!fullTask || (type && fullTask.type !== type)) return false;
+      const lowerTaskTags = (fullTask.tags || []).map(tag => tag.toLowerCase());
+      return !tags?.length || tags.some(tag => lowerTaskTags.includes(tag.toLowerCase()));
     });
-  }, [filteredTasks, ganttFilter, tasks]);
+
+    const fullTaskById = new Map([
+      ...tasks.map(task => [task.task_id, task] as const),
+      ...selectedPlanTasks.map(task => [task.task_id, task] as const),
+    ]);
+    const visibleIds = new Set(matching.map(task => task.task_id));
+    for (const task of matching) {
+      let parentId = fullTaskById.get(task.task_id)?.parent_task_id;
+      const visited = new Set<string>();
+      while (parentId && !visited.has(parentId)) {
+        visited.add(parentId);
+        visibleIds.add(parentId);
+        parentId = fullTaskById.get(parentId)?.parent_task_id;
+      }
+    }
+    return selectedPlanTasks.filter(task => visibleIds.has(task.task_id));
+  }, [filteredTasks, ganttFilter, selectedPlanTasks, selectedUserId, tasks, viewMode]);
+
+  const visibleTaskIds = useMemo(
+    () => new Set(visibleTasks.map((task) => task.task_id)),
+    [visibleTasks]
+  );
+  // Ancestors kept only to explain a filtered match are context, not drop
+  // targets. DnD therefore cannot turn filtering into a reparenting path.
+  const draggableTaskIds = useMemo(() => {
+    const { searchQuery, status, priority, type, tags } = ganttFilter;
+    const hasGanttFilter = Boolean(searchQuery || status || priority || type || tags?.length);
+    const hasUserFilter = viewMode === 'user' && Boolean(selectedUserId);
+    if (!hasGanttFilter && !hasUserFilter) return new Set(Array.from(visibleTaskIds).filter(id => !contextTaskIds.has(id)));
+    return new Set(filteredTasks.filter(task => !contextTaskIds.has(task.task_id)).filter((task) => {
+      if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+      if (status && task.status !== status) return false;
+      if (priority && task.priority !== priority) return false;
+      if (!type && !tags?.length) return true;
+      const fullTask = tasks.find((candidate) => candidate.task_id === task.task_id || candidate.id === task.task_id);
+      if (!fullTask || (type && fullTask.type !== type)) return false;
+      const lowerTaskTags = (fullTask.tags || []).map((tag) => tag.toLowerCase());
+      return !tags?.length || tags.some((tag) => lowerTaskTags.includes(tag.toLowerCase()));
+    }).map((task) => task.task_id));
+  }, [contextTaskIds, filteredTasks, ganttFilter, selectedUserId, tasks, viewMode, visibleTaskIds]);
 
   // ── Increment 1: unified grid rows for the schedule modes ───────────────────
   // TASK rows reuse the existing TaskBar rendering below; HEADING/PHASE rows
   // are NON-DRAGGABLE display rows never passed to task callbacks.
   const scheduleGridRows = useMemo<ScheduleGridRow[]>(() => {
-    // No projection data yet (loading/error): keep the existing task-bar view,
-    // but render parent/child hierarchy from task.parent_task_id (requirement 1).
-    if (projectionLoading || projectionWbsRows.length === 0) {
-      // herdr-260906: hardened row builder — dedup by task_id, cycle guard,
-      // orphan emission (shared util, unit-tested for deep/orphan/cycle/
-      // duplicate inputs).
-      const enriched = visibleTasks.map((task) => {
-        const full = tasks.find(
-          (t) => t.task_id === task.task_id || t.id === task.task_id
-        );
-        return { ...task, parent_task_id: full?.parent_task_id };
-      });
-      return buildGanttTaskRows(enriched);
-    }
-
+    const taskRows = buildGanttTaskRows(visibleTasks);
     if (scheduleMode === 'WBS_DETAIL') {
-      return projectionWbsRows.map((row) =>
-        row.kind === 'SOURCE_HEADING'
-          ? { key: row.row_id, kind: 'HEADING' as const, heading: row.heading }
-          : {
-              key: row.row_id,
-              kind: 'TASK' as const,
-              task: resolveTask(row.task),
-              depth: row.depth,
-            }
-      );
+      const headings: ScheduleGridRow[] = projectionWbsRows.flatMap(row => row.kind === 'SOURCE_HEADING'
+        ? [{ key: row.row_id, kind: 'HEADING' as const, heading: row.heading }] : []);
+      return [...headings, ...taskRows];
     }
-
-    // MASTER_SCHEDULE: phase groups in exact display order, Unphased ALWAYS LAST.
-    const rows: ScheduleGridRow[] = [];
-    for (const group of [...masterRows.phase_groups, masterRows.unphased_group]) {
-      rows.push({ key: group.phase_id ? `phase:${group.phase_id}` : 'phase:unphased', kind: 'PHASE', group });
-      for (const taskId of group.task_ids) {
-        const wbsTask = projectionWbsRows.find(
-          (r) => r.kind === 'TASK' && r.task.task_id === taskId
-        );
-        const entry = wbsTask && wbsTask.kind === 'TASK' ? wbsTask.task : { task_id: taskId, title: taskId };
-        rows.push({ key: `task:${taskId}`, kind: 'TASK', task: resolveTask(entry), depth: 1 });
-      }
+    // Phase is presentation only: children stay with their authoritative parent.
+    const groups = [...masterRows.phase_groups, masterRows.unphased_group];
+    const groupById = new Map(groups.flatMap(group => group.task_ids.map(id => [id, group.phase_id] as const)));
+    const rowsByGroup = new Map<string | null, typeof taskRows>();
+    let rootGroup: string | null = null;
+    for (const row of taskRows) {
+      if (row.depth === 0) rootGroup = groupById.get(row.task.task_id) ?? null;
+      const groupRows = rowsByGroup.get(rootGroup) ?? [];
+      groupRows.push({ ...row, depth: row.depth + 1 });
+      rowsByGroup.set(rootGroup, groupRows);
     }
-    return rows;
-  }, [scheduleMode, projectionWbsRows, masterRows, projectionLoading, visibleTasks, resolveTask, tasks, currentProjectId]);
+    return groups.flatMap(group => {
+      const children = rowsByGroup.get(group.phase_id ?? null) ?? [];
+      return [{ key: group.phase_id ? `phase:${group.phase_id}` : 'phase:unphased', kind: 'PHASE' as const,
+        group: { ...group, task_ids: children.map(row => row.task.task_id), task_count: children.length } }, ...children];
+    });
+  }, [scheduleMode, projectionWbsRows, masterRows, visibleTasks]);
 
   // ── Requirement 1: parent/child expand/collapse over the grid rows ────────
   // A row "has children" when any following row is deeper before an
@@ -823,72 +977,61 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
     }
   }, []);
 
-  // Điều chỉnh onDragEnd để đánh dấu user đã thực hiện kéo thả
+  // DnD has one hierarchy contract: only visible matching siblings can move.
+  // Saved snapshots reject moves; draft snapshots remain completely local.
   const onDragEnd = useCallback(async (event: DragEndEvent) => {
-    // Đánh dấu kết thúc kéo thả
     setIsDragging(false);
+    const activeTaskId = String(event.active.id);
+    const overTaskId = event.over ? String(event.over.id) : '';
+    if (!overTaskId || activeTaskId === overTaskId) return;
+    if (planLifecycle.mode === 'saved') {
+      toast.info('Saved plan order is immutable. Recalculate to create an editable draft.');
+      return;
+    }
 
-    const { active, over } = event;
+    const reorderedIds = reorderGanttSiblingTaskIds(
+      selectedPlanTasks,
+      activeTaskId,
+      overTaskId,
+      draggableTaskIds
+    );
+    if (reorderedIds.join('|') === selectedPlanTasks.map((task) => task.task_id).join('|')) return;
+    if (planLifecycle.mode === 'draft') {
+      planLifecycle.reorderDraft(reorderedIds);
+      return;
+    }
+    if (!currentProjectId) return;
 
-    if (!over) return;
-
-    const activeTaskId = active.id as string;
-    const overTaskId = over.id as string;
-
-    if (activeTaskId === overTaskId) return;
-
-    // Tìm vị trí mới trong danh sách
-    const taskListIds = orderedTaskItems.map(task => task.taskId);
-    const oldIndex = taskListIds.indexOf(activeTaskId);
-    const newIndex = taskListIds.indexOf(overTaskId);
-
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    // Log thứ tự trước khi thay đổi
-    console.log('📋 Thứ tự task trước khi kéo thả:');
-    orderedTaskItems.forEach((item, idx) => {
-      console.log(`  ${idx + 1}. Task ${item.taskId}: ${item.title} (${item.priority}), Priority Order: ${item.priorityOrder}`);
-    });
-
-    // Tạo mảng mới theo thứ tự ưu tiên
-    const newTasksOrder = arrayMove(orderedTaskItems, oldIndex, newIndex);
-
-    // QUAN TRỌNG: Không tách riêng urgent task nữa, giữ nguyên thứ tự kéo thả của user
-    // Cập nhật priorityOrder mới CHÍNH XÁC theo vị trí
-    const updatedDragItems = newTasksOrder.map((item, index) => ({
-      ...item,
-      priorityOrder: index + 1
+    const previousItems = orderedTaskItems;
+    const itemById = new Map(previousItems.map((item) => [item.taskId, item]));
+    if (reorderedIds.some((taskId) => !itemById.has(taskId))) return;
+    const nextItems = reorderedIds.map((taskId, index) => ({
+      ...itemById.get(taskId)!,
+      priorityOrder: index + 1,
     }));
+    const scheduleItems = (items: typeof orderedTaskItems) => items.map((item) => ({
+      ...convertTaskOrderToTask(item, currentProjectId),
+      priority_order: item.priorityOrder,
+      force_recalculate: true,
+      start_date: undefined,
+      due_date: undefined,
+    }) as Task);
 
-    // Log thứ tự sau khi thay đổi
-    console.log('📋 Thứ tự task SAU khi kéo thả (trước khi tính toán lại ngày):');
-    updatedDragItems.forEach((item, idx) => {
-      console.log(`  ${idx + 1}. Task ${item.taskId}: ${item.title} (${item.priority}), Priority Order: ${item.priorityOrder}`);
-    });
-
-    // Chuyển đổi thành Task[] với force_recalculate để tính toán lại ngày
-    const tasksToRecalculate = updatedDragItems.map(item => {
-      return {
-        ...convertTaskOrderToTask(item, currentProjectId || ''),
-        priority_order: item.priorityOrder,
-        force_recalculate: true,
-        start_date: undefined,
-        due_date: undefined
-      } as Task;
-    });
-
-    // QUAN TRỌNG: Chỉ sử dụng processTasksAndUpdateStore, không cần dispatch updateTaskOrder riêng
-    // vì processTasksAndUpdateStore sẽ tự đảm bảo cập nhật cả thứ tự và ngày tháng
-    console.log('🔄 Timeline - onDragEnd: Gọi processTasksAndUpdateStore để cập nhật thứ tự và ngày:',
-      tasksToRecalculate.length, 'tasks');
-    processTasksAndUpdateStore(tasksToRecalculate, true, dispatch);
-
-    // Tắt chế độ tự động sắp xếp
+    processTasksAndUpdateStore(scheduleItems(nextItems), true, dispatch);
     setAutoSort(false);
-    // Cập nhật vào Redux store
     dispatch(updateAutoSort(false));
-
-  }, [orderedTaskItems, dispatch, currentProjectId]);
+    try {
+      await reorderTasks.mutateAsync({
+        projectId: currentProjectId,
+        taskOrders: nextItems.map((item) => ({ taskId: item.taskId, priorityOrder: item.priorityOrder })),
+      });
+    } catch (error) {
+      processTasksAndUpdateStore(scheduleItems(previousItems), true, dispatch);
+      setAutoSort(autoSort);
+      dispatch(updateAutoSort(autoSort));
+      toast.error(error instanceof Error ? error.message : 'Unable to save task order');
+    }
+  }, [autoSort, currentProjectId, dispatch, draggableTaskIds, orderedTaskItems, planLifecycle, reorderTasks, selectedPlanTasks]);
 
   useEffect(() => {
     if (tasks.length === 0) return;
@@ -954,38 +1097,21 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
     return () => observer.disconnect();
   }, []);
 
-  // Sync horizontal scroll between gantt grid and sticky date header
   useEffect(() => {
-    const grid = ganttContentRef.current;
-    const header = ganttHeaderRef.current;
-    if (!grid || !header) return;
-    const onScroll = () => { header.scrollLeft = grid.scrollLeft; };
-    grid.addEventListener('scroll', onScroll);
-    return () => grid.removeEventListener('scroll', onScroll);
-  }, []);
+    for (const element of [ganttContentRef.current, ganttHeaderRef.current, matrixScrollRef.current]) {
+      if (element) element.scrollLeft = scrollLeftRef.current;
+    }
+  }, [schedulingConfig.loading, schedulingConfig.error, tasksLoading, isLoading]);
 
-  const days = getDatesBetween(dateRange.startDate, dateRange.endDate);
+  const days = lifecycleDays;
   const dayWidth = Math.max(80, dimensions.width / days.length);
   const rowHeight = 48;
-  // ── Requirements 3/5/6: capacity-aware per-task allocation with per-day ──
-  // hour splits (e.g. effort 10h → 8h + 2h). Recurring commitments are
-  // reserved before finite priority tasks; zero-hour days get no hours.
-  // ── Requirements 3/5/6: capacity-aware allocation with per-day hour
-  // splits, computed on an EXPLICIT horizon (today → +365d, extended by long
-  // viewports) — never on the visible viewport alone, so tasks that spill
-  // past the view still get commitments subtracted and scrolling cannot
-  // change an allocation (manager review).
-  const allocationHorizon = useMemo(
-    () => schedulingHorizon(today, days[0], days[days.length - 1]),
-    [today, days]
-  );
+  // Live allocations are explicit and viewport-independent. Draft/saved views
+  // replace this map with their snapshot vectors; they never merge live rows.
   const taskAllocationResult = useMemo(
-    () =>
+    () => calculationsUnavailable ? { allocations: {}, exhaustedTaskIds: [] } :
       computeTaskAllocations(
-        orderedTasks.map((t) => ({
-          ...t,
-          assignee_user_id: (t.assignee as { userId?: string } | undefined)?.userId ?? null,
-        })),
+        planLifecycleScheduling.tasks,
         {
           capacityFor: (key) => schedulingConfig.capacityFor(key),
           reservedFor: (key, from, to) => schedulingConfig.reservedFor(key, from, to),
@@ -994,41 +1120,28 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
         allocationHorizon,
         today
       ),
-    [orderedTasks, schedulingConfig, allocationHorizon, today]
+    [calculationsUnavailable, planLifecycleScheduling.tasks, schedulingConfig, allocationHorizon, today]
   );
-  // herdr-260906: saved-plan / draft override — snapshot bars (incl. per-day
-  // hours) replace computed allocations when a lifecycle view is active.
   const taskAllocations = useMemo(() => {
-    if (!barsOverride) return taskAllocationResult.allocations;
-    const merged: Record<string, TaskAllocation> = { ...taskAllocationResult.allocations };
-    for (const [taskId, bar] of Object.entries(barsOverride)) {
-      merged[taskId] = {
-        start: new Date(bar.start),
-        end: new Date(bar.end),
-        hoursPerDay: bar.hoursPerDay,
-      };
-    }
-    return merged;
-  }, [taskAllocationResult, barsOverride]);
+    if (!displayedBarsOverride) return taskAllocationResult.allocations;
+    return Object.fromEntries(Object.entries(displayedBarsOverride).map(([taskId, bar]) => [
+      taskId,
+      { start: new Date(bar.start), end: new Date(bar.end), hoursPerDay: bar.hoursPerDay },
+    ])) as Record<string, TaskAllocation>;
+  }, [displayedBarsOverride, taskAllocationResult.allocations]);
 
-  // Scheduling inputs shared with the plan lifecycle (same mapping the
-  // allocation above uses, so drafts match live computation).
-  const planLifecycleScheduling = useMemo(
-    () => ({
-      tasks: orderedTasks.map((t) => ({
-        ...t,
-        assignee_user_id: (t.assignee as { userId?: string } | undefined)?.userId ?? null,
-      })),
-      config: {
-        capacityFor: (key: string) => schedulingConfig.capacityFor(key),
-        reservedFor: (key: string, from: string, to: string) =>
-          schedulingConfig.reservedFor(key, from, to),
-        memberKeyFor: (userId?: string | null) => schedulingConfig.memberKeyFor(userId),
-      },
-      horizon: allocationHorizon,
-      today,
-    }),
-    [orderedTasks, schedulingConfig, allocationHorizon, today]
+  const displayedTaskEfforts = useMemo<DisplayedTaskEffort[]>(
+    () => selectedPlanTasks.filter(task => !contextTaskIds.has(task.task_id)).map((task) => ({
+      unknownSpan: selectedSnapshot?.meta.legacyHoursMissing === true
+        ? { start: selectedSnapshot.tasks.find(t => t.taskId === task.task_id)!.startDate, end: selectedSnapshot.tasks.find(t => t.taskId === task.task_id)!.endDate }
+        : undefined,
+      taskId: task.task_id,
+      assigneeResourceMemberId: task.assignee_resource_member_id,
+      assigneeUserId: task.assignee?.userId,
+      hoursPerDay: taskAllocations[task.task_id]?.hoursPerDay ?? {},
+      kind: 'TASK',
+    })),
+    [contextTaskIds, selectedSnapshot, selectedPlanTasks, taskAllocations]
   );
 
   // Requirement 3: reallocate tasks by priority when capacity config changes.
@@ -1218,96 +1331,51 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
       });
   }, [activePlan, dispatch]);
 
-  // Thêm hàm xử lý để sắp xếp lại thứ tự task
-  const handleTaskReorder = useCallback((taskId: string, newIndex: number) => {
-    // Tìm vị trí hiện tại của task
-    const currentIndex = orderedTaskItems.findIndex(item => item.taskId === taskId);
-    if (currentIndex === -1) return;
-
-    // Tắt chế độ tự động sắp xếp vì user đã thủ công sắp xếp
-    setAutoSort(false);
-    // Cập nhật vào Redux store
-    dispatch(updateAutoSort(false));
-
-    // Log thứ tự trước khi thay đổi
-    console.log('📋 Thứ tự task trước khi kéo thả:');
-    orderedTaskItems.forEach((item, idx) => {
-      console.log(`  ${idx + 1}. Task ${item.taskId}: ${item.title} (${item.priority}), Priority Order: ${item.priorityOrder}`);
-    });
-
-    // Tạo bản sao của mảng để tránh thay đổi trực tiếp
-    const newOrderedItems = [...orderedTaskItems];
-
-    // Di chuyển task đến vị trí mới
-    const [movedItem] = newOrderedItems.splice(currentIndex, 1);
-    newOrderedItems.splice(newIndex, 0, movedItem);
-
-    // QUAN TRỌNG: Không tách riêng urgent task nữa, giữ nguyên thứ tự kéo thả của user
-    // Cập nhật priorityOrder mới CHÍNH XÁC theo vị trí
-    const updatedReorderedItems = newOrderedItems.map((item, index) => ({
-      ...item,
-      priorityOrder: index + 1
+  // Stable priority sorting is sibling-local, then persisted as the complete
+  // hierarchy order. Saved plans stay immutable and draft order stays local.
+  const handleAutoSort = useCallback(async () => {
+    const sortedIds = sortGanttSiblingTaskIds(selectedPlanTasks, draggableTaskIds);
+    if (planLifecycle.mode === 'draft') {
+      planLifecycle.reorderDraft(sortedIds);
+      return;
+    }
+    if (planLifecycle.mode === 'saved') {
+      toast.info('Saved plan order is immutable. Recalculate or return to Live before auto-sorting.');
+      return;
+    }
+    if (!currentProjectId) return;
+    const previousItems = orderedTaskItems;
+    if (sortedIds.join('|') === previousItems.map((item) => item.taskId).join('|')) return;
+    const itemById = new Map(previousItems.map((item) => [item.taskId, item]));
+    if (sortedIds.some((taskId) => !itemById.has(taskId))) return;
+    const nextItems = sortedIds.map((taskId, index) => ({
+      ...itemById.get(taskId)!,
+      priorityOrder: index + 1,
     }));
-
-    // Log thứ tự sau khi thay đổi
-    console.log('📋 Thứ tự task SAU khi kéo thả (trước khi tính toán lại ngày):');
-    updatedReorderedItems.forEach((item, idx) => {
-      console.log(`  ${idx + 1}. Task ${item.taskId}: ${item.title} (${item.priority}), Priority Order: ${item.priorityOrder}`);
-    });
-
-    // Chuyển đổi thành Task[] với force_recalculate để tính toán lại ngày
-    const tasksToRecalculate = updatedReorderedItems.map(item => {
-      return {
-        ...convertTaskOrderToTask(item, currentProjectId || ''),
-        priority_order: item.priorityOrder, // Giữ nguyên priorityOrder đã cập nhật
-        force_recalculate: true,  // Đánh dấu để tính toán lại ngày
-        // Xóa start_date và due_date để buộc tính toán lại từ đầu
-        start_date: undefined,
-        due_date: undefined
-      } as Task;
-    });
-
-    console.log('📊 Danh sách task để tính toán lại ngày:', tasksToRecalculate.length);
-    tasksToRecalculate.forEach((task, idx) => {
-      console.log(`  ${idx + 1}. ${task.title} (${task.priority}) - Priority Order: ${task.priority_order}`);
-    });
-
-    // QUAN TRỌNG: Chỉ gọi processTasksAndUpdateStore, KHÔNG cần dispatch updateTaskOrder riêng
-    // vì processTasksAndUpdateStore sẽ tự động dispatch updateTaskOrderAndDates
-    console.log('🔄 Timeline - handleTaskReorder: Gọi processTasksAndUpdateStore để cập nhật thứ tự và ngày:',
-      tasksToRecalculate.length, 'tasks');
-    processTasksAndUpdateStore(tasksToRecalculate, true, dispatch);
-  }, [orderedTaskItems, dispatch, currentProjectId]);
-
-  // Thêm hàm để kích hoạt sắp xếp tự động
-  const handleAutoSort = useCallback(() => {
-    // 1. Cập nhật state local và Redux store
-    setAutoSort(true);
-    dispatch(updateAutoSort(true));
-
-    // 2. Lọc bỏ task đã done/close, chỉ sắp xếp task chưa hoàn thành
-    const activeTasks = tasks.filter(task => !['DONE', 'CLOSE'].includes(task.status.toUpperCase()));
-    console.log(`Bắt đầu sắp xếp tự động cho ${activeTasks.length} tasks (bỏ ${tasks.length - activeTasks.length} task done/close)`);
-    const sortedTasks = sortTasksByPriority(activeTasks);
-
-    console.log('Thứ tự tasks sau khi sắp xếp theo priority:');
-    sortedTasks.slice(0, 5).forEach((task, idx) => {
-      console.log(`  ${idx + 1}. ${task.title} (${task.priority}), Priority Order: ${task.priority_order}`);
-    });
-
-    // 3. Chuẩn bị tasks cho tính toán ngày - reset ngày để tính toán lại theo priority
-    const tasksToProcess = sortedTasks.map(task => ({
-      ...task,
+    const scheduleItems = (items: typeof orderedTaskItems) => items.map((item) => ({
+      ...convertTaskOrderToTask(item, currentProjectId),
+      priority_order: item.priorityOrder,
       force_recalculate: true,
       start_date: undefined,
-      due_date: undefined
-    }));
+      due_date: undefined,
+    }) as Task);
 
-    // 4. Gọi processTasksAndUpdateStore để tính toán lại ngày và cập nhật vào store
-    processTasksAndUpdateStore(tasksToProcess, true, dispatch);
-
-    toast.success(t('gantt.sortedByPriority'));
-  }, [tasks, dispatch]);
+    processTasksAndUpdateStore(scheduleItems(nextItems), true, dispatch);
+    setAutoSort(true);
+    dispatch(updateAutoSort(true));
+    try {
+      await reorderTasks.mutateAsync({
+        projectId: currentProjectId,
+        taskOrders: nextItems.map((item) => ({ taskId: item.taskId, priorityOrder: item.priorityOrder })),
+      });
+      toast.success(t('gantt.sortedByPriority'));
+    } catch (error) {
+      processTasksAndUpdateStore(scheduleItems(previousItems), true, dispatch);
+      setAutoSort(autoSort);
+      dispatch(updateAutoSort(autoSort));
+      toast.error(error instanceof Error ? error.message : 'Unable to save task order');
+    }
+  }, [autoSort, currentProjectId, dispatch, draggableTaskIds, orderedTaskItems, planLifecycle, reorderTasks, selectedPlanTasks, t]);
 
   // Debug re-render
   console.log('🔄 Timeline render', {
@@ -1324,16 +1392,6 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
     return <TimelineSkeleton />;
   }
 
-  if (tasks.length === 0) {
-    return (
-      <div className="flex items-center justify-center h-64 bg-white rounded-lg border border-slate-200">
-        <div className="text-slate-500 text-center">
-          <p>No tasks scheduled</p>
-          <p className="text-sm">Add tasks to see them in the timeline</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="bg-white rounded-lg p-2">
@@ -1342,57 +1400,11 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
         <div className="flex flex-col gap-2 mb-4 border-b pb-2">
           {/* Row 1: Plan controls - right-aligned */}
           <div className="flex justify-end gap-2 items-center flex-wrap">
-            <select
-              className="px-3 py-1 border rounded text-sm"
-              value={activePlan?.id || ''}
-              onChange={(e) => {
-                const selectedPlan = plans.find((p: Plan) => p.id === e.target.value);
-                if (selectedPlan) {
-                  handleSelectPlan(selectedPlan);
-                }
-              }}
-              title={t('gantt.selectPlan')}
-            >
-              <option value="" disabled>{t('gantt.selectPlan')}</option>
-              {plans.map((plan: Plan) => (
-                <option key={plan.id} value={plan.id}>
-                  {plan.name}
-                </option>
-              ))}
-            </select>
-
-            <button
-              onClick={handleNewPlan}
-              className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-slate-100 hover:bg-slate-200 whitespace-nowrap"
-              title={t('gantt.newPlan')}
-            >
-              <PlusIcon className="h-4 w-4" />
-              New Plan
-            </button>
-
-            <button
-              onClick={handleSavePlan}
-              className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-blue-100 hover:bg-blue-200 whitespace-nowrap"
-              title={t('gantt.savePlanCount', { count: visibleTasks.filter(task => !['DONE', 'CLOSE'].includes(task.status)).length })}
-            >
-              <span>{t('gantt.savePlan')}</span>
-            </button>
-
             <PlanLifecycleBar
-              projectId={currentProjectId || undefined}
-              scheduling={planLifecycleScheduling}
+              lifecycle={planLifecycle}
               truncatedCommitmentRules={schedulingConfig.truncatedCommitmentRules}
             />
 
-            {activePlan && (
-              <button
-                onClick={() => setShowDeletePlanDialog(true)}
-                className="flex items-center gap-1 px-2 py-1 rounded text-sm bg-red-100 hover:bg-red-200 whitespace-nowrap"
-                title={t('gantt.deletePlan')}
-              >
-                <TrashIcon className="h-4 w-4" />
-              </button>
-            )}
 
             <button
               onClick={handleAutoSort}
@@ -1460,15 +1472,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
 
             {/* Requirement 3: priority reallocation from member capacity /
                 days off / recurring commitments (explicit user action). */}
-            <button
-              onClick={handleRecalculateSchedule}
-              className="flex items-center gap-1 px-3 py-1 rounded text-sm bg-emerald-100 hover:bg-emerald-200 whitespace-nowrap"
-              title="Recalculate task dates from member capacity, days off and recurring commitments"
-              data-testid="recalculate-schedule-btn"
-            >
-              <ChevronDownIcon className="h-4 w-4" />
-              <span>Recalculate</span>
-            </button>
+
 
             <div className="h-6 w-px bg-slate-200 mx-2"></div>
 
@@ -1508,112 +1512,55 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
           </div>
         </div>
 
-        {/* Content: Left task list + Right gantt chart - uses page scroll only */}
-        <div className="flex">
-          {/* Left panel - task priority list */}
-          <div className="w-52 flex-shrink-0 border-r border-slate-200">
-            {/* Sticky header - sticks below page header when page scrolls */}
-            <div className="h-[40px] border-b border-slate-200 bg-slate-50 flex items-center px-2 sticky z-40" style={{ top: '64px' }}>
-              <span className="text-xs font-medium text-slate-500">{t('gantt.taskList')}</span>
-            </div>
-            {viewMode === 'project' ? (
-              <PriorityTaskList
-                title={t('gantt.taskList')}
-                tasks={visibleTasks}
-                onTaskClick={onTaskClick}
-                onTaskReorder={(taskId, newIndex) => {
-                  // Xử lý sắp xếp lại task dựa trên kéo thả
-                  handleTaskReorder(taskId, newIndex);
-                }}
-                activePlanId={activePlan?.id || null}
-                autoSort={autoSort}
-              />
-            ) : (
-              <>
-                {selectedUserId ? (
-                  <PriorityTaskList
-                    title={t('gantt.taskList')}
-                    tasks={visibleTasks}
-                    onTaskClick={onTaskClick}
-                    onTaskReorder={(taskId, newIndex) => {
-                      // Xử lý sắp xếp lại task dựa trên kéo thả
-                      handleTaskReorder(taskId, newIndex);
-                    }}
-                    activePlanId={activePlan?.id || null}
-                    autoSort={autoSort}
-                  />
-                ) : (
-                  <div className="p-3 text-slate-500 text-sm">
-                    Vui lòng chọn một người dùng để xem danh sách task
-                  </div>
-                )}
-              </>
-            )}
-          </div>
-
-          {/* Gantt Chart */}
-          <div className="flex-1 min-w-0 flex" ref={containerRef}>
-            {/* Requirement 1: task-name column on the right side of the
-                priority list — parent/child hierarchy with indent and
-                expand/collapse, vertically aligned with the bar grid. */}
-            <div className="w-60 flex-shrink-0 border-r border-slate-200 bg-white" data-testid="gantt-name-column">
-              <div className="h-[40px] border-b border-slate-200 bg-slate-50 flex items-center px-2 sticky z-40" style={{ top: '64px' }}>
-                <span className="text-xs font-medium text-slate-500">Task</span>
+        {/* One hierarchy/grid is the shared row source for labels and bars. */}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={onDragStart}
+          onDragEnd={onDragEnd}
+        >
+          <div className="flex" ref={containerRef}>
+            <div className="w-96 flex-shrink-0 border-r border-slate-200 bg-white" data-testid="gantt-name-column">
+              <div className="h-[40px] border-b border-slate-200 bg-slate-50 grid grid-cols-[22px_18px_minmax(0,1fr)_76px_76px] items-center gap-1 px-2 sticky z-40 text-xs font-medium text-slate-500" style={{ top: '64px' }}>
+                <span className="col-span-3">Task</span><span>Start</span><span>End</span>
               </div>
-              <div className="relative" style={{ height: `${gridRowCount * rowHeight}px`, minHeight: `${6 * rowHeight}px` }}>
-                {gridRows.map((row, rowIndex) => {
-                  const depth =
-                    row.kind === 'TASK'
-                      ? row.depth
-                      : row.kind === 'HEADING'
-                        ? row.heading.depth
-                        : 0;
-                  const hasChildren = rowHasChildren.get(row.key) ?? false;
-                  const collapsed = collapsedRows.has(row.key);
-                  const title =
-                    row.kind === 'TASK'
-                      ? row.task.title
-                      : row.kind === 'HEADING'
-                        ? row.heading.title
-                        : row.group.name;
-                  const isTaskRow = row.kind === 'TASK';
-                  return (
-                    <div
-                      key={row.key}
-                      className="absolute left-0 right-0 flex items-center gap-1 px-2 border-b border-slate-100"
-                      style={{ top: `${rowIndex * rowHeight}px`, height: `${rowHeight}px` }}
-                      data-testid="gantt-name-row"
-                      data-depth={depth}
-                    >
-                      {hasChildren ? (
-                        <button
-                          type="button"
-                          aria-label={collapsed ? 'Expand' : 'Collapse'}
-                          aria-expanded={!collapsed}
-                          data-testid="gantt-row-toggle"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleRowCollapsed(row.key);
-                          }}
-                          className="p-0.5 rounded hover:bg-slate-200 text-slate-600"
-                        >
-                          {collapsed ? <ChevronRightIcon className="h-3.5 w-3.5" /> : <ChevronDownIcon className="h-3.5 w-3.5" />}
-                        </button>
-                      ) : (
-                        <span className="w-[22px]" />
-                      )}
-                      <span
-                        className={`truncate text-xs ${isTaskRow ? 'text-slate-700' : 'font-semibold text-slate-800'}`}
-                        style={{ paddingLeft: `${depth * 14}px` }}
-                        title={title}
-                        onClick={isTaskRow ? () => handleTaskBarClick(row.task.task_id) : undefined}
-                      >
-                        {title}
-                      </span>
-                    </div>
-                  );
-                })}
-              </div>
+              <SortableContext
+                items={gridRows
+                  .filter((row): row is Extract<ScheduleGridRow, { kind: 'TASK' }> => row.kind === 'TASK')
+                  .filter((row) => draggableTaskIds.has(row.task.task_id))
+                  .map((row) => row.task.task_id)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="relative" style={{ height: `${gridRowCount * rowHeight}px`, minHeight: `${6 * rowHeight}px` }}>
+                  {gridRows.map((row, rowIndex) => {
+                    if (row.kind === 'TASK') {
+                      const allocation = taskAllocations[row.task.task_id];
+                      const bounds = allocation && positiveWorkBounds(allocation.hoursPerDay);
+                      return (
+                        <SortableGanttTaskRow
+                          key={row.key}
+                          row={row}
+                          rowIndex={rowIndex}
+                          rowHeight={rowHeight}
+                          hasChildren={rowHasChildren.get(row.key) ?? false}
+                          collapsed={collapsedRows.has(row.key)}
+                          startLabel={bounds?.start ?? (allocation ? 'Unscheduled' : '—')}
+                          endLabel={bounds?.end ?? (allocation ? 'Unscheduled' : '—')}
+                          onToggle={toggleRowCollapsed}
+                          onTaskClick={(taskId) => handleTaskBarClick(taskId)}
+                          draggable={planLifecycle.mode !== 'saved' && draggableTaskIds.has(row.task.task_id)}
+                        />
+                      );
+                    }
+                    const title = row.kind === 'HEADING' ? row.heading.title : row.group.name;
+                    return (
+                      <div key={row.key} className="absolute left-0 right-0 grid grid-cols-[40px_minmax(0,1fr)_76px_76px] items-center gap-1 px-2 border-b border-slate-100 font-semibold text-xs text-slate-800" style={{ top: `${rowIndex * rowHeight}px`, height: `${rowHeight}px` }} data-testid="gantt-name-row" data-depth={row.kind === 'HEADING' ? row.heading.depth : 0}>
+                        <span /><span className="truncate">{title}</span><span>—</span><span>—</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </SortableContext>
             </div>
             <div className="flex-1 min-w-0">
             {/* Date header - sticky, synced horizontal scroll with grid below */}
@@ -1621,6 +1568,8 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
               className="sticky z-40 bg-white border-b border-slate-200 overflow-hidden"
               style={{ top: '64px' }}
               ref={ganttHeaderRef}
+              data-testid="gantt-header-scroll"
+              onScroll={syncDateScroll}
             >
               <div className="flex date-headers" style={{
                 width: `${days.length * dayWidth}px`,
@@ -1658,7 +1607,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
             </div>
 
             {/* Grid and task bars - horizontally scrollable */}
-            <div className="overflow-x-auto" ref={ganttContentRef}>
+            <div className="overflow-x-auto" ref={ganttContentRef} data-testid="gantt-scroll" onScroll={syncDateScroll}>
               <div style={{ width: `${days.length * dayWidth}px`, minWidth: '100%' }}>
 
                 {/* Phần grid và task bars */}
@@ -1752,100 +1701,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                         // Requirements 3/5/6: capacity-aware allocation with
                         // per-day hour splits when available.
                         const allocation = taskAllocations[task.task_id];
-                        // herdr-260906: saved snapshot bar (or unsaved draft)
-                        // wins over live computation — config/viewport cannot
-                        // move it while a plan view is active.
-                        const planBar = barsOverride?.[task.task_id];
-                        let taskStartDate: Date;
-
-                        if (planBar) {
-                          taskStartDate = new Date(planBar.start);
-                          taskStartDate.setHours(0, 0, 0, 0);
-                        } else if (task.start_date) {
-                          // Plan start date set → use as-is (even if in the past)
-                          taskStartDate = new Date(task.start_date);
-                          taskStartDate.setHours(0, 0, 0, 0);
-                        } else {
-                          // No plan start date → today, but skip weekends to next Monday
-                          const todayDate = new Date(today);
-                          todayDate.setHours(0, 0, 0, 0);
-                          const dayOfWeek = todayDate.getDay(); // 0=Sun, 6=Sat
-                          if (dayOfWeek === 6) todayDate.setDate(todayDate.getDate() + 2); // Sat → Mon
-                          else if (dayOfWeek === 0) todayDate.setDate(todayDate.getDate() + 1); // Sun → Mon
-                          taskStartDate = todayDate;
-                        }
-
-                        // Tính end_date:
-                        // Nếu có effort → tính theo effort (calculateTaskSchedule)
-                        // Nếu không có effort nhưng có due_date → dùng due_date
-                        // Còn lại → same day as start
-                        let taskEndDate: Date;
-                        if (planBar) {
-                          taskEndDate = new Date(planBar.end);
-                          taskEndDate.setHours(0, 0, 0, 0);
-                        } else if (task.effort != null && task.effort > 0) {
-                          taskEndDate = calculateTaskSchedule(taskStartDate, task.effort).endDate;
-                        } else if (task.due_date) {
-                          taskEndDate = new Date(task.due_date);
-                          taskEndDate.setHours(0, 0, 0, 0);
-                        } else {
-                          taskEndDate = new Date(taskStartDate);
-                        }
-
-                        // Nếu start > end (do default start=today mà end=quá khứ), swap hoặc skip
-                        // Ở đây ta skip render bar nếu data không hợp lệ thay vì vẽ full
-                        if (taskStartDate > taskEndDate) {
-                          if (task.status === 'DONE') console.warn(`Skipping Done Task ${task.title}: Start ${taskStartDate} > End ${taskEndDate}`);
-                          return null;
-                        }
-
-                        // Tính tổng số ngày (kể cả ngày nghỉ) giữa start_date và end_date
-                        const startDayIndex = days.findIndex(day => isSameDay(day, taskStartDate));
-                        let endDayIndex = days.findIndex(day => isSameDay(day, taskEndDate));
-
-                        let renderStartDayIndex = startDayIndex;
-                        const totalDaysSpan = Math.ceil((taskEndDate.getTime() - taskStartDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
-
-                        // Nếu không tìm thấy ngày Start trong view này
-                        if (startDayIndex === -1) {
-                          const viewStart = days[0];
-                          const viewEnd = days[days.length - 1];
-
-                          // Nếu không overlap thì return null
-                          if (taskEndDate < viewStart || (taskStartDate && taskStartDate > viewEnd)) {
-                            // Silent skip for out of view
-                            return null;
-                          }
-
-                          // Nếu overlap (start < viewStart <= end), vẽ từ đầu view
-                          // Tính offset ngày bị cắt
-                          renderStartDayIndex = 0;
-                        }
-
-                        // Tính số ngày hiển thị
-                        // Nếu endDayIndex = -1 (không tìm thấy trong view)
-                        // Tính số ngày hiển thị
-                        // Nếu endDayIndex = -1 (không tìm thấy trong view)
-                        let totalDays;
-                        if (endDayIndex === -1) {
-                          const viewEnd = days[days.length - 1];
-                          if (taskEndDate > viewEnd) {
-                            // Task kết thúc sau view (hoặc start đã bị clip thành 0) -> vẽ đến hết view từ renderStartDayIndex
-                            // Nếu start gốc < viewStart, renderStartDayIndex = 0
-                            // Nếu start gốc trong view, renderStartDayIndex = startDayIndex
-                            totalDays = days.length - renderStartDayIndex;
-                          } else {
-                            // Task kết thúc trước view -> Đã filter ở trên
-                            totalDays = 0;
-                          }
-                        } else {
-                          // Task end trong view
-                          totalDays = endDayIndex - renderStartDayIndex + 1;
-                        }
-
-                        // Đảm bảo task luôn có ít nhất 1 ngày hiển thị
-                        const displayDays = Math.max(1, totalDays);
-
+                        // Only explicit positive vector days are clipped to the viewport.
                         // Requirement 5: render per-day hour segments
                         // (effort 10h → “8h” + “2h” cells; zero days blank).
                         if (allocation) {
@@ -1895,32 +1751,9 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                           );
                         }
 
-                        return (
-                          <div
-                            key={task.task_id}
-                            style={{
-                              position: 'absolute',
-                              left: `${renderStartDayIndex * dayWidth}px`,
-                              top: `${rowIndex * rowHeight}px`,
-                              width: `${displayDays * dayWidth}px`,
-                              height: `${rowHeight}px`,
-                              zIndex: 15,
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'flex-start',
-                              padding: '0 4px'
-                            }}
-                          >
-                            <TaskBar
-                              task={task}
-                              width={displayDays * dayWidth - 8}
-                              x={0}
-                              y={0}
-                              height={36}
-                              onClick={handleTaskBarClick}
-                            />
-                          </div>
-                        );
+                        // Missing/zero allocation is explicit: never fabricate a
+                        // continuous title bar from task dates or deadlines.
+                        return null;
                       })}
                     </div>
                   </div>
@@ -1929,7 +1762,18 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
             </div>
             </div>
           </div>
-        </div>
+          <MemberDailyEffortMatrix
+            members={schedulingConfig.resourceMembers}
+            dates={days}
+            taskEfforts={displayedTaskEfforts}
+            scheduling={schedulingConfig}
+            snapshotFrozen={planLifecycle.mode !== 'live'}
+            dayWidth={dayWidth}
+            scrollRef={matrixScrollRef}
+            onScroll={syncDateScroll}
+            scrollLeft={scrollLeftRef.current}
+          />
+        </DndContext>
 
         {/* Dialog Tạo/Lưu Plan */}
         {showSavePlanDialog && (

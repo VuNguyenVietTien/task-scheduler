@@ -14,6 +14,13 @@ import '@/i18n/i18n-config';
 import { Timeline } from '../Timeline';
 import { store as reduxStore } from '@/redux/store';
 import { fetchProjectTasks } from '@/redux/features/tasksSlice';
+import { CAPACITY_SETTINGS_QUERY, RESOURCE_GROUPS_QUERY, RECURRING_COMMITMENTS_QUERY, RESOURCE_MEMBERS_QUERY } from '@/graphql/scheduling';
+const schedulingMocks = [
+  [CAPACITY_SETTINGS_QUERY, { capacity_settings: [], day_offs: [] }],
+  [RESOURCE_GROUPS_QUERY, { resource_groups: [] }],
+  [RECURRING_COMMITMENTS_QUERY, { recurring_commitments: [] }],
+  [RESOURCE_MEMBERS_QUERY, { resource_members: [] }],
+].map(([query, data]) => ({ request: { query: query as import('graphql').DocumentNode, variables: { project_id: 'proj-1' } }, result: { data } }));
 import type { Task } from '@/types/task';
 
 jest.mock('next/navigation', () => ({
@@ -25,15 +32,7 @@ jest.mock('../../../contexts/AuthContext', () => ({
 }));
 
 jest.mock('../TaskBar', () => ({
-  TaskBar: ({ task, onClick }: { task: { task_id: string }; onClick?: (id: string, e?: React.MouseEvent) => void }) => (
-    <button
-      type="button"
-      data-testid={`task-bar-${task.task_id}`}
-      onClick={(e) => onClick?.(task.task_id, e)}
-    >
-      {task.title}
-    </button>
-  ),
+  TaskBar: () => <div data-testid="legacy-continuous-task-bar" />,
 }));
 
 jest.mock('../PriorityTaskList', () => ({
@@ -92,7 +91,7 @@ const tasks: Task[] = [
   } as Task,
 ];
 
-function renderTimeline() {
+function renderTimeline(barsOverride?: Record<string, { start: string; end: string; hoursPerDay: Record<string, number> }>) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -102,8 +101,8 @@ function renderTimeline() {
   return render(
     <QueryClientProvider client={queryClient}>
       <Provider store={reduxStore}>
-        <MockedProvider mocks={[]} addTypename={false}>
-          <Timeline />
+        <MockedProvider mocks={schedulingMocks} addTypename={false}>
+          <Timeline barsOverride={barsOverride} />
         </MockedProvider>
       </Provider>
     </QueryClientProvider>
@@ -184,5 +183,42 @@ describe('Per-day scheduled hours on task bars (requirement 5)', () => {
     const segmentDates = segments.map((s) => s.dataset.date);
     expect(segmentDates).not.toContain('2026-09-12');
     expect(segmentDates).not.toContain('2026-09-13');
+  });
+
+  it('renders saved/discontinuous hours only: a leave-like mid-task zero stays empty', async () => {
+    renderTimeline({
+      't-root': {
+        start: '2026-09-07',
+        end: '2026-09-10',
+        hoursPerDay: { '2026-09-07': 8, '2026-09-09': 2 },
+      },
+    });
+    await screen.findByTestId('gantt-name-column');
+
+    const rootSegments = (await screen.findAllByTestId('task-day-segment'))
+      .filter((segment) => segment.dataset.taskId === 't-root');
+    expect(rootSegments.map((segment) => segment.dataset.date)).toEqual(['2026-09-07', '2026-09-09']);
+    expect(rootSegments.map((segment) => segment.textContent)).toEqual(['8h', '2h']);
+    expect(screen.queryByTestId('legacy-continuous-task-bar')).not.toBeInTheDocument();
+  });
+
+  it('keeps weekend gaps and does not fall back when an allocation is empty', async () => {
+    renderTimeline({
+      't-root': {
+        start: '2026-09-11',
+        end: '2026-09-14',
+        hoursPerDay: { '2026-09-11': 8, '2026-09-14': 2 },
+      },
+      't-child-a': { start: '2026-09-09', end: '2026-09-09', hoursPerDay: {} },
+    });
+    await screen.findByTestId('gantt-name-column');
+
+    const segments = await screen.findAllByTestId('task-day-segment');
+    const rootDates = segments.filter((segment) => segment.dataset.taskId === 't-root').map((segment) => segment.dataset.date);
+    expect(rootDates).toEqual(['2026-09-11']);
+    expect(rootDates).not.toContain('2026-09-12');
+    expect(rootDates).not.toContain('2026-09-13');
+    expect(segments.filter((segment) => segment.dataset.taskId === 't-child-a')).toHaveLength(0);
+    expect(screen.queryByTestId('legacy-continuous-task-bar')).not.toBeInTheDocument();
   });
 });

@@ -13,7 +13,7 @@
  * recalculated draft defaults to NEW_REVISION (append; old snapshot kept) —
  * SAME_REVISION requires an explicit user choice.
  */
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useApolloClient, useMutation, useQuery } from '@apollo/client';
 import {
   PLAN_RECALC_METADATA_QUERY,
@@ -25,13 +25,15 @@ import {
   draftFromCurrentTasks,
   draftFromSavedPlanTasks,
   parsePlanSnapshot,
+  reorderPlanSnapshot,
   snapshotToBars,
   type PlanBar,
   type PlanDraft,
   type PlanSnapshot,
   type PlanSchedulingInputs,
 } from '@/utils/planLifecycle';
-import type { TaskAllocation } from '@/utils/taskAllocations';
+import { fmt, type TaskAllocation } from '@/utils/taskAllocations';
+import { DELETE_PLAN, SET_PLAN_ACTIVE } from '@/graphql/mutations/plans';
 
 export interface SavedPlanPayload {
   plan_id: string;
@@ -74,7 +76,12 @@ export interface UsePlanLifecycleResult {
   recalculate: () => Promise<void>;
   loadPlan: (planId: string) => Promise<void>;
   savePlan: (name: string, revisionMode: 'NEW_REVISION' | 'SAME_REVISION') => Promise<SavedPlanPayload | null>;
+  /** Reorders the current draft only; saved snapshots are never mutated. */
+  reorderDraft: (taskIds: readonly string[]) => void;
   backToLive: () => void;
+  deletePlan: () => Promise<void>;
+  setActivePlan: () => Promise<void>;
+  calculationsUnavailable?: string;
 }
 
 export function usePlanLifecycle(
@@ -91,6 +98,23 @@ export function usePlanLifecycle(
   const [loadedSnapshot, setLoadedSnapshot] = useState<PlanSnapshot | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
+  const projectIdRef = useRef(projectId);
+  projectIdRef.current = projectId;
+
+  useEffect(() => {
+    requestIdRef.current += 1;
+    setMode('live');
+    setDraft(null);
+    setDraftSource(null);
+    setBasePlanId(null);
+    setLoadedPlan(null);
+    setSavedBars({});
+    setLoadedSnapshot(null);
+    setError(null);
+    setSaving(false);
+    return () => { requestIdRef.current += 1; };
+  }, [projectId]);
 
   const plansQ = useQuery(SAVED_PLANS_QUERY, {
     variables: { project_id: projectId },
@@ -103,16 +127,38 @@ export function usePlanLifecycle(
   const schedRef = useRef(scheduling);
   schedRef.current = scheduling;
 
-  const newPlan = useCallback(() => {
+  // Every user intent invalidates every older completion (including failures/finally).
+  const beginIntent = useCallback(() => {
+    const requestId = ++requestIdRef.current;
+    const requestedProject = projectIdRef.current;
     setError(null);
-    const d = draftFromCurrentTasks(schedRef.current);
-    setDraft(d);
-    setDraftSource('new-plan');
-    setBasePlanId(null);
-    setMode('draft');
+    setSaving(false);
+    return () => requestId === requestIdRef.current && requestedProject === projectIdRef.current;
   }, []);
 
+  const newPlan = useCallback(() => {
+    beginIntent();
+    try {
+      const d = draftFromCurrentTasks(schedRef.current);
+      setDraft(d);
+      setDraftSource('new-plan');
+      setBasePlanId(null);
+      setMode('draft');
+    } catch (e) { setError(e instanceof Error ? e.message : String(e)); }
+  }, [beginIntent]);
+
   const recalculate = useCallback(async () => {
+    const isCurrent = beginIntent();
+    if (schedRef.current.unavailableReason) { setError(schedRef.current.unavailableReason); return; }
+    if (mode !== 'saved') {
+      const d = mode === 'draft' && draft
+        ? draftFromSavedPlanTasks(draft.snapshot.tasks, schedRef.current)
+        : draftFromCurrentTasks({ ...schedRef.current, selectedTaskIds: undefined });
+      setDraft(d);
+      if (mode === 'live') { setDraftSource('new-plan'); setBasePlanId(null); }
+      setMode('draft');
+      return;
+    }
     if (!loadedSnapshot || !loadedPlan) {
       setError('Recalculate needs a loaded saved plan');
       return;
@@ -123,6 +169,8 @@ export function usePlanLifecycle(
         query: PLAN_RECALC_METADATA_QUERY,
         variables: { plan_id: loadedPlan.plan_id },
       });
+      if (!isCurrent()) return;
+      if (schedRef.current.unavailableReason) throw new Error(schedRef.current.unavailableReason);
       const metaTaskIds: string[] = meta.data?.plan_recalc_metadata?.task_ids ?? [];
       // Saved priority order (snapshot order) wins; metadata ids are the
       // authoritative filter (drops deleted tasks server-side).
@@ -134,20 +182,21 @@ export function usePlanLifecycle(
       setBasePlanId(loadedPlan.plan_id);
       setMode('draft');
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (isCurrent()) setError(e instanceof Error ? e.message : String(e));
     }
-  }, [client, loadedPlan, loadedSnapshot]);
+  }, [beginIntent, client, loadedPlan, loadedSnapshot, mode, draft]);
 
   const loadPlan = useCallback(
     async (planId: string) => {
-      setError(null);
+      const isCurrent = beginIntent();
       try {
         const res = await client.query({
           query: SAVED_PLAN_QUERY,
           variables: { plan_id: planId },
         });
+        if (!isCurrent()) return;
         const plan: SavedPlanPayload | null = res.data?.saved_plan ?? null;
-        if (!plan) throw new Error('plan not found');
+        if (!plan || plan.project_id !== projectId) throw new Error('plan not found in this project');
         const snap = parsePlanSnapshot(plan.plan_data);
         setLoadedPlan(plan);
         setLoadedSnapshot(snap);
@@ -157,14 +206,17 @@ export function usePlanLifecycle(
         setBasePlanId(plan.plan_id);
         setMode('saved');
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        if (isCurrent()) {
+          setError(e instanceof Error ? e.message : String(e));
+        }
       }
     },
-    [client]
+    [beginIntent, client, projectId]
   );
 
   const savePlan = useCallback(
     async (name: string, revisionMode: 'NEW_REVISION' | 'SAME_REVISION') => {
+      const isCurrent = beginIntent();
       if (!projectId) {
         setError('no project');
         return null;
@@ -191,8 +243,9 @@ export function usePlanLifecycle(
             },
           },
         });
+        if (!isCurrent()) return null;
         const saved: SavedPlanPayload | null = res.data?.save_plan_snapshot ?? null;
-        if (!saved) throw new Error('save returned no plan');
+        if (!saved || saved.project_id !== projectId) throw new Error('save returned no plan in this project');
         const snap = parsePlanSnapshot(saved.plan_data);
         setLoadedPlan(saved);
         setLoadedSnapshot(snap);
@@ -201,23 +254,46 @@ export function usePlanLifecycle(
         setDraftSource(null);
         setBasePlanId(saved.plan_id);
         setMode('saved');
-        void plansQ.refetch();
+        void plansQ.refetch().catch((e: Error) => { if (isCurrent()) setError(e.message); });
         return saved;
       } catch (e) {
-        setError(e instanceof Error ? e.message : String(e));
+        if (isCurrent()) setError(e instanceof Error ? e.message : String(e));
         return null;
       } finally {
-        setSaving(false);
+        if (isCurrent()) setSaving(false);
       }
     },
-    [basePlanId, draft, draftSource, projectId, saveMutation, plansQ]
+    [beginIntent, basePlanId, draft, draftSource, projectId, saveMutation, plansQ]
   );
 
+  const reorderDraft = useCallback((taskIds: readonly string[]) => {
+    beginIntent();
+    setDraft((current) => current
+      ? { ...current, snapshot: reorderPlanSnapshot(current.snapshot, taskIds.filter(id => current.snapshot.tasks.some(task => task.taskId === id))) }
+      : current);
+  }, [beginIntent]);
+
   const backToLive = useCallback(() => {
+    beginIntent();
     setMode('live');
     setDraft(null);
     setDraftSource(null);
-  }, []);
+    setBasePlanId(null);
+  }, [beginIntent]);
+
+  const mutateDisplayedPlan = useCallback(async (remove: boolean) => {
+    const isCurrent = beginIntent();
+    if (mode !== 'saved' || !loadedPlan) { setError('Select a saved plan first'); return; }
+    try {
+      const res = await client.mutate({ mutation: remove ? DELETE_PLAN : SET_PLAN_ACTIVE, variables: { id: loadedPlan.plan_id } });
+      if (!isCurrent()) return;
+      if (!(remove ? res.data?.deletePlan : res.data?.setPlanActive)) throw new Error('Plan mutation failed');
+      if (remove) {
+        setMode('live'); setLoadedPlan(null); setLoadedSnapshot(null); setSavedBars({}); setBasePlanId(null);
+      } else setLoadedPlan({ ...loadedPlan, is_active: true });
+      await plansQ.refetch();
+    } catch (e) { if (isCurrent()) setError(e instanceof Error ? e.message : String(e)); }
+  }, [beginIntent, client, loadedPlan, mode, plansQ]);
 
   const overrideBars = useMemo(() => {
     if (mode === 'saved' && loadedSnapshot) {
@@ -233,8 +309,8 @@ export function usePlanLifecycle(
         Object.entries(draft.allocations as Record<string, TaskAllocation>).map(([id, a]) => [
           id,
           {
-            start: a.start.toISOString().slice(0, 10),
-            end: a.end.toISOString().slice(0, 10),
+            start: fmt(a.start),
+            end: fmt(a.end),
             hoursPerDay: a.hoursPerDay,
           },
         ])
@@ -265,6 +341,10 @@ export function usePlanLifecycle(
     recalculate,
     loadPlan,
     savePlan,
+    reorderDraft,
     backToLive,
+    deletePlan: () => mutateDisplayedPlan(true),
+    setActivePlan: () => mutateDisplayedPlan(false),
+    calculationsUnavailable: scheduling.unavailableReason,
   };
 }

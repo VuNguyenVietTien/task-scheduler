@@ -18,34 +18,34 @@
  */
 'use client';
 
-import { useMemo, useState } from 'react';
-import { usePlanLifecycle } from '@/hooks/usePlanLifecycle';
-import type { PlanSchedulingInputs } from '@/utils/planLifecycle';
+import { useEffect, useMemo, useState } from 'react';
+import type { UsePlanLifecycleResult } from '@/hooks/usePlanLifecycle';
 
 export interface PlanLifecycleBarProps {
-  projectId: string | undefined;
-  scheduling: PlanSchedulingInputs;
+  /** Lifecycle state is owned by Timeline so its override drives bars and resources. */
+  lifecycle: UsePlanLifecycleResult;
   /** Recurring-commitment rule ids whose expansion was truncated. */
   truncatedCommitmentRules: Set<string>;
 }
 
 export function PlanLifecycleBar({
-  projectId,
-  scheduling,
+  lifecycle: lc,
   truncatedCommitmentRules,
 }: PlanLifecycleBarProps) {
-  const lc = usePlanLifecycle(projectId, scheduling);
   const [name, setName] = useState('');
   const [revisionChoice, setRevisionChoice] = useState<'NEW_REVISION' | 'SAME_REVISION'>(
     'NEW_REVISION'
   );
   const [showRevisionChoice, setShowRevisionChoice] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  useEffect(() => { setDeleteTarget(null); setShowRevisionChoice(false); setRevisionChoice('NEW_REVISION'); }, [lc.mode, lc.loadedPlan?.plan_id, lc.draft]);
 
   const unscheduledSaved = useMemo(
     () => Object.values(lc.savedBars).filter((b) => b.unscheduled).length,
     [lc.savedBars]
   );
+  const legacyHoursMissing = lc.loadedSnapshot?.meta.legacyHoursMissing === true;
 
   const handleSave = () => {
     if (lc.draftSource === 'recalculate') {
@@ -71,6 +71,7 @@ export function PlanLifecycleBar({
         type="button"
         data-testid="new-plan-btn"
         onClick={lc.newPlan}
+        disabled={Boolean(lc.calculationsUnavailable)}
         className="px-2 py-1 rounded bg-blue-100 hover:bg-blue-200"
         title="Build a draft from current tasks + current config (nothing is saved yet)"
       >
@@ -137,7 +138,7 @@ export function PlanLifecycleBar({
 
       <select
         data-testid="plan-select"
-        value={lc.loadedPlan?.plan_id ?? ''}
+        value={lc.mode === 'saved' ? lc.loadedPlan?.plan_id ?? '' : ''}
         onChange={(e) => {
           if (!e.target.value) {
             lc.backToLive();
@@ -157,6 +158,22 @@ export function PlanLifecycleBar({
         ))}
       </select>
 
+      {lc.mode === 'saved' && (
+        <span data-testid="saved-order-guidance" className="text-xs text-slate-500">
+          Saved order is immutable. Recalculate to edit a draft.
+        </span>
+      )}
+      <button type="button" data-testid="recalculate-btn" onClick={() => void lc.recalculate()} disabled={Boolean(lc.calculationsUnavailable)}
+        className="px-2 py-1 rounded bg-blue-100 hover:bg-blue-200" title="Rebuild the displayed plan with current capacity as a draft">Recalculate</button>
+      {lc.calculationsUnavailable && <span role="status">{lc.calculationsUnavailable}</span>}
+      {lc.mode === 'saved' && lc.loadedPlan && <>
+        <button type="button" data-testid="set-active-plan-btn" disabled={lc.loadedPlan.is_active} onClick={() => void lc.setActivePlan()}>Set active plan</button>
+        <button type="button" data-testid="delete-plan-btn" onClick={() => setDeleteTarget(lc.loadedPlan!.plan_id)}>Delete plan</button>
+        {deleteTarget === lc.loadedPlan.plan_id && <span data-testid="delete-plan-confirm">Delete {lc.loadedPlan.name}?
+          <button type="button" data-testid="confirm-delete-plan-btn" onClick={() => { setDeleteTarget(null); void lc.deletePlan(); }}>Confirm delete</button>
+          <button type="button" onClick={() => setDeleteTarget(null)}>Cancel</button>
+        </span>}
+      </>}
       {lc.mode === 'saved' && lc.loadedPlan?.stale && (
         <span className="flex items-center gap-1">
           <span
@@ -165,27 +182,7 @@ export function PlanLifecycleBar({
           >
             Stale — config changed since save
           </span>
-          <button
-            type="button"
-            data-testid="recalculate-btn"
-            onClick={() => void lc.recalculate()}
-            className="px-2 py-1 rounded bg-blue-100 hover:bg-blue-200"
-            title="Rebuild a draft from THIS plan's tasks with CURRENT capacity/leave/groups/meetings"
-          >
-            Recalculate
-          </button>
         </span>
-      )}
-      {lc.mode === 'saved' && !lc.loadedPlan?.stale && lc.loadedPlan && (
-        <button
-          type="button"
-          data-testid="recalculate-btn"
-          onClick={() => void lc.recalculate()}
-          className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200"
-          title="Rebuild a draft from this plan's tasks with current config"
-        >
-          Recalculate
-        </button>
       )}
       {lc.mode === 'saved' && lc.loadedPlan?.stale_reasons?.length ? (
         <ul data-testid="stale-reasons" className="text-xs text-amber-700 list-disc ml-4">
@@ -204,7 +201,12 @@ export function PlanLifecycleBar({
           ⚠ {lc.exhaustedTaskIds.length} task(s) unschedulable with current capacity
         </span>
       )}
-      {lc.mode === 'saved' && unscheduledSaved > 0 && (
+      {lc.mode === 'saved' && legacyHoursMissing && (
+        <span data-testid="legacy-hours-warning" className="px-2 py-0.5 rounded bg-amber-100 text-amber-800">
+          ⚠ Legacy plan has no daily allocation vectors; totals are incomplete. Recalculate to create a v2 revision.
+        </span>
+      )}
+      {lc.mode === 'saved' && unscheduledSaved > 0 && !legacyHoursMissing && (
         <span data-testid="unscheduled-warning" className="px-2 py-0.5 rounded bg-red-100 text-red-800">
           ⚠ {unscheduledSaved} task(s) had zero capacity when this plan was saved
         </span>

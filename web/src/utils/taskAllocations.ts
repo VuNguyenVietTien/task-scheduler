@@ -40,6 +40,12 @@ export interface TaskAllocation {
   hoursPerDay: Record<string, number>;
 }
 
+/** Positive work, not the requested span, owns rendered date bounds. */
+export function positiveWorkBounds(hoursPerDay: Record<string, number>): { start: string; end: string } | null {
+  const dates = Object.keys(hoursPerDay).filter(date => Number.isFinite(hoursPerDay[date]) && hoursPerDay[date] > 0).sort();
+  return dates.length ? { start: dates[0], end: dates[dates.length - 1] } : null;
+}
+
 export function pad(n: number): string {
   return String(n).padStart(2, '0');
 }
@@ -81,10 +87,12 @@ export function computeTaskAllocations(
   const allocations: Record<string, TaskAllocation> = {};
   const exhaustedTaskIds: string[] = [];
   const schedules: Record<string, WorkSchedule> = {};
+  const seenTaskIds = new Set<string>();
 
   for (const task of orderedTasks) {
     const taskId = task.task_id || task.id;
-    if (!taskId) continue;
+    if (!taskId || seenTaskIds.has(taskId)) continue;
+    seenTaskIds.add(taskId);
     if (task.status === 'DONE' || task.status === 'CLOSE') continue;
     // R5: a direct resource-member assignment is the stable scheduling key
     // (survives user linking); fall back to userId→member mapping.
@@ -126,7 +134,9 @@ export function computeTaskAllocations(
       exhaustedTaskIds.push(taskId);
     }
     schedules[memberKey] = updatedSchedule;
-    allocations[taskId] = { start, end: endDate, hoursPerDay };
+    const bounds = positiveWorkBounds(hoursPerDay);
+    allocations[taskId] = { start: bounds ? new Date(`${bounds.start}T00:00:00`) : start,
+      end: bounds ? new Date(`${bounds.end}T00:00:00`) : endDate, hoursPerDay };
   }
   return { allocations, exhaustedTaskIds };
 }

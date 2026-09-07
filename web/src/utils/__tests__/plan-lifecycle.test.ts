@@ -15,6 +15,7 @@ import {
   draftFromSavedPlanTasks,
   isSnapshotStale,
   parsePlanSnapshot,
+  reorderPlanSnapshot,
   savedBarsAreViewportIndependent,
   snapshotToBars,
   type PlanSnapshot,
@@ -165,10 +166,63 @@ describe('Save/load: snapshot stability + viewport independence', () => {
     expect(Object.keys(snapshotToBars(dup))).toEqual(['t1']);
   });
 
-  it('parsePlanSnapshot rejects junk payloads loudly', () => {
-    expect(() => parsePlanSnapshot({ tasks: [] })).toThrow();
+  it('parsePlanSnapshot accepts empty plans but rejects corrupt hours, dates, and duplicate ids', () => {
+    expect(parsePlanSnapshot({ version: 2, tasks: [], meta: {} }).tasks).toEqual([]);
     expect(() => parsePlanSnapshot({ tasks: [{ startDate: 'x' }] })).toThrow();
     expect(() => parsePlanSnapshot('not json')).toThrow(); // string payloads are JSON.parse'd
+    expect(() => parsePlanSnapshot({
+      version: 2,
+      meta: {},
+      tasks: [
+        { taskId: 't1', startDate: '2026-09-07', endDate: '2026-09-07', hoursPerDay: {}, priorityOrder: 1 },
+        { taskId: 't1', startDate: '2026-09-07', endDate: '2026-09-07', hoursPerDay: {}, priorityOrder: 2 },
+      ],
+    })).toThrow();
+    expect(() => parsePlanSnapshot({
+      version: 2, meta: {}, tasks: [
+        { taskId: 't1', startDate: '2026-02-30', endDate: '2026-02-30', hoursPerDay: {}, priorityOrder: 1 },
+      ],
+    })).toThrow();
+  });
+
+  it('adapts legacy camelCase rows without inventing daily hours', () => {
+    const legacy = parsePlanSnapshot({
+      tasks: [{
+        taskId: 'legacy-1', startDate: '2026-09-07', endDate: '2026-09-08',
+        priorityOrder: 4, assigneeId: 'u-legacy', title: 'Legacy task',
+      }],
+    });
+    expect(legacy.tasks[0]).toMatchObject({
+      taskId: 'legacy-1', startDate: '2026-09-07', endDate: '2026-09-08',
+      priorityOrder: 4, assigneeUserId: 'u-legacy', hoursPerDay: {},
+    });
+    expect(legacy.meta.legacyHoursMissing).toBe(true);
+  });
+
+  it('rejects invalid optional snapshot identity metadata', () => {
+    expect(() => parsePlanSnapshot({
+      version: 2, meta: {}, tasks: [{
+        taskId: 't1', startDate: '2026-09-07', endDate: '2026-09-07',
+        hoursPerDay: { '2026-09-07': 1 }, priorityOrder: 1,
+        assigneeResourceMemberId: 42,
+      }],
+    })).toThrow();
+  });
+
+  it('reorders a draft snapshot locally without changing its allocations or source snapshot', () => {
+    const source: PlanSnapshot = {
+      version: 2,
+      meta: { savedAt: '2026-09-07T00:00:00Z' },
+      tasks: [
+        { taskId: 'a', startDate: '2026-09-07', endDate: '2026-09-07', hoursPerDay: { '2026-09-07': 8 }, priorityOrder: 1 },
+        { taskId: 'b', startDate: '2026-09-08', endDate: '2026-09-08', hoursPerDay: { '2026-09-08': 4 }, priorityOrder: 2 },
+      ],
+    };
+    const ordered = reorderPlanSnapshot(source, ['b', 'a']);
+    expect(ordered.tasks.map((task) => [task.taskId, task.priorityOrder])).toEqual([['b', 1], ['a', 2]]);
+    expect(ordered.tasks[0].hoursPerDay).toEqual({ '2026-09-08': 4 });
+    expect(source.tasks.map((task) => task.taskId)).toEqual(['a', 'b']);
+    expect(reorderPlanSnapshot(source, ['a'])).toBe(source);
   });
 });
 

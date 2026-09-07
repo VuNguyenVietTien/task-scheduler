@@ -10,8 +10,8 @@
  *    recurring commitments applying to that member (group-scoped rules apply
  *    only to group members; project rules to everyone)
  *
- * Falls back to defaults (8h weekday / 0h weekend, no reservations) when the
- * backend does not expose the new queries yet, so the Gantt keeps working.
+ * Defaults apply only to confirmed absent config rows. Loading, failed or
+ * incomplete query results must not authorize draft calculations.
  */
 import { useMemo } from 'react';
 import { useQuery } from '@apollo/client';
@@ -35,8 +35,19 @@ import {
   type RecurringCommitment,
 } from '@/utils/recurring';
 
+export interface SchedulingResourceMember {
+  resource_member_id: string;
+  display_name: string;
+  user_id: string | null;
+  member_kind: string;
+}
+
 export interface SchedulingConfig {
   loading: boolean;
+  /** Scheduling reads failed; callers must not present defaults as loaded data. */
+  error?: string;
+  /** Canonical project resources, including unlinked zero-allocation members. */
+  resourceMembers: SchedulingResourceMember[];
   /** resource member id -> group ids */
   memberGroups: Record<string, string[]>;
   /** resource member id -> capacity config */
@@ -132,7 +143,7 @@ export function useProjectSchedulingConfig(projectId: string | undefined): Sched
     const commitmentRows: CommitmentRow[] =
       commitmentsQ.data?.recurring_commitments ?? [];
 
-    const memberRows: { resource_member_id: string; user_id: string | null }[] =
+    const memberRows: SchedulingResourceMember[] =
       membersQ.data?.resource_members ?? [];
     // userId → resource_member_id (linked placeholders resolve to the row
     // that carries their capacity/leave/groups; R2/R3 key mapping).
@@ -224,7 +235,12 @@ export function useProjectSchedulingConfig(projectId: string | undefined): Sched
     };
 
     return {
-      loading: capacityQ.loading || groupsQ.loading || commitmentsQ.loading,
+      loading: capacityQ.loading || groupsQ.loading || commitmentsQ.loading || membersQ.loading,
+      error: capacityQ.error?.message || groupsQ.error?.message || commitmentsQ.error?.message || membersQ.error?.message ||
+        (![capacityQ.data?.capacity_settings, capacityQ.data?.day_offs, groupsQ.data?.resource_groups,
+          commitmentsQ.data?.recurring_commitments, membersQ.data?.resource_members].every(Array.isArray)
+          ? 'Scheduling data is incomplete or unavailable' : undefined),
+      resourceMembers: memberRows,
       memberGroups,
       memberCapacity,
       defaultCapacity: DEFAULT_CAPACITY,
@@ -238,5 +254,5 @@ export function useProjectSchedulingConfig(projectId: string | undefined): Sched
       memberKeyFor,
       truncatedCommitmentRules,
     };
-  }, [capacityQ.data, groupsQ.data, commitmentsQ.data, membersQ.data]);
+  }, [capacityQ.data, capacityQ.loading, capacityQ.error, groupsQ.data, groupsQ.loading, groupsQ.error, commitmentsQ.data, commitmentsQ.loading, commitmentsQ.error, membersQ.data, membersQ.loading, membersQ.error]);
 }

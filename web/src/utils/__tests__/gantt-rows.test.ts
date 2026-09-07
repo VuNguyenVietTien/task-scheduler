@@ -3,7 +3,11 @@
  * deep trees, orphans (missing/filtered parent), parent_id CYCLES, and
  * DUPLICATE entries must yield a finite, deduplicated row list.
  */
-import { buildGanttTaskRows } from '@/utils/ganttRows';
+import {
+  buildGanttTaskRows,
+  reorderGanttSiblingTaskIds,
+  sortGanttSiblingTaskIds,
+} from '@/utils/ganttRows';
 
 const t = (task_id: string, parent_task_id?: string) => ({ task_id, parent_task_id: parent_task_id ?? null });
 
@@ -49,5 +53,38 @@ describe('buildGanttTaskRows', () => {
   it('DUPLICATE entries emit exactly one row per task_id (first wins)', () => {
     const rows = buildGanttTaskRows([t('a'), t('a'), t('b', 'a'), t('b', 'a')]);
     expect(rows.map((r) => r.task.task_id)).toEqual(['a', 'b']);
+  });
+
+  it('moves a root subtree as a block while filtered sibling slots preserve hidden siblings', () => {
+    const tasks = [
+      t('hidden-root'), t('a'), t('a-child', 'a'), t('hidden-middle'), t('b'), t('b-child', 'b'),
+    ];
+    expect(reorderGanttSiblingTaskIds(tasks, 'b', 'a', new Set(['a', 'b'])))
+      .toEqual(['hidden-root', 'b', 'b-child', 'hidden-middle', 'a', 'a-child']);
+  });
+
+  it('rejects foreign-parent, context-only, missing, and orphan drops', () => {
+    const tasks = [t('root'), t('a', 'root'), t('b', 'root'), t('other'), t('child', 'other'), t('orphan', 'gone')];
+    const expected = tasks.map((task) => task.task_id);
+    const draggable = new Set(['a', 'b', 'child', 'orphan']);
+    expect(reorderGanttSiblingTaskIds(tasks, 'a', 'child', draggable)).toEqual(expected);
+    expect(reorderGanttSiblingTaskIds(tasks, 'root', 'a', draggable)).toEqual(expected);
+    expect(reorderGanttSiblingTaskIds(tasks, 'missing', 'a', draggable)).toEqual(expected);
+    expect(reorderGanttSiblingTaskIds(tasks, 'orphan', 'a', draggable)).toEqual(expected);
+  });
+
+  it('auto-sorts independently per sibling set with stable persisted ties and completed-last', () => {
+    const tasks = [
+      { ...t('root'), priority: 'LOW', status: 'TODO' },
+      { ...t('a', 'root'), priority: 'MEDIUM', status: 'TODO' },
+      { ...t('b', 'root'), priority: 'CRITICAL', status: 'TODO' },
+      { ...t('c', 'root'), priority: 'CRITICAL', status: 'TODO' },
+      { ...t('done', 'root'), priority: 'CRITICAL', status: 'DONE' },
+      { ...t('child-low', 'a'), priority: 'LOW', status: 'TODO' },
+      { ...t('child-high', 'a'), priority: 'HIGH', status: 'TODO' },
+    ];
+    expect(sortGanttSiblingTaskIds(tasks)).toEqual([
+      'root', 'b', 'c', 'a', 'child-high', 'child-low', 'done',
+    ]);
   });
 });
