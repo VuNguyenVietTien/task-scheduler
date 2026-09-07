@@ -40,13 +40,15 @@ import {
   type PhaseFilterValue,
 } from '@/components/projects/phase-controls';
 import { PhaseSettingsPanel } from '@/components/projects/PhaseSettingsPanel';
-import { TaskExcelGrid, type StagedEdit } from './TaskExcelGrid';
+import { TaskExcelGrid, type ExcelCatalogField, type StagedEdit } from './TaskExcelGrid';
 import { TaskCloneDialog } from './TaskCloneDialog';
 import { useMutation, useQuery } from '@apollo/client';
 import { CLONE_TASK_SUBTREE } from '@/graphql/mutations';
 import { TASK_TREE_ROWS } from '@/graphql/queries/tasks';
 import { RESOURCE_MEMBERS_QUERY } from '@/graphql/scheduling';
 import { toast } from 'sonner';
+import { useProjectCatalogs } from '@/hooks/useProjectCatalogs';
+import { resolveProjectCatalogLabel } from '@/utils/project-catalog';
 
 export interface CloneRecoveryState {
   kind: 'committed' | 'unknown' | 'reselect';
@@ -166,7 +168,7 @@ export function TaskListView({
   filters = {},
   setFilters
 }: TaskListViewProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const router = useRouter();
   const [filter, setFilter] = useState<TaskFilter>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'created_at', direction: 'desc' });
@@ -183,8 +185,9 @@ export function TaskListView({
   // Requirement 7: normal ↔ Excel (staged bulk edit) list mode toggle.
   const [listMode, setListMode] = useState<'normal' | 'excel'>('normal');
   const [excelOpened, setExcelOpened] = useState(false);
-  // Confirmed assignment patches bridge the independent flat query until it acknowledges them.
+  // Confirmed patches bridge the independent flat query until it acknowledges them.
   const [assignmentPatches, setAssignmentPatches] = useState<Record<string, Partial<Task>>>({});
+  const [excelPatches, setExcelPatches] = useState<Record<string, Partial<Task>>>({});
   const [treeRefreshError, setTreeRefreshError] = useState<string | null>(null);
   const [memberRefreshError, setMemberRefreshError] = useState<string | null>(null);
   const [memberRefreshing, setMemberRefreshing] = useState(false);
@@ -222,6 +225,24 @@ export function TaskListView({
   });
   const { phases, loading: phasesLoading, ensureDefaultPhases, createPhase, updatePhase, archivePhase, setTaskPhase } =
     useProjectTaxonomies(taxonomyProjectId);
+  const { items: progressCatalogItems } = useProjectCatalogs(taxonomyProjectId ?? undefined, 'PROGRESS_TYPE');
+  const { items: categoryCatalogItems } = useProjectCatalogs(taxonomyProjectId ?? undefined, 'CATEGORY');
+  const { items: taskTypeCatalogItems } = useProjectCatalogs(taxonomyProjectId ?? undefined, 'TASK_TYPE');
+  const catalogLocale = i18n?.resolvedLanguage || i18n?.language || 'en';
+  const catalogItemsById = useMemo(() => new Map(
+    [...progressCatalogItems, ...categoryCatalogItems, ...taskTypeCatalogItems]
+      .map((item) => [item.catalog_item_id, item])
+  ), [progressCatalogItems, categoryCatalogItems, taskTypeCatalogItems]);
+  const catalogLabel = useCallback((task: Task, field: ExcelCatalogField): string => {
+    const id = field === 'progress' ? task.progressCatalogItemId
+      : field === 'category' ? task.categoryCatalogItemId
+        : task.taskTypeCatalogItemId;
+    const fallback = field === 'progress' ? task.progress_type
+      : field === 'category' ? task.category
+        : task.type;
+    const item = id ? catalogItemsById.get(id) : undefined;
+    return item ? resolveProjectCatalogLabel(item, catalogLocale) : fallback ?? id ?? '';
+  }, [catalogItemsById, catalogLocale]);
   const [phaseFilter, setPhaseFilter] = useState<PhaseFilterValue>('ALL');
   const [showPhaseSettings, setShowPhaseSettings] = useState(false);
   
@@ -251,11 +272,8 @@ export function TaskListView({
   }, []);
   
   useEffect(() => {
-    // Chỉ cập nhật dữ liệu nếu không có chỉnh sửa đang diễn ra
-    if (!editingCell) {
     setTasks(initialTasks);
-    }
-  }, [initialTasks, editingCell]);
+  }, [initialTasks]);
 
   const applyCanonicalAssignment = useCallback((taskId: string, result: Partial<Task>) => {
     const updates: Partial<Task> = {
@@ -280,6 +298,13 @@ export function TaskListView({
       const acknowledged = Object.keys(current).filter((id) => rows.some((row) =>
         row.task_id === id && row.assignee_resource_member_id === current[id].assignee_resource_member_id &&
         row.assignee?.userId === current[id].assignee?.userId));
+      if (!acknowledged.length) return current;
+      const next = { ...current };
+      acknowledged.forEach((id) => delete next[id]);
+      return next;
+    });
+    setExcelPatches((current) => {
+      const acknowledged = Object.keys(current).filter((id) => rows.some((row) => row.task_id === id && row.effort === current[id].effort));
       if (!acknowledged.length) return current;
       const next = { ...current };
       acknowledged.forEach((id) => delete next[id]);
@@ -464,6 +489,13 @@ export function TaskListView({
       : sortedIncompleteTasks;
   }, [sortedIncompleteTasks, sortedCompletedTasks, showCompletedTasks]);
 
+  const applyEffortPatch = useCallback((taskId: string, effort: number | undefined) => {
+    const updates: Partial<Task> = { effort };
+    updateSingleTaskInState(taskId, updates);
+    dispatch(updateTaskLocally({ taskId, updates }));
+    setExcelPatches((current) => ({ ...current, [taskId]: updates }));
+  }, [dispatch, updateSingleTaskInState]);
+
   // Excel keeps the normal List's filtered roots, then projects every active
   // descendant from the flat arbitrary-depth query without changing normal List.
   const excelTasks = useMemo(() => {
@@ -482,7 +514,7 @@ export function TaskListView({
       }
       return rows
         .filter((row) => included.has(row.task_id))
-        .map((row) => ({ ...row, ...assignmentPatches[row.task_id], excelDepth: depths.get(row.task_id) ?? 0 }));
+        .map((row) => ({ ...row, ...excelPatches[row.task_id], ...assignmentPatches[row.task_id], excelDepth: depths.get(row.task_id) ?? 0 }));
     }
 
     const flattened: Array<Task & { excelDepth?: number }> = [];
@@ -495,7 +527,7 @@ export function TaskListView({
     };
     displayedTasks.forEach((task) => visit(task, 0));
     return flattened;
-  }, [displayedTasks, taskTreeRowsQ.data?.task_tree_rows, assignmentPatches]);
+  }, [displayedTasks, taskTreeRowsQ.data?.task_tree_rows, assignmentPatches, excelPatches]);
 
   // Function cập nhật task trực tiếp vào danh sách hiện tại
   const updateDisplayedTask = useCallback((taskId: string, updates: Partial<Task>) => {
@@ -744,10 +776,12 @@ export function TaskListView({
               </span>
             )}
           </td>
+          <td className="px-3 py-4 whitespace-nowrap">{catalogLabel(childTask, 'progress') || <span className="text-slate-400">-</span>}</td>
+          <td className="px-3 py-4 whitespace-nowrap">{catalogLabel(childTask, 'category') || <span className="text-slate-400">-</span>}</td>
           <td className="px-3 py-4 whitespace-nowrap">
-            {childTask.type ? (
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE_COLORS[childTask.type] || 'bg-gray-100 text-gray-800'}`}>
-                {childTask.type}
+            {catalogLabel(childTask, 'taskType') ? (
+              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE_COLORS[childTask.type ?? ''] || 'bg-gray-100 text-gray-800'}`}>
+                {catalogLabel(childTask, 'taskType')}
               </span>
             ) : (
               <span className="text-slate-400">-</span>
@@ -1212,7 +1246,19 @@ export function TaskListView({
     } else if (edit.field === 'priority') {
       await dispatch(updateTaskPriority({ taskId: edit.taskId, priority: edit.value as Priority })).unwrap();
     } else if (edit.field === 'effort') {
-      await dispatch(updateTaskEffort({ taskId: edit.taskId, effort: parseFloat(edit.value) || 0 })).unwrap();
+      const priorEffort = findTaskInTree(tasks, edit.taskId)?.effort;
+      try {
+        const result = await dispatch(updateTaskEffort({ taskId: edit.taskId, effort: Number(edit.value) })).unwrap() as { task?: Partial<Task> };
+        if (result.task?.task_id !== edit.taskId || typeof result.task.effort !== 'number') {
+          throw new Error('Effort update returned no complete task result.');
+        }
+        applyEffortPatch(edit.taskId, result.task.effort);
+      } catch (error) {
+        // The legacy thunk can merge an incomplete result before unwrap returns.
+        // Restore the known value; the grid keeps its staged edit and error.
+        applyEffortPatch(edit.taskId, priorEffort);
+        throw error;
+      }
     } else if (edit.field === 'due_date') {
       await dispatch(updateTaskDueDate({ taskId: edit.taskId, dueDate: edit.value })).unwrap();
     } else if (edit.field === 'assignee') {
@@ -1234,7 +1280,7 @@ export function TaskListView({
     } else {
       await updateTask(edit.taskId, { title: edit.value });
     }
-  }, [applyCanonicalAssignment, dispatch, updateTask, updateAssignee, assigneeOptions, memberMappingUnavailable, memberMappingError]);
+  }, [applyCanonicalAssignment, applyEffortPatch, dispatch, tasks, updateTask, updateAssignee, assigneeOptions, memberMappingUnavailable, memberMappingError]);
 
   const handleFilterChange = (newFilters: TaskFilter) => {
     if (setFilters) {
@@ -1321,29 +1367,22 @@ export function TaskListView({
         }
       } 
       else if (field === 'effort') {
-        const effort = parseFloat(editValue) || 0;
-        
-        // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
-        const originalTasks = [...tasks];
-        
-        // Optimistic update cho UI - Chỉ cập nhật task được chọn
-        updateSingleTaskInState(taskId, { effort });
-        
+        const effort = Number(editValue);
+        if (!Number.isFinite(effort) || effort < 0 || effort > 24 * 30) {
+          alert('Không thể cập nhật công sức: Invalid effort (non-negative hours)');
+          return;
+        }
         try {
-          // CÁCH MỚI: Sử dụng Redux dispatch
-          await dispatch(updateTaskEffort({ taskId, effort })).unwrap();
-          console.log(`Đã cập nhật công sức thành: ${effort} (qua Redux)`);
-          
-          /* CÁCH CŨ: Sử dụng hook mutation
-          const result = await updateEffort(taskId, effort);
-          console.log(`Đã cập nhật công sức thành: ${effort}`, result);
-          */
+          const result = await dispatch(updateTaskEffort({ taskId, effort })).unwrap() as { task?: Partial<Task> };
+          if (result.task?.task_id !== taskId || typeof result.task.effort !== 'number') {
+            throw new Error('Effort update returned no complete task result.');
+          }
+          applyEffortPatch(taskId, result.task.effort);
         } catch (error) {
           console.error('Lỗi khi gọi API cập nhật công sức:', error);
-          // Khôi phục trạng thái cũ nếu API call thất bại
-          setTasks(originalTasks);
+          applyEffortPatch(taskId, currentTask.effort);
           alert(`Không thể cập nhật công sức: ${error}`);
-          return; // Thoát sớm, không đóng chế độ chỉnh sửa
+          return; // Keep the editor and entered value after a failed save.
         }
       } 
       else if (field === 'assignee_id') {
@@ -1548,6 +1587,10 @@ export function TaskListView({
         <TaskExcelGrid
           tasks={excelTasks}
           assigneeLabel={assignmentLabel}
+          assigneeOptions={assigneeOptions}
+          assigneeValue={(task) => assigneeOptionForTask(task)?.key ?? ''}
+          catalogLabel={catalogLabel}
+          active={listMode === 'excel'}
           onSaveEdit={handleExcelSave}
           onCloneTask={handleCloneTask}
         />
@@ -1578,7 +1621,13 @@ export function TaskListView({
                 {t('tasks.colPriority')}
               </th>
               <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
-                {t('tasks.colType')}
+                {t('tasks.fields.progressType')}
+              </th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                {t('tasks.fields.category')}
+              </th>
+              <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
+                {t('tasks.fields.taskType')}
               </th>
               <th scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
                 {t('tasks.colAssignee')}
@@ -1739,10 +1788,12 @@ export function TaskListView({
                         </span>
                       )}
                     </td>
+                    <td className="px-3 py-4 whitespace-nowrap">{catalogLabel(task, 'progress') || <span className="text-slate-400">-</span>}</td>
+                    <td className="px-3 py-4 whitespace-nowrap">{catalogLabel(task, 'category') || <span className="text-slate-400">-</span>}</td>
                     <td className="px-3 py-4 whitespace-nowrap">
-                      {task.type ? (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE_COLORS[task.type] || 'bg-gray-100 text-gray-800'}`}>
-                          {task.type}
+                      {catalogLabel(task, 'taskType') ? (
+                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE_COLORS[task.type ?? ''] || 'bg-gray-100 text-gray-800'}`}>
+                          {catalogLabel(task, 'taskType')}
                         </span>
                       ) : (
                         <span className="text-slate-400">-</span>

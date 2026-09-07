@@ -5,11 +5,18 @@
  */
 import React from 'react';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 
 /** jsdom has no ClipboardEvent ctor with clipboardData — build one manually. */
 function pasteEvent(text: string) {
   const ev = new Event('paste', { bubbles: true, cancelable: true });
   Object.defineProperty(ev, 'clipboardData', { value: { getData: () => text } });
+  return ev;
+}
+
+function copyEvent(setData: jest.Mock) {
+  const ev = new Event('copy', { bubbles: true, cancelable: true });
+  Object.defineProperty(ev, 'clipboardData', { value: { setData } });
   return ev;
 }
 import '@testing-library/jest-dom';
@@ -39,6 +46,7 @@ describe('validateCellValue', () => {
     expect(validateCellValue('effort', 'abc').ok).toBe(false);
     expect(validateCellValue('effort', '-1').ok).toBe(false);
     expect(validateCellValue('status', 'WIP').ok).toBe(false);
+    expect(validateCellValue('status', 'CANCELLED').ok).toBe(false);
     expect(validateCellValue('priority', 'TOP').ok).toBe(false);
     expect(validateCellValue('due_date', '07/09/2026').ok).toBe(false);
   });
@@ -82,7 +90,7 @@ describe('TaskExcelGrid interactions', () => {
     expect(screen.getByTestId('excel-dirty-count').textContent).toBe('2 unsaved');
   });
 
-  it('Enter fill with invalid value reports errors and stages nothing', () => {
+  it('Enter fill rejects invalid enum and read-only catalog cells before staging', () => {
     renderGrid();
     fireEvent.mouseDown(screen.getByTestId('excel-cell-0-1')); // status col
     fireEvent.change(screen.getByTestId('excel-typing-input'), { target: { value: 'WIP' } });
@@ -91,6 +99,56 @@ describe('TaskExcelGrid interactions', () => {
     expect(screen.getByTestId('excel-errors')).toBeInTheDocument();
     expect(screen.queryByTestId('excel-dirty-count')).not.toBeInTheDocument();
     expect(screen.getByTestId('excel-cell-0-1').textContent).toBe('TODO');
+
+    fireEvent.mouseDown(screen.getByTestId('excel-cell-0-6'));
+    fireEvent.change(screen.getByTestId('excel-typing-input'), { target: { value: 'invented catalog' } });
+    fireEvent.keyDown(screen.getByTestId('excel-typing-input'), { key: 'Enter' });
+    expect(screen.getByTestId('excel-errors')).toHaveTextContent('Read-only column');
+    expect(screen.queryByTestId('excel-dirty-count')).not.toBeInTheDocument();
+  });
+
+  it('click restores the real keyboard target; Tab commits and advances; Escape discards typing', async () => {
+    const user = userEvent.setup();
+    renderGrid();
+    const outside = document.body.appendChild(document.createElement('button'));
+    outside.focus();
+
+    await user.click(screen.getByTestId('excel-cell-0-0'));
+    expect(document.activeElement).toBe(screen.getByTestId('excel-typing-input'));
+    await user.keyboard('Renamed{Tab}doing{Enter}draft{Escape}{Enter}');
+
+    expect(screen.getByTestId('excel-cell-0-0')).toHaveTextContent('Renamed');
+    expect(screen.getByTestId('excel-cell-0-1')).toHaveTextContent('DOING');
+    expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('2 unsaved');
+    outside.remove();
+  });
+
+  it('single-click Assignee opens canonical member choices and stages the selected unlinked member', async () => {
+    const user = userEvent.setup();
+    const onSaveEdit = jest.fn().mockResolvedValue(undefined);
+    render(<TaskExcelGrid
+      tasks={tasks}
+      onSaveEdit={onSaveEdit}
+      assigneeOptions={[{ key: 'resource:linked', label: 'Linked Member' }, { key: 'resource:unlinked', label: 'Unlinked Member' }]}
+    />);
+
+    await user.click(screen.getByTestId('excel-cell-0-5'));
+    const assignee = screen.getByRole('combobox', { name: 'Excel assignee' });
+    expect(assignee).toHaveTextContent('Linked Member');
+    expect(assignee).toHaveTextContent('Unlinked Member');
+    await user.selectOptions(assignee, 'resource:unlinked');
+    expect(screen.getByTestId('excel-cell-0-5')).toHaveTextContent('Unlinked Member');
+    fireEvent.click(screen.getByTestId('excel-save-btn'));
+    await waitFor(() => expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'assignee', value: 'resource:unlinked' }));
+  });
+
+  it('copies the selected rectangle as CRLF TSV from the focused cell input', () => {
+    renderGrid();
+    fireEvent.mouseDown(screen.getByTestId('excel-cell-0-0'));
+    fireEvent.mouseOver(screen.getByTestId('excel-cell-1-1'));
+    const setData = jest.fn();
+    fireEvent(screen.getByTestId('excel-typing-input'), copyEvent(setData));
+    expect(setData).toHaveBeenCalledWith('text/plain', 'Alpha\tTODO\r\nBeta\tTODO');
   });
 
   it('TSV paste stages a block anchored at the selected cell, clipping overflow', () => {
