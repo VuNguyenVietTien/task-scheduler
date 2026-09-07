@@ -51,6 +51,9 @@ pub struct Task {
     /// uncategorised. Same-project validity enforced by set_task_taxonomy.
     pub phase_id: Option<Uuid>,
     pub category_id: Option<Uuid>,
+    pub progress_catalog_item_id: Option<Uuid>,
+    pub category_catalog_item_id: Option<Uuid>,
+    pub task_type_catalog_item_id: Option<Uuid>,
     pub progress_type: Option<TaskProgressType>,
     pub tags: Option<JsonValue>,
     pub child_tasks: Option<Vec<Task>>,
@@ -246,6 +249,9 @@ pub struct CreateTaskInput {
     pub category: Option<String>,
     pub tags: Option<Vec<String>>,
     pub progress_type: Option<TaskProgressType>,
+    pub progress_catalog_item_id: Option<ID>,
+    pub category_catalog_item_id: Option<ID>,
+    pub task_type_catalog_item_id: Option<ID>,
 }
 
 #[derive(InputObject)]
@@ -271,6 +277,9 @@ pub struct UpdateTaskInput {
     pub category: Option<String>,
     pub tags: Option<Vec<String>>,
     pub progress_type: Option<TaskProgressType>,
+    pub progress_catalog_item_id: MaybeUndefined<ID>,
+    pub category_catalog_item_id: MaybeUndefined<ID>,
+    pub task_type_catalog_item_id: MaybeUndefined<ID>,
     pub is_deleted: Option<bool>,
 }
 

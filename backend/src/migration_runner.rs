@@ -406,7 +406,48 @@ const FP_V9_TABLES: &[&str] = &[
     "users",
     "wbs_groups",
 ];
+/// v9 plus project-local normal task catalogs. The old phase/category tables
+/// stay in the WBS domain; these tables are a separate current-task contract.
+const FP_V10_TABLES: &[&str] = &[
+    "activity_logs",
+    "attachments",
+    "bugs",
+    "comment_mentions",
+    "comments",
+    "external_import_runs",
+    "member_capacity_overrides",
+    "member_capacity_settings",
+    "member_days_off",
+    "notifications",
+    "plans",
+    "project_categories",
+    "project_category_translations",
+    "project_members",
+    "project_phase_translations",
+    "project_phases",
+    "project_task_catalog_items",
+    "project_task_catalog_labels",
+    "projects",
+    "recurring_commitments",
+    "report_tasks",
+    "reports",
+    "resource_group_members",
+    "resource_groups",
+    "resource_member_classifications",
+    "snapshots",
+    "tags",
+    "task_durations",
+    "task_snapshots",
+    "task_status_history",
+    "task_statuses",
+    "task_tags",
+    "tasks",
+    "timesheet_entries",
+    "users",
+    "wbs_groups",
+];
 const MEMBER_CONSOLIDATION_VERSION: i64 = 20_260_907_000_001;
+const PROJECT_TASK_CATALOG_VERSION: i64 = 20_260_907_000_002;
 
 /// Cumulative per version; order matches `BOOTSTRAP_ORDER` (dependency order).
 const VERSIONED_FINGERPRINTS: &[SchemaFingerprint] = &[
@@ -661,6 +702,28 @@ const VERSIONED_FINGERPRINTS: &[SchemaFingerprint] = &[
             ("task_status", "TODO"),
         ],
     },
+    SchemaFingerprint {
+        version: PROJECT_TASK_CATALOG_VERSION,
+        tables: FP_V10_TABLES,
+        columns: &[
+            ("project_members", "resource_member_id"),
+            ("project_members", "display_name"),
+            ("project_members", "member_kind"),
+            ("tasks", "assignee_resource_member_id"),
+            ("tasks", "progress_catalog_item_id"),
+            ("tasks", "category_catalog_item_id"),
+            ("tasks", "task_type_catalog_item_id"),
+            ("plans", "revision"),
+            ("plans", "config_fingerprint"),
+            ("plans", "parent_plan_id"),
+        ],
+        enum_values: &[
+            ("member_role", "manager"),
+            ("member_role", "leader"),
+            ("member_role", "guest"),
+            ("task_status", "TODO"),
+        ],
+    },
 ];
 
 /// Migration set a matched fingerprint certifies: the dependency prefix
@@ -767,7 +830,7 @@ async fn represented_version(conn: &mut PgConnection) -> Result<Option<usize>, s
                 continue 'outer;
             }
         }
-        if fingerprint.version == MEMBER_CONSOLIDATION_VERSION
+        if fingerprint.version >= MEMBER_CONSOLIDATION_VERSION
             && !canonical_member_relations(conn).await?
         {
             continue;
@@ -1120,7 +1183,7 @@ pub async fn probe_state(pool: &PgPool) -> Result<MigrationState, sqlx::Error> {
     if table_count != latest_tables.len() as i64 {
         return Ok(MigrationState::PartialSchema);
     }
-    if latest == MEMBER_CONSOLIDATION_VERSION {
+    if latest >= MEMBER_CONSOLIDATION_VERSION {
         let mut conn = pool.acquire().await?;
         if !canonical_member_relations(&mut *conn).await? {
             return Ok(MigrationState::PartialSchema);

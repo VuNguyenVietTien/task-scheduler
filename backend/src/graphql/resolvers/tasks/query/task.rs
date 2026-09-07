@@ -69,6 +69,9 @@ pub async fn task(ctx: &Context<'_>, task_id: ID) -> Result<Option<Task>> {
             parent_task_id: row.get("parent_task_id"),
             phase_id: row.get("phase_id"),
             category_id: row.get("category_id"),
+            progress_catalog_item_id: row.get("progress_catalog_item_id"),
+            category_catalog_item_id: row.get("category_catalog_item_id"),
+            task_type_catalog_item_id: row.get("task_type_catalog_item_id"),
             title: row.get("title"),
             description: row.get("description"),
             assignee: row
@@ -117,6 +120,9 @@ pub async fn task(ctx: &Context<'_>, task_id: ID) -> Result<Option<Task>> {
         parent_task_id: parent_task.get("parent_task_id"),
         phase_id: parent_task.get("phase_id"),
         category_id: parent_task.get("category_id"),
+        progress_catalog_item_id: parent_task.get("progress_catalog_item_id"),
+        category_catalog_item_id: parent_task.get("category_catalog_item_id"),
+        task_type_catalog_item_id: parent_task.get("task_type_catalog_item_id"),
         title: parent_task.get("title"),
         description: parent_task.get("description"),
         assignee: parent_task

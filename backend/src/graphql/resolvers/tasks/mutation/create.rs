@@ -8,7 +8,7 @@ use uuid::Uuid;
 use crate::auth::error::AuthError;
 use crate::domain::project_member_identity::{self, Field};
 use crate::graphql::context::Context as GraphQLContext;
-use crate::graphql::resolvers::project_authz;
+use crate::graphql::resolvers::{project_authz, project_catalogs};
 use crate::graphql::types::{Assignee, CreateTaskInput, Task};
 
 pub async fn create_task(
@@ -36,6 +36,17 @@ pub async fn create_task(
     let caller_id = Uuid::parse_str(&user_id)?;
     project_authz::require_project_write_tx(&mut tx, caller_id, project_id).await?;
     crate::domain::taxonomy::lock_project_hierarchy(&mut *tx, project_id).await?;
+    let classifications = project_catalogs::resolve_create_task_catalogs(
+        &mut tx,
+        project_id,
+        input.progress_catalog_item_id.as_ref().map(|id| Uuid::parse_str(&id.to_string())).transpose()?,
+        input.category_catalog_item_id.as_ref().map(|id| Uuid::parse_str(&id.to_string())).transpose()?,
+        input.task_type_catalog_item_id.as_ref().map(|id| Uuid::parse_str(&id.to_string())).transpose()?,
+        project_catalogs::progress_legacy(input.progress_type),
+        input.category.clone(),
+        input.type_.clone(),
+    ).await?;
+    let legacy_progress_type = project_catalogs::progress_type(classifications.progress_legacy.clone())?;
     let assignment = project_member_identity::normalize_task_assignment(
         &mut tx,
         project_id,
@@ -84,9 +95,10 @@ pub async fn create_task(
                 effort, progress, created_by,
                 created_at, updated_at, is_deleted,
                 assignee_id, actual_start_date, actual_end_date,
-                type, category, progress_type, tags, assignee_resource_member_id
+                type, category, progress_type, tags, assignee_resource_member_id,
+                progress_catalog_item_id, category_catalog_item_id, task_type_catalog_item_id
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24)
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27)
             RETURNING *
         )
         SELECT t.*,
@@ -122,11 +134,14 @@ pub async fn create_task(
     .bind(assignee_id)
     .bind(None::<DateTime<Utc>>)
     .bind(None::<DateTime<Utc>>)
-    .bind(input.type_)
-    .bind(input.category)
-    .bind(input.progress_type)
+    .bind(classifications.task_type_legacy)
+    .bind(classifications.category_legacy)
+    .bind(legacy_progress_type)
     .bind(tags_json)
     .bind(assignee_resource_member_id)
+    .bind(classifications.progress_id)
+    .bind(classifications.category_id)
+    .bind(classifications.task_type_id)
     .fetch_one(&mut *tx)
     .await
     .map_err(|e| {
@@ -143,6 +158,9 @@ pub async fn create_task(
         parent_task_id: created.get("parent_task_id"),
         phase_id: created.get("phase_id"),
         category_id: created.get("category_id"),
+        progress_catalog_item_id: created.get("progress_catalog_item_id"),
+        category_catalog_item_id: created.get("category_catalog_item_id"),
+        task_type_catalog_item_id: created.get("task_type_catalog_item_id"),
         title: created.get("title"),
         description: created.get("description"),
         assignee: created

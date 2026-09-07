@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::auth::error::AuthError;
 use crate::domain::project_member_identity::{self, Field};
 use crate::graphql::context::Context as GraphQLContext;
-use crate::graphql::resolvers::project_authz;
+use crate::graphql::resolvers::{project_authz, project_catalogs};
 use crate::graphql::types::{Assignee, Task, UpdateTaskInput};
 
 fn id_field(
@@ -29,19 +29,42 @@ pub async fn update_task(
     let task_id = Uuid::parse_str(&input.task_id.to_string())?;
     let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
 
-    let project_id: Uuid = sqlx::query_scalar(
-        "SELECT project_id FROM tasks WHERE task_id = $1 AND NOT COALESCE(is_deleted, false)",
+    let existing = sqlx::query(
+        "SELECT project_id, progress_catalog_item_id, category_catalog_item_id, \
+         task_type_catalog_item_id, progress_type::text AS progress_legacy, category, type \
+         FROM tasks WHERE task_id = $1 AND NOT COALESCE(is_deleted, false)",
     )
     .bind(task_id)
     .fetch_optional(&mut *tx)
     .await
     .map_err(AuthError::Database)?
     .ok_or_else(|| async_graphql::Error::new("Task not found"))?;
+    let project_id: Uuid = existing.get("project_id");
     project_authz::require_project_write_tx(&mut tx, caller_id, project_id).await?;
     crate::domain::taxonomy::lock_project_hierarchy(&mut *tx, project_id).await?;
     sqlx::query("SELECT task_id FROM tasks WHERE task_id = $1 AND project_id = $2 AND NOT COALESCE(is_deleted, false) FOR UPDATE")
         .bind(task_id).bind(project_id).fetch_optional(&mut *tx).await.map_err(AuthError::Database)?
         .ok_or_else(|| async_graphql::Error::new("Task not found"))?;
+
+    let classifications = project_catalogs::resolve_update_task_catalogs(
+        &mut tx,
+        project_id,
+        project_catalogs::task_catalog_id(&input.progress_catalog_item_id)?,
+        project_catalogs::task_catalog_id(&input.category_catalog_item_id)?,
+        project_catalogs::task_catalog_id(&input.task_type_catalog_item_id)?,
+        project_catalogs::progress_legacy(input.progress_type),
+        input.category.clone(),
+        input.type_.clone(),
+        project_catalogs::TaskCatalogState {
+            progress_id: existing.get("progress_catalog_item_id"),
+            category_id: existing.get("category_catalog_item_id"),
+            task_type_id: existing.get("task_type_catalog_item_id"),
+            progress_legacy: existing.get("progress_legacy"),
+            category_legacy: existing.get("category"),
+            task_type_legacy: existing.get("type"),
+        },
+    ).await?;
+    let legacy_progress_type = project_catalogs::progress_type(classifications.progress_legacy.clone())?;
 
     let assignment = project_member_identity::normalize_task_assignment(
         &mut tx,
@@ -85,14 +108,17 @@ pub async fn update_task(
                 actual_end_date = COALESCE($10, actual_end_date),
                 effort = COALESCE($11, effort),
                 progress = COALESCE($12, progress),
-                type = COALESCE($13, type),
-                category = COALESCE($14, category),
-                progress_type = COALESCE($15::task_progress_type, progress_type),
+                type = $13,
+                category = $14,
+                progress_type = $15::task_progress_type,
                 tags = COALESCE($16, tags),
                 is_deleted = COALESCE($17, is_deleted),
                 parent_task_id = CASE WHEN $18 THEN $19 ELSE parent_task_id END,
                 assignee_resource_member_id = CASE WHEN $20 THEN $21 ELSE assignee_resource_member_id END,
                 assignee_id = CASE WHEN $20 THEN $22 ELSE assignee_id END,
+                progress_catalog_item_id = $23,
+                category_catalog_item_id = $24,
+                task_type_catalog_item_id = $25,
                 updated_at = now()
             WHERE task_id = $1 RETURNING *
         )
@@ -117,9 +143,9 @@ pub async fn update_task(
     .bind(input.actual_end_date)
     .bind(input.effort)
     .bind(input.progress)
-    .bind(input.type_)
-    .bind(input.category)
-    .bind(input.progress_type)
+    .bind(classifications.task_type_legacy)
+    .bind(classifications.category_legacy)
+    .bind(legacy_progress_type)
     .bind(input.tags.as_ref().map(|tags| json!(tags)))
     .bind(input.is_deleted)
     .bind(parent_changed)
@@ -127,6 +153,9 @@ pub async fn update_task(
     .bind(assignment_changed)
     .bind(resource_member_id)
     .bind(assignee_id)
+    .bind(classifications.progress_id)
+    .bind(classifications.category_id)
+    .bind(classifications.task_type_id)
     .fetch_optional(&mut *tx)
     .await
     .map_err(AuthError::Database)?
@@ -139,6 +168,9 @@ pub async fn update_task(
         parent_task_id: row.get("parent_task_id"),
         phase_id: row.get("phase_id"),
         category_id: row.get("category_id"),
+        progress_catalog_item_id: row.get("progress_catalog_item_id"),
+        category_catalog_item_id: row.get("category_catalog_item_id"),
+        task_type_catalog_item_id: row.get("task_type_catalog_item_id"),
         title: row.get("title"),
         description: row.get("description"),
         assignee: row

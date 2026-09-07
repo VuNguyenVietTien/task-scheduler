@@ -109,6 +109,9 @@ pub async fn reorder_tasks(
             parent_task_id: updated_task.get("parent_task_id"),
             phase_id: updated_task.get("phase_id"),
             category_id: updated_task.get("category_id"),
+            progress_catalog_item_id: updated_task.get("progress_catalog_item_id"),
+            category_catalog_item_id: updated_task.get("category_catalog_item_id"),
+            task_type_catalog_item_id: updated_task.get("task_type_catalog_item_id"),
             title: updated_task.get("title"),
             description: updated_task.get("description"),
             assignee: updated_task

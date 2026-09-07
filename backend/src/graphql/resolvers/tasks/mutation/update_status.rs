@@ -83,6 +83,9 @@ pub async fn update_task_status(
         parent_task_id: updated.get("parent_task_id"),
         phase_id: updated.get("phase_id"),
         category_id: updated.get("category_id"),
+        progress_catalog_item_id: updated.get("progress_catalog_item_id"),
+        category_catalog_item_id: updated.get("category_catalog_item_id"),
+        task_type_catalog_item_id: updated.get("task_type_catalog_item_id"),
         title: updated.get("title"),
         description: updated.get("description"),
         assignee: updated

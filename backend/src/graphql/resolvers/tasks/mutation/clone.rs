@@ -28,6 +28,10 @@ struct SourceTask {
     priority: TaskPriority,
     task_type: Option<String>,
     category: Option<String>,
+    progress_type: Option<TaskProgressType>,
+    progress_catalog_item_id: Option<Uuid>,
+    category_catalog_item_id: Option<Uuid>,
+    task_type_catalog_item_id: Option<Uuid>,
     tags: Option<JsonValue>,
 }
 
@@ -122,7 +126,8 @@ pub async fn clone_task_subtree(
         SELECT t.task_id, t.project_id, t.parent_task_id, t.title, t.description,
                t.assignee_id, t.assignee_resource_member_id, t.priority_order,
                t.created_at, t.due_date, t.effort, t.priority, t.type AS task_type,
-               t.category, t.tags
+               t.category, t.progress_type, t.progress_catalog_item_id,
+               t.category_catalog_item_id, t.task_type_catalog_item_id, t.tags
         FROM tasks t
         JOIN source_tree st ON st.task_id = t.task_id
         FOR UPDATE OF t
@@ -311,11 +316,12 @@ pub async fn clone_task_subtree(
                     effort, progress, created_by, created_at, updated_at,
                     is_deleted, status, priority, type, category, tags,
                     progress_type, phase_id, category_id,
-                    source_system, external_id, source_metadata, wbs_group_id
+                    source_system, external_id, source_metadata, wbs_group_id,
+                    progress_catalog_item_id, category_catalog_item_id, task_type_catalog_item_id
                 ) VALUES (
                     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
                     $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23,
-                    $24, $25, $26, $27, $28, $29, $30
+                    $24, $25, $26, $27, $28, $29, $30, $31, $32, $33
                 )
                 "#,
             )
@@ -342,13 +348,16 @@ pub async fn clone_task_subtree(
             .bind(&source.task_type)
             .bind(&source.category)
             .bind(source.tags.clone().unwrap_or_else(|| json!([])))
-            .bind(None::<TaskProgressType>)
+            .bind(source.progress_type)
             .bind(None::<Uuid>)
             .bind(None::<Uuid>)
             .bind(None::<String>)
             .bind(None::<String>)
             .bind(None::<JsonValue>)
             .bind(None::<Uuid>)
+            .bind(source.progress_catalog_item_id)
+            .bind(source.category_catalog_item_id)
+            .bind(source.task_type_catalog_item_id)
             .execute(&mut *tx)
             .await
             .map_err(|_| clone_error("INTERNAL_SERVER_ERROR", "could not clone task tree"))?;

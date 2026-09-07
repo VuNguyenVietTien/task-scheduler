@@ -179,6 +179,7 @@ pub mod project_authz {
     }
 }
 mod plan_lifecycle;
+pub mod project_catalogs;
 mod tasks;
 
 pub use auth::AuthMutation;
@@ -190,6 +191,7 @@ pub use members::{MemberMutation, MemberQuery};
 pub use notifications::{NotificationMutation, NotificationQuery};
 pub use plan_lifecycle::{PlanLifecycleMutation, PlanLifecycleQuery};
 pub use plans::{PlanMutation, PlanQuery};
+pub use project_catalogs::{ProjectCatalogMutation, ProjectCatalogQuery};
 pub use project::{ProjectMutation, ProjectQuery};
 pub use project_member::{ProjectMemberMutation, ProjectMemberQuery};
 pub use scheduling::{SchedulingMutation, SchedulingQuery};

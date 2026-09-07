@@ -117,6 +117,12 @@ input CreatePlanInput {
 	plan_data: PlanDataInput!
 }
 
+input CreateProjectCatalogItemsInput {
+	project_id: ID!
+	kind: ProjectCatalogKind!
+	items: [ProjectCatalogItemDraftInput!]!
+}
+
 input CreateProjectInput {
 	name: String!
 	description: String
@@ -180,6 +186,9 @@ input CreateTaskInput {
 	category: String
 	tags: [String!]
 	progress_type: TaskProgressType
+	progress_catalog_item_id: ID
+	category_catalog_item_id: ID
+	task_type_catalog_item_id: ID
 }
 
 input CreateTermInput {
@@ -419,6 +428,9 @@ type Mutation {
 	project and be active; NULL explicitly means Unphased/uncategorised.
 	"""
 	set_task_taxonomy(task_id: ID!, phase_id: ID, category_id: ID): Boolean!
+	create_project_catalog_items(input: CreateProjectCatalogItemsInput!): [ProjectCatalogItem!]!
+	update_project_catalog_item(input: UpdateProjectCatalogItemInput!): ProjectCatalogItem!
+	reorder_project_catalog_items(input: ReorderProjectCatalogItemsInput!): [ProjectCatalogItem!]!
 	"""
 	Create a resource identity. With no user_id this is a PLACEHOLDER:
 	stable ID, required display name, optional email, no fabricated user.
@@ -604,6 +616,34 @@ type Project {
 	members: [ProjectMember!]!
 }
 
+type ProjectCatalogItem {
+	catalog_item_id: ID!
+	project_id: ID!
+	kind: ProjectCatalogKind!
+	display_order: Int!
+	labels: [ProjectCatalogLabel!]!
+}
+
+input ProjectCatalogItemDraftInput {
+	labels: [ProjectCatalogLabelInput!]!
+}
+
+enum ProjectCatalogKind {
+	PROGRESS_TYPE
+	CATEGORY
+	TASK_TYPE
+}
+
+type ProjectCatalogLabel {
+	locale: String!
+	name: String!
+}
+
+input ProjectCatalogLabelInput {
+	locale: String!
+	name: String!
+}
+
 type ProjectMember {
 	role: MemberRole!
 	joined_at: DateTime
@@ -726,6 +766,7 @@ type Query {
 	A project's phases in display order with all translations.
 	"""
 	project_phases(project_id: ID!, include_archived: Boolean): [ProjectPhaseType!]!
+	project_catalog_items(project_id: ID!, kind: ProjectCatalogKind!): [ProjectCatalogItem!]!
 	"""
 	A project's resource identities (optionally only concrete members).
 	"""
@@ -827,6 +868,13 @@ input RegisterInput {
 	email: String!
 	password: String!
 	username: String
+}
+
+input ReorderProjectCatalogItemsInput {
+	project_id: ID!
+	kind: ProjectCatalogKind!
+	ordered_catalog_item_ids: [ID!]!
+	expected_catalog_item_ids: [ID!]!
 }
 
 input ReorderTasksInput {
@@ -1011,6 +1059,9 @@ type Task {
 	"""
 	phase_id: UUID
 	category_id: UUID
+	progress_catalog_item_id: UUID
+	category_catalog_item_id: UUID
+	task_type_catalog_item_id: UUID
 	progress_type: TaskProgressType
 	tags: JSON
 	child_tasks: [Task!]
@@ -1108,6 +1159,11 @@ input UpdatePlanInput {
 	plan_data: PlanDataInput
 }
 
+input UpdateProjectCatalogItemInput {
+	catalog_item_id: ID!
+	labels: [ProjectCatalogLabelInput!]!
+}
+
 input UpdateTaskEffortInput {
 	task_id: ID!
 	effort: Float!
@@ -1133,6 +1189,9 @@ input UpdateTaskInput {
 	category: String
 	tags: [String!]
 	progress_type: TaskProgressType
+	progress_catalog_item_id: ID
+	category_catalog_item_id: ID
+	task_type_catalog_item_id: ID
 	is_deleted: Boolean
 }
 
