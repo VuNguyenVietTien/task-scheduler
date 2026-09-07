@@ -39,40 +39,17 @@ describe('W3: project creation consumes Rust project_id', () => {
   });
 });
 
-describe('W3: progress_type stays lowercase per Rust enum', () => {
-  it('buildCreateTaskInput sends the select value as-is (no toUpperCase)', () => {
-    const input = buildCreateTaskInput(
-      {
-        title: 't',
-        description: 'd',
-        status: 'TODO',
-        priority: 'HIGH',
-        startDate: null,
-        dueDate: null,
-        assignee: null,
-        effort: 0,
-        type: null,
-        category: null,
-        progressType: 'review_code',
-        tags: [],
-      } as any,
-      'proj-1'
-    );
-    expect(input.progress_type).toBe('review_code');
-    // BD-2: required CreateTaskInput.priority_order must always be present
-    expect(input.priority_order).toBe(0);
-    expect(buildCreateTaskInput({ progressType: 'code', priorityOrder: 3 } as any, 'p').priority_order).toBe(3);
-    const fs = require('fs');
-    const form = fs.readFileSync(
-      require('path').join(__dirname, '../../components/tasks/NewTaskForm.tsx'),
-      'utf8'
-    );
-    expect(form).not.toContain('progressType.toUpperCase()');
+describe('W3: task creation uses stable project catalog identity', () => {
+  it('buildCreateTaskInput sends the selected catalog ID without a legacy progress scalar', () => {
+    const input = buildCreateTaskInput({ progressCatalogItemId: 'catalog-id', priorityOrder: 3 } as any, 'p');
+    expect(input.progress_catalog_item_id).toBe('catalog-id');
+    expect(input).not.toHaveProperty('progress_type');
+    expect(input.priority_order).toBe(3);
   });
 
-  it('buildCreateTaskInput maps null progressType to null', () => {
-    const input = buildCreateTaskInput({ progressType: '' } as any, 'p');
-    expect(input.progress_type).toBeNull();
+  it('buildCreateTaskInput maps an empty catalog selection to null', () => {
+    const input = buildCreateTaskInput({ progressCatalogItemId: '' } as any, 'p');
+    expect(input.progress_catalog_item_id).toBeNull();
     expect(input.priority_order).toBe(0);
   });
 

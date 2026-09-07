@@ -91,7 +91,7 @@ export function useDashboardTasks(userId: string, role: string) {
           assignee: row.assignee ? { user_id: row.assignee.user_id, username: row.assignee.username ?? '' } : null,
         });
       }
-      const tasks = [...distinct.values()].filter(task => isPM || task.assignee?.user_id === userId);
+      const tasks = Array.from(distinct.values()).filter(task => isPM || task.assignee?.user_id === userId);
       if (requestId.current === currentRequest) setState({ tasks, loading: false });
     } catch (error) {
       if (requestId.current === currentRequest) {
