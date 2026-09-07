@@ -91,9 +91,19 @@ Do not commit secret values. The server-side Firebase verifier can validate Goog
 
 ## Release artifact assembly
 
-- Build release artifacts from a committed Git archive, not from implicit working-tree line-ending conversion.
-- Keep `backend/migrations/*.sql` as LF through the repository `.gitattributes`; verify archived historical migration bytes against deployed SQLx checksums before building.
+- Build release artifacts from a committed Git archive using `git -c core.autocrlf=false archive`, not from implicit working-tree conversion.
+- Keep `backend/migrations/*.sql` as LF through `.gitattributes`; verify all historical archived migrations against deployed SQLx checksums and verify the new migration independently before building.
 - Include the committed `backend/Cargo.lock` that matches `backend/Cargo.toml`, and use `cargo build --locked`. Do not regenerate or upgrade dependencies during release assembly.
+
+## Canonical member migration gate
+
+`backend/migrations/20260907000001_consolidate_project_members.sql` is forward-only and fail-closed. Before applying it:
+
+1. stop or gate application writes and take a restorable database backup;
+2. verify the committed archive, migration checksum, lock file, and tested backend source identity;
+3. run the migration with the repository runner, then require local and public readiness before serving traffic.
+
+Starting the previous image does not reverse this schema change. Database rollback requires restoring the pre-migration backup; that discards or separately reconciles writes made after the backup. Keep the prior image, release files, backup, and exact runtime/network configuration until the new release is accepted. Do not record this release as deployed until those operational checks and browser acceptance complete.
 
 ## Health checks
 

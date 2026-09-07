@@ -123,6 +123,14 @@ The ProjectManager system is transitioning from a distributed microservice archi
     - Field mapping editor
     - External link manager
 
+### Canonical project planning contracts
+
+- Project membership has one writable base table, `project_members`; `resource_members` is a compatibility view. The migration is owned by `backend/migrations/20260907000001_consolidate_project_members.sql`.
+- Account linking and project access are separate decisions: linking preserves the stable resource handle and assignments but grants no access role. See the member mutations under `backend/src/graphql/resolvers/resource_members/` and the management surface in `web/src/components/projects/SchedulingConfigPanel.tsx`.
+- Tasks use one self-referential table. `parent_task_id` defines every descendant depth; the all-depth frontend owner is `web/src/redux/features/tasksSlice.ts`. List and report totals count distinct descendants, while root pagination is labelled as root-only.
+- Excel hierarchy and selective clone behavior are owned by `web/src/components/tasks/TaskExcelGrid.tsx`, `TaskCloneDialog.tsx`, and `web/src/utils/cloneTask.ts`. Each requested copy is a separate tree containing the selected ancestor-closed descendants.
+- Gantt labels, daily bars, and the member matrix consume the selected live/draft/saved plan allocation vectors. Navigation: `web/src/components/timeline/Timeline.tsx`, `MemberDailyEffortMatrix.tsx`, and `web/src/utils/taskAllocations.ts`.
+
 ## Communication Patterns
 
 ### Inter-Service Communication
