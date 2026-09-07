@@ -6,11 +6,13 @@ import { TaskListView } from '../TaskListView';
 import tasksReducer, { fetchProjectTasks } from '../../../redux/features/tasksSlice';
 import type { Task } from '@/types/task';
 
+const { client } = require('@/lib/apollo-client');
 const updateAssignee = jest.fn();
 const useQuery = jest.fn();
+let mockLocale = 'en';
 
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
-jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
+jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: mockLocale, resolvedLanguage: mockLocale } }) }));
 jest.mock('../../../contexts/AuthContext', () => ({ useAuth: () => ({ user: null }) }));
 jest.mock('@/hooks/useTaskFieldMutations', () => ({
   useUpdateTaskStatus: () => ({ updateStatus: jest.fn(), isUpdating: false }),
@@ -64,11 +66,17 @@ const membersReducer = (state = { members: [] }) => state;
 const parent: Task = {
   task_id: 'parent', project_id: 'project-1', title: 'Parent task', description: 'keep parent description',
   assignee_resource_member_id: 'linked-member', assignee: { userId: 'linked-user', username: 'Linked Member' },
-  priority_order: 1, status: 'TODO', priority: 'MEDIUM', created_by: 'owner', child_tasks: [],
+  progressCatalogItemId: 'progress-create', categoryCatalogItemId: 'category-ui', taskTypeCatalogItemId: 'type-feature',
+  priority_order: 1, status: 'TODO', priority: 'MEDIUM', effort: 8, created_by: 'owner', child_tasks: [],
 };
+const catalogItems = [
+  { catalog_item_id: 'progress-create', project_id: 'project-1', kind: 'PROGRESS_TYPE', display_order: 0, labels: [{ locale: 'en', name: 'Create' }, { locale: 'ja', name: '作成' }, { locale: 'vi', name: 'Tạo' }] },
+  { catalog_item_id: 'category-ui', project_id: 'project-1', kind: 'CATEGORY', display_order: 0, labels: [{ locale: 'en', name: 'UI' }, { locale: 'ja', name: 'UI日本語' }, { locale: 'vi', name: 'Giao diện' }] },
+  { catalog_item_id: 'type-feature', project_id: 'project-1', kind: 'TASK_TYPE', display_order: 0, labels: [{ locale: 'en', name: 'Feature' }, { locale: 'ja', name: '機能' }, { locale: 'vi', name: 'Tính năng' }] },
+];
 const child: Task = {
   task_id: 'child', project_id: 'project-1', parent_task_id: 'parent', title: 'Deep child', description: 'keep child description',
-  priority_order: 2, status: 'TODO', priority: 'MEDIUM', created_by: 'owner', child_tasks: [],
+  priority_order: 2, status: 'TODO', priority: 'MEDIUM', effort: 4, created_by: 'owner', child_tasks: [],
 };
 
 function makeStore() {
@@ -117,14 +125,17 @@ function assignResult(taskId: string, value: unknown) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockLocale = 'en';
   updateAssignee.mockImplementation(async (taskId: string, value: unknown) => assignResult(taskId, value));
-  useQuery.mockImplementation((_document, options: { variables?: { only_assignable?: boolean } }) => (
+  useQuery.mockImplementation((_document, options: { variables?: { only_assignable?: boolean; kind?: string } }) => (
     options.variables?.only_assignable
       ? { data: { resource_members: [
         { resource_member_id: 'linked-member', display_name: 'Linked Member', user_id: 'linked-user' },
         { resource_member_id: 'unlinked-member', display_name: 'Unlinked Member', user_id: null },
       ] }, loading: false }
-      : { data: { task_tree_rows: [{ ...parent }, { ...child }] }, loading: false, refetch: jest.fn() }
+      : options.variables?.kind
+        ? { data: { project_catalog_items: catalogItems.filter((item) => item.kind === options.variables?.kind) }, loading: false, refetch: jest.fn() }
+        : { data: { task_tree_rows: [{ ...parent }, { ...child }] }, loading: false, refetch: jest.fn() }
   ));
 });
 
@@ -163,6 +174,70 @@ describe('TaskListView canonical assignment source wiring', () => {
     expect(updateAssignee).toHaveBeenLastCalledWith('child', {
       assigneeId: null, assigneeResourceMemberId: 'unlinked-member',
     });
+  });
+
+  it('reflects a confirmed normal List effort save immediately from the authoritative result', async () => {
+    client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'parent', effort: 13 } } });
+    const store = renderList();
+    const row = screen.getByText('Parent task').closest('tr')!;
+    fireEvent.click(within(row).getByText('8h'));
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Công sức' }), { target: { value: '13' } });
+    fireEvent.click(within(row).getByTitle('Lưu'));
+
+    await waitFor(() => expect(within(row).getByText('13h')).toBeInTheDocument());
+    expect(taskFromStore(store, 'parent')?.effort).toBe(13);
+    expect(client.mutate).toHaveBeenCalledWith(expect.objectContaining({ variables: { input: { task_id: 'parent', effort: 13 } } }));
+  });
+
+  it('keeps normal List effort editor and error after a rejected or incomplete save', async () => {
+    const alert = jest.spyOn(window, 'alert').mockImplementation(() => {});
+    client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'parent' } } });
+    const store = renderList();
+    const row = screen.getByText('Parent task').closest('tr')!;
+    fireEvent.click(within(row).getByText('8h'));
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Công sức' }), { target: { value: '13' } });
+    fireEvent.click(within(row).getByTitle('Lưu'));
+
+    await waitFor(() => expect(alert).toHaveBeenCalledWith(expect.stringContaining('Effort update returned no complete task result.')));
+    expect(screen.getByRole('spinbutton', { name: 'Công sức' })).toHaveValue(13);
+    expect(taskFromStore(store, 'parent')?.effort).toBe(8);
+    alert.mockRestore();
+  });
+
+  it('reflects confirmed Excel effort immediately without a task-row reload', async () => {
+    client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'parent', effort: 14 } } });
+    const store = renderList();
+    fireEvent.click(screen.getByTestId('mode-excel-btn'));
+    fireEvent.mouseDown(screen.getByTestId('excel-cell-0-3'));
+    fireEvent.change(screen.getByTestId('excel-typing-input'), { target: { value: '14' } });
+    fireEvent.keyDown(screen.getByTestId('excel-typing-input'), { key: 'Enter' });
+    fireEvent.click(screen.getByTestId('excel-save-btn'));
+
+    await waitFor(() => expect(screen.getByTestId('excel-cell-0-3')).toHaveTextContent('14'));
+    expect(taskFromStore(store, 'parent')?.effort).toBe(14);
+  });
+
+  it('renders stable catalog IDs as selected-locale labels in normal and Excel views', () => {
+    const store = makeStore();
+    const view = render(<Provider store={store}><TaskSource /></Provider>);
+    const row = screen.getByText('Parent task').closest('tr')!;
+    expect(row).toHaveTextContent('Create');
+    expect(row).toHaveTextContent('UI');
+    expect(row).toHaveTextContent('Feature');
+
+    mockLocale = 'ja';
+    view.rerender(<Provider store={store}><TaskSource /></Provider>);
+    expect(row).toHaveTextContent('作成');
+    expect(row).toHaveTextContent('UI日本語');
+    expect(row).toHaveTextContent('機能');
+    expect(taskFromStore(store, 'parent')).toMatchObject({
+      progressCatalogItemId: 'progress-create', categoryCatalogItemId: 'category-ui', taskTypeCatalogItemId: 'type-feature',
+    });
+
+    fireEvent.click(screen.getByTestId('mode-excel-btn'));
+    expect(screen.getByTestId('excel-cell-0-6')).toHaveTextContent('作成');
+    expect(screen.getByTestId('excel-cell-0-7')).toHaveTextContent('UI日本語');
+    expect(screen.getByTestId('excel-cell-0-8')).toHaveTextContent('機能');
   });
 
   it('persists Excel root clear and deep-child unlinked assignment into the same Redux tree', async () => {
