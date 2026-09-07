@@ -481,41 +481,22 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
     [tasks, taskFromProjection]
   );
 
-  // Lấy thông tin các thành viên từ tasks và users (props)
-  const allMembers = useMemo(() => {
-    // Lấy unique assignees từ tasks
-    const assigneesMap = new Map();
+  // The same canonical project members as the matrix, including unlinked
+  // and zero-allocation rows. Account assignees are not a member directory.
+  const allMembers = useMemo(() => schedulingConfig.resourceMembers
+    .map(member => ({ id: member.resource_member_id, name: member.display_name }))
+    .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
+  [schedulingConfig.resourceMembers]);
+  useEffect(() => setSelectedUserId(''), [currentProjectId]);
 
-    tasks.filter(task => task.assignee && task.assignee.userId)
-      .forEach(task => {
-        const assignee = task.assignee!;
-        if (!assigneesMap.has(assignee.userId)) {
-          assigneesMap.set(assignee.userId, {
-            id: assignee.userId,
-            name: assignee.username || 'Không có tên',
-            avatarUrl: assignee.avatarUrl,
-            role: 'member'
-          });
-        }
-      });
-
-    // Nếu có users từ props, thêm vào danh sách
-    if (users && users.length > 0) {
-      users.forEach(user => {
-        if (!assigneesMap.has(user.id)) {
-          assigneesMap.set(user.id, {
-            id: user.id,
-            name: user.name,
-            avatarUrl: user.avatarUrl,
-            role: user.role
-          });
-        }
-      });
-    }
-
-    return Array.from(assigneesMap.values())
-      .sort((a, b) => a.name.localeCompare(b.name));
-  }, [tasks, users]);
+  const matchesSelectedMember = useCallback((resourceId?: string | null, userId?: string | null) => {
+    // A concrete resource identity wins, even when removed. Legacy user-only
+    // assignments map through the canonical relation, never a display name.
+    return typeof resourceId === 'string'
+      ? resourceId === selectedUserId
+      : Boolean(userId && schedulingConfig.resourceMembers.some(member =>
+        member.resource_member_id === selectedUserId && member.user_id === userId));
+  }, [schedulingConfig.resourceMembers, selectedUserId]);
 
   // useEffect để xử lý fetch và process tasks
   useEffect(() => {
@@ -684,12 +665,12 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   }, [currentProjectId, liveOrder, taskTree, tasks]);
 
   const matchesTaskFilter = useCallback((task: Task) => {
-    if (viewMode === 'user' && selectedUserId && task.assignee?.userId !== selectedUserId) return false;
+    if (viewMode === 'user' && selectedUserId && !matchesSelectedMember(task.assignee_resource_member_id, task.assignee?.userId)) return false;
     const { searchQuery, status, priority, type, tags } = ganttFilter;
     if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (status && task.status !== status || priority && task.priority !== priority || type && task.type !== type) return false;
     return !tags?.length || tags.some(tag => (task.tags ?? []).some(value => value.toLowerCase() === tag.toLowerCase()));
-  }, [ganttFilter, selectedUserId, viewMode]);
+  }, [ganttFilter, matchesSelectedMember, selectedUserId, viewMode]);
   const calculationsUnavailable = schedulingConfig.loading ? 'Loading member capacity data' : schedulingConfig.error;
 
   const lifecycleDays = getDatesBetween(dateRange.startDate, dateRange.endDate);
@@ -869,7 +850,14 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
 
     // Chỉ filter theo user nếu cần
     if (viewMode === 'user' && selectedUserId) {
-      result = result.filter(task => task.assignee?.userId === selectedUserId);
+      result = result.filter(task => {
+        if (selectedSnapshot) {
+          // Absent/null historical assignment must not inherit today's task.
+          const saved = selectedSnapshot.tasks.find(row => row.taskId === task.task_id);
+          return Boolean(saved && matchesSelectedMember(saved.assigneeResourceMemberId, saved.assigneeUserId));
+        }
+        return matchesSelectedMember(task.assignee_resource_member_id, task.assignee?.userId);
+      });
       console.log('Filtered tasks by user:', result.map(t =>
         `${t.title} (${t.priority}) - Order: ${t.priority_order}`
       ));
@@ -878,8 +866,10 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
     return result;
   }, [
     selectedPlanTasks,
+    selectedSnapshot,
+    matchesSelectedMember,
     viewMode,
-    selectedUserId  // Hoặc khi user được chọn thay đổi
+    selectedUserId
   ]);
 
   // Apply filters while retaining every matching task's ancestor chain. This
@@ -1440,7 +1430,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                 aria-label="Chọn người dùng để lọc task"
                 title="Chọn người dùng"
               >
-                <option value="">Chọn người dùng</option>
+                <option value="">All project members</option>
                 {allMembers.map(member => (
                   <option key={member.id} value={member.id}>
                     {member.name}

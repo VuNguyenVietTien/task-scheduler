@@ -246,6 +246,51 @@ describe('Authority regression wiring R1-R11', () => {
   });
 });
 
+describe('canonical member User filter', () => {
+  it('lists linked/unlinked/zero members, retains descendant ancestors, and clears without changing totals', () => {
+    renderTimeline(lifecycle(), [
+      liveTasks[0],
+      { ...liveTasks[1], parent_task_id: 'parent', assignee_resource_member_id: 'rm-saved', assignee: undefined },
+      { ...liveTasks[2], assignee_resource_member_id: null, assignee: { user_id: 'u-current', username: 'Old account label' } } as unknown as Task,
+    ]);
+    const totals = screen.getAllByTestId('member-effort-cell').map(cell => cell.textContent);
+    fireEvent.click(screen.getByRole('button', { name: 'User', exact: true }));
+    const picker = screen.getByRole('combobox', { name: 'Chọn người dùng để lọc task' });
+    expect(Array.from(picker.querySelectorAll('option')).map(option => option.value)).toEqual(['', 'rm-current', 'rm-saved', 'rm-zero']);
+    fireEvent.change(picker, { target: { value: 'rm-saved' } });
+    expect(screen.getAllByTestId('gantt-name-row').map(row => row.dataset.depth)).toEqual(['0', '1']);
+    expect(screen.queryByRole('button', { name: 'Live only', exact: true })).not.toBeInTheDocument();
+    expect(Array.from(mockUsePlanLifecycle.mock.calls.at(-1)[1].selectedTaskIds)).toEqual(['child']);
+    expect(screen.getAllByTestId('member-effort-cell').map(cell => cell.textContent)).toEqual(totals);
+    fireEvent.change(picker, { target: { value: 'rm-current' } });
+    expect(screen.getAllByTestId('gantt-name-row')).toHaveLength(2);
+    expect(screen.queryByRole('button', { name: 'Live child', exact: true })).not.toBeInTheDocument();
+    fireEvent.change(picker, { target: { value: 'rm-zero' } });
+    expect(screen.queryAllByTestId('gantt-name-row')).toHaveLength(0);
+    fireEvent.change(picker, { target: { value: '' } });
+    expect(screen.getAllByTestId('gantt-name-row')).toHaveLength(3);
+    expect(mockReorderMutation).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    [{ assigneeResourceMemberId: 'rm-saved', assigneeUserId: 'u-current' }, 'rm-saved'],
+    [{ assigneeResourceMemberId: 'removed', assigneeUserId: 'u-current' }, null],
+    [{ assigneeResourceMemberId: null }, null],
+    [{}, null],
+    [{ assigneeUserId: 'u-current' }, 'rm-current'],
+  ])('uses saved assignment %j, never current-task/name inference', (assignment, matchingId) => {
+    renderTimeline(savedLifecycle(assignment));
+    fireEvent.click(screen.getByRole('button', { name: 'User', exact: true }));
+    const picker = screen.getByRole('combobox', { name: 'Chọn người dùng để lọc task' });
+    for (const id of ['rm-current', 'rm-saved']) {
+      fireEvent.change(picker, { target: { value: id } });
+      expect(screen.queryAllByTestId('gantt-name-row')).toHaveLength(id === matchingId ? 1 : 0);
+    }
+    fireEvent.change(picker, { target: { value: '' } });
+    expect(screen.getAllByTestId('gantt-name-row')).toHaveLength(1);
+  });
+});
+
 describe('Timeline selected-plan wiring', () => {
   it('uses saved membership, hierarchy, order, dates, and allocations instead of live fields', async () => {
     const snapshot: PlanSnapshot = {
