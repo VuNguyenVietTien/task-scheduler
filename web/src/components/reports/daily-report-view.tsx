@@ -7,6 +7,7 @@ import { ReportMetricsCard } from './report-metrics-card';
 import { DelayedTasksTable } from './delayed-tasks-table';
 import { ActiveTasksTable } from './active-tasks-table';
 import { CompletedTasksTable } from './completed-tasks-table';
+import { distinctTaskPopulation } from './task-population';
 
 interface DailyReportViewProps {
   projectId: string;
@@ -32,11 +33,12 @@ interface OverduePlanTask {
 
 /** Build daily report from Redux tasks + members + plan data */
 export function useDailyReportData(projectId: string) {
-  const { tasks } = useAppSelector(state => state.tasks);
+  const { tasks: taskForest } = useAppSelector(state => state.tasks);
   const { members } = useAppSelector(state => state.members);
   const { activePlan } = useAppSelector(state => state.plans);
 
   return useMemo(() => {
+    const tasks = distinctTaskPopulation(taskForest);
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const yesterday = new Date(today);
@@ -170,7 +172,7 @@ export function useDailyReportData(projectId: string) {
       unassignedUsers,
       bugTasks,
     };
-  }, [tasks, members, activePlan]);
+  }, [taskForest, members, activePlan]);
 }
 
 export function DailyReportView({ projectId, onSummaryChange }: DailyReportViewProps) {

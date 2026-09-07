@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { cloneTaskSubtree, type CloneSourceTask } from '@/utils/cloneTask';
+import type { CloneTaskSelectionInput, CloneTreeNode } from '@/utils/cloneTask';
 import { useTranslation } from 'react-i18next';
 import { Task, TaskStatus, Priority, TaskFilter, TaskStatuses, Priorities, UserBasic } from '@/types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
@@ -28,9 +28,10 @@ import {
   updateTaskPriority, 
   updateTaskEffort, 
   updateTaskAssignee,
-  updateTaskDueDate
+  updateTaskDueDate,
+  updateTaskLocally,
+  fetchProjectTasks
 } from '@/redux/features/tasksSlice';
-import { ProjectMember } from '@/hooks/useProject';
 import { useProjectTaxonomies } from '@/hooks/useProjectTaxonomies';
 import {
   PhaseFilterSelect,
@@ -40,18 +41,31 @@ import {
 } from '@/components/projects/phase-controls';
 import { PhaseSettingsPanel } from '@/components/projects/PhaseSettingsPanel';
 import { TaskExcelGrid, type StagedEdit } from './TaskExcelGrid';
+import { TaskCloneDialog } from './TaskCloneDialog';
 import { useMutation, useQuery } from '@apollo/client';
-import { CREATE_TASK } from '@/graphql/mutations';
+import { CLONE_TASK_SUBTREE } from '@/graphql/mutations';
+import { TASK_TREE_ROWS } from '@/graphql/queries/tasks';
 import { RESOURCE_MEMBERS_QUERY } from '@/graphql/scheduling';
 import { toast } from 'sonner';
 
+export interface CloneRecoveryState {
+  kind: 'committed' | 'unknown' | 'reselect';
+  message: string;
+  busy?: 'mutation' | 'refresh';
+}
+
 interface TaskListViewProps {
   tasks: Task[];
+  projectId?: string;
+  cloneRecoveryState?: CloneRecoveryState | null;
+  onCloneRecoveryChange?: (state: CloneRecoveryState | null) => void;
   onTaskClick?: (taskId: string) => void;
   pagination?: {
     currentPage: number;
     totalPages: number;
     totalItems: number;
+    /** Pagination may count root trees, never silently label that as all tasks. */
+    rootTasksOnly?: boolean;
     pageSize: number;
     setPage: (page: number) => void;
     setPageSize: (size: number) => void;
@@ -82,7 +96,24 @@ interface TaskAssigneeOption {
 interface ResourceMemberRow {
   resource_member_id: string;
   display_name: string;
+  email?: string | null;
   user_id: string | null;
+}
+
+type CloneRecovery = 'committed' | 'unknown' | 'reselect' | null;
+
+function graphQLErrorCode(error: unknown): string | undefined {
+  const errors = (error as { graphQLErrors?: Array<{ extensions?: { code?: string } }> }).graphQLErrors;
+  return errors?.find((item) => item.extensions?.code)?.extensions?.code;
+}
+
+function findTaskInTree(tasks: readonly Task[], taskId: string): Task | undefined {
+  for (const task of tasks) {
+    if (task.task_id === taskId || task.id === taskId) return task;
+    const nested = task.child_tasks && findTaskInTree(task.child_tasks, taskId);
+    if (nested) return nested;
+  }
+  return undefined;
 }
 
 // Task type badge colors following design system
@@ -127,6 +158,9 @@ const taskNestedStyles = `
 
 export function TaskListView({
   tasks: initialTasks,
+  projectId,
+  cloneRecoveryState: parentRecovery,
+  onCloneRecoveryChange,
   onTaskClick,
   pagination,
   filters = {},
@@ -148,17 +182,43 @@ export function TaskListView({
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
   // Requirement 7: normal ↔ Excel (staged bulk edit) list mode toggle.
   const [listMode, setListMode] = useState<'normal' | 'excel'>('normal');
-  const [createTaskMut] = useMutation(CREATE_TASK);
+  const [excelOpened, setExcelOpened] = useState(false);
+  // Confirmed assignment patches bridge the independent flat query until it acknowledges them.
+  const [assignmentPatches, setAssignmentPatches] = useState<Record<string, Partial<Task>>>({});
+  const [treeRefreshError, setTreeRefreshError] = useState<string | null>(null);
+  const [memberRefreshError, setMemberRefreshError] = useState<string | null>(null);
+  const [memberRefreshing, setMemberRefreshing] = useState(false);
+  const [cloneSourceTaskId, setCloneSourceTaskId] = useState<string | null>(null);
+  const [cloneError, setCloneError] = useState<string | null>(null);
+  const [localRecovery, setLocalRecovery] = useState<CloneRecoveryState | null>(null);
+  const recoveryState = parentRecovery === undefined ? localRecovery : parentRecovery;
+  const cloneRecovery = recoveryState?.kind ?? null;
+  const setCloneRecovery = useCallback((state: CloneRecoveryState | null) => {
+    setLocalRecovery(state);
+    onCloneRecoveryChange?.(state);
+  }, [onCloneRecoveryChange]);
+  const [cloneRefreshing, setCloneRefreshing] = useState(false);
+  const [cloneTaskSubtreeMut, { loading: cloneSubmitting }] = useMutation(CLONE_TASK_SUBTREE);
 
   // ── Increment 1: phase taxonomy (selector + filter + settings) ─────────────
   const taxonomyProjectId = useMemo(
-    () => initialTasks.find((t) => t.project_id)?.project_id ?? tasks.find((t) => t.project_id)?.project_id ?? null,
-    [initialTasks, tasks]
+    () => projectId ?? initialTasks.find((t) => t.project_id)?.project_id ?? tasks.find((t) => t.project_id)?.project_id ?? null,
+    [projectId, initialTasks, tasks]
   );
   const resourceMembersQ = useQuery(RESOURCE_MEMBERS_QUERY, {
-    variables: { project_id: taxonomyProjectId ?? '' },
+    variables: { project_id: taxonomyProjectId ?? '', only_assignable: true },
     skip: !taxonomyProjectId,
     fetchPolicy: 'cache-and-network',
+    notifyOnNetworkStatusChange: true,
+  });
+  const memberMappingError = memberRefreshError ?? resourceMembersQ.error?.message ??
+    (!resourceMembersQ.loading && !Array.isArray(resourceMembersQ.data?.resource_members) ? 'Member mapping returned no data.' : null);
+  const memberMappingUnavailable = resourceMembersQ.loading || memberRefreshing || Boolean(memberMappingError);
+  const taskTreeRowsQ = useQuery(TASK_TREE_ROWS, {
+    variables: { projectId: taxonomyProjectId ?? '' },
+    skip: !taxonomyProjectId || (listMode !== 'excel' && !cloneSourceTaskId),
+    fetchPolicy: 'network-only',
+    notifyOnNetworkStatusChange: true,
   });
   const { phases, loading: phasesLoading, ensureDefaultPhases, createPhase, updatePhase, archivePhase, setTaskPhase } =
     useProjectTaxonomies(taxonomyProjectId);
@@ -178,27 +238,16 @@ export function TaskListView({
   // Lấy danh sách members từ Redux store
   const reduxMembers = useAppSelector(state => state.members.members);
   
-  // Function cập nhật một task cụ thể, giữ nguyên các task khác
+  // Keep the local rendering tree aligned with the canonical Redux tree,
+  // including arbitrary-depth descendants.
   const updateSingleTaskInState = useCallback((taskId: string, updates: Partial<Task>) => {
-    setTasks(currentTasks => {
-      // Tìm task cần cập nhật
-      const taskIndex = currentTasks.findIndex(t => t.task_id === taskId);
-      
-      // Nếu không tìm thấy task, trả về danh sách hiện tại
-      if (taskIndex === -1) {
-        console.warn('Không tìm thấy task có ID:', taskId);
-        return currentTasks;
-      }
-      
-      // Tạo bản sao của mảng tasks và cập nhật task cụ thể
-      const updatedTasks = [...currentTasks];
-      updatedTasks[taskIndex] = {
-        ...updatedTasks[taskIndex],
-        ...updates
-      };
-      
-      return updatedTasks;
+    const updateTree = (currentTasks: Task[]): Task[] => currentTasks.map((task) => {
+      if (task.task_id === taskId || task.id === taskId) return { ...task, ...updates };
+      if (!task.child_tasks?.length) return task;
+      const childTasks = updateTree(task.child_tasks);
+      return childTasks === task.child_tasks ? task : { ...task, child_tasks: childTasks };
     });
+    setTasks((currentTasks) => updateTree(currentTasks));
   }, []);
   
   useEffect(() => {
@@ -207,6 +256,36 @@ export function TaskListView({
     setTasks(initialTasks);
     }
   }, [initialTasks, editingCell]);
+
+  const applyCanonicalAssignment = useCallback((taskId: string, result: Partial<Task>) => {
+    const updates: Partial<Task> = {
+      assignee_resource_member_id: result.assignee_resource_member_id ?? null,
+      assignee: result.assignee,
+    };
+    updateSingleTaskInState(taskId, updates);
+    dispatch(updateTaskLocally({ taskId, updates }));
+    setAssignmentPatches((current) => ({ ...current, [taskId]: updates }));
+    // Task uses task_id, not Apollo's default id key: update this embedded query explicitly.
+    taskTreeRowsQ.updateQuery?.((data: { task_tree_rows?: Task[] }) => data?.task_tree_rows ? {
+      ...data,
+      task_tree_rows: data.task_tree_rows.map((task) => task.task_id === taskId
+        ? { ...task, ...updates, assignee: updates.assignee ?? null } : task),
+    } : data);
+  }, [dispatch, updateSingleTaskInState, taskTreeRowsQ.updateQuery]);
+
+  useEffect(() => {
+    const rows = taskTreeRowsQ.data?.task_tree_rows as Task[] | undefined;
+    if (!rows || taskTreeRowsQ.loading || taskTreeRowsQ.error) return;
+    setAssignmentPatches((current) => {
+      const acknowledged = Object.keys(current).filter((id) => rows.some((row) =>
+        row.task_id === id && row.assignee_resource_member_id === current[id].assignee_resource_member_id &&
+        row.assignee?.userId === current[id].assignee?.userId));
+      if (!acknowledged.length) return current;
+      const next = { ...current };
+      acknowledged.forEach((id) => delete next[id]);
+      return next;
+    });
+  }, [taskTreeRowsQ.data, taskTreeRowsQ.loading, taskTreeRowsQ.error]);
 
   // Memoize assignees and projects
   const { assignees, projects } = useMemo(() => {
@@ -236,13 +315,13 @@ export function TaskListView({
     
     // Thêm tất cả members từ Redux store (nếu có)
     if (reduxMembers && reduxMembers.length > 0) {
-      reduxMembers.forEach((member: ProjectMember) => {
-        if (member.user && member.user.userId) {
+      reduxMembers.forEach((member) => {
+        if (member.user?.userId) {
           uniqueAssignees.set(member.user.userId, {
             userId: member.user.userId,
             username: member.user.username || member.user.fullName || member.user.email,
             avatarUrl: member.user.avatarUrl || undefined,
-            role: member.role
+            role: member.role,
           });
         }
       });
@@ -257,72 +336,49 @@ export function TaskListView({
     };
   }, [tasks, reduxMembers]);
 
-  // Resource members without a linked user account cannot appear in the
-  // legacy project-members Redux slice. They use a distinct option value so
-  // saving can send assignee_resource_member_id instead of assignee_id.
+  // Every List option uses the stable canonical resource id, even when the
+  // member is linked. That keeps placeholder assignments intact across link.
   const assigneeOptions = useMemo<TaskAssigneeOption[]>(() => {
-    const byKey = new Map<string, TaskAssigneeOption>();
-    for (const assignee of assignees) {
-      byKey.set(`user:${assignee.userId}`, {
-        key: `user:${assignee.userId}`,
-        label: assignee.username,
-        userId: assignee.userId,
-        resourceMemberId: null,
-        avatarUrl: assignee.avatarUrl,
-        role: assignee.role,
-      });
-    }
-    for (const member of (resourceMembersQ.data?.resource_members ?? []) as ResourceMemberRow[]) {
-      if (member.user_id) {
-        // Linked users keep the existing assignee_id behavior.
-        const key = `user:${member.user_id}`;
-        if (!byKey.has(key)) {
-          byKey.set(key, {
-            key,
-            label: member.display_name,
-            userId: member.user_id,
-            resourceMemberId: null,
-          });
-        }
-      } else {
-        byKey.set(`resource:${member.resource_member_id}`, {
-          key: `resource:${member.resource_member_id}`,
-          label: member.display_name,
-          userId: null,
-          resourceMemberId: member.resource_member_id,
-        });
-      }
-    }
-    return Array.from(byKey.values()).sort((a, b) => a.label.localeCompare(b.label));
-  }, [assignees, resourceMembersQ.data?.resource_members]);
+    const members = (resourceMembersQ.data?.resource_members ?? []) as ResourceMemberRow[];
+    const duplicateNames = new Set(
+      members.filter((member, _, all) => all.filter((other) => other.display_name === member.display_name).length > 1)
+        .map((member) => member.display_name)
+    );
+    return members.map((member) => ({
+      key: `resource:${member.resource_member_id}`,
+      label: duplicateNames.has(member.display_name)
+        ? `${member.display_name} (${member.email ?? member.resource_member_id.slice(0, 8)})`
+        : member.display_name,
+      userId: member.user_id,
+      resourceMemberId: member.resource_member_id,
+    })).sort((a, b) => a.label.localeCompare(b.label));
+  }, [resourceMembersQ.data?.resource_members]);
 
   const assigneeOptionForTask = useCallback((task: Task): TaskAssigneeOption | undefined => {
-    if (task.assignee?.userId) {
-      return assigneeOptions.find((option) => option.userId === task.assignee?.userId);
-    }
     if (task.assignee_resource_member_id) {
-      return assigneeOptions.find(
-        (option) => option.resourceMemberId === task.assignee_resource_member_id
-      );
+      return assigneeOptions.find((option) => option.resourceMemberId === task.assignee_resource_member_id);
     }
-    return undefined;
+    return assigneeOptions.find((option) => option.userId === task.assignee?.userId);
   }, [assigneeOptions]);
 
-  // Đếm các task theo trạng thái
-  const statusCounts = useMemo(() => {
+  const assignmentLabel = (task: Task): string => assigneeOptionForTask(task)?.label ??
+    (task.assignee_resource_member_id || task.assignee?.userId
+      ? (resourceMembersQ.loading ? 'Loading assigned member…' : task.assignee?.username ?? 'Assigned member unavailable')
+      : '');
+
+  // Count identities, not just root rows. Do not flatten the rendering forest.
+  const { statusCounts, totalTaskCount } = useMemo(() => {
     const counts: Record<string, number> = {};
-    
-    Object.values(TaskStatuses).forEach(status => {
-      counts[status] = 0;
-    });
-    
-    tasks.forEach(task => {
-      if (counts[task.status] !== undefined) {
-        counts[task.status]++;
-      }
-    });
-    
-    return counts;
+    const seen = new Set<string>();
+    const pending = [...tasks];
+    while (pending.length) {
+      const task = pending.pop()!;
+      if (seen.has(task.task_id)) continue;
+      seen.add(task.task_id);
+      counts[task.status] = (counts[task.status] ?? 0) + 1;
+      pending.push(...(task.child_tasks ?? []));
+    }
+    return { statusCounts: counts, totalTaskCount: seen.size };
   }, [tasks]);
 
   // Filter tasks client-side when server pagination is not available
@@ -407,6 +463,39 @@ export function TaskListView({
       ? [...sortedIncompleteTasks, ...sortedCompletedTasks]
       : sortedIncompleteTasks;
   }, [sortedIncompleteTasks, sortedCompletedTasks, showCompletedTasks]);
+
+  // Excel keeps the normal List's filtered roots, then projects every active
+  // descendant from the flat arbitrary-depth query without changing normal List.
+  const excelTasks = useMemo(() => {
+    const rows = (taskTreeRowsQ.data?.task_tree_rows ?? []) as Task[];
+    if (rows.length) {
+      const roots = new Set(displayedTasks.map((task) => task.task_id));
+      const included = new Set(roots);
+      const depths = new Map<string, number>();
+      roots.forEach((id) => depths.set(id, 0));
+      for (const row of rows) {
+        const parent = row.parent_task_id;
+        if (parent && included.has(parent)) {
+          included.add(row.task_id);
+          depths.set(row.task_id, (depths.get(parent) ?? 0) + 1);
+        }
+      }
+      return rows
+        .filter((row) => included.has(row.task_id))
+        .map((row) => ({ ...row, ...assignmentPatches[row.task_id], excelDepth: depths.get(row.task_id) ?? 0 }));
+    }
+
+    const flattened: Array<Task & { excelDepth?: number }> = [];
+    const seen = new Set<string>();
+    const visit = (task: Task, excelDepth: number) => {
+      if (seen.has(task.task_id)) return;
+      seen.add(task.task_id);
+      flattened.push({ ...task, excelDepth });
+      task.child_tasks?.forEach((child) => visit(child, excelDepth + 1));
+    };
+    displayedTasks.forEach((task) => visit(task, 0));
+    return flattened;
+  }, [displayedTasks, taskTreeRowsQ.data?.task_tree_rows, assignmentPatches]);
 
   // Function cập nhật task trực tiếp vào danh sách hiện tại
   const updateDisplayedTask = useCallback((taskId: string, updates: Partial<Task>) => {
@@ -677,9 +766,9 @@ export function TaskListView({
                     title="Chọn người được giao"
                   >
                     <option value="">Chưa gán</option>
-                    {assignees.map((assignee) => (
-                      <option key={assignee.userId} value={assignee.userId}>
-                        {assignee.username}
+                    {assigneeOptions.map((option) => (
+                      <option key={option.key} value={option.key}>
+                        {option.label}{option.userId ? '' : ' (unlinked)'}
                       </option>
                     ))}
                   </select>
@@ -708,19 +797,19 @@ export function TaskListView({
             ) : (
               <div 
                 className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1 rounded"
-                onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'assignee_id', childTask.assignee?.userId || ''); }}
+                onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'assignee_id', assigneeOptionForTask(childTask)?.key || ''); }}
               >
-                {childTask.assignee ? (
+                {assigneeOptionForTask(childTask) ? (
                   <>
-                    <UserAvatar 
-                      username={childTask.assignee.username} 
-                      avatarUrl={childTask.assignee.avatarUrl} 
-                      size="md" 
+                    <UserAvatar
+                      username={assigneeOptionForTask(childTask)!.label}
+                      avatarUrl={childTask.assignee?.avatarUrl}
+                      size="md"
                     />
-                    <span>{childTask.assignee.username}</span>
+                    <span>{assigneeOptionForTask(childTask)!.label}</span>
                   </>
                 ) : (
-                  <span className="text-slate-400">Chưa gán</span>
+                  <span className="text-slate-400">{assignmentLabel(childTask) || 'Chưa gán'}</span>
                 )}
               </div>
             )}
@@ -818,6 +907,18 @@ export function TaskListView({
             )}
           </td>
           <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+            <button
+              className="text-slate-500 hover:text-blue-700 mr-2"
+              title="Clone task"
+              aria-label={`Clone ${childTask.title}`}
+              data-testid={`clone-task-${childTask.task_id}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleCloneTask(childTask.task_id);
+              }}
+            >
+              ⧉
+            </button>
             <button 
               className="text-blue-600 hover:text-blue-900"
               title="Thao tác khác"
@@ -836,17 +937,7 @@ export function TaskListView({
 
   // Handle task click: left click -> modal, ctrl/middle -> new tab
   const handleTaskClick = useCallback((taskId: string, event?: React.MouseEvent) => {
-    // Find task in all tasks (parent and children)
-    let foundTask: Task | undefined = tasks.find(t => t.task_id === taskId || t.id === taskId);
-
-    if (!foundTask) {
-      for (const parentTask of tasks) {
-        if (parentTask.child_tasks && parentTask.child_tasks.length > 0) {
-          foundTask = parentTask.child_tasks.find(child => child.task_id === taskId || child.id === taskId);
-          if (foundTask) break;
-        }
-      }
-    }
+    const foundTask = findTaskInTree(tasks, taskId);
 
     if (!foundTask) {
       console.warn(`Task not found: ${taskId}`);
@@ -997,52 +1088,121 @@ export function TaskListView({
   const updateTaskPriorityOrder = useUpdateTaskPriorityOrder();
   const { updateTask } = useUpdateTask();
 
-  // ── Requirement 7: clone task (RECURSIVE subtree via cloneTaskSubtree;
-  // cycle-safe, parent-remapping, partial-error reporting) ────────────────
-  const handleCloneTask = useCallback(async (taskId: string) => {
-    const source = tasks.find((t) => t.task_id === taskId);
-    if (!source) return;
-    const project = source.project_id || source.projectId || '';
-    const result = await cloneTaskSubtree(
-      {
-        createTask: async (input) => {
-          const s = input.source as unknown as typeof source;
-          const res = await createTaskMut({
-            variables: {
-              input: {
-                project_id: input.project_id || project,
-                parent_task_id: input.parent_task_id ?? undefined,
-                title: input.title,
-                description: (s.description as string) ?? '',
-                status: 'TODO',
-                priority: s.priority ?? 'MEDIUM',
-                priority_order: (s.priority_order as number) ?? 0,
-                effort: (s.effort as number) ?? 0,
-                due_date: s.due_date ? new Date(s.due_date as string).toISOString() : undefined,
-                assignee_id: (s.assignee as { userId?: string } | undefined)?.userId ?? null,
-                type_: s.type ?? null,
-                category: s.category ?? null,
-                tags: (s.tags as string[]) ?? [],
-              },
-            },
-          });
-          const id = res.data?.create_task?.task_id as string | undefined;
-          if (!id) throw new Error('create_task returned no id');
-          return id;
-        },
-      },
-      tasks as unknown as CloneSourceTask[],
-      taskId
-    );
-    if (result.ok) {
-      toast.success(`Cloned "${source.title}" + ${result.created.length - 1} subtasks`);
-    } else {
-      const failed = result.failures.map((f) => `"${f.title}": ${f.error}`).join('; ');
-      toast.error(
-        `Clone incomplete: ${result.created.length} created, ${result.failures.length} failed — ${failed}`
-      );
+  // Clone is a single atomic server mutation. Opening works for normal and
+  // deep Excel rows because its source is resolved from task_tree_rows.
+  const handleCloneTask = useCallback((taskId: string) => {
+    setCloneError(null);
+    setCloneSourceTaskId(taskId);
+  }, []);
+
+  const refreshClonedTasks = useCallback(async () => {
+    if (!taxonomyProjectId) throw new Error('Task project is unavailable.');
+    // Wait for both requests, even on failure; no overlapping blind recovery retries.
+    const [tree, redux] = await Promise.allSettled([
+      taskTreeRowsQ.refetch(),
+      dispatch(fetchProjectTasks(taxonomyProjectId)).unwrap(),
+    ]);
+    if (tree.status === 'rejected') throw tree.reason;
+    if (redux.status === 'rejected') throw redux.reason;
+    const treeResult = tree.value;
+    if (treeResult.error || treeResult.errors?.length || !treeResult.data?.task_tree_rows) {
+      throw treeResult.error ?? new Error(treeResult.errors?.[0]?.message ?? 'Task tree refresh returned no data.');
     }
-  }, [tasks, createTaskMut]);
+  }, [dispatch, taskTreeRowsQ, taxonomyProjectId]);
+
+  const finishCloneRefresh = useCallback(async (
+    successMessage: string,
+    refreshFailureMessage: string,
+    kind: NonNullable<CloneRecovery> | 'success'
+  ) => {
+    const recovery = { kind: kind === 'success' ? 'committed' as const : kind, message: refreshFailureMessage };
+    setCloneRecovery({ ...recovery, busy: 'refresh', message: kind === 'success'
+      ? `${successMessage} Refreshing task list…`
+      : kind === 'unknown' ? 'Could not confirm clone. Refreshing task list…' : 'Task tree changed. Refreshing task list…' });
+    setCloneRefreshing(true);
+    try {
+      await refreshClonedTasks();
+      setCloneError(null);
+      setCloneRecovery(null);
+      setCloneSourceTaskId(null);
+      if (kind === 'success') toast.success(successMessage);
+      else toast.error(successMessage);
+      return true;
+    } catch {
+      // Recovery truth was stored before dispatch could unmount this List.
+      setCloneRecovery(recovery);
+      setCloneError(null);
+      return false;
+    } finally {
+      setCloneRefreshing(false);
+    }
+  }, [refreshClonedTasks, setCloneRecovery]);
+
+  const handleCloneSubmit = useCallback(async (input: CloneTaskSelectionInput) => {
+    if (cloneRecovery || cloneRefreshing) return;
+    setCloneError(null);
+    setCloneRecovery({ kind: 'unknown', busy: 'mutation', message: 'Clone outcome is not yet confirmed. Refresh task list before retrying.' });
+    try {
+      const result = await cloneTaskSubtreeMut({ variables: { input } });
+      const createdCount = result.data?.clone_task_subtree?.created_task_ids?.length;
+      if (result.errors?.length) throw { graphQLErrors: result.errors };
+      if (!createdCount) throw { networkError: new Error('Clone returned no created tasks') };
+      await finishCloneRefresh(
+        `Created ${input.quantity} copies (${createdCount} tasks).`,
+        `Created ${input.quantity} copies (${createdCount} tasks), but the task list could not be refreshed. Refresh task list before creating another copy.`,
+        'success'
+      );
+    } catch (error) {
+      const code = graphQLErrorCode(error);
+      if (code === 'CONFLICT' || code === 'NOT_FOUND') {
+        await finishCloneRefresh(
+          'Task tree changed. Task list refreshed. Select the source again.',
+          'Task tree changed, but the task list could not be refreshed. Refresh it before selecting again.',
+          'reselect'
+        );
+        return;
+      }
+      if ((error as { networkError?: unknown }).networkError) {
+        await finishCloneRefresh(
+          'Could not confirm clone; task list refreshed. Check results before retrying.',
+          'Could not confirm clone. The task list could not be refreshed; do not retry until it succeeds.',
+          'unknown'
+        );
+        return;
+      }
+      setCloneRecovery(null);
+      setCloneError(error instanceof Error ? error.message : 'Could not clone task tree.');
+    }
+  }, [cloneTaskSubtreeMut, finishCloneRefresh, cloneRecovery, cloneRefreshing, setCloneRecovery]);
+
+  const handleRetryCloneRefresh = useCallback(async () => {
+    if (recoveryState?.busy || cloneRefreshing) return;
+    if (recoveryState) setCloneRecovery({ ...recoveryState, busy: 'refresh' });
+    setCloneRefreshing(true);
+    try {
+      if (!cloneRecovery) {
+        const result = await taskTreeRowsQ.refetch();
+        if (result.error || result.errors?.length || !result.data?.task_tree_rows) {
+          throw result.error ?? new Error('Task tree refresh returned no data.');
+        }
+        setCloneError(null);
+        return;
+      }
+      await refreshClonedTasks();
+      const message = cloneRecovery === 'reselect'
+        ? 'Task list refreshed. Select the source again.'
+        : 'Task list refreshed. Check results before retrying.';
+      setCloneError(null);
+      setCloneRecovery(null);
+      setCloneSourceTaskId(null);
+      toast.error(message);
+    } catch (error) {
+      if (recoveryState) setCloneRecovery({ ...recoveryState, busy: undefined });
+      setCloneError(error instanceof Error ? error.message : 'Could not refresh the task list.');
+    } finally {
+      setCloneRefreshing(false);
+    }
+  }, [cloneRecovery, recoveryState, cloneRefreshing, refreshClonedTasks, taskTreeRowsQ, setCloneRecovery]);
 
   // Excel-mode staged edit persistence — reuses the exact per-field Redux
   // thunks the inline editor uses; failures throw and stay staged in the grid.
@@ -1056,26 +1216,25 @@ export function TaskListView({
     } else if (edit.field === 'due_date') {
       await dispatch(updateTaskDueDate({ taskId: edit.taskId, dueDate: edit.value })).unwrap();
     } else if (edit.field === 'assignee') {
-      // Resolve the typed username back to a user id (Excel cells show names).
-      if (edit.value.trim() === '') {
-        await dispatch(updateTaskAssignee({ taskId: edit.taskId, assigneeId: null })).unwrap();
+      if (memberMappingUnavailable) throw new Error(memberMappingError ?? 'Member mapping is loading. Retry after it loads.');
+      const value = edit.value.trim();
+      if (!value) {
+        applyCanonicalAssignment(edit.taskId, await updateAssignee(edit.taskId, null));
       } else {
-        const match = Array.from(
-          new Map(
-            tasks
-              .filter((t) => t.assignee?.userId)
-              .map((t) => [t.assignee!.username, t.assignee!.userId])
-          ).entries()
-        ).find(([username]) => username === edit.value);
-        if (!match) {
-          throw new Error(`Unknown assignee "${edit.value}" (no matching user in this project)`);
+        const matches = assigneeOptions.filter((option) => option.label === value || option.key === value);
+        if (matches.length !== 1) {
+          throw new Error(`Unknown or ambiguous assignee "${edit.value}"`);
         }
-        await dispatch(updateTaskAssignee({ taskId: edit.taskId, assigneeId: match[1] })).unwrap();
+        const member = matches[0];
+        applyCanonicalAssignment(edit.taskId, await updateAssignee(edit.taskId, {
+          assigneeId: member.userId,
+          assigneeResourceMemberId: member.resourceMemberId,
+        }));
       }
     } else {
       await updateTask(edit.taskId, { title: edit.value });
     }
-  }, [dispatch, updateTask]);
+  }, [applyCanonicalAssignment, dispatch, updateTask, updateAssignee, assigneeOptions, memberMappingUnavailable, memberMappingError]);
 
   const handleFilterChange = (newFilters: TaskFilter) => {
     if (setFilters) {
@@ -1087,6 +1246,7 @@ export function TaskListView({
 
   // Xử lý bắt đầu chỉnh sửa
   const handleStartEditing = (taskId: string, field: string, value: any) => {
+    if (field === 'assignee_id' && memberMappingUnavailable) return;
     setEditingCell({ taskId, field });
     setEditValue(String(value || ''));
   };
@@ -1100,7 +1260,7 @@ export function TaskListView({
   // Cập nhật hàm xử lý lưu chỉnh sửa để sử dụng Redux
   const handleSaveEditing = async (taskId: string, field: string) => {
     // Tạo một bản sao của task hiện tại để cập nhật UI optimistically
-    const currentTask = tasks.find(t => t.task_id === taskId);
+    const currentTask = findTaskInTree(tasks, taskId);
     if (!currentTask) {
       console.error('Không tìm thấy task có ID:', taskId);
       return;
@@ -1187,31 +1347,20 @@ export function TaskListView({
         }
       } 
       else if (field === 'assignee_id') {
-        const assigneeId = editValue === "" ? null : editValue;
-        
-        // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
-        const originalTasks = [...tasks];
-        
-        // Optimistic update cho UI - Chỉ cập nhật task được chọn
-        // Sửa assignee_id thành assignee và cập nhật cấu trúc đúng
-        const assigneeObj = assigneeId ? 
-          assignees.find(a => a.userId === assigneeId) || undefined : 
-          undefined;
-        
-        updateSingleTaskInState(taskId, { 
-          assignee: assigneeObj 
-        });
-        
+        if (memberMappingUnavailable) {
+          alert(memberMappingError ?? 'Member mapping is loading. Retry after it loads.');
+          return;
+        }
+        const option = assigneeOptions.find((candidate) => candidate.key === editValue);
+        if (editValue && !option) throw new Error('Unknown canonical member');
         try {
-          // CÁCH MỚI: Sử dụng Redux dispatch
-          await dispatch(updateTaskAssignee({ taskId, assigneeId: assigneeId as string | null })).unwrap();
-          console.log(`Đã cập nhật người được giao thành: ${assigneeId} (qua Redux)`);
+          applyCanonicalAssignment(taskId, await updateAssignee(taskId, option ? {
+            assigneeId: option.userId,
+            assigneeResourceMemberId: option.resourceMemberId,
+          } : null));
         } catch (error) {
-          console.error('Lỗi khi gọi API cập nhật người được giao:', error);
-          // Khôi phục trạng thái cũ nếu API call thất bại
-          setTasks(originalTasks);
           alert(`Không thể cập nhật người được giao: ${error}`);
-          return; // Thoát sớm, không đóng chế độ chỉnh sửa
+          return;
         }
       }
       else if (field === 'due_date') {
@@ -1221,7 +1370,7 @@ export function TaskListView({
         const originalTasks = [...tasks];
 
         // Optimistic update cho UI - Chỉ cập nhật task được chọn
-        updateSingleTaskInState(taskId, { due_date: dueDate });
+        updateSingleTaskInState(taskId, { due_date: dueDate ?? undefined });
 
         try {
           // CÁCH MỚI: Sử dụng Redux dispatch
@@ -1317,7 +1466,7 @@ export function TaskListView({
               Normal
             </button>
             <button
-              onClick={() => setListMode('excel')}
+              onClick={() => { setExcelOpened(true); setListMode('excel'); }}
               className={`px-3 py-2 text-sm font-medium ${listMode === 'excel' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
               aria-pressed={listMode === 'excel'}
               data-testid="mode-excel-btn"
@@ -1329,11 +1478,14 @@ export function TaskListView({
         
         {/* Status Summary */}
         <div className="flex flex-wrap gap-2">
+          <span data-testid="total-task-count">Total tasks: {totalTaskCount} (including descendants)</span>
+          <span data-testid="displayed-root-count">Displayed roots: {displayedTasks.length}</span>
           {Object.entries(statusCounts)
             .filter(([status]) => statusCounts[status] > 0)
             .map(([status, count]) => (
               <span 
-                key={status} 
+                key={status}
+                data-testid={`task-status-count-${status}`}
                 className={`inline-flex items-center px-2.5 py-1 rounded-md text-xs font-medium ${getStatusColor(status as TaskStatus)}`}
               >
                 {getStatusLabel(status)}: {count}
@@ -1350,14 +1502,58 @@ export function TaskListView({
         )}
       </div>
 
+      {(resourceMembersQ.loading || memberRefreshing) && <p role="status">Loading member mapping…</p>}
+      {memberMappingError && (
+        <div role="alert" className="mb-2 text-sm text-red-700">
+          Could not load member mapping: {memberMappingError}
+          <button type="button" disabled={memberRefreshing} className="ml-2 underline" onClick={async () => {
+            setMemberRefreshing(true);
+            try {
+              const result = await resourceMembersQ.refetch();
+              if (result.error || result.errors?.length || !Array.isArray(result.data?.resource_members)) {
+                throw result.error ?? new Error(result.errors?.[0]?.message ?? 'Member mapping returned no data.');
+              }
+              setMemberRefreshError(null);
+            } catch (error) {
+              setMemberRefreshError((error as Error).message);
+            } finally {
+              setMemberRefreshing(false);
+            }
+          }}>Retry member mapping</button>
+        </div>
+      )}
+      {!memberMappingUnavailable && assigneeOptions.length === 0 && <p>No assignable members.</p>}
+      {listMode === 'excel' && (
+        <div className="mb-2 text-sm">
+          {(treeRefreshError || taskTreeRowsQ.error) && (
+            <p role="alert">Task rows could not be refreshed; showing last available rows. {treeRefreshError ?? taskTreeRowsQ.error?.message}</p>
+          )}
+          <button type="button" disabled={taskTreeRowsQ.loading} onClick={async () => {
+            try {
+              const result = await taskTreeRowsQ.refetch();
+              if (result.error || result.errors?.length || !result.data?.task_tree_rows) {
+                throw result.error ?? new Error(result.errors?.[0]?.message ?? 'Task tree refresh returned no data.');
+              }
+              setTreeRefreshError(null);
+            } catch (error) {
+              setTreeRefreshError(error instanceof Error ? error.message : 'Refresh failed.');
+            }
+          }}>Refresh task rows</button>
+        </div>
+      )}
+
       {/* Task List: normal table (requirement 7) or Excel staged-edit grid */}
-      {listMode === 'excel' ? (
+      {excelOpened && (
+        <div hidden={listMode !== 'excel'}>
         <TaskExcelGrid
-          tasks={displayedTasks}
+          tasks={excelTasks}
+          assigneeLabel={assignmentLabel}
           onSaveEdit={handleExcelSave}
           onCloneTask={handleCloneTask}
         />
-      ) : (
+        </div>
+      )}
+      {listMode === 'normal' && (
       <div className="overflow-x-auto grow border border-slate-200 rounded-lg bg-white min-h-0">
         <table className="min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
@@ -1565,9 +1761,9 @@ export function TaskListView({
                               title="Chọn người được giao"
                             >
                               <option value="">Chưa gán</option>
-                              {assignees.map((assignee) => (
-                                <option key={assignee.userId} value={assignee.userId}>
-                                  {assignee.username}
+                              {assigneeOptions.map((option) => (
+                                <option key={option.key} value={option.key}>
+                                  {option.label}{option.userId ? '' : ' (unlinked)'}
                                 </option>
                               ))}
                             </select>
@@ -1596,19 +1792,19 @@ export function TaskListView({
                       ) : (
                         <div 
                           className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1 rounded"
-                          onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'assignee_id', task.assignee?.userId || ''); }}
+                          onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'assignee_id', assigneeOptionForTask(task)?.key || ''); }}
                         >
-                          {task.assignee ? (
+                          {assigneeOptionForTask(task) ? (
                             <>
-                              <UserAvatar 
-                                username={task.assignee.username} 
-                                avatarUrl={task.assignee.avatarUrl} 
-                                size="md" 
+                              <UserAvatar
+                                username={assigneeOptionForTask(task)!.label}
+                                avatarUrl={task.assignee?.avatarUrl}
+                                size="md"
                               />
-                              <span>{task.assignee.username}</span>
+                              <span>{assigneeOptionForTask(task)!.label}</span>
                             </>
                           ) : (
-                            <span className="text-slate-400">Chưa gán</span>
+                            <span className="text-slate-400">{assignmentLabel(task) || 'Chưa gán'}</span>
                           )}
                         </div>
                       )}
@@ -1761,6 +1957,10 @@ export function TaskListView({
 
       {/* Pagination */}
       {pagination && pagination.totalPages > 0 && (
+        <div aria-label={pagination.rootTasksOnly ? 'Parent task pagination' : 'Task pagination'}>
+        {pagination.rootTasksOnly && pagination.totalPages > 1 && (
+          <p className="px-4 pt-2 text-sm text-slate-600">Pages count parent tasks only; total tasks above includes descendants.</p>
+        )}
         <Pagination
           currentPage={pagination.currentPage}
           totalPages={pagination.totalPages}
@@ -1769,6 +1969,7 @@ export function TaskListView({
           onPageSizeChange={pagination.setPageSize}
           totalItems={pagination.totalItems}
         />
+        </div>
       )}
 
       {/* Filter Modal */}
@@ -1780,6 +1981,26 @@ export function TaskListView({
         assignees={assignees}
         projects={projects}
       />
+
+      {cloneSourceTaskId && (
+        <TaskCloneDialog
+          open
+          nodes={(taskTreeRowsQ.data?.task_tree_rows ?? []) as CloneTreeNode[]}
+          sourceTaskId={cloneSourceTaskId}
+          loading={taskTreeRowsQ.loading}
+          submitting={cloneSubmitting || recoveryState?.busy === 'mutation'}
+          serverError={recoveryState ? `${recoveryState.message}${cloneError ? ` ${cloneError}` : ''}` : cloneError}
+          loadError={taskTreeRowsQ.error?.message ?? null}
+          requiresRefresh={cloneRecovery !== null}
+          retrying={cloneRefreshing || recoveryState?.busy === 'refresh'}
+          onRetry={handleRetryCloneRefresh}
+          onClose={() => {
+            setCloneSourceTaskId(null);
+            setCloneError(null);
+          }}
+          onSubmit={handleCloneSubmit}
+        />
+      )}
 
       {/* TaskDetail khi được chọn */}
       {selectedTask && (

@@ -1,7 +1,7 @@
 import { createSlice, createAsyncThunk, PayloadAction } from '@reduxjs/toolkit';
 import { client } from '@/lib/apollo-client';
 import { 
-  GET_PROJECT_TASKS,
+  TASK_TREE_ROWS,
   GET_PROJECT_TASKS_PAGINATED 
 } from '@/graphql/queries/tasks';
 import {
@@ -17,6 +17,7 @@ import {
   PaginationData
 } from '@/types/task';
 import { gql } from '@apollo/client';
+import { buildGanttTaskRows } from '@/utils/ganttRows';
 
 interface TasksState {
   tasks: Task[];
@@ -24,6 +25,8 @@ interface TasksState {
   error: string | null;
   pagination: PaginationData;
   filters: TaskFilter;
+  projectId?: string;
+  requestId?: string;
 }
 
 const initialState: TasksState = {
@@ -55,7 +58,7 @@ export const fetchProjectTasks = createAsyncThunk(
   async (projectId: string, { getState, rejectWithValue }) => {
     try {
       const response = await client.query({
-        query: GET_PROJECT_TASKS,
+        query: TASK_TREE_ROWS,
         variables: { projectId },
         fetchPolicy: 'network-only'
       });
@@ -64,7 +67,19 @@ export const fetchProjectTasks = createAsyncThunk(
         return rejectWithValue(response.errors[0].message);
       }
       
-      return response.data.tasks;
+      // The legacy tasks field returns roots; selecting one child level loses
+      // deeper descendants. Read all rows once, then preserve the public forest.
+      if (!Array.isArray(response.data?.task_tree_rows)) throw new Error('Task tree response is missing');
+      const roots: any[] = [];
+      const ancestors: any[] = [];
+      for (const row of buildGanttTaskRows(response.data.task_tree_rows as Task[])) {
+        const task = { ...row.task, child_tasks: [] };
+        ancestors.length = row.depth;
+        if (row.depth) ancestors[row.depth - 1].child_tasks.push(task);
+        else roots.push(task);
+        ancestors.push(task);
+      }
+      return roots;
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi tải danh sách công việc');
     }
@@ -309,6 +324,7 @@ const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
     parent_task_id: apiTask.parent_task_id,
     title: apiTask.title,
     description: apiTask.description,
+    assignee_resource_member_id: apiTask.assignee_resource_member_id ?? null,
     assignee: apiTask.assignee ? {
       userId: apiTask.assignee.user_id,
       username: apiTask.assignee.full_name || apiTask.assignee.username,
@@ -356,25 +372,42 @@ const tasksSlice = createSlice({
     },
     resetTasks: (state) => {
       state.tasks = [];
+      state.projectId = undefined;
+      state.requestId = undefined;
+      state.loading = false;
       state.pagination = initialState.pagination;
       state.filters = {};
     },
-    // Sync a single task's fields locally without refetching
+    // Sync a task in the canonical tree. List and Excel can edit descendants,
+    // so a root-only lookup would be overwritten by the next prop refresh.
     updateTaskLocally: (state, action: PayloadAction<{ taskId: string; updates: Partial<Task> }>) => {
       const { taskId, updates } = action.payload;
-      const idx = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
-      if (idx >= 0) {
-        state.tasks[idx] = { ...state.tasks[idx], ...updates };
-      }
+      const updateTree = (tasks: Task[]): boolean => {
+        for (const task of tasks) {
+          if (task.task_id === taskId || task.id === taskId) {
+            Object.assign(task, updates);
+            return true;
+          }
+          if (task.child_tasks && updateTree(task.child_tasks)) return true;
+        }
+        return false;
+      };
+      updateTree(state.tasks);
     }
   },
   extraReducers: (builder) => {
     // fetchProjectTasks
-    builder.addCase(fetchProjectTasks.pending, (state) => {
+    builder.addCase(fetchProjectTasks.pending, (state, action) => {
+      if (state.projectId !== action.meta.arg) state.tasks = [];
+      state.projectId = action.meta.arg;
+      state.requestId = action.meta.requestId;
       state.loading = true;
       state.error = null;
     });
     builder.addCase(fetchProjectTasks.fulfilled, (state, action) => {
+      if (action.meta && state.requestId !== action.meta.requestId) return;
+      state.projectId = action.meta?.arg ?? action.payload[0]?.project_id;
+      state.requestId = undefined;
       state.loading = false;
       
       // Log dữ liệu để debug
@@ -391,6 +424,8 @@ const tasksSlice = createSlice({
       state.pagination.totalPages = Math.ceil(action.payload.length / state.pagination.pageSize);
     });
     builder.addCase(fetchProjectTasks.rejected, (state, action) => {
+      if (action.meta && state.requestId !== action.meta.requestId) return;
+      state.requestId = undefined;
       state.loading = false;
       state.error = action.payload as string;
     });

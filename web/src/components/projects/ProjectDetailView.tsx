@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Timeline } from '@/components/timeline/Timeline';
-import { TaskListView } from '@/components/tasks/TaskListView';
+import { TaskListView, type CloneRecoveryState } from '@/components/tasks/TaskListView';
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
 import { MembersView } from '@/components/projects/MembersView';
 import { ProjectReportView } from '@/components/reports/ProjectReportView';
@@ -36,6 +36,12 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
   const { t } = useTranslation();
   const lastFetchedProjectIdRef = useRef<string | null>(null);
   const [activeView, setActiveView] = useState<ViewType>(toViewType(initialTab));
+  const [loadedTasksProjectId, setLoadedTasksProjectId] = useState<string | null>(null);
+  // Recovery belongs to the project, not the modal or a transient task-loading render.
+  const [cloneRecoveries, setCloneRecoveries] = useState<Record<string, CloneRecoveryState | null>>({});
+  const handleCloneRecoveryChange = useCallback((state: CloneRecoveryState | null) => {
+    setCloneRecoveries((current) => ({ ...current, [project.id]: state }));
+  }, [project.id]);
 
   // Sync activeView with URL tab param when navigating via sidebar
   useEffect(() => {
@@ -91,6 +97,8 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
 
           // Check again if still mounted
           if (!isMounted) return;
+
+          if (fetchProjectTasks.fulfilled.match(tasksResult)) setLoadedTasksProjectId(project.id);
 
           // Bước 2: Sau khi có tasks, fetch plans
           const plansResult = await dispatch(fetchProjectPlans(project.id));
@@ -211,6 +219,7 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
     currentPage: page,
     totalPages: Math.ceil(reduxTasks.length / pageSize),
     totalItems: reduxTasks.length,
+    rootTasksOnly: true,
     pageSize: pageSize,
     setPage: setPage,
     setPageSize: setPageSize
@@ -261,7 +270,9 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
 
   // Tabs are now driven by sidebar navigation (Phase 1) via initialTab prop
 
-  if (error) {
+  const retainTaskView = (activeView === 'list' || activeView === 'gantt') && loadedTasksProjectId === project.id;
+
+  if (error && !retainTaskView) {
     return (
       <div className="p-6">
         <div className="bg-red-50 p-4 rounded-lg text-red-700">
@@ -297,6 +308,11 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
 
   return (
     <div className="p-2">
+      {error && retainTaskView && (
+        <p role="alert" className="p-2 text-red-700">
+          Error refreshing tasks: {typeof error === 'object' && error !== null ? (error as any).message : String(error)}
+        </p>
+      )}
       {/* Add task link - only visible on list view */}
       {activeView === 'list' && (
         <div className="flex justify-end mb-2">
@@ -330,14 +346,18 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
           <DocumentsTab projectId={project.id} />
         ) : activeView === 'timesheet' ? (
           <TimesheetPage />
-        ) : isLoading ? (
+        ) : isLoading && !retainTaskView ? (
           <LoadingState />
-        ) : !displayedTasks.length ? (
+        ) : !displayedTasks.length && activeView !== 'gantt' ? (
           <EmptyState />
         ) : (
           <>
             {activeView === 'list' && (
               <TaskListView
+                key={project.id}
+                projectId={project.id}
+                cloneRecoveryState={cloneRecoveries[project.id] ?? null}
+                onCloneRecoveryChange={handleCloneRecoveryChange}
                 tasks={displayedTasks}
                 pagination={pagination}
                 filters={filters}

@@ -45,7 +45,7 @@ import { useProject } from '@/hooks/useProject';
 import { Button } from '@/components/ui/Button';
 import { toast } from 'sonner';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
-import { updateTaskPriority } from '@/redux/features/tasksSlice';
+import { fetchProjectTasks, updateTaskLocally, updateTaskPriority } from '@/redux/features/tasksSlice';
 import {
   createPlan,
   deletePlan,
@@ -226,7 +226,22 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   const { user } = useAuth();
 
   // Lấy redux store tasks
-  const { tasks, loading: tasksLoading } = useAppSelector(state => state.tasks);
+  const { tasks: taskTree, loading: tasksLoading } = useAppSelector(state => state.tasks);
+  const tasks = useMemo(() => {
+    const byId = new Map<string, Task>();
+    const pending = [...taskTree];
+    while (pending.length) {
+      const task = pending.pop()!;
+      if (byId.has(task.task_id)) continue;
+      byId.set(task.task_id, task);
+      pending.push(...(task.child_tasks ?? []));
+    }
+    // Match the backend expected_order contract, not its DFS presentation order.
+    return Array.from(byId.values()).sort((a, b) =>
+      (a.priority_order ?? Number.MAX_SAFE_INTEGER) - (b.priority_order ?? Number.MAX_SAFE_INTEGER) || a.task_id.localeCompare(b.task_id));
+  }, [taskTree]);
+  const [liveOrder, setLiveOrder] = useState<{ projectId: string; source: Task[]; ids: string[] } | null>(null);
+  const reorderIntent = useRef(0);
   const projectMembers = useAppSelector(state => state.members.members);
 
   // Lấy data từ Redux store (KHÔNG gọi API lại)
@@ -656,14 +671,11 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
 
   // Tối ưu lại orderedTasks với memo chi tiết hơn
   const orderedTasks = useMemo(() => {
-    console.log('🔄 Recalculating orderedTasks');
-    const liveById = new Map(tasks.map(task => [task.task_id, task]));
-    const result = orderedTaskItems.filter(item => liveById.has(item.taskId)).map(item => ({
-      ...convertTaskOrderToTask(item, currentProjectId || ''), ...liveById.get(item.taskId)!, priority_order: item.priorityOrder,
-    }));
-    for (const task of tasks) if (!result.some(t => t.task_id === task.task_id)) result.push(task);
-    return result;
-  }, [orderedTaskItems, currentProjectId, tasks]);
+    const currentTasks = tasks.filter(task => task.project_id === currentProjectId);
+    if (liveOrder?.projectId !== currentProjectId || liveOrder.source !== taskTree) return currentTasks;
+    const byId = new Map(currentTasks.map(task => [task.task_id, task]));
+    return liveOrder.ids.filter(id => byId.has(id)).map((id, index) => ({ ...byId.get(id)!, priority_order: index + 1 }));
+  }, [currentProjectId, liveOrder, taskTree, tasks]);
 
   const matchesTaskFilter = useCallback((task: Task) => {
     if (viewMode === 'user' && selectedUserId && task.assignee?.userId !== selectedUserId) return false;
@@ -880,9 +892,23 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   const scheduleGridRows = useMemo<ScheduleGridRow[]>(() => {
     const taskRows = buildGanttTaskRows(visibleTasks);
     if (scheduleMode === 'WBS_DETAIL') {
-      const headings: ScheduleGridRow[] = projectionWbsRows.flatMap(row => row.kind === 'SOURCE_HEADING'
-        ? [{ key: row.row_id, kind: 'HEADING' as const, heading: row.heading }] : []);
-      return [...headings, ...taskRows];
+      // Source headings own sections; authoritative roots carry their entire
+      // subtree into that section, irrespective of projection task depth/order.
+      const sections: ScheduleGridRow[][] = [[]];
+      const sectionByTask = new Map<string, number>();
+      for (const row of projectionWbsRows) {
+        if (row.kind === 'SOURCE_HEADING') {
+          sections.push([{ key: row.row_id, kind: 'HEADING', heading: row.heading }]);
+        } else {
+          sectionByTask.set(row.task.task_id, sections.length - 1);
+        }
+      }
+      let section = 0;
+      for (const row of taskRows) {
+        if (row.depth === 0) section = sectionByTask.get(row.task.task_id) ?? 0;
+        sections[section].push(row);
+      }
+      return sections.flat();
     }
     // Phase is presentation only: children stay with their authoritative parent.
     const groups = [...masterRows.phase_groups, masterRows.unphased_group];
@@ -903,57 +929,25 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   }, [scheduleMode, projectionWbsRows, masterRows, visibleTasks]);
 
   // ── Requirement 1: parent/child expand/collapse over the grid rows ────────
-  // A row "has children" when any following row is deeper before an
-  // equal-or-shallower row appears. Collapsed parents hide their subtree.
+  // Task depths are relative to their task tree, not source-heading depths.
+  // A heading always closes the preceding task tree, but can still belong to
+  // an enclosing heading. Both grids and toggles use this same ancestry.
   const { gridRows, rowHasChildren } = useMemo(() => {
     const hasChildren = new Map<string, boolean>();
-    for (let i = 0; i < scheduleGridRows.length; i++) {
-      const row = scheduleGridRows[i];
-      const depth =
-        row.kind === 'TASK'
-          ? row.depth
-          : row.kind === 'HEADING'
-            ? row.heading.depth
-            : 0;
-      let child = false;
-      for (let j = i + 1; j < scheduleGridRows.length; j++) {
-        const next = scheduleGridRows[j];
-        const nextDepth =
-          next.kind === 'TASK'
-            ? next.depth
-            : next.kind === 'HEADING'
-              ? next.heading.depth
-              : 0;
-        if (nextDepth > depth) {
-          child = true;
-          break;
-        }
-        if (nextDepth <= depth) break;
-      }
-      hasChildren.set(row.key, child);
-    }
-    if (collapsedRows.size === 0) {
-      return { gridRows: scheduleGridRows, rowHasChildren: hasChildren };
-    }
     const visible: ScheduleGridRow[] = [];
-    const openStack: { depthVal: number; collapsed: boolean }[] = [];
+    const ancestors: { row: ScheduleGridRow; hidden: boolean }[] = [];
     for (const row of scheduleGridRows) {
-      const depth =
-        row.kind === 'TASK'
-          ? row.depth
-          : row.kind === 'HEADING'
-            ? row.heading.depth
-            : 0;
-      while (openStack.length > 0 && openStack[openStack.length - 1].depthVal >= depth) {
-        openStack.pop();
+      while (ancestors.length) {
+        const parent = ancestors[ancestors.length - 1].row;
+        if (row.kind === 'TASK' && (parent.kind !== 'TASK' || parent.depth < row.depth)) break;
+        if (row.kind === 'HEADING' && parent.kind === 'HEADING' && parent.heading.depth < row.heading.depth) break;
+        ancestors.pop();
       }
-      const hidden = openStack.some((a) => a.collapsed);
+      const parent = ancestors[ancestors.length - 1];
+      if (parent) hasChildren.set(parent.row.key, true);
+      const hidden = Boolean(parent && (parent.hidden || collapsedRows.has(parent.row.key)));
       if (!hidden) visible.push(row);
-      if (hasChildren.get(row.key) && collapsedRows.has(row.key)) {
-        openStack.push({ depthVal: depth, collapsed: true });
-      } else if (hasChildren.get(row.key)) {
-        openStack.push({ depthVal: depth, collapsed: false });
-      }
+      ancestors.push({ row, hidden });
     }
     return { gridRows: visible, rowHasChildren: hasChildren };
   }, [scheduleGridRows, collapsedRows]);
@@ -976,6 +970,45 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
       window.navigator.vibrate(100);
     }
   }, []);
+
+  const reorderContext = useRef({ projectId: currentProjectId, mode: planLifecycle.mode });
+  reorderContext.current = { projectId: currentProjectId, mode: planLifecycle.mode };
+  useEffect(() => () => { reorderIntent.current++; }, [currentProjectId]);
+
+  // Only this live path persists. Redux owns the server version; optimistic
+  // display order is separate, so expected_order is captured BEFORE any edit.
+  const persistLiveOrder = useCallback(async (ids: string[], nextAutoSort: boolean) => {
+    if (!currentProjectId || ids.join('|') === orderedTasks.map(task => task.task_id).join('|')) return;
+    const intent = ++reorderIntent.current;
+    const isCurrent = () => intent === reorderIntent.current && reorderContext.current.projectId === currentProjectId;
+    const expectedOrder = tasks.filter(task => task.project_id === currentProjectId && !task.is_deleted).map(task => task.task_id);
+    setLiveOrder({ projectId: currentProjectId, source: taskTree, ids });
+    setAutoSort(nextAutoSort);
+    dispatch(updateAutoSort(nextAutoSort));
+    try {
+      const result = await reorderTasks.mutateAsync({
+        projectId: currentProjectId,
+        expectedOrder,
+        taskOrders: ids.map((taskId, index) => ({ taskId, priorityOrder: index + 1 })),
+      });
+      if (!isCurrent()) return;
+      for (const item of result ?? []) {
+        dispatch(updateTaskLocally({ taskId: item.taskId, updates: { priority_order: item.priorityOrder } }));
+      }
+    } catch (error) {
+      if (!isCurrent()) return;
+      setLiveOrder(null);
+      if (reorderContext.current.mode === 'live') {
+        setAutoSort(autoSort);
+        dispatch(updateAutoSort(autoSort));
+      }
+      toast.error(error instanceof Error ? error.message : 'Unable to save task order');
+      // Roll back first, then refresh the actual task owner over the network.
+      // Never reset the lifecycle: a newer valid saved selection stays selected.
+      try { await dispatch(fetchProjectTasks(currentProjectId)).unwrap(); }
+      catch { if (isCurrent()) toast.error('Task refresh failed. Reload before reordering again.'); }
+    }
+  }, [autoSort, currentProjectId, dispatch, orderedTasks, reorderTasks, taskTree, tasks]);
 
   // DnD has one hierarchy contract: only visible matching siblings can move.
   // Saved snapshots reject moves; draft snapshots remain completely local.
@@ -1000,38 +1033,8 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
       planLifecycle.reorderDraft(reorderedIds);
       return;
     }
-    if (!currentProjectId) return;
-
-    const previousItems = orderedTaskItems;
-    const itemById = new Map(previousItems.map((item) => [item.taskId, item]));
-    if (reorderedIds.some((taskId) => !itemById.has(taskId))) return;
-    const nextItems = reorderedIds.map((taskId, index) => ({
-      ...itemById.get(taskId)!,
-      priorityOrder: index + 1,
-    }));
-    const scheduleItems = (items: typeof orderedTaskItems) => items.map((item) => ({
-      ...convertTaskOrderToTask(item, currentProjectId),
-      priority_order: item.priorityOrder,
-      force_recalculate: true,
-      start_date: undefined,
-      due_date: undefined,
-    }) as Task);
-
-    processTasksAndUpdateStore(scheduleItems(nextItems), true, dispatch);
-    setAutoSort(false);
-    dispatch(updateAutoSort(false));
-    try {
-      await reorderTasks.mutateAsync({
-        projectId: currentProjectId,
-        taskOrders: nextItems.map((item) => ({ taskId: item.taskId, priorityOrder: item.priorityOrder })),
-      });
-    } catch (error) {
-      processTasksAndUpdateStore(scheduleItems(previousItems), true, dispatch);
-      setAutoSort(autoSort);
-      dispatch(updateAutoSort(autoSort));
-      toast.error(error instanceof Error ? error.message : 'Unable to save task order');
-    }
-  }, [autoSort, currentProjectId, dispatch, draggableTaskIds, orderedTaskItems, planLifecycle, reorderTasks, selectedPlanTasks]);
+    await persistLiveOrder(reorderedIds, false);
+  }, [draggableTaskIds, persistLiveOrder, planLifecycle, selectedPlanTasks]);
 
   useEffect(() => {
     if (tasks.length === 0) return;
@@ -1343,39 +1346,8 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
       toast.info('Saved plan order is immutable. Recalculate or return to Live before auto-sorting.');
       return;
     }
-    if (!currentProjectId) return;
-    const previousItems = orderedTaskItems;
-    if (sortedIds.join('|') === previousItems.map((item) => item.taskId).join('|')) return;
-    const itemById = new Map(previousItems.map((item) => [item.taskId, item]));
-    if (sortedIds.some((taskId) => !itemById.has(taskId))) return;
-    const nextItems = sortedIds.map((taskId, index) => ({
-      ...itemById.get(taskId)!,
-      priorityOrder: index + 1,
-    }));
-    const scheduleItems = (items: typeof orderedTaskItems) => items.map((item) => ({
-      ...convertTaskOrderToTask(item, currentProjectId),
-      priority_order: item.priorityOrder,
-      force_recalculate: true,
-      start_date: undefined,
-      due_date: undefined,
-    }) as Task);
-
-    processTasksAndUpdateStore(scheduleItems(nextItems), true, dispatch);
-    setAutoSort(true);
-    dispatch(updateAutoSort(true));
-    try {
-      await reorderTasks.mutateAsync({
-        projectId: currentProjectId,
-        taskOrders: nextItems.map((item) => ({ taskId: item.taskId, priorityOrder: item.priorityOrder })),
-      });
-      toast.success(t('gantt.sortedByPriority'));
-    } catch (error) {
-      processTasksAndUpdateStore(scheduleItems(previousItems), true, dispatch);
-      setAutoSort(autoSort);
-      dispatch(updateAutoSort(autoSort));
-      toast.error(error instanceof Error ? error.message : 'Unable to save task order');
-    }
-  }, [autoSort, currentProjectId, dispatch, draggableTaskIds, orderedTaskItems, planLifecycle, reorderTasks, selectedPlanTasks, t]);
+    await persistLiveOrder(sortedIds, true);
+  }, [draggableTaskIds, persistLiveOrder, planLifecycle, selectedPlanTasks]);
 
   // Debug re-render
   console.log('🔄 Timeline render', {
@@ -1555,7 +1527,19 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                     const title = row.kind === 'HEADING' ? row.heading.title : row.group.name;
                     return (
                       <div key={row.key} className="absolute left-0 right-0 grid grid-cols-[40px_minmax(0,1fr)_76px_76px] items-center gap-1 px-2 border-b border-slate-100 font-semibold text-xs text-slate-800" style={{ top: `${rowIndex * rowHeight}px`, height: `${rowHeight}px` }} data-testid="gantt-name-row" data-depth={row.kind === 'HEADING' ? row.heading.depth : 0}>
-                        <span /><span className="truncate">{title}</span><span>—</span><span>—</span>
+                        {rowHasChildren.get(row.key) ? (
+                          <button
+                            type="button"
+                            aria-label={`${collapsedRows.has(row.key) ? 'Expand' : 'Collapse'} ${title}`}
+                            aria-expanded={!collapsedRows.has(row.key)}
+                            data-testid="gantt-row-toggle"
+                            onClick={() => toggleRowCollapsed(row.key)}
+                            className="p-0.5 rounded hover:bg-slate-200 text-slate-600"
+                          >
+                            {collapsedRows.has(row.key) ? <ChevronRightIcon className="h-3.5 w-3.5" /> : <ChevronDownIcon className="h-3.5 w-3.5" />}
+                          </button>
+                        ) : <span />}
+                        <span className="truncate">{title}</span><span>—</span><span>—</span>
                       </div>
                     );
                   })}

@@ -8,6 +8,7 @@ export const UPDATE_TASK_STATUS = gql`
       parent_task_id
       title
       description
+      assignee_resource_member_id
       assignee {
         user_id
         username
@@ -44,6 +45,7 @@ export const UPDATE_TASK_EFFORT = gql`
       parent_task_id
       title
       description
+      assignee_resource_member_id
       assignee {
         user_id
         username
@@ -80,6 +82,7 @@ export const UPDATE_TASK = gql`
       parent_task_id
       title
       description
+      assignee_resource_member_id
       assignee {
         user_id
         username

@@ -24,7 +24,8 @@ import { toast } from 'sonner';
 import {
   RESOURCE_MEMBERS_QUERY,
   CREATE_RESOURCE_MEMBER,
-  LINK_RESOURCE_MEMBER_USER,
+  LINK_RESOURCE_MEMBER_BY_EMAIL,
+  SET_PROJECT_MEMBER_ACCESS,
   CAPACITY_SETTINGS_QUERY,
   SET_MEMBER_CAPACITY,
   SET_CAPACITY_DATE_OVERRIDE,
@@ -47,12 +48,14 @@ interface Props {
 }
 
 interface ResourceMemberRow {
+  member_id: string;
   resource_member_id: string;
   display_name: string;
   email: string | null;
   user_id: string | null;
   member_kind: string;
   linked_at: string | null;
+  access_role: string | null;
 }
 
 interface CapacityRow {
@@ -99,6 +102,8 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [linkTarget, setLinkTarget] = useState<Record<string, string>>({});
+  const [memberRefreshError, setMemberRefreshError] = useState<string | null>(null);
+  const [memberRefreshing, setMemberRefreshing] = useState(false);
 
   const [capacityDraft, setCapacityDraft] = useState<Record<string, { weekday: string; weekend: string }>>({});
   const [overrideDraft, setOverrideDraft] = useState<Record<string, { date: string; hours: string }>>({});
@@ -131,6 +136,7 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
   const membersQ = useQuery(RESOURCE_MEMBERS_QUERY, {
     variables: { project_id: projectId },
     fetchPolicy: 'cache-and-network',
+    notifyOnNetworkStatusChange: true,
   });
   const capacityQ = useQuery(CAPACITY_SETTINGS_QUERY, {
     variables: { project_id: projectId },
@@ -145,15 +151,40 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
     fetchPolicy: 'cache-and-network',
   });
 
-  const refetchAll = () => {
-    membersQ.refetch();
-    capacityQ.refetch();
-    groupsQ.refetch();
-    commitmentsQ.refetch();
+  const recordMemberResult = (member?: ResourceMemberRow) => {
+    if (!member?.resource_member_id) return;
+    // Resource handles are not Apollo's default id key; retain confirmed writes explicitly.
+    membersQ.updateQuery?.((data: { resource_members?: ResourceMemberRow[] }) => {
+      const rows = data?.resource_members ?? [];
+      const present = rows.some((row) => row.resource_member_id === member.resource_member_id);
+      return { ...data, resource_members: present
+        ? rows.map((row) => row.resource_member_id === member.resource_member_id ? { ...row, ...member } : row)
+        : [...rows, member] };
+    });
   };
 
+  const refreshMembers = async (afterWrite = false) => {
+    setMemberRefreshing(true);
+    try {
+      const result = await membersQ.refetch();
+      if (result.error || result.errors?.length || !Array.isArray(result.data?.resource_members)) {
+        throw result.error ?? new Error(result.errors?.[0]?.message ?? 'Member list returned no data.');
+      }
+      setMemberRefreshError(null);
+    } catch (error) {
+      const message = `${afterWrite ? 'Member change saved, but refresh failed: ' : 'Member refresh failed: '}${(error as Error).message}`;
+      setMemberRefreshError(message);
+      toast.error(message);
+    } finally {
+      setMemberRefreshing(false);
+    }
+  };
+  const memberError = memberRefreshError ?? membersQ.error?.message ??
+    (!membersQ.loading && !Array.isArray(membersQ.data?.resource_members) ? 'Member list returned no data.' : null);
+
   const [createMember] = useMutation(CREATE_RESOURCE_MEMBER);
-  const [linkMember] = useMutation(LINK_RESOURCE_MEMBER_USER);
+  const [linkMember] = useMutation(LINK_RESOURCE_MEMBER_BY_EMAIL);
+  const [setMemberAccess] = useMutation(SET_PROJECT_MEMBER_ACCESS);
   const [setCapacity] = useMutation(SET_MEMBER_CAPACITY);
   const [setOverride] = useMutation(SET_CAPACITY_DATE_OVERRIDE);
   const [addDayOff] = useMutation(ADD_DAY_OFF);
@@ -181,7 +212,7 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
   const handleCreateMember = async () => {
     if (!newMemberName.trim()) return;
     try {
-      await createMember({
+      const result = await createMember({
         variables: {
           input: {
             project_id: projectId,
@@ -190,10 +221,11 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
           },
         },
       });
+      recordMemberResult(result.data?.create_resource_member);
       toast.success(`Member "${newMemberName.trim()}" created (no account needed)`);
       setNewMemberName('');
       setNewMemberEmail('');
-      membersQ.refetch();
+      await refreshMembers(true);
     } catch (e) {
       toast.error(`Create failed: ${(e as Error).message}`);
     }
@@ -203,15 +235,16 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
     const value = (linkTarget[memberId] ?? '').trim();
     if (!value) return;
     try {
-      await linkMember({
+      const result = await linkMember({
         variables: {
           resource_member_id: memberId,
-          user_id: value, // backend resolves email-or-id via link input
+          email: value,
         },
       });
+      recordMemberResult(result.data?.link_resource_member_by_email);
       toast.success('Member linked; task assignments preserved');
       setLinkTarget((p) => ({ ...p, [memberId]: '' }));
-      membersQ.refetch();
+      await refreshMembers(true);
     } catch (e) {
       toast.error(`Link failed: ${(e as Error).message}`);
     }
@@ -371,6 +404,13 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
       {/* ------------------------- R2: resource members ------------------------- */}
       <section className="border rounded-lg p-4 bg-white" data-testid="resource-members-section">
         <h3 className="text-sm font-semibold mb-2">Project members (named, no email required)</h3>
+        {(membersQ.loading || memberRefreshing) && <p role="status">Loading project members…</p>}
+        {memberError && (
+          <div role="alert" className="mb-2 text-sm text-red-700">
+            Could not load project members: {memberError}
+            <button type="button" className="ml-2 underline" disabled={memberRefreshing} onClick={() => refreshMembers()}>Retry members</button>
+          </div>
+        )}
         {canManage && (
           <div className="flex flex-wrap gap-2 mb-3">
             <input
@@ -390,7 +430,7 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
             <button
               className="px-3 py-1 bg-blue-600 text-white rounded text-xs"
               onClick={handleCreateMember}
-              disabled={!newMemberName.trim()}
+              disabled={!newMemberName.trim() || memberRefreshing}
               data-testid="create-resource-member-btn"
             >
               Add member
@@ -403,7 +443,8 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
               <th className="py-1">Name</th>
               <th>Email</th>
               <th>Status</th>
-              {canManage && <th>Link to user</th>}
+              <th>Access</th>
+              {canManage && <th>Link to existing account</th>}
             </tr>
           </thead>
           <tbody>
@@ -420,18 +461,43 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
                     <span className="text-amber-600">placeholder</span>
                   )}
                 </td>
+                <td>
+                  {canManage ? (
+                    <select
+                      className={inputCls}
+                      aria-label={`Access role for ${m.display_name}`}
+                      value={m.access_role ?? ''}
+                      onChange={async (event) => {
+                        try {
+                          const result = await setMemberAccess({ variables: {
+                            resource_member_id: m.resource_member_id,
+                            role: event.target.value || null,
+                          }});
+                          recordMemberResult(result.data?.set_project_member_access);
+                          await refreshMembers(true);
+                        } catch (error) {
+                          toast.error(`Access change failed: ${(error as Error).message}`);
+                        }
+                      }}
+                    >
+                      <option value="">No access</option>
+                      <option value="manager">Manager</option>
+                      <option value="leader">Leader</option>
+                      <option value="member">Member</option>
+                      <option value="guest">Guest</option>
+                    </select>
+                  ) : (m.access_role ?? <span className="text-slate-400">none</span>)}
+                </td>
                 {canManage && (
                   <td>
                     {!m.user_id && (
                       <span className="flex gap-1">
                         <input
                           className={inputCls}
-                          placeholder="user email / id"
+                          placeholder="existing account email"
                           aria-label={`Link user for ${m.display_name}`}
                           value={linkTarget[m.resource_member_id] ?? ''}
-                          onChange={(e) =>
-                            setLinkTarget((p) => ({ ...p, [m.resource_member_id]: e.target.value }))
-                          }
+                          onChange={(e) => setLinkTarget((p) => ({ ...p, [m.resource_member_id]: e.target.value }))}
                         />
                         <button
                           className="px-2 py-1 border rounded text-xs"
@@ -447,7 +513,7 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
                 )}
               </tr>
             ))}
-            {resourceMembers.length === 0 && (
+            {!membersQ.loading && !memberRefreshing && !memberError && resourceMembers.length === 0 && (
               <tr>
                 <td colSpan={4} className="py-2 text-slate-400">
                   No resource members yet

@@ -13,8 +13,9 @@ import { gql } from '@apollo/client';
 /* ------------------------------ resource members ----------------------------- */
 
 export const RESOURCE_MEMBERS_QUERY = gql`
-  query ResourceMembers($project_id: ID!) {
-    resource_members(project_id: $project_id) {
+  query ResourceMembers($project_id: ID!, $only_assignable: Boolean) {
+    resource_members(project_id: $project_id, only_assignable: $only_assignable) {
+      member_id
       resource_member_id
       project_id
       display_name
@@ -22,6 +23,9 @@ export const RESOURCE_MEMBERS_QUERY = gql`
       user_id
       member_kind
       linked_at
+      access_role
+      joined_at
+      invited_by
     }
   }
 `;
@@ -43,13 +47,23 @@ export const CREATE_RESOURCE_MEMBER = gql`
 export const LINK_RESOURCE_MEMBER_USER = gql`
   mutation LinkResourceMemberUser($resource_member_id: ID!, $user_id: ID!) {
     link_resource_member_user(resource_member_id: $resource_member_id, user_id: $user_id) {
-      resource_member_id
-      project_id
-      display_name
-      email
-      user_id
-      member_kind
-      linked_at
+      member_id resource_member_id project_id display_name email user_id member_kind linked_at access_role joined_at invited_by
+    }
+  }
+`;
+
+export const LINK_RESOURCE_MEMBER_BY_EMAIL = gql`
+  mutation LinkResourceMemberByEmail($resource_member_id: ID!, $email: String!) {
+    link_resource_member_by_email(resource_member_id: $resource_member_id, email: $email) {
+      member_id resource_member_id project_id display_name email user_id member_kind linked_at access_role joined_at invited_by
+    }
+  }
+`;
+
+export const SET_PROJECT_MEMBER_ACCESS = gql`
+  mutation SetProjectMemberAccess($resource_member_id: ID!, $role: String) {
+    set_project_member_access(resource_member_id: $resource_member_id, role: $role) {
+      member_id resource_member_id project_id display_name email user_id member_kind linked_at access_role joined_at invited_by
     }
   }
 `;

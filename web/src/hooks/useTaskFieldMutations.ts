@@ -406,11 +406,18 @@ export function useUpdateTaskAssignee() {
       const assigneeId = resourceAssignment ? resourceAssignment.assigneeId ?? null : assignment;
       const assigneeResourceMemberId = resourceAssignment?.assigneeResourceMemberId ?? null;
 
-      const input = {
-        task_id: taskId,
-        assignee_id: assigneeId === '' ? null : assigneeId,
-        assignee_resource_member_id: assigneeResourceMemberId,
-      };
+      const input = resourceAssignment
+        ? {
+            task_id: taskId,
+            assignee_id: assigneeId === '' ? null : assigneeId,
+            assignee_resource_member_id: assigneeResourceMemberId,
+          }
+        : {
+            task_id: taskId,
+            // Explicit blank is the atomic clear contract, not a no-op.
+            assignee_id: assigneeId === '' ? null : assigneeId,
+            assignee_resource_member_id: assigneeId === null ? null : undefined,
+          };
       
       console.log(`Đang cập nhật người được giao: ${assigneeId}`);
       
@@ -419,38 +426,28 @@ export function useUpdateTaskAssignee() {
         mutation: UPDATE_TASK,
         variables: { input },
         errorPolicy: 'all',
-        optimisticResponse: {
-          update_task: {
-            __typename: 'Task',
-            task_id: taskId,
-            assignee_id: input.assignee_id,
-            assignee_resource_member_id: input.assignee_resource_member_id,
-          }
-        }
       });
-      
-      if (response.errors) {
-        console.warn("GraphQL errors:", response.errors);
-        if (!response.data) {
-          throw new Error(response.errors[0].message);
-        }
-      }
-      
-      // Xử lý kết quả
+
+      // Partial GraphQL data is not a confirmed assignment. Never publish it.
+      if (response.errors?.length) throw new Error(response.errors.map((error) => error.message).join('; '));
       const result = response.data?.update_task;
-      
-      // Thông báo cập nhật thành công
-      if (result) {
+      if (!result || result.task_id !== taskId ||
+          result.assignee_resource_member_id === undefined || result.assignee === undefined) {
+        throw new Error('Assignment update returned no complete task result.');
+      }
+
+      {
         // Đảm bảo TypeScript nhận assignee có định dạng đúng (undefined thay vì null)
         const formattedResult: Partial<Task> = {
           task_id: result.task_id,
           // Chuyển assignee từ null thành undefined để phù hợp với Task type
+          assignee_resource_member_id: result.assignee_resource_member_id,
           assignee: result.assignee ? {
             userId: result.assignee.user_id,
             username: result.assignee.username,
             avatarUrl: result.assignee.avatar_url,
             role: result.assignee.role,
-          } : undefined // Dùng undefined thay vì null
+          } : undefined
         };
         
         // Broadcast event cập nhật
@@ -458,7 +455,8 @@ export function useUpdateTaskAssignee() {
           const event = new CustomEvent('task-assignee-updated', { 
             detail: { 
               task_id: taskId,
-              assigneeId: assigneeId,
+              assigneeId: formattedResult.assignee?.userId ?? null,
+              assignee_resource_member_id: formattedResult.assignee_resource_member_id,
               assignee: formattedResult.assignee
             } 
           });
@@ -468,10 +466,7 @@ export function useUpdateTaskAssignee() {
         setIsUpdating(false);
         return formattedResult;
       }
-      
-      setIsUpdating(false);
-      // Trả về đúng kiểu dữ liệu cho Task interface
-      return { task_id: taskId, assignee: undefined };
+
     } catch (err) {
       console.error('Lỗi khi cập nhật người được giao task:', err);
       setError(err instanceof Error ? err : new Error(String(err)));

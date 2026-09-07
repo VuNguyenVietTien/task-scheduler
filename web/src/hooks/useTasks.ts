@@ -28,12 +28,16 @@ const updateTaskPriorityOrderApi = async (taskId: string, newOrder: number) => {
   }
 };
 
-// Map frontend camelCase reorder payload → Rust ReorderTasksInput (snake_case)
-export const mapReorderInput = (input: {
+interface ReorderInput {
   projectId: string;
   taskOrders: { taskId: string; priorityOrder: number }[];
-}) => ({
+  expectedOrder?: string[];
+}
+
+// Optional on the wire for old callers; Gantt supplies the full pre-edit order.
+export const mapReorderInput = (input: ReorderInput) => ({
   project_id: input.projectId,
+  ...(input.expectedOrder !== undefined ? { expected_order: input.expectedOrder } : {}),
   tasks: input.taskOrders.map((o) => ({
     task_id: o.taskId,
     priority_order: o.priorityOrder,
@@ -51,10 +55,7 @@ export const normalizeReorderResult = (result: any): { taskId: string; priorityO
     .map((t) => ({ taskId: t.task_id, priorityOrder: t.priority_order ?? 0 }));
 };
 
-const reorderTasksApi = async (input: { 
-  projectId: string; 
-  taskOrders: { taskId: string; priorityOrder: number }[] 
-}) => {
+const reorderTasksApi = async (input: ReorderInput) => {
   try {
     if (!input.projectId || !input.taskOrders?.length) {
       throw new Error('Invalid reorder tasks input');
@@ -89,49 +90,9 @@ export const useUpdateTaskPriorityOrder = () => {
   );
 };
 
-export const useReorderTasks = () => {
-  const queryClient = useQueryClient();
-
-  return useMutation(
-    async (input: { projectId: string; taskOrders: { taskId: string; priorityOrder: number }[] }) => {
-      return reorderTasksApi(input);
-    },
-    {
-      onMutate: async (newData) => {
-        await queryClient.cancelQueries(['tasks']);
-        const previousTasks = queryClient.getQueryData<Task[]>(['tasks']);
-
-        queryClient.setQueryData<Task[]>(['tasks'], (old) => {
-          if (!old) return old;
-          
-          const updated = [...old];
-          newData.taskOrders.forEach(({ taskId, priorityOrder }) => {
-            const taskIndex = updated.findIndex(t => t.id === taskId);
-            if (taskIndex !== -1) {
-              updated[taskIndex] = {
-                ...updated[taskIndex],
-                priority_order: priorityOrder,
-              };
-            }
-          });
-          
-          return updated.sort((a, b) => a.priority_order - b.priority_order);
-        });
-
-        return { previousTasks };
-      },
-      onError: (err, newData, context) => {
-        if (context?.previousTasks) {
-          console.warn('Rolling back task reorder due to error');
-          queryClient.setQueryData(['tasks'], context.previousTasks);
-        }
-      },
-      onSettled: () => {
-        queryClient.invalidateQueries(['tasks']);
-      },
-    }
-  );
-};
+// Timeline owns optimistic display order and Redux network recovery. The
+// unrelated mock-backed React Query ['tasks'] cache is not a task authority.
+export const useReorderTasks = () => useMutation(reorderTasksApi);
 
 // API interface for updating task
 const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {

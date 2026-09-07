@@ -3,6 +3,7 @@ import { gql } from '@apollo/client';
 export const GET_PROJECT_TASKS = gql`
   query GetTasks($projectId: ID!) {
     tasks(project_id: $projectId) {
+      priority_order
       task_id
       project_id
       parent_task_id
@@ -32,6 +33,7 @@ export const GET_PROJECT_TASKS = gql`
       tags
       progress_type
       child_tasks {
+        priority_order
         task_id
         project_id
         parent_task_id
@@ -53,6 +55,43 @@ export const GET_PROJECT_TASKS = gql`
         type_
         category
       }
+    }
+  }
+`;
+
+export const TASK_TREE_ROWS = gql`
+  query TaskTreeRows($projectId: ID!) {
+    task_tree_rows(project_id: $projectId) {
+      task_id
+      project_id
+      parent_task_id
+      title
+      description
+      assignee_resource_member_id
+      assignee {
+        user_id
+        username
+        full_name
+        avatar_url
+        role
+      }
+      priority_order
+      start_date
+      due_date
+      actual_start_date
+      actual_end_date
+      effort
+      progress
+      created_by
+      created_at
+      updated_at
+      is_deleted
+      status
+      priority
+      type_
+      category
+      tags
+      progress_type
     }
   }
 `;
@@ -146,6 +185,7 @@ export const GET_PROJECT_TASKS_PAGINATED = gql`
           project_id
           parent_task_id
           title
+          assignee_resource_member_id
           assignee {
             user_id
             username

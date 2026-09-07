@@ -186,6 +186,19 @@ describe('TaskExcelGrid interactions', () => {
     expect(screen.getByTestId('excel-dirty-count').textContent).toBe('1 unsaved');
   });
 
+  it('keeps descendant task ids and stages edits on the descendant row', async () => {
+    const child = { ...task('child', 'Child'), excelDepth: 1 };
+    const onSaveEdit = jest.fn().mockResolvedValue(undefined);
+    render(<TaskExcelGrid tasks={[task('parent', 'Parent'), child]} onSaveEdit={onSaveEdit} />);
+    expect(screen.getByTestId('excel-cell-1-0')).toHaveTextContent('↳ Child');
+    expect(screen.getByTestId('excel-cell-1-0')).toHaveAttribute('data-task-id', 'child');
+    fireEvent.mouseDown(screen.getByTestId('excel-cell-1-3'));
+    fireEvent.change(screen.getByTestId('excel-typing-input'), { target: { value: '3' } });
+    fireEvent.keyDown(screen.getByTestId('excel-typing-input'), { key: 'Enter' });
+    fireEvent.click(screen.getByTestId('excel-save-btn'));
+    await waitFor(() => expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 'child', field: 'effort', value: '3' }));
+  });
+
   it('clone button calls onCloneTask for the row', () => {
     const onCloneTask = jest.fn();
     renderGrid(jest.fn().mockResolvedValue(undefined), onCloneTask);

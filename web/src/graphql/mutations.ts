@@ -9,6 +9,7 @@ export const CREATE_TASK = gql`
       status
       priority
       priority_order
+      assignee_resource_member_id
       assignee {
         user_id
         username
@@ -25,6 +26,15 @@ export const CREATE_TASK = gql`
       progress_type
       tags
       parent_task_id
+    }
+  }
+`;
+
+export const CLONE_TASK_SUBTREE = gql`
+  mutation CloneTaskSubtree($input: CloneTaskSubtreeInput!) {
+    clone_task_subtree(input: $input) {
+      root_task_ids
+      created_task_ids
     }
   }
 `;

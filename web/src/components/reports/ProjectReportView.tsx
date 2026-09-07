@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAppSelector } from '@/redux/hooks';
 import { PieChart, Pie, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from 'recharts';
@@ -6,6 +6,7 @@ import { format } from 'date-fns';
 import { vi } from 'date-fns/locale';
 import { PeriodReportView } from './period-report-view';
 import { useDailyReportData } from './daily-report-view';
+import { countTasksByStatus, distinctTaskPopulation } from './task-population';
 
 // Define types
 type ReportTabType = 'overview' | 'daily' | 'weekly' | 'monthly' | 'quarterly' | 'bugs' | 'plan-vs-actual';
@@ -78,8 +79,9 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
   const [selectedPlanId, setSelectedPlanId] = useState<string>('');
 
   // Get data from Redux store
-  const { tasks } = useAppSelector(state => state.tasks);
+  const { tasks: taskForest } = useAppSelector(state => state.tasks);
   const { plans, activePlan } = useAppSelector(state => state.plans);
+  const tasks = useMemo(() => distinctTaskPopulation(taskForest), [taskForest]);
 
   // Use the fixed daily report data hook (plan-aware)
   const dailyReportData = useDailyReportData(projectId);
@@ -114,27 +116,21 @@ export function ProjectReportView({ projectId }: { projectId: string }) {
 
   // Process data when tasks or plans change
   useEffect(() => {
-    if (tasks && tasks.length > 0) {
-      // Cập nhật planTasks từ activePlan
-      const newPlanTasks = activePlan?.planData?.tasks || [];
-      setPlanTasks(newPlanTasks);
-      
-      // Process data for dashboard overview
-      processTasksForOverview();
-      
-      // Process data for daily report
-      processTasksForDailyReport();
-    }
+    // Cập nhật planTasks từ activePlan
+    const newPlanTasks = activePlan?.planData?.tasks || [];
+    setPlanTasks(newPlanTasks);
+
+    // Process data for dashboard overview
+    processTasksForOverview();
+
+    // Process data for daily report
+    processTasksForDailyReport();
   }, [tasks, plans, activePlan]);
 
   // Process tasks for overview dashboard
   const processTasksForOverview = () => {
     // Group tasks by status for pie chart
-    const statusCounts: Record<string, number> = {};
-    tasks.forEach(task => {
-      const status = task.status.toUpperCase();
-      statusCounts[status] = (statusCounts[status] || 0) + 1;
-    });
+    const statusCounts = countTasksByStatus(tasks);
     
     const statusData = Object.entries(statusCounts).map(([status, count]) => ({
       status,

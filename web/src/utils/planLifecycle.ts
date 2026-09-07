@@ -253,8 +253,14 @@ export function parsePlanSnapshot(planData: unknown): PlanSnapshot {
       };
       if (!legacy || typeof legacy !== 'object') throw new Error(`plan_data.tasks[${index}] is invalid`);
       const fields = legacy as Record<string, unknown>;
-      for (const [camel, snake] of [['taskId', 'task_id'], ['startDate', 'start_date'], ['endDate', 'end_date'], ['priorityOrder', 'priority_order'], ['assigneeId', 'assignee_id']]) {
-        if (camel in fields && snake in fields && fields[camel] !== fields[snake]) throw new Error('conflicting legacy aliases');
+      for (const aliases of [
+        ['taskId', 'task_id'], ['startDate', 'start_date'], ['endDate', 'end_date'],
+        ['priorityOrder', 'priority_order'],
+        ['assigneeUserId', 'assignee_user_id', 'assigneeId', 'assignee_id'],
+        ['assigneeResourceMemberId', 'assignee_resource_member_id'], ['parentTaskId', 'parent_task_id'],
+      ]) {
+        const present = aliases.filter(key => key in fields);
+        if (present.some(key => fields[key] !== fields[present[0]])) throw new Error('conflicting legacy aliases');
       }
       const taskId = legacy.taskId ?? legacy.task_id;
       if (!taskId) throw new Error(`plan_data.tasks[${index}] has no task id`);

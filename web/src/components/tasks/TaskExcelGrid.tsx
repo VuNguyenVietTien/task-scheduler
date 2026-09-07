@@ -27,9 +27,11 @@ export interface StagedEdit {
 }
 
 interface Props {
-  tasks: Task[];
+  tasks: Array<Task & { excelDepth?: number }>;
   /** Persist one staged edit. Throw to report failure (edit stays staged). */
   onSaveEdit: (edit: StagedEdit) => Promise<void>;
+  /** Canonical resource label; supports members without linked accounts. */
+  assigneeLabel?: (task: Task) => string;
   onCloneTask?: (taskId: string) => void;
 }
 
@@ -116,7 +118,7 @@ export function parseTsv(text: string): string[][] {
     .map((line) => line.split('\t'));
 }
 
-export function TaskExcelGrid({ tasks, onSaveEdit, onCloneTask }: Props) {
+export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, onCloneTask }: Props) {
   const [staged, setStaged] = useState<Map<string, StagedEdit>>(new Map());
   const [anchor, setAnchor] = useState<{ row: number; col: number } | null>(null);
   const [focusCell, setFocusCell] = useState<{ row: number; col: number } | null>(null);
@@ -144,12 +146,12 @@ export function TaskExcelGrid({ tasks, onSaveEdit, onCloneTask }: Props) {
         case 'due_date':
           return task.due_date ? task.due_date.slice(0, 10) : '';
         case 'assignee':
-          return task.assignee?.username ?? '';
+          return assigneeLabel?.(task) ?? task.assignee?.username ?? '';
         default:
           return '';
       }
     },
-    [staged]
+    [assigneeLabel, staged]
   );
 
   const inSelection = useCallback(
@@ -206,24 +208,24 @@ export function TaskExcelGrid({ tasks, onSaveEdit, onCloneTask }: Props) {
 
   /** Enter commits the typed value to every selected cell (fill-down/across). */
   const handleGridKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && anchor) {
+    const clearsSelection = e.key === 'Delete';
+    if (anchor && ((e.key === 'Enter' && typing.trim() !== '') || clearsSelection)) {
       e.preventDefault();
-      if (typing.trim() !== '') {
-        const other = focusCell ?? anchor;
-        const r1 = Math.min(anchor.row, other.row);
-        const r2 = Math.max(anchor.row, other.row);
-        const c1 = Math.min(anchor.col, other.col);
-        const c2 = Math.max(anchor.col, other.col);
-        const cellErrors: string[] = [];
-        for (let r = r1; r <= r2; r++) {
-          for (let c = c1; c <= c2; c++) {
-            const err = stageCell(r, c, typing);
-            if (err) cellErrors.push(`Row ${r + 1} ${COLUMNS[c].label}: ${err}`);
-          }
+      const value = clearsSelection ? '' : typing;
+      const other = focusCell ?? anchor;
+      const r1 = Math.min(anchor.row, other.row);
+      const r2 = Math.max(anchor.row, other.row);
+      const c1 = Math.min(anchor.col, other.col);
+      const c2 = Math.max(anchor.col, other.col);
+      const cellErrors: string[] = [];
+      for (let r = r1; r <= r2; r++) {
+        for (let c = c1; c <= c2; c++) {
+          const err = stageCell(r, c, value);
+          if (err) cellErrors.push(`Row ${r + 1} ${COLUMNS[c].label}: ${err}`);
         }
-        setErrors(cellErrors);
-        setTyping('');
       }
+      setErrors(cellErrors);
+      setTyping('');
     } else if (e.key === 'Escape') {
       setTyping('');
       setErrors([]);
@@ -377,7 +379,11 @@ export function TaskExcelGrid({ tasks, onSaveEdit, onCloneTask }: Props) {
                     data-task-id={task.task_id}
                     data-field={col.field}
                   >
-                    {isTypingCell ? typing : cellValue(task, col.field)}
+                    {isTypingCell ? typing : col.field === 'title' ? (
+                      <span style={{ paddingLeft: `${(task.excelDepth ?? 0) * 16}px` }}>
+                        {(task.excelDepth ?? 0) > 0 ? '↳ ' : ''}{cellValue(task, col.field)}
+                      </span>
+                    ) : cellValue(task, col.field)}
                   </td>
                 );
               })}

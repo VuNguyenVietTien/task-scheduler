@@ -1,157 +1,147 @@
-/**
- * Recursive task-subtree clone (requirement 7, manager review #4).
- *
- * Contract:
- * - Clones `rootId` and EVERY descendant (grandchildren included) via DFS.
- * - Cycle guard: `parent_task_id` cycles in the source list cannot cause
- *   infinite recursion (visited set); each source node is cloned at most once.
- * - Parent remap: each clone's `parent_task_id` points at its cloned parent;
- *   the ROOT clone keeps the SOURCE root's own parent (cloning a child keeps
- *   it under the same parent), or null when the source was a root task.
- * - newId validation: children are only written after the parent's create
- *   call returns a usable id; a missing/invalid id fails that branch
- *   WITHOUT orphaning further writes.
- * - Partial errors: per-node failures are collected and reported; success is
- *   claimed ONLY when every node was created.
- */
-
-export interface CloneSourceTask {
+export interface CloneTreeNode {
   task_id: string;
   parent_task_id?: string | null;
   title: string;
-  [k: string]: unknown; // remaining fields are copied verbatim per node
+  is_deleted?: boolean;
 }
 
-export interface CloneCreateInput {
-  project_id: string;
-  title: string;
-  parent_task_id?: string | null;
-  source: CloneSourceTask;
+export interface CloneTreeItem {
+  node: CloneTreeNode;
+  depth: number;
 }
 
-export interface CloneApi {
-  /** Must return the new task id; throwing records a per-node failure. */
-  createTask(input: CloneCreateInput): Promise<string>;
+export interface CloneTree {
+  sourceTaskId: string;
+  items: CloneTreeItem[];
 }
 
-export interface CloneNodeFailure {
-  sourceId: string;
-  title: string;
-  error: string;
+export interface CloneTaskSelectionInput {
+  source_task_id: string;
+  selected_descendant_ids: string[];
+  quantity: number;
 }
 
-export interface CloneResult {
-  ok: boolean;
-  rootCloneId?: string | { id?: string; err?: string };
-  created: string[]; // new ids in creation order
-  failures: CloneNodeFailure[];
+export interface ClonePreview {
+  parentCount: number;
+  childCount: number;
+  totalCount: number;
 }
 
-export async function cloneTaskSubtree(
-  api: CloneApi,
-  tasks: CloneSourceTask[],
-  rootId: string,
-  opts: { titleSuffix?: string } = {}
-): Promise<CloneResult> {
-  const suffix = opts.titleSuffix ?? ' (copy)';
-  const byId = new Map(tasks.map((t) => [t.task_id, t]));
-  const childrenOf = new Map<string, CloneSourceTask[]>();
-  for (const t of tasks) {
-    const p = t.parent_task_id ?? null;
-    if (p) {
-      (childrenOf.get(p) ?? childrenOf.set(p, []).get(p)!).push(t);
-    }
+/** Projects one active, cycle-safe subtree. Duplicate IDs appear once; orphans are never promoted. */
+export function buildCloneTree(nodes: readonly CloneTreeNode[], sourceTaskId: string): CloneTree {
+  const byId = new Map<string, CloneTreeNode>();
+  for (const node of nodes) {
+    if (!node.is_deleted && !byId.has(node.task_id)) byId.set(node.task_id, node);
   }
-  // Pre-compute descendants with a visited set (cycle-safe).
-  const descendants: CloneSourceTask[] = [];
-  const seen = new Set<string>([rootId]);
-  const stack = [...(childrenOf.get(rootId) ?? [])];
+
+  const source = byId.get(sourceTaskId);
+  if (!source) return { sourceTaskId, items: [] };
+
+  const children = new Map<string, CloneTreeNode[]>();
+  byId.forEach((node) => {
+    const parentId = node.parent_task_id;
+    if (parentId && byId.has(parentId)) {
+      const siblings = children.get(parentId) ?? [];
+      siblings.push(node);
+      children.set(parentId, siblings);
+    }
+  });
+
+  const items: CloneTreeItem[] = [];
+  const seen = new Set<string>();
+  const stack: CloneTreeItem[] = [{ node: source, depth: 0 }];
   while (stack.length) {
-    const node = stack.pop()!;
-    if (seen.has(node.task_id)) continue; // cycle or duplicate edge
-    seen.add(node.task_id);
-    descendants.push(node);
-    for (const c of childrenOf.get(node.task_id) ?? []) stack.push(c);
-  }
-
-  const created: string[] = [];
-  const failures: CloneNodeFailure[] = [];
-  const idMap = new Map<string, string>(); // source id → clone id
-  const project = (byId.get(rootId)?.project_id as string) ?? '';
-
-  const root = byId.get(rootId);
-  if (!root) {
-    return { ok: false, created, failures: [{ sourceId: rootId, title: '', error: 'source task not found' }] };
-  }
-
-  // Root clone keeps the SOURCE root's parent (cloning a child preserves its
-  // place in the tree); children remap onto their cloned ancestors.
-  const rootCloneId = await cloneOne(api, root, root.parent_task_id ?? null, project, suffix);
-  if (!rootCloneId.id) {
-    return {
-      ok: false,
-      created,
-      failures: [{ sourceId: rootId, title: root.title, error: rootCloneId.err ?? 'root create_task failed' }],
-    };
-  }
-  idMap.set(rootId, rootCloneId.id);
-  created.push(rootCloneId.id);
-
-  // DFS children in stable order so parents always exist before their kids.
-  const order: CloneSourceTask[] = [];
-  const walk = (id: string) => {
-    for (const child of (childrenOf.get(id) ?? []).slice().sort((a, b) => a.task_id.localeCompare(b.task_id))) {
-      if (child.task_id === rootId) continue; // never re-clone the root (cycle edge)
-      if (!seen.has(child.task_id)) continue;
-      if (order.some((o) => o.task_id === child.task_id)) continue;
-      order.push(child);
-      walk(child.task_id);
+    const item = stack.pop()!;
+    if (seen.has(item.node.task_id)) continue;
+    seen.add(item.node.task_id);
+    items.push(item);
+    const descendants = children.get(item.node.task_id) ?? [];
+    for (let index = descendants.length - 1; index >= 0; index -= 1) {
+      stack.push({ node: descendants[index], depth: item.depth + 1 });
     }
-  };
-  walk(rootId);
-
-  for (const node of order) {
-    const parentClone = idMap.get(node.parent_task_id ?? '');
-    // If the parent failed earlier, remap to the nearest cloned ancestor is
-    // NOT done silently — record the orphan instead of guessing placement.
-    if (node.parent_task_id && !parentClone) {
-      failures.push({
-        sourceId: node.task_id,
-        title: node.title,
-        error: `parent ${node.parent_task_id} was not cloned; skipping subtree to avoid misplacement`,
-      });
-      continue;
-    }
-    const r = await cloneOne(api, node, parentClone ?? null, project, suffix);
-    if (!r.id) {
-      failures.push({ sourceId: node.task_id, title: node.title, error: r.err ?? 'create_task returned no id' });
-      continue;
-    }
-    idMap.set(node.task_id, r.id);
-    created.push(r.id);
   }
 
-  return { ok: failures.length === 0, rootCloneId, created, failures };
+  return { sourceTaskId, items };
 }
 
-async function cloneOne(
-  api: CloneApi,
-  node: CloneSourceTask,
-  parentTaskId: string | null,
-  projectId: string,
-  suffix: string
-): Promise<{ id?: string; err?: string }> {
-  try {
-    const id = await api.createTask({
-      project_id: projectId,
-      title: node.title + suffix,
-      parent_task_id: parentTaskId,
-      source: node,
-    });
-    // Empty/invalid id is a FAILURE (never write children against it).
-    if (typeof id === 'string' && id) return { id };
-    return { err: 'create_task returned no id' };
-  } catch (e) {
-    return { err: (e as Error).message || 'create_task threw' };
+export function defaultCloneSelection(tree: CloneTree): Set<string> {
+  return new Set(tree.items.map(({ node }) => node.task_id));
+}
+
+/** Applies checkbox-tree closure: branches toggle descendants and checked nodes include ancestors. */
+export function updateCloneSelection(
+  tree: CloneTree,
+  selected: ReadonlySet<string>,
+  taskId: string,
+  checked: boolean
+): Set<string> {
+  const next = new Set(selected);
+  const index = tree.items.findIndex(({ node }) => node.task_id === taskId);
+  if (index < 0 || (!checked && taskId === tree.sourceTaskId)) return next;
+
+  const depth = tree.items[index].depth;
+  const branchIds = [taskId];
+  for (let cursor = index + 1; cursor < tree.items.length && tree.items[cursor].depth > depth; cursor += 1) {
+    branchIds.push(tree.items[cursor].node.task_id);
   }
+
+  if (checked) {
+    branchIds.forEach((id) => next.add(id));
+    const inTree = new Set(tree.items.map(({ node }) => node.task_id));
+    let parentId = tree.items[index].node.parent_task_id;
+    while (parentId && inTree.has(parentId)) {
+      if (next.has(parentId)) break;
+      next.add(parentId);
+      parentId = tree.items.find(({ node }) => node.task_id === parentId)?.node.parent_task_id;
+    }
+  } else {
+    branchIds.forEach((id) => next.delete(id));
+  }
+
+  if (tree.items.length) next.add(tree.sourceTaskId);
+  return next;
+}
+
+export function getCloneCheckboxState(
+  tree: CloneTree,
+  selected: ReadonlySet<string>,
+  taskId: string
+): { checked: boolean; indeterminate: boolean } {
+  const index = tree.items.findIndex(({ node }) => node.task_id === taskId);
+  if (index < 0) return { checked: false, indeterminate: false };
+  const depth = tree.items[index].depth;
+  const descendantIds: string[] = [];
+  for (let cursor = index + 1; cursor < tree.items.length && tree.items[cursor].depth > depth; cursor += 1) {
+    descendantIds.push(tree.items[cursor].node.task_id);
+  }
+  const selectedDescendants = descendantIds.filter((id) => selected.has(id)).length;
+  return {
+    checked: selected.has(taskId),
+    indeterminate: selectedDescendants > 0 && selectedDescendants < descendantIds.length,
+  };
+}
+
+export function parseCloneQuantity(value: string): number | null {
+  const quantity = Number(value);
+  return Number.isSafeInteger(quantity) && quantity > 0 ? quantity : null;
+}
+
+export function getClonePreview(selectedCount: number, quantity: number): ClonePreview {
+  const parentCount = quantity;
+  const childCount = Math.max(0, selectedCount - 1) * quantity;
+  return { parentCount, childCount, totalCount: parentCount + childCount };
+}
+
+export function createCloneSelectionInput(
+  tree: CloneTree,
+  selected: ReadonlySet<string>,
+  quantity: number
+): CloneTaskSelectionInput {
+  return {
+    source_task_id: tree.sourceTaskId,
+    selected_descendant_ids: tree.items
+      .map(({ node }) => node.task_id)
+      .filter((id) => id !== tree.sourceTaskId && selected.has(id)),
+    quantity,
+  };
 }
