@@ -15,7 +15,7 @@
  * Saving delegates to the parent via `onSaveEdit` (existing task update
  * thunks/mutations — no new backend entities).
  */
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { Task } from '@/types/task';
 
 export type ExcelField = 'title' | 'status' | 'priority' | 'effort' | 'due_date' | 'assignee';
@@ -52,6 +52,7 @@ interface Props {
   /** Restore the keyboard target whenever a retained grid becomes visible. */
   active?: boolean;
   onCloneTask?: (taskId: string) => void;
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 const COLUMNS: ExcelColumn[] = [
@@ -140,22 +141,31 @@ export function parseTsv(text: string): string[][] {
     .map((line) => line.split('\t'));
 }
 
-export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOptions = [], assigneeValue, catalogLabel, active = true, onCloneTask }: Props) {
+export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOptions = [], assigneeValue, catalogLabel, active = true, onCloneTask, onDirtyChange }: Props) {
   const [staged, setStaged] = useState<Map<string, StagedEdit>>(new Map());
   const [anchor, setAnchor] = useState<{ row: number; col: number } | null>(null);
   const [focusCell, setFocusCell] = useState<{ row: number; col: number } | null>(null);
   const [assigneeEditor, setAssigneeEditor] = useState<{ row: number; col: number } | null>(null);
   const [typing, setTyping] = useState<string>('');
   const typingInputRef = useRef<HTMLInputElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const scrollTopRef = useRef(0);
   const [errors, setErrors] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
   const draggingRef = useRef(false);
 
   const keyFor = (taskId: string, field: ExcelField) => `${taskId}:${field}`;
+  const focusTypingInput = useCallback(() => typingInputRef.current?.focus({ preventScroll: true }), []);
 
   useEffect(() => {
-    if (active) typingInputRef.current?.focus();
-  }, [active]);
+    if (active) focusTypingInput();
+  }, [active, focusTypingInput]);
+
+  // The hidden keyboard target must never make the grid/page jump to its DOM
+  // position. Restore the user's scroll after every staged rerender.
+  useLayoutEffect(() => {
+    if (gridRef.current) gridRef.current.scrollTop = scrollTopRef.current;
+  }, [tasks, staged, focusCell, assigneeEditor, errors]);
 
   const cellValue = useCallback(
     (task: Task, column: ExcelColumn): string => {
@@ -231,7 +241,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
     setAssigneeEditor(null);
     setTyping('');
     setErrors([]);
-    typingInputRef.current?.focus();
+    focusTypingInput();
   };
 
   const handleMouseOver = (row: number, col: number) => {
@@ -384,10 +394,37 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
     });
     setErrors(failed);
     setSaving(false);
-    typingInputRef.current?.focus(); // keyboard flow continues after toolbar (review #7)
+    focusTypingInput(); // keyboard flow continues after toolbar without scrolling
   };
 
   const dirtyCount = staged.size;
+
+  useEffect(() => {
+    onDirtyChange?.(dirtyCount > 0);
+    return () => onDirtyChange?.(false);
+  }, [dirtyCount, onDirtyChange]);
+
+  useEffect(() => {
+    if (!dirtyCount) return;
+    const confirmLeave = () => window.confirm('Discard unsaved Excel edits?');
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    const onDocumentClick = (event: MouseEvent) => {
+      const target = event.target as Element | null;
+      const link = target?.closest('a[href]') as HTMLAnchorElement | null;
+      if (!link || link.target === '_blank' || confirmLeave()) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('click', onDocumentClick, true);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('click', onDocumentClick, true);
+    };
+  }, [dirtyCount]);
 
   const selectionSummary = useMemo(() => {
     if (!anchor) return '';
@@ -399,8 +436,10 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
 
   return (
     <div
+      ref={gridRef}
       className="border border-slate-200 rounded-lg bg-white overflow-auto"
       data-testid="task-excel-grid"
+      onScroll={(event) => { scrollTopRef.current = event.currentTarget.scrollTop; }}
       onMouseUp={handleMouseUp}
       onMouseLeave={handleMouseUp}
       onCopy={handleCopy}
@@ -429,7 +468,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
           onClick={() => {
             setStaged(new Map());
             setErrors([]);
-            typingInputRef.current?.focus(); // keyboard flow continues (review #7)
+            focusTypingInput(); // keyboard flow continues without scrolling
           }}
           disabled={dirtyCount === 0}
           data-testid="excel-discard-btn"
@@ -475,7 +514,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                     onClick={() => {
                       if (col.field === 'assignee') setAssigneeEditor({ row, col: c });
                     }}
-                    onDoubleClick={() => typingInputRef.current?.focus()}
+                    onDoubleClick={focusTypingInput}
                     data-testid={`excel-cell-${row}-${c}`}
                     data-task-id={task.task_id}
                     data-field={col.field ?? col.catalogField}
@@ -490,7 +529,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                           const error = stageCell(row, c, e.target.value);
                           setErrors(error ? [`Row ${row + 1} ${col.label}: ${error}`] : []);
                           setAssigneeEditor(null);
-                          typingInputRef.current?.focus();
+                          focusTypingInput();
                         }}
                       >
                         <option value="">Not assigned</option>

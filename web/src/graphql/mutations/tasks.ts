@@ -1,122 +1,26 @@
 import { gql } from '@apollo/client';
+import { TASK_WITH_CHILDREN_FIELDS } from '@/graphql/queries/tasks';
 
+// These mutations share List's exact Task selection. A resolved mutation is
+// therefore safe to normalize and replace in Redux without guessing fields.
 export const UPDATE_TASK_STATUS = gql`
+  ${TASK_WITH_CHILDREN_FIELDS}
   mutation UpdateTaskStatus($input: UpdateTaskStatusInput!) {
-    update_task_status(input: $input) {
-      task_id
-      project_id
-      parent_task_id
-      title
-      description
-      assignee_resource_member_id
-      assignee {
-        user_id
-        username
-        full_name
-        avatar_url
-        role
-      }
-      priority_order
-      start_date
-      due_date
-      actual_start_date
-      actual_end_date
-      effort
-      progress
-      created_by
-      created_at
-      updated_at
-      is_deleted
-      status
-      priority
-      type_
-      category
-      tags
-      progress_type
-      progress_catalog_item_id
-      category_catalog_item_id
-      task_type_catalog_item_id
-    }
+    update_task_status(input: $input) { ...TaskWithChildrenFields }
   }
 `;
 
 export const UPDATE_TASK_EFFORT = gql`
+  ${TASK_WITH_CHILDREN_FIELDS}
   mutation UpdateTaskEffort($input: UpdateTaskEffortInput!) {
-    update_task_effort(input: $input) {
-      task_id
-      project_id
-      parent_task_id
-      title
-      description
-      assignee_resource_member_id
-      assignee {
-        user_id
-        username
-        full_name
-        avatar_url
-        role
-      }
-      priority_order
-      start_date
-      due_date
-      actual_start_date
-      actual_end_date
-      effort
-      progress
-      created_by
-      created_at
-      updated_at
-      is_deleted
-      status
-      priority
-      type_
-      category
-      tags
-      progress_type
-      progress_catalog_item_id
-      category_catalog_item_id
-      task_type_catalog_item_id
-    }
+    update_task_effort(input: $input) { ...TaskWithChildrenFields }
   }
 `;
 
 export const UPDATE_TASK = gql`
+  ${TASK_WITH_CHILDREN_FIELDS}
   mutation UpdateTask($input: UpdateTaskInput!) {
-    update_task(input: $input) {
-      task_id
-      project_id
-      parent_task_id
-      title
-      description
-      assignee_resource_member_id
-      assignee {
-        user_id
-        username
-        full_name
-        avatar_url
-        role
-      }
-      priority_order
-      start_date
-      due_date
-      actual_start_date
-      actual_end_date
-      effort
-      progress
-      created_by
-      created_at
-      updated_at
-      is_deleted
-      status
-      priority
-      type_
-      category
-      tags
-      progress_type
-      progress_catalog_item_id
-      category_catalog_item_id
-      task_type_catalog_item_id
-    }
+    update_task(input: $input) { ...TaskWithChildrenFields }
   }
 `;
 

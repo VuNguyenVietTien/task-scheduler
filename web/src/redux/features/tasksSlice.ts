@@ -109,21 +109,12 @@ export const updateTaskStatus = createAsyncThunk(
         return rejectWithValue(response.errors[0].message);
       }
 
-      if (!response.data) {
-        console.error('Không có dữ liệu trả về từ server');
-        return rejectWithValue('Không có dữ liệu trả về từ server');
+      const returnedTask = response.data?.update_task;
+      if (!returnedTask || returnedTask.task_id !== taskId) {
+        return rejectWithValue('Task update returned no matching task result.');
       }
 
-      console.log('Response từ server:', response.data.update_task);
-
-      // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
-      const transformedTask = transformTaskFromAPI(response.data.update_task);
-      
-      return {
-        taskId,
-        status,
-        task: transformedTask
-      };
+      return { taskId, status, task: transformTaskFromAPI(returnedTask) };
     } catch (error) {
       console.error('Lỗi khi gọi API cập nhật trạng thái:', error);
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi cập nhật trạng thái');
@@ -153,22 +144,12 @@ export const updateTaskAssignee = createAsyncThunk(
         return rejectWithValue(response.errors[0].message);
       }
 
-      if (!response.data) {
-        console.error('Không có dữ liệu trả về từ server');
-        return rejectWithValue('Không có dữ liệu trả về từ server');
+      const returnedTask = response.data?.update_task;
+      if (!returnedTask || returnedTask.task_id !== taskId) {
+        return rejectWithValue('Task update returned no matching task result.');
       }
 
-      console.log('Response từ server:', response.data.update_task);
-
-      // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
-      const transformedTask = transformTaskFromAPI(response.data.update_task);
-      
-      return {
-        taskId,
-        assigneeId,
-        assignee: response.data.update_task.assignee,
-        task: transformedTask
-      };
+      return { taskId, assigneeId, assignee: returnedTask.assignee, task: transformTaskFromAPI(returnedTask) };
     } catch (error) {
       console.error('Lỗi khi gọi API cập nhật người được giao:', error);
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi cập nhật người được giao');
@@ -199,21 +180,12 @@ export const updateTaskPriority = createAsyncThunk(
         return rejectWithValue(response.errors[0].message);
       }
 
-      if (!response.data) {
-        console.error('Không có dữ liệu trả về từ server');
-        return rejectWithValue('Không có dữ liệu trả về từ server');
+      const returnedTask = response.data?.update_task;
+      if (!returnedTask || returnedTask.task_id !== taskId) {
+        return rejectWithValue('Task update returned no matching task result.');
       }
 
-      console.log('Response từ server:', response.data.update_task);
-
-      // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
-      const transformedTask = transformTaskFromAPI(response.data.update_task);
-      
-      return {
-        taskId,
-        priority,
-        task: transformedTask
-      };
+      return { taskId, priority, task: transformTaskFromAPI(returnedTask) };
     } catch (error) {
       console.error('Lỗi khi gọi API cập nhật ưu tiên:', error);
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi cập nhật ưu tiên');
@@ -244,21 +216,12 @@ export const updateTaskEffort = createAsyncThunk(
         return rejectWithValue(response.errors[0].message);
       }
 
-      if (!response.data) {
-        console.error('Không có dữ liệu trả về từ server');
-        return rejectWithValue('Không có dữ liệu trả về từ server');
+      const returnedTask = response.data?.update_task;
+      if (!returnedTask || returnedTask.task_id !== taskId) {
+        return rejectWithValue('Task update returned no matching task result.');
       }
 
-      console.log('Response từ server:', response.data.update_task);
-
-      // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
-      const transformedTask = transformTaskFromAPI(response.data.update_task);
-      
-      return {
-        taskId,
-        effort,
-        task: transformedTask
-      };
+      return { taskId, effort, task: transformTaskFromAPI(returnedTask) };
     } catch (error) {
       console.error('Lỗi khi gọi API cập nhật công sức:', error);
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi cập nhật công sức');
@@ -290,21 +253,12 @@ export const updateTaskDueDate = createAsyncThunk(
         return rejectWithValue(response.errors[0].message);
       }
 
-      if (!response.data) {
-        console.error('Không có dữ liệu trả về từ server');
-        return rejectWithValue('Không có dữ liệu trả về từ server');
+      const returnedTask = response.data?.update_task;
+      if (!returnedTask || returnedTask.task_id !== taskId) {
+        return rejectWithValue('Task update returned no matching task result.');
       }
 
-      console.log('Response từ server:', response.data.update_task);
-
-      // Chuyển đổi dữ liệu từ API về dạng dùng trong UI
-      const transformedTask = transformTaskFromAPI(response.data.update_task);
-      
-      return {
-        taskId,
-        dueDate: formattedDueDate || undefined,
-        task: transformedTask
-      };
+      return { taskId, dueDate: formattedDueDate || undefined, task: transformTaskFromAPI(returnedTask) };
     } catch (error) {
       console.error('Lỗi khi gọi API cập nhật hạn:', error);
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi cập nhật hạn');
@@ -365,6 +319,40 @@ export const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
   };
 };
 
+function findTaskInTree(tasks: readonly Task[], taskId: string): Task | undefined {
+  for (const task of tasks) {
+    if (task.task_id === taskId || task.id === taskId) return task;
+    const found = task.child_tasks && findTaskInTree(task.child_tasks, taskId);
+    if (found) return found;
+  }
+  return undefined;
+}
+
+/** Replace a known task in-place without flattening, reordering, or duplicating its tree. */
+export function upsertTaskInTree(tasks: Task[], incoming: Task): Task[] {
+  const merge = (current: Task, next: Task): Task => {
+    const childTasks = next.child_tasks === undefined
+      ? current.child_tasks
+      : next.child_tasks.map((child) => {
+        const previous = findTaskInTree(current.child_tasks ?? [], child.task_id);
+        return previous ? merge(previous, child) : child;
+      });
+    return { ...current, ...next, child_tasks: childTasks };
+  };
+  let replaced = false;
+  const replace = (nodes: Task[]): Task[] => nodes.map((task) => {
+    if (task.task_id === incoming.task_id || task.id === incoming.task_id) {
+      replaced = true;
+      return merge(task, incoming);
+    }
+    if (!task.child_tasks?.length) return task;
+    const childTasks = replace(task.child_tasks);
+    return childTasks === task.child_tasks ? task : { ...task, child_tasks: childTasks };
+  });
+  const next = replace(tasks);
+  return replaced ? next : [...next, incoming];
+}
+
 const tasksSlice = createSlice({
   name: 'tasks',
   initialState,
@@ -386,6 +374,9 @@ const tasksSlice = createSlice({
       state.loading = false;
       state.pagination = initialState.pagination;
       state.filters = {};
+    },
+    upsertTask: (state, action: PayloadAction<Task>) => {
+      state.tasks = upsertTaskInTree(state.tasks as Task[], action.payload) as any;
     },
     // Sync a task in the canonical tree. List and Excel can edit descendants,
     // so a root-only lookup would be overwritten by the next prop refresh.
@@ -439,107 +430,18 @@ const tasksSlice = createSlice({
       state.error = action.payload as string;
     });
     
-    // updateTaskStatus
-    builder.addCase(updateTaskStatus.fulfilled, (state, action) => {
-      const { taskId, status, task } = action.payload;
-      
-      // Cập nhật task trong state
-      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
-      if (taskIndex >= 0) {
-        console.log('Cập nhật task status trong store, index =', taskIndex);
-        state.tasks[taskIndex].status = status;
-        
-        // Nếu có thêm data từ API, cập nhật luôn
-        if (task) {
-          state.tasks[taskIndex] = { ...state.tasks[taskIndex], ...task };
-        }
-      } else {
-        console.log('Không tìm thấy task để cập nhật status trong store, taskId =', taskId);
-      }
-    });
-    
-    // updateTaskAssignee
-    builder.addCase(updateTaskAssignee.fulfilled, (state, action) => {
-      const { taskId, assigneeId, assignee, task } = action.payload;
-      
-      // Cập nhật task trong state
-      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
-      if (taskIndex >= 0) {
-        console.log('Cập nhật task assignee trong store, index =', taskIndex);
-        // Sử dụng assignee.userId thay vì assignee_id
-        if (assignee) {
-          state.tasks[taskIndex].assignee = assignee;
-        } else {
-          state.tasks[taskIndex].assignee = undefined;
-        }
-        
-        // Nếu có thêm data từ API, cập nhật luôn
-        if (task) {
-          state.tasks[taskIndex] = { ...state.tasks[taskIndex], ...task };
-        }
-      } else {
-        console.log('Không tìm thấy task để cập nhật assignee trong store, taskId =', taskId);
-      }
-    });
-    
-    // updateTaskPriority
-    builder.addCase(updateTaskPriority.fulfilled, (state, action) => {
-      const { taskId, priority, task } = action.payload;
-      
-      // Cập nhật task trong state
-      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
-      if (taskIndex >= 0) {
-        console.log('Cập nhật task priority trong store, index =', taskIndex);
-        state.tasks[taskIndex].priority = priority;
-        
-        // Nếu có thêm data từ API, cập nhật luôn
-        if (task) {
-          state.tasks[taskIndex] = { ...state.tasks[taskIndex], ...task };
-        }
-      } else {
-        console.log('Không tìm thấy task để cập nhật priority trong store, taskId =', taskId);
-      }
-    });
-    
-    // updateTaskEffort
-    builder.addCase(updateTaskEffort.fulfilled, (state, action) => {
-      const { taskId, effort, task } = action.payload;
-      
-      // Cập nhật task trong state
-      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
-      if (taskIndex >= 0) {
-        console.log('Cập nhật task effort trong store, index =', taskIndex);
-        state.tasks[taskIndex].effort = effort;
-        
-        // Nếu có thêm data từ API, cập nhật luôn
-        if (task) {
-          state.tasks[taskIndex] = { ...state.tasks[taskIndex], ...task };
-        }
-      } else {
-        console.log('Không tìm thấy task để cập nhật effort trong store, taskId =', taskId);
-      }
-    });
-    
-    // updateTaskDueDate
-    builder.addCase(updateTaskDueDate.fulfilled, (state, action) => {
-      const { taskId, dueDate, task } = action.payload;
-      
-      // Cập nhật task trong state
-      const taskIndex = state.tasks.findIndex(t => t.task_id === taskId || t.id === taskId);
-      if (taskIndex >= 0) {
-        console.log('Cập nhật task due date trong store, index =', taskIndex);
-        state.tasks[taskIndex].due_date = dueDate;
-        
-        // Nếu có thêm data từ API, cập nhật luôn
-        if (task) {
-          state.tasks[taskIndex] = { ...state.tasks[taskIndex], ...task };
-        }
-      } else {
-        console.log('Không tìm thấy task để cập nhật due date trong store, taskId =', taskId);
-      }
-    });
+    // A mutation result replaces its matching node at any depth. Never publish
+    // status-only / locally guessed patches as a confirmed server update.
+    const applyReturnedTask = (state: TasksState, task?: Partial<Task>) => {
+      if (task?.task_id) state.tasks = upsertTaskInTree(state.tasks, task as Task);
+    };
+    builder.addCase(updateTaskStatus.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));
+    builder.addCase(updateTaskAssignee.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));
+    builder.addCase(updateTaskPriority.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));
+    builder.addCase(updateTaskEffort.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));
+    builder.addCase(updateTaskDueDate.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));
   }
 });
 
-export const { setFilter, setPage, setPageSize, resetTasks, updateTaskLocally } = tasksSlice.actions;
+export const { setFilter, setPage, setPageSize, resetTasks, upsertTask, updateTaskLocally } = tasksSlice.actions;
 export default tasksSlice.reducer; 
