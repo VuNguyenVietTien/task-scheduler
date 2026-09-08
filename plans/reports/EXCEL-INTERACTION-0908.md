@@ -2,7 +2,7 @@
 
 ## Status
 
-DONE_WITH_CONCERNS
+DONE
 
 ## Commit
 
@@ -29,19 +29,22 @@ DONE_WITH_CONCERNS
 
 ## Focused tests
 
-Passed before the final read-only typing-display guard:
+Final verification ran from the integrated `dev-0908/web` dependency installation:
 
 ```text
-TaskExcelGrid.test.tsx + TaskListView.assignment.test.tsx
+npm test -- --config jest.config.js --reporters=default --runInBand \
+  src/components/tasks/__tests__/TaskExcelGrid.test.tsx \
+  src/components/tasks/__tests__/TaskListView.assignment.test.tsx
+
 2 suites passed; 44 tests passed; 0 failed
 ```
 
-A final `TaskExcelGrid.test.tsx` retry after that one-line guard did not provide code-valid evidence: the feature worktree's partial `node_modules` shadowed the requested `NODE_PATH`, loading duplicate React copies and producing `Invalid hook call` / `useMemo` dispatcher failures. Result: 5 pure tests passed, 24 component tests failed from the shared test environment. No package install or dependency cleanup was performed. `git diff --check` passed before commit.
+The suite emits existing React `act(...)` warnings and expected error-path logging; Jest exits successfully. `git diff --check` passed before implementation commit.
 
 ## Limitations
 
-- Final component rerun remains blocked by duplicate React resolution in the reused dependency setup; the earlier combined focused run passed all 44 tests.
 - Parent totals use the hierarchy loaded by each List mode; missing/unloaded descendants cannot be included.
+- List member-filter wiring is not part of this commit. It remains a separate coordinated change after the member worker's canonical modal-prop update; assignee loaders were intentionally untouched.
 
 ## Unresolved questions
 
