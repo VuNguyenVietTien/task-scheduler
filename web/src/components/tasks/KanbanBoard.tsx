@@ -28,6 +28,8 @@ import {
   getKanbanStatus,
   updateKanbanTaskInTree,
 } from './kanban-tasks';
+import { getStatusLabel } from '@/constants/task-display-labels';
+import { filterTaskTreeByStatus, isTaskStatusVisible } from '@/utils/task-status-visibility';
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -119,25 +121,26 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
   // Lấy danh sách thành viên từ Redux store
   const { members, loading: membersLoading } = useSelector((state: RootState) => state.members);
   
-  // Các columns hiển thị dựa trên selectedStatuses
-  const visibleColumns = useMemo(() => {
-    if (selectedStatuses.length === 0) {
-      return KANBAN_COLUMNS; // Hiển thị tất cả columns nếu không có lựa chọn
-    }
-    return KANBAN_COLUMNS.filter(column =>
-      selectedStatuses.some(status => status.value === column.id)
-    );
-  }, [selectedStatuses]);
+  const statusOptions = useMemo<StatusOption[]>(() => KANBAN_COLUMNS.map(({ id }) => ({
+    value: id,
+    label: getStatusLabel(id),
+  })), [t]);
 
-  // Flatten once, then filter rows without losing parent-first order/context.
+  const visibleColumns = useMemo(() => {
+    const selected = selectedStatuses.map(({ value }) => value);
+    return statusOptions
+      .filter((column) => isTaskStatusVisible(column.value, selected))
+      .map(({ value, label }) => ({ id: value, title: label }));
+  }, [selectedStatuses, statusOptions]);
+
+  // Filter the authoritative tree first, then flatten once without losing descendants.
   const filteredTasks = useMemo(() => {
-    let result = flattenKanbanTasks(clonedTasks);
+    let result = flattenKanbanTasks(filterTaskTreeByStatus(
+      clonedTasks,
+      selectedStatuses.map(({ value }) => value)
+    ));
     if (selectedUser && selectedUser.value !== 'all') {
       result = result.filter(({ task }) => task.assignee?.userId === selectedUser.value);
-    }
-    if (selectedStatuses.length > 0) {
-      const statusValues = selectedStatuses.map(({ value }) => value);
-      result = result.filter(({ task }) => statusValues.includes(getKanbanStatus(task.status)));
     }
     return result;
   }, [clonedTasks, selectedUser, selectedStatuses]);
@@ -226,12 +229,6 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
     // Fallback sử dụng tasks từ props nếu không có dữ liệu từ Redux
     updateClonedTasks(tasks);
   }, [tasks, tasksState, projectId, updateClonedTasks]);
-
-  // Tạo danh sách lựa chọn cho Status
-  const statusOptions: StatusOption[] = KANBAN_COLUMNS.map(column => ({
-    value: column.id,
-    label: column.title
-  }));
 
   // Tạo danh sách lựa chọn users từ members
   const userOptions: UserOption[] = useMemo(() => {
