@@ -23,3 +23,8 @@ Only optional, non-blocking Chrome feedback remains:
 - [ ] Confirm normal/Excel effort updates display immediately, persist after reload, and retain errors for rejected/partial/missing results.
 - [ ] Confirm existing task-detail/full-page/create catalog selectors save and reload correctly.
 - [ ] Confirm Remove action visibility without deleting a production member. If desired, rename only an identified QA fixture and restore its original name immediately.
+
+## Latest backend feedback
+- CORS fixed and live: localhost:3000 and prjmngr.vercel.app accepted. Chrome dashboard loads real data.
+- Member hard removal fixed and LIVE on Ubuntu image task-scheduler-backend:20260908T0952-53011ef. Assigned tasks become unassigned atomically; task hierarchy and timesheet history retained. Local/public health verified. Report plans/reports/MEMBER-REMOVE-0908.md.
+- User may now retry Remove. No production deletion was performed by PM for testing.
