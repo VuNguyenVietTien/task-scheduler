@@ -12,6 +12,7 @@ import { Button } from '@/components/ui/Button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { formatDistance } from 'date-fns';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
 import { PencilIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, BookOpenIcon, DocumentTextIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQuery, useApolloClient } from '@apollo/client';
@@ -22,6 +23,7 @@ import { AdvancedEditor } from '@/components/common/AdvancedEditor';
 import { imageService } from "@/services/imageService";
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { 
+  deleteTask,
   updateTaskStatus, 
   updateTaskPriority, 
   updateTaskEffort, 
@@ -40,6 +42,7 @@ import { isTiptapContentEmpty } from '@/utils/mentionUtils';
 import { toast } from "sonner";
 import { ProjectCatalogSelect } from '@/components/projects/ProjectCatalogSettingsPanel';
 import type { ProjectCatalogKind } from '@/types/project-catalog';
+import { taskDeletionConfirmationMessage } from '@/utils/task-deletion';
 
 interface TaskDetailPageProps {
   task: Task;
@@ -115,6 +118,7 @@ export function TaskDetailPage({
   initialActiveTab = 'description'
 }: TaskDetailPageProps) {
   const { t } = useTranslation();
+  const router = useRouter();
   // Khai báo các biến cần dùng chung
   const taskId = task.task_id || task.id || '';
   const taskIdString = taskId.toString();
@@ -1140,6 +1144,23 @@ export function TaskDetailPage({
     });
   }, [task, taskId, latestTaskData]);
 
+  const handleDelete = async (reason: 'delete' | 'reject') => {
+    if (!window.confirm(taskDeletionConfirmationMessage(task, reason))) return false;
+    try {
+      setIsSaving(true);
+      setError(null);
+      await dispatch(deleteTask({ taskId })).unwrap();
+      router.replace(`/projects/${projectId}`);
+      return true;
+    } catch (error) {
+      console.error('Error deleting task:', error);
+      setError('Could not delete task.');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Xử lý cập nhật task
   const handleSaveTask = async (fieldName?: string) => {
     try {
@@ -1218,6 +1239,11 @@ export function TaskDetailPage({
         if (editedTask.taskTypeCatalogItemId !== task.taskTypeCatalogItemId) updates.taskTypeCatalogItemId = editedTask.taskTypeCatalogItemId ?? null;
       }
       
+      if (updates.status === TaskStatuses.REJECTED) {
+        await handleDelete('reject');
+        return;
+      }
+
       // Gọi hàm update từ props
       const success = await onTaskUpdate(updates);
       
@@ -1810,13 +1836,23 @@ export function TaskDetailPage({
                 >
                   {editedTask.title}
                 </h1>
-                <button 
-                  onClick={() => startEditing('title')} 
-                  className="p-1 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100"
-                  title="Chỉnh sửa tiêu đề"
-                >
-                  <PencilIcon className="h-4 w-4" />
-                </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    disabled={isSaving}
+                    onClick={() => void handleDelete('delete')}
+                    className="text-sm text-red-600 hover:text-red-700 disabled:opacity-50"
+                  >
+                    Delete
+                  </button>
+                  <button
+                    onClick={() => startEditing('title')}
+                    className="p-1 text-gray-400 hover:text-gray-700 rounded-full hover:bg-gray-100"
+                    title="Chỉnh sửa tiêu đề"
+                  >
+                    <PencilIcon className="h-4 w-4" />
+                  </button>
+                </div>
               </div>
             )}
 

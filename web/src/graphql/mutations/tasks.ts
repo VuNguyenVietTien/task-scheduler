@@ -71,6 +71,15 @@ export const DELETE_TASK_COMMENT = gql`
   }
 `;
 
+export const DELETE_TASK = gql`
+  mutation DeleteTask($taskId: ID!) {
+    delete_task(task_id: $taskId) {
+      project_id
+      deleted_task_ids
+    }
+  }
+`;
+
 // Rust schema: reorder_tasks(input: ReorderTasksInput!): [Task!]!
 // Returns the full updated Task list (NOT a boolean/wrapper) — callers must
 // treat the result as Task[] keyed by task_id.

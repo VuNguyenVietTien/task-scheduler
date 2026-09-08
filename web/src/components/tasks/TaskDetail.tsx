@@ -7,7 +7,7 @@ import { Dialog } from '../ui/Dialog';
 import clsx from 'clsx';
 import { useUpdateTask } from '@/hooks/useTasks';
 import { useAppDispatch } from '@/redux/hooks';
-import { upsertTask } from '@/redux/features/tasksSlice';
+import { deleteTask, upsertTask } from '@/redux/features/tasksSlice';
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { TagInput } from '@/components/ui/tag-input';
 import { useMutation, useQuery } from '@apollo/client';
@@ -19,6 +19,7 @@ import { imageService } from '@/services/imageService';
 import { Member } from '@/types/members';
 import { ProjectCatalogSelect } from '@/components/projects/ProjectCatalogSettingsPanel';
 import type { ProjectCatalogKind } from '@/types/project-catalog';
+import { taskDeletionConfirmationMessage } from '@/utils/task-deletion';
 
 interface TaskDetailProps {
   task: Task;
@@ -123,6 +124,23 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
     return colors[priority] || colors.MEDIUM;
   };
 
+  const handleDelete = async (reason: 'delete' | 'reject') => {
+    if (!window.confirm(taskDeletionConfirmationMessage(task, reason))) return false;
+    try {
+      setIsSaving(true);
+      setError(null);
+      await dispatch(deleteTask({ taskId })).unwrap();
+      onClose();
+      return true;
+    } catch (err) {
+      console.error('Error deleting task:', err);
+      setError('Could not delete task.');
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   // Save a single field to backend
   const saveField = async (fieldName: string) => {
     try {
@@ -132,6 +150,10 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
       const updates: Partial<Task> = {};
 
       const val = (editedTask as any)[fieldName];
+      if (fieldName === 'status' && val === TaskStatuses.REJECTED) {
+        await handleDelete('reject');
+        return;
+      }
       switch (fieldName) {
         case 'title': updates.title = val; break;
         case 'description': updates.description = val; break;
@@ -425,6 +447,14 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
     >
       <div className="relative p-6 space-y-6">
         {/* Close button (top-right) */}
+        <button
+          type="button"
+          disabled={isSaving}
+          onClick={() => void handleDelete('delete')}
+          className="absolute top-4 right-12 px-2 py-1 text-sm text-red-600 hover:text-red-700 disabled:opacity-50 z-10"
+        >
+          Delete
+        </button>
         <button
           onClick={onClose}
           className="absolute top-4 right-4 p-1 rounded-full text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors z-10"

@@ -5,6 +5,7 @@ import {
   GET_PROJECT_TASKS_PAGINATED 
 } from '@/graphql/queries/tasks';
 import {
+  DELETE_TASK,
   UPDATE_TASK,
   UPDATE_TASK_STATUS,
   UPDATE_TASK_EFFORT
@@ -86,37 +87,56 @@ export const fetchProjectTasks = createAsyncThunk(
   }
 );
 
-// Async thunk để update task status
+export interface DeleteTaskResult {
+  projectId: string;
+  deletedTaskIds: string[];
+}
+
+async function requestTaskDeletion(taskId: string): Promise<DeleteTaskResult> {
+  const response = await client.mutate({
+    mutation: DELETE_TASK,
+    variables: { taskId },
+    errorPolicy: 'all',
+    fetchPolicy: 'no-cache',
+  });
+  if (response.errors?.length) throw new Error(response.errors[0].message);
+  const payload = response.data?.delete_task;
+  if (!payload?.project_id || !Array.isArray(payload.deleted_task_ids) || !payload.deleted_task_ids.includes(taskId)) {
+    throw new Error('Task deletion returned no matching task result.');
+  }
+  return { projectId: payload.project_id, deletedTaskIds: payload.deleted_task_ids };
+}
+
+export const deleteTask = createAsyncThunk(
+  'tasks/deleteTask',
+  async ({ taskId }: { taskId: string }, { rejectWithValue }) => {
+    try {
+      return await requestTaskDeletion(taskId);
+    } catch (error) {
+      return rejectWithValue(error instanceof Error ? error.message : 'Could not delete task.');
+    }
+  }
+);
+
+// REJECTED is a confirmed-delete UI action, never a persisted status.
 export const updateTaskStatus = createAsyncThunk(
   'tasks/updateTaskStatus',
-  async ({ taskId, status }: { taskId: string, status: TaskStatus }, { getState, rejectWithValue }) => {
+  async ({ taskId, status }: { taskId: string, status: TaskStatus }, { rejectWithValue }) => {
     try {
-      const input = {
-        task_id: taskId,
-        status: status
-      };
-
-      // Cập nhật cách gọi API
+      if (status === 'REJECTED') return await requestTaskDeletion(taskId);
       const response = await client.mutate({
         mutation: UPDATE_TASK,
-        variables: { input },
+        variables: { input: { task_id: taskId, status } },
         errorPolicy: 'all',
-        fetchPolicy: 'no-cache' // Đảm bảo không sử dụng cache
+        fetchPolicy: 'no-cache',
       });
-
-      if (response.errors) {
-        console.error('Lỗi GraphQL:', response.errors);
-        return rejectWithValue(response.errors[0].message);
-      }
-
+      if (response.errors?.length) return rejectWithValue(response.errors[0].message);
       const returnedTask = response.data?.update_task;
       if (!returnedTask || returnedTask.task_id !== taskId) {
         return rejectWithValue('Task update returned no matching task result.');
       }
-
       return { taskId, status, task: transformTaskFromAPI(returnedTask) };
     } catch (error) {
-      console.error('Lỗi khi gọi API cập nhật trạng thái:', error);
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi cập nhật trạng thái');
     }
   }
@@ -335,6 +355,15 @@ function findTaskInTree(tasks: readonly Task[], taskId: string): Task | undefine
 }
 
 /** Replace a known task in-place without flattening, reordering, or duplicating its tree. */
+export function removeTasksFromTree(tasks: Task[], deletedTaskIds: readonly string[]): Task[] {
+  const deleted = new Set(deletedTaskIds);
+  return tasks.flatMap((task) => {
+    if (deleted.has(task.task_id) || (task.id && deleted.has(task.id))) return [];
+    if (!task.child_tasks?.length) return [task];
+    return [{ ...task, child_tasks: removeTasksFromTree(task.child_tasks, deletedTaskIds) }];
+  });
+}
+
 export function upsertTaskInTree(tasks: Task[], incoming: Task): Task[] {
   const merge = (current: Task, next: Task): Task => {
     const childTasks = next.child_tasks === undefined
@@ -443,7 +472,14 @@ const tasksSlice = createSlice({
     const applyReturnedTask = (state: TasksState, task?: Partial<Task>) => {
       if (task?.task_id) state.tasks = upsertTaskInTree(state.tasks, task as Task);
     };
-    builder.addCase(updateTaskStatus.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));
+    const applyDeletedTasks = (state: TasksState, result?: DeleteTaskResult) => {
+      if (result?.deletedTaskIds.length) state.tasks = removeTasksFromTree(state.tasks, result.deletedTaskIds);
+    };
+    builder.addCase(deleteTask.fulfilled, (state, action) => applyDeletedTasks(state, action.payload));
+    builder.addCase(updateTaskStatus.fulfilled, (state, action) => {
+      if ('deletedTaskIds' in action.payload) applyDeletedTasks(state, action.payload);
+      else applyReturnedTask(state, action.payload.task);
+    });
     builder.addCase(updateTaskAssignee.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));
     builder.addCase(updateTaskPriority.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));
     builder.addCase(updateTaskEffort.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));

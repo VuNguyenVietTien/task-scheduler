@@ -7,7 +7,7 @@ use crate::auth::error::AuthError;
 use crate::domain::project_member_identity::{self, Field};
 use crate::graphql::context::Context as GraphQLContext;
 use crate::graphql::resolvers::{project_authz, project_catalogs};
-use crate::graphql::types::{Assignee, Task, UpdateTaskInput};
+use crate::graphql::types::{Assignee, Task, TaskStatus, UpdateTaskInput};
 
 fn id_field(
     value: &MaybeUndefined<async_graphql::ID>,
@@ -24,6 +24,12 @@ pub async fn update_task(
     ctx: &Context<'_>,
     input: UpdateTaskInput,
 ) -> Result<Task, async_graphql::Error> {
+    if input.status == Some(TaskStatus::Rejected) {
+        return Err(async_graphql::Error::new(
+            "REJECTED permanently deletes a task; use delete_task after confirmation",
+        ));
+    }
+
     let context = ctx.data::<GraphQLContext>()?;
     let caller_id = project_authz::require_user(context)?;
     let task_id = Uuid::parse_str(&input.task_id.to_string())?;

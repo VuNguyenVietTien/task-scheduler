@@ -78,6 +78,11 @@ type CloneTaskSubtreePayload {
 	created_task_ids: [ID!]!
 }
 
+type DeleteTaskPayload {
+	project_id: UUID!
+	deleted_task_ids: [UUID!]!
+}
+
 type CommentResponse {
 	id: String!
 	content: String!
@@ -354,7 +359,7 @@ type Mutation {
 	update_task(input: UpdateTaskInput!): Task!
 	update_task_status(input: UpdateTaskStatusInput!): Task!
 	update_task_effort(input: UpdateTaskEffortInput!): Task!
-	delete_task(task_id: ID!): Boolean!
+	delete_task(task_id: ID!): DeleteTaskPayload!
 	reorder_tasks(input: ReorderTasksInput!): [Task!]!
 	add_project_member_by_email(project_id: ID!, email: String!, role: MemberRole!): ProjectMember!
 	"""

@@ -2,7 +2,7 @@
 //! Covers Sol review C1–C4: snake_case root operation names (no camelCase leaks),
 //! `type_` + `type` aliases scoped inside `type Task` / `type Notification`,
 //! input `type_` pins, plans dual aliases, ReorderTasksInput shape,
-//! `update_task_effort` mount, `delete_comment(id:)`, enum casing.
+//! `update_task_effort` mount, recursive `delete_task` payload, `delete_comment(id:)`, enum casing.
 //!
 //! Run: `cargo test --test contract` (regenerates schema.graphql each run).
 
@@ -234,6 +234,46 @@ fn clone_tree_contract_is_additive_and_non_nullable() {
         ),
         "clone_task_subtree mount/nullability changed:\n{mutation}"
     );
+}
+
+#[test]
+fn delete_task_contract_is_authorized_and_recursive() {
+    let sdl = sdl();
+    let mutation = type_block(&sdl, "Mutation");
+    assert!(
+        mutation.contains("delete_task(task_id: ID!): DeleteTaskPayload!"),
+        "delete_task payload/nullability changed:\n{mutation}"
+    );
+    let payload = type_block(&sdl, "DeleteTaskPayload");
+    for field in ["project_id: UUID!", "deleted_task_ids: [UUID!]!"] {
+        assert!(payload.contains(field), "{field} missing:\n{payload}");
+    }
+
+    let source = include_str!("../../src/graphql/resolvers/tasks/mutation/delete.rs");
+    for required in [
+        "project_authz::require_user",
+        "require_project_write_tx",
+        "lock_project_hierarchy",
+        "WITH RECURSIVE task_tree",
+        "FOR UPDATE OF task",
+        "DELETE FROM report_tasks",
+        "UPDATE bugs SET task_id = NULL",
+        "DELETE FROM tasks",
+        "deleted_task_ids",
+    ] {
+        assert!(source.contains(required), "delete_task missing {required}");
+    }
+}
+
+#[test]
+fn rejected_status_is_not_persisted_by_status_mutations() {
+    for source in [
+        include_str!("../../src/graphql/resolvers/tasks/mutation/create.rs"),
+        include_str!("../../src/graphql/resolvers/tasks/mutation/update.rs"),
+        include_str!("../../src/graphql/resolvers/tasks/mutation/update_status.rs"),
+    ] {
+        assert!(source.contains("TaskStatus::Rejected"));
+    }
 }
 
 #[test]

@@ -9,12 +9,18 @@ use crate::auth::error::AuthError;
 use crate::domain::project_member_identity::{self, Field};
 use crate::graphql::context::Context as GraphQLContext;
 use crate::graphql::resolvers::{project_authz, project_catalogs};
-use crate::graphql::types::{Assignee, CreateTaskInput, Task};
+use crate::graphql::types::{Assignee, CreateTaskInput, Task, TaskStatus};
 
 pub async fn create_task(
     ctx: &Context<'_>,
     input: CreateTaskInput,
 ) -> Result<Task, async_graphql::Error> {
+    if input.status == TaskStatus::Rejected {
+        return Err(async_graphql::Error::new(
+            "REJECTED permanently deletes a task; create a task with another status",
+        ));
+    }
+
     let context = ctx.data::<GraphQLContext>()?;
     let pool = &context.db;
     let auth = context

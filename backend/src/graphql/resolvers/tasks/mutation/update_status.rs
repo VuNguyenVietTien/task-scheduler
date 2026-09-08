@@ -20,6 +20,11 @@ pub async fn update_task_status(
 
     let status = TaskStatus::from_str(&input.status.to_lowercase())
         .map_err(|e| async_graphql::Error::new(e))?;
+    if status == TaskStatus::Rejected {
+        return Err(async_graphql::Error::new(
+            "REJECTED permanently deletes a task; use delete_task after confirmation",
+        ));
+    }
 
     let mut tx = pool.begin().await.map_err(|e| AuthError::Database(e))?;
 
