@@ -7,6 +7,7 @@ import { TaskListView, type CloneRecoveryState } from '@/components/tasks/TaskLi
 import { KanbanBoard } from '@/components/tasks/KanbanBoard';
 import { MembersView } from '@/components/projects/MembersView';
 import { ProjectReportView } from '@/components/reports/ProjectReportView';
+import { ProjectBurndownView } from '@/components/projects/project-burndown-view';
 import { DocumentsTab } from '@/components/projects/DocumentsTab';
 import { ProjectCatalogSettingsPanel } from '@/components/projects/ProjectCatalogSettingsPanel';
 import { ProjectNameSettings } from '@/components/projects/ProjectNameSettings';
@@ -26,8 +27,8 @@ import { updateAutoSort } from '@/redux/features/taskOrderStore';
 import { useAuth } from '@/contexts/AuthContext';
 import { canAddMembers, canViewMembers, canViewSettings } from '@/utils/project-permissions';
 
-type ViewType = 'list' | 'kanban' | 'gantt' | 'members' | 'report' | 'documents' | 'settings' | 'timesheet';
-const VALID_VIEWS: ViewType[] = ['list', 'kanban', 'gantt', 'members', 'report', 'documents', 'settings', 'timesheet'];
+type ViewType = 'list' | 'kanban' | 'gantt' | 'burndown' | 'members' | 'report' | 'documents' | 'settings' | 'timesheet';
+const VALID_VIEWS: ViewType[] = ['list', 'kanban', 'gantt', 'burndown', 'members', 'report', 'documents', 'settings', 'timesheet'];
 function toViewType(tab?: string): ViewType {
   return VALID_VIEWS.includes(tab as ViewType) ? (tab as ViewType) : 'list';
 }
@@ -384,6 +385,8 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
           </>
         ) : activeView === 'report' ? (
           <ProjectReportView projectId={project.id} />
+        ) : activeView === 'burndown' ? (
+          <ProjectBurndownView projectId={project.id} />
         ) : activeView === 'documents' ? (
           <DocumentsTab projectId={project.id} />
         ) : activeView === 'timesheet' ? (
