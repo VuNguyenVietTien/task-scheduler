@@ -87,6 +87,9 @@ export function computeTaskAllocations(
   const allocations: Record<string, TaskAllocation> = {};
   const exhaustedTaskIds: string[] = [];
   const schedules: Record<string, WorkSchedule> = {};
+  // Tasks arrive in their stable priority order. A member's next task may
+  // share the final day's unused capacity, but never schedule before it.
+  const plannedThrough: Record<string, Date> = {};
   const seenTaskIds = new Set<string>();
 
   for (const task of orderedTasks) {
@@ -108,13 +111,10 @@ export function computeTaskAllocations(
         schedule[dateKey] = Math.max(0, capacity(new Date(y, m - 1, d)) - hours);
       }
     }
-    let start: Date;
-    if (task.start_date) {
-      start = new Date(task.start_date);
-      start.setHours(0, 0, 0, 0);
-    } else {
-      start = new Date(today);
-    }
+    let start = task.start_date ? new Date(task.start_date) : new Date(today);
+    start.setHours(0, 0, 0, 0);
+    const priorEnd = plannedThrough[memberKey];
+    if (priorEnd && priorEnd > start) start = new Date(priorEnd);
     const effort = task.effort ?? 0;
     if (effort <= 0) {
       allocations[taskId] = { start, end: new Date(start), hoursPerDay: { [fmt(start)]: 0 } };
@@ -135,8 +135,9 @@ export function computeTaskAllocations(
     }
     schedules[memberKey] = updatedSchedule;
     const bounds = positiveWorkBounds(hoursPerDay);
-    allocations[taskId] = { start: bounds ? new Date(`${bounds.start}T00:00:00`) : start,
-      end: bounds ? new Date(`${bounds.end}T00:00:00`) : endDate, hoursPerDay };
+    const end = bounds ? new Date(`${bounds.end}T00:00:00`) : endDate;
+    if (bounds) plannedThrough[memberKey] = end;
+    allocations[taskId] = { start: bounds ? new Date(`${bounds.start}T00:00:00`) : start, end, hoursPerDay };
   }
   return { allocations, exhaustedTaskIds };
 }

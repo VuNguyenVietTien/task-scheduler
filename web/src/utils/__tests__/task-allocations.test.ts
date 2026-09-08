@@ -87,4 +87,46 @@ describe('computeTaskAllocations viewport-independence (R3/R6)', () => {
     ], makeConfig(), schedulingHorizon(today), today);
     expect(r.allocations.t1.hoursPerDay).toEqual({ '2026-09-07': 8, '2026-09-08': 2 });
   });
+
+  it('keeps undated lower-priority work behind future same-member work', () => {
+    const r = computeTaskAllocations([
+      { task_id: 'high', priority_order: 1, assignee_user_id: 'u1', start_date: '2026-09-10', effort: 8 },
+      { task_id: 'low', priority_order: 2, assignee_user_id: 'u1', effort: 8 },
+    ], makeConfig(), schedulingHorizon(today), today);
+
+    expect(r.allocations.high.hoursPerDay).toEqual({ '2026-09-10': 8 });
+    expect(r.allocations.low.hoursPerDay).toEqual({ '2026-09-11': 8 });
+  });
+
+  it('sequences each assignee independently', () => {
+    const r = computeTaskAllocations([
+      { task_id: 'a-high', priority_order: 1, assignee_user_id: 'a', start_date: '2026-09-10', effort: 8 },
+      { task_id: 'b-low', priority_order: 2, assignee_user_id: 'b', effort: 8 },
+      { task_id: 'a-low', priority_order: 3, assignee_user_id: 'a', effort: 8 },
+    ], makeConfig(), schedulingHorizon(today), today);
+
+    expect(r.allocations['b-low'].hoursPerDay).toEqual({ '2026-09-07': 8 });
+    expect(r.allocations['a-low'].hoursPerDay).toEqual({ '2026-09-11': 8 });
+  });
+
+  it('keeps stable order while respecting weekends, leave, and remaining daily capacity', () => {
+    const leave: DayOffRange[] = [{
+      id: 'leave', scope: 'individual', memberKey: 'u1', startDate: '2026-09-14', endDate: '2026-09-14',
+    }];
+    const config = {
+      ...makeConfig(),
+      capacityFor: (key: string) => buildCapacityResolver(DEFAULT_CAPACITY, key, [], leave),
+    };
+    const r = computeTaskAllocations([
+      { task_id: 'first', priority_order: 1, assignee_user_id: 'u1', start_date: '2026-09-11', effort: 10 },
+      { task_id: 'second', priority_order: 2, assignee_user_id: 'u1', effort: 8 },
+    ], config, schedulingHorizon(today), today);
+
+    expect(r.allocations.first.hoursPerDay).toEqual({ '2026-09-11': 8, '2026-09-15': 2 });
+    expect(r.allocations.second.hoursPerDay).toEqual({ '2026-09-15': 6, '2026-09-16': 2 });
+    for (const date of ['2026-09-11', '2026-09-15', '2026-09-16']) {
+      const used = (r.allocations.first.hoursPerDay[date] ?? 0) + (r.allocations.second.hoursPerDay[date] ?? 0);
+      expect(used).toBeLessThanOrEqual(8);
+    }
+  });
 });
