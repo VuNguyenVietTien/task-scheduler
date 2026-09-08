@@ -400,12 +400,20 @@ describe('Timeline selected-plan wiring', () => {
     expect(screen.getByText(/Unresolved assignment \(unassigned\)/)).toBeInTheDocument();
   });
 
-  it('exposes localized No plan and a clear corrupt-newest fallback', async () => {
-    renderTimeline(lifecycle({ defaultPlanFallback: true, error: 'corrupt snapshot' }));
+  it('exposes a localized invalid-plan fallback and deletion for its retained identity', async () => {
+    const invalid = { plan_id: 'B', project_id: 'proj-1', name: 'Invalid B', revision: 2, is_active: true, stale: false, stale_reasons: [], plan_data: {} };
+    const lc = lifecycle({ loadedPlan: invalid, plans: [invalid], defaultPlanFallback: true });
+    renderTimeline(lc);
     await screen.findByTestId('plan-lifecycle-bar');
     expect(screen.getByRole('option', { name: 'No plan' })).toBeInTheDocument();
-    expect(screen.getByTestId('default-plan-fallback')).toHaveTextContent('newest saved plan is invalid');
+    expect(screen.getByTestId('plan-select')).toHaveValue('B');
+    expect(screen.getByTestId('default-plan-fallback')).toHaveTextContent('selected saved plan is invalid');
+    expect(screen.queryByTestId('plan-error')).not.toBeInTheDocument();
     expect(screen.queryByText(/Live view|Live \(current config\)/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId('delete-plan-btn'));
+    expect(screen.getByTestId('delete-plan-confirm')).toHaveTextContent('Invalid B');
+    fireEvent.click(screen.getByTestId('confirm-delete-plan-btn'));
+    expect(lc.deletePlan).toHaveBeenCalledTimes(1);
   });
 
   it('exposes one plan selector/new/save lifecycle rather than parallel legacy controls', async () => {

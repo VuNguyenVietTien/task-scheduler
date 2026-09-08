@@ -139,7 +139,7 @@ export function PlanLifecycleBar({
 
       <select
         data-testid="plan-select"
-        value={lc.mode === 'saved' ? lc.loadedPlan?.plan_id ?? '' : ''}
+        value={lc.loadedPlan && (lc.mode === 'saved' || lc.defaultPlanFallback) ? lc.loadedPlan.plan_id : ''}
         onChange={(e) => {
           if (!e.target.value) {
             lc.backToLive();
@@ -166,8 +166,9 @@ export function PlanLifecycleBar({
       <button type="button" data-testid="recalculate-btn" onClick={() => void lc.recalculate()} disabled={Boolean(lc.calculationsUnavailable)}
         className="px-2 py-1 rounded bg-blue-100 hover:bg-blue-200" title="Rebuild the displayed plan with current capacity as a draft">Recalculate</button>
       {lc.calculationsUnavailable && <span role="status">{lc.calculationsUnavailable}</span>}
-      {lc.mode === 'saved' && lc.loadedPlan && <>
-        <button type="button" data-testid="set-active-plan-btn" disabled={lc.loadedPlan.is_active} onClick={() => void lc.setActivePlan()}>Set active plan</button>
+      {lc.mode === 'saved' && lc.loadedPlan &&
+        <button type="button" data-testid="set-active-plan-btn" disabled={lc.loadedPlan.is_active} onClick={() => void lc.setActivePlan()}>Set active plan</button>}
+      {lc.loadedPlan && (lc.mode === 'saved' || lc.defaultPlanFallback) && <>
         <button type="button" data-testid="delete-plan-btn" className="px-2 py-1 rounded bg-red-100 text-red-800 hover:bg-red-200" onClick={() => setDeleteTarget(lc.loadedPlan!.plan_id)}>{t('gantt.deletePlan')}</button>
         {deleteTarget === lc.loadedPlan.plan_id && <span data-testid="delete-plan-confirm">{t('gantt.deleteConfirm')}: {lc.loadedPlan.name}?
           <button type="button" data-testid="confirm-delete-plan-btn" onClick={() => { setDeleteTarget(null); void lc.deletePlan(); }}>{t('gantt.deletePlan')}</button>

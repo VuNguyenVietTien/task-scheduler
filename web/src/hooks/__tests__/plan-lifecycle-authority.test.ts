@@ -24,6 +24,9 @@ function plan(id: string, project = 'p') {
   return { plan_id: id, project_id: project, name: id, revision: 1, is_active: false, stale: false, stale_reasons: [],
     plan_data: { version: 2, tasks: [{ taskId: 'a', startDate: '2026-09-07', endDate: '2026-09-07', hoursPerDay: { '2026-09-07': 8 }, priorityOrder: 1 }], meta: { savedAt: '' } } };
 }
+function corruptPlan(id: string) {
+  return { ...plan(id), plan_data: { version: 2, tasks: [{ taskId: 'a', startDate: '2026-09-07', endDate: '2026-09-07', priorityOrder: 1, hoursPerDay: 'bad' }], meta: {} } };
+}
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (reason: Error) => void;
   const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 const setup = () => renderHook(({ project, inputs }) => usePlanLifecycle(project, inputs), { initialProps: { project: 'p', inputs: scheduling } });
@@ -97,17 +100,55 @@ test('defaults once to the newest plan and keeps an explicit No plan selection',
   expect(mockQuery).not.toHaveBeenCalled();
 });
 
-test('a corrupt newest plan falls back to No plan without selecting an older revision', async () => {
-  mockPlans = [
-    { ...plan('corrupt'), plan_data: { version: 2, tasks: [{ taskId: 'a', startDate: '2026-09-07', endDate: '2026-09-07', priorityOrder: 1, hoursPerDay: 'bad' }], meta: {} } },
-    plan('older'),
-  ];
+test('a corrupt newest plan stays identifiable and can be deleted before selecting the next revision', async () => {
+  mockPlans = [corruptPlan('corrupt'), plan('older')];
   const { result } = setup();
   await waitFor(() => expect(result.current.defaultPlanFallback).toBe(true));
   expect(result.current.mode).toBe('live');
-  expect(result.current.loadedPlan).toBeNull();
-  expect(result.current.error).toMatch(/invalid daily hours/);
+  expect(result.current.loadedPlan?.plan_id).toBe('corrupt');
+  expect(result.current.loadedSnapshot).toBeNull();
+  expect(result.current.error).toBeNull();
   expect(mockQuery).not.toHaveBeenCalled();
+
+  mockMutate.mockRejectedValueOnce(new Error('delete failed'));
+  await act(async () => result.current.deletePlan());
+  expect(result.current.loadedPlan?.plan_id).toBe('corrupt');
+  expect(result.current.defaultPlanFallback).toBe(true);
+
+  mockMutate.mockResolvedValueOnce({ data: { deletePlan: true } });
+  mockRefetch.mockResolvedValueOnce({ data: { saved_plans: [plan('older')] } });
+  await act(async () => result.current.deletePlan());
+  expect(mockMutate).toHaveBeenLastCalledWith(expect.objectContaining({ mutation: DELETE_PLAN, variables: { id: 'corrupt' } }));
+  expect(result.current.loadedPlan?.plan_id).toBe('older');
+  expect(result.current.mode).toBe('saved');
+});
+
+test('a corrupt manual selection uses current scheduling and explicit No plan clears its identity', async () => {
+  mockQuery.mockResolvedValueOnce({ data: { saved_plan: corruptPlan('corrupt') } });
+  const { result } = setup();
+  await act(async () => result.current.loadPlan('corrupt'));
+  expect(result.current.mode).toBe('live');
+  expect(result.current.loadedPlan?.plan_id).toBe('corrupt');
+  expect(result.current.defaultPlanFallback).toBe(true);
+  expect(result.current.error).toBeNull();
+
+  act(() => result.current.backToLive());
+  expect(result.current.loadedPlan).toBeNull();
+  expect(result.current.defaultPlanFallback).toBe(false);
+  expect(result.current.error).toBeNull();
+});
+
+test('a refreshed list clears a failed selection removed externally', async () => {
+  mockQuery.mockResolvedValueOnce({ data: { saved_plan: corruptPlan('corrupt') } });
+  const { result, rerender } = setup();
+  await act(async () => result.current.loadPlan('corrupt'));
+  expect(result.current.loadedPlan?.plan_id).toBe('corrupt');
+
+  mockPlans = [];
+  rerender({ project: 'p', inputs: { ...scheduling } });
+  await waitFor(() => expect(result.current.loadedPlan).toBeNull());
+  expect(result.current.defaultPlanFallback).toBe(false);
+  expect(result.current.error).toBeNull();
 });
 
 test('R4 delete/set-active explicitly mutate displayed B, then selects the newest remaining legacy plan', async () => {

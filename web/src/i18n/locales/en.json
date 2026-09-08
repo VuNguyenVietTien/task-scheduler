@@ -456,7 +456,7 @@
     "noPlan": "No plan",
     "assigned": "Assigned",
     "working": "Working",
-    "newestPlanFallback": "The newest saved plan is invalid. Showing current scheduling instead.",
+    "newestPlanFallback": "The selected saved plan is invalid. Showing current scheduling; delete it to recover.",
     "enterPlanNameRequired": "Please enter a plan name",
     "noTasksToSave": "No tasks to save to plan",
     "sortedByPriority": "Tasks sorted by priority",

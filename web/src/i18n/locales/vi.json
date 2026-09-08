@@ -456,7 +456,7 @@
     "noPlan": "Không chọn kế hoạch",
     "assigned": "Được giao",
     "working": "Làm việc",
-    "newestPlanFallback": "Kế hoạch mới nhất không hợp lệ. Đang hiển thị lịch hiện tại.",
+    "newestPlanFallback": "Kế hoạch đã chọn không hợp lệ. Đang hiển thị lịch hiện tại; hãy xóa kế hoạch để khôi phục.",
     "enterPlanNameRequired": "Vui lòng nhập tên kế hoạch",
     "noTasksToSave": "Không có task nào để lưu vào kế hoạch",
     "sortedByPriority": "Đã sắp xếp lại tasks theo mức độ ưu tiên",
