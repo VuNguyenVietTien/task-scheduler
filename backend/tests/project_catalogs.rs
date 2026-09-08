@@ -101,9 +101,15 @@ async fn mounted_project_catalogs_preserve_task_classification_boundaries() {
 
     let owner = Uuid::new_v4();
     let outsider = Uuid::new_v4();
+    let manager = Uuid::new_v4();
+    let member = Uuid::new_v4();
+    let guest = Uuid::new_v4();
     for (user_id, email, username) in [
         (owner, "catalog-owner@test.local", "catalog-owner"),
         (outsider, "catalog-outsider@test.local", "catalog-outsider"),
+        (manager, "catalog-manager@test.local", "catalog-manager"),
+        (member, "catalog-member@test.local", "catalog-member"),
+        (guest, "catalog-guest@test.local", "catalog-guest"),
     ] {
         sqlx::query("INSERT INTO users (user_id, email, username) VALUES ($1, $2, $3)")
             .bind(user_id)
@@ -127,10 +133,36 @@ async fn mounted_project_catalogs_preserve_task_classification_boundaries() {
             .await
             .unwrap();
     }
+    for (user_id, role) in [(manager, "manager"), (member, "member"), (guest, "guest")] {
+        let member_id = Uuid::new_v4();
+        sqlx::query(
+            "INSERT INTO project_members (member_id, resource_member_id, project_id, user_id, display_name, role) \
+             VALUES ($1, $1, $2, $3, $4, $5::member_role)",
+        )
+        .bind(member_id)
+        .bind(project)
+        .bind(user_id)
+        .bind(format!("catalog {role}"))
+        .bind(role)
+        .execute(&pool)
+        .await
+        .unwrap();
+    }
+    for denied_actor in [member, guest] {
+        let denied = execute(
+            &pool,
+            Some(denied_actor),
+            format!(
+                "mutation {{ create_project_catalog_items(input: {{ project_id: \"{project}\", kind: PROGRESS_TYPE, items: [{{ labels: [{{locale: \"en\", name: \"Denied\"}}] }}] }}) {{ catalog_item_id }} }}"
+            ),
+        )
+        .await;
+        assert_eq!(code(&denied), Some("FORBIDDEN".to_owned()));
+    }
 
     let progress = execute(
         &pool,
-        Some(owner),
+        Some(manager),
         format!(
             "mutation {{ create_project_catalog_items(input: {{ project_id: \"{project}\", kind: PROGRESS_TYPE, items: [{{ labels: [{{locale: \"en\", name: \"Create\"}}, {{locale: \"vi\", name: \"Tạo\"}}] }}, {{ labels: [{{locale: \"en\", name: \"Review\"}}] }}] }}) {{ catalog_item_id display_order labels {{ locale name }} }} }}"
         ),
@@ -168,7 +200,7 @@ async fn mounted_project_catalogs_preserve_task_classification_boundaries() {
 
     let renamed = execute(
         &pool,
-        Some(owner),
+        Some(manager),
         format!(
             "mutation {{ update_project_catalog_item(input: {{ catalog_item_id: \"{progress_create}\", labels: [{{locale: \"en\", name: \"Build\"}}, {{locale: \"ja\", name: \"作る\"}}] }}) {{ catalog_item_id labels {{locale name}} }} }}"
         ),
@@ -181,7 +213,7 @@ async fn mounted_project_catalogs_preserve_task_classification_boundaries() {
 
     let reordered = execute(
         &pool,
-        Some(owner),
+        Some(manager),
         format!(
             "mutation {{ reorder_project_catalog_items(input: {{ project_id: \"{project}\", kind: PROGRESS_TYPE, ordered_catalog_item_ids: [\"{progress_review}\", \"{progress_create}\"], expected_catalog_item_ids: [\"{progress_create}\", \"{progress_review}\"] }}) {{ catalog_item_id display_order }} }}"
         ),
@@ -335,4 +367,59 @@ async fn mounted_project_catalogs_preserve_task_classification_boundaries() {
     assert!(legacy.errors.is_empty(), "{:#?}", legacy.errors);
     assert_eq!(json(&legacy)["create_task"]["task_type_catalog_item_id"], Value::Null);
     assert_eq!(json(&legacy)["create_task"]["type_"], "legacy raw");
+
+    let denied_delete = execute(
+        &pool,
+        Some(guest),
+        format!("mutation {{ delete_project_catalog_item(catalog_item_id: \"{progress_review}\") {{ catalog_item_id }} }}"),
+    )
+    .await;
+    assert_eq!(code(&denied_delete), Some("FORBIDDEN".to_owned()));
+    let foreign_delete = execute(
+        &pool,
+        Some(owner),
+        format!("mutation {{ delete_project_catalog_item(catalog_item_id: \"{foreign_id}\") {{ catalog_item_id }} }}"),
+    )
+    .await;
+    assert_eq!(code(&foreign_delete), Some("FORBIDDEN".to_owned()));
+    let task_id_text = task_id.to_string();
+    for (item_id, expected_kind) in [
+        (progress_review, "PROGRESS_TYPE"),
+        (category_id, "CATEGORY"),
+        (task_type_id, "TASK_TYPE"),
+    ] {
+        let deleted = execute(
+            &pool,
+            Some(manager),
+            format!(
+                "mutation {{ delete_project_catalog_item(catalog_item_id: \"{item_id}\") {{ catalog_item_id kind affected_task_ids }} }}"
+            ),
+        )
+        .await;
+        assert!(deleted.errors.is_empty(), "{expected_kind}: {:#?}", deleted.errors);
+        let deleted_json = json(&deleted);
+        assert_eq!(id(&deleted_json, &["delete_project_catalog_item", "catalog_item_id"]), item_id);
+        assert_eq!(deleted_json["delete_project_catalog_item"]["kind"], expected_kind);
+        assert!(deleted_json["delete_project_catalog_item"]["affected_task_ids"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|id| id.as_str() == Some(task_id_text.as_str())));
+        let label_count: i64 = sqlx::query_scalar(
+            "SELECT count(*) FROM project_task_catalog_labels WHERE catalog_item_id = $1",
+        )
+        .bind(item_id)
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(label_count, 0, "{expected_kind} labels must be deleted");
+    }
+    let cleared_slots: (Option<Uuid>, Option<Uuid>, Option<Uuid>, Option<String>, Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT progress_catalog_item_id, category_catalog_item_id, task_type_catalog_item_id, progress_type::text, category, type FROM tasks WHERE task_id = $1",
+    )
+    .bind(task_id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(cleared_slots, (None, None, None, None, None, None));
 }

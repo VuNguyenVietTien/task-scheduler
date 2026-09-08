@@ -737,6 +737,46 @@ fn authz_guards_are_wired_into_every_scheduling_resolver() {
 }
 
 #[test]
+fn catalog_delete_contract_clears_only_the_matching_task_slot_in_one_authorized_transaction() {
+    use std::fs;
+    let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    let source = fs::read_to_string(root.join("src/graphql/resolvers/project_catalogs/mod.rs"))
+        .expect("read catalog resolver");
+    let start = source.find("async fn delete_project_catalog_item")
+        .expect("catalog delete mutation must exist");
+    let body = &source[start..source[start..].find("async fn reorder_project_catalog_items")
+        .expect("catalog delete must precede reorder") + start];
+    for required in [
+        "context.db.begin()",
+        "require_project_write_tx",
+        "WHERE catalog_item_id = $1 AND project_id = $2 FOR UPDATE",
+        "DELETE FROM project_task_catalog_labels",
+        "DELETE FROM project_task_catalog_items",
+        "tx.commit()",
+    ] {
+        assert!(body.contains(required), "catalog delete missing {required}");
+    }
+    for (kind, id_column, legacy_column) in [
+        ("ProgressType", "progress_catalog_item_id", "progress_type"),
+        ("Category", "category_catalog_item_id", "category"),
+        ("TaskType", "task_type_catalog_item_id", "type"),
+    ] {
+        assert!(body.contains(kind), "catalog delete must handle {kind}");
+        assert!(body.contains(&format!("SET {id_column} = NULL, {legacy_column} = NULL")),
+            "{kind} delete must clear only its ID and legacy task columns");
+    }
+    assert!(body.find("require_project_write_tx").unwrap() < body.find("FOR UPDATE").unwrap(),
+        "project authorization/lock must precede catalog-item lock");
+    assert!(body.find("FOR UPDATE").unwrap() < body.find("UPDATE tasks").unwrap(),
+        "catalog item must be locked before affected tasks are cleared");
+    assert!(body.find("UPDATE tasks").unwrap() < body.find("DELETE FROM project_task_catalog_labels").unwrap(),
+        "task clears must roll back with label/item deletion on failure");
+    let sdl = fs::read_to_string(root.join("schema.graphql")).expect("read schema SDL");
+    assert!(sdl.contains("delete_project_catalog_item(catalog_item_id: ID!): DeleteProjectCatalogItemPayload!"));
+    assert!(sdl.contains("affected_task_ids: [ID!]!"));
+}
+
+#[test]
 fn assemble_forest_returns_orphan_and_self_parent_rows_as_roots() {
     // Domain contract (task 1.1 handoff): corrupt rows surface exactly once
     // as roots — an orphan (parent missing from input) and a self-parent.

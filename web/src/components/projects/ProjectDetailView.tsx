@@ -365,7 +365,11 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
               canManage={canManageProject}
               onRenamed={() => dispatch(fetchProject(project.id)).then(() => undefined)}
             />
-            <ProjectCatalogSettingsPanel projectId={project.id} canManage={canManageProject} />
+            <ProjectCatalogSettingsPanel
+              projectId={project.id}
+              canManage={canManageProject}
+              onTasksChanged={() => dispatch(fetchProjectTasks(project.id)).then(() => undefined)}
+            />
           </>
         ) : activeView === 'report' ? (
           <ProjectReportView projectId={project.id} />
