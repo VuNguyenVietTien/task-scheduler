@@ -116,6 +116,7 @@ interface SortableGanttTaskRowProps {
   collapsed: boolean;
   startLabel: string;
   endLabel: string;
+  assigneeName?: string;
   onToggle: (key: string) => void;
   onTaskClick: (taskId: string) => void;
   draggable: boolean;
@@ -129,6 +130,7 @@ function SortableGanttTaskRow({
   collapsed,
   startLabel,
   endLabel,
+  assigneeName,
   onToggle,
   onTaskClick,
   draggable,
@@ -177,15 +179,17 @@ function SortableGanttTaskRow({
       >
         <ArrowUpDown className="h-3 w-3" />
       </button>
-      <button
-        type="button"
-        className="truncate text-left text-xs text-slate-700"
-        style={{ paddingLeft: `${row.depth * 14}px` }}
-        title={row.task.title}
-        onClick={() => onTaskClick(row.task.task_id)}
-      >
-        {row.task.title}
-      </button>
+      <div className="min-w-0" style={{ paddingLeft: `${row.depth * 14}px` }}>
+        <button
+          type="button"
+          className="truncate block w-full text-left text-xs text-slate-700"
+          title={row.task.title}
+          onClick={() => onTaskClick(row.task.task_id)}
+        >
+          {row.task.title}
+        </button>
+        {assigneeName && <span className="block truncate text-[0.65rem] text-slate-500">{assigneeName}</span>}
+      </div>
       <span className="truncate text-[0.65rem] text-slate-500" data-testid="gantt-row-start">{startLabel}</span>
       <span className="truncate text-[0.65rem] text-slate-500" data-testid="gantt-row-end">{endLabel}</span>
     </div>
@@ -484,6 +488,8 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
 
   // The same canonical project members as the matrix, including unlinked
   // and zero-allocation rows. Account assignees are not a member directory.
+  const memberNames = useMemo(() => new Map(schedulingConfig.resourceMembers
+    .map(member => [member.resource_member_id, member.display_name])), [schedulingConfig.resourceMembers]);
   const allMembers = useMemo(() => schedulingConfig.resourceMembers
     .map(member => ({ id: member.resource_member_id, name: member.display_name }))
     .sort((a, b) => a.name.localeCompare(b.name) || a.id.localeCompare(b.id)),
@@ -1533,6 +1539,9 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                           collapsed={collapsedRows.has(row.key)}
                           startLabel={bounds?.start ?? (allocation ? 'Unscheduled' : '—')}
                           endLabel={bounds?.end ?? (allocation ? 'Unscheduled' : '—')}
+                          assigneeName={row.task.assignee_resource_member_id
+                            ? memberNames.get(row.task.assignee_resource_member_id)
+                            : row.task.assignee?.username}
                           onToggle={toggleRowCollapsed}
                           onTaskClick={(taskId) => handleTaskBarClick(taskId)}
                           draggable={planLifecycle.mode !== 'saved' && draggableTaskIds.has(row.task.task_id)}
@@ -1732,7 +1741,9 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                               return (
                                 <div
                                   key={`${task.task_id}-seg-${dateKey}`}
-                                  title={`${task.title} — ${dateKey}: ${hours}h`}
+                                  title={`${task.title} — ${task.assignee_resource_member_id
+                                    ? memberNames.get(task.assignee_resource_member_id) ?? 'Assigned member unavailable'
+                                    : task.assignee?.username ?? 'Unassigned'} — ${dateKey}: ${hours}h`}
                                   onClick={(e) => handleTaskBarClick(task.task_id, e)}
                                   className="rounded-sm text-gray-800 text-[0.65rem] font-medium cursor-pointer shadow hover:brightness-95 transition-all flex items-center justify-center border border-blue-200 bg-blue-100"
                                   style={{
@@ -1747,7 +1758,12 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                                   data-date={dateKey}
                                   data-hours={hours}
                                 >
-                                  {Math.round(hours * 10) / 10}h
+                                  <span>{Math.round(hours * 10) / 10}h</span>
+                                  {(task.assignee_resource_member_id || task.assignee) && (
+                                    <span className="ml-1 max-w-[60%] truncate">· {task.assignee_resource_member_id
+                                      ? memberNames.get(task.assignee_resource_member_id) ?? 'Unknown member'
+                                      : task.assignee?.username}</span>
+                                  )}
                                 </div>
                               );
                             });

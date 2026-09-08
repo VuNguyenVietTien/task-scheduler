@@ -20,6 +20,14 @@ import { Member } from '@/types/members';
 import { ProjectCatalogSelect } from '@/components/projects/ProjectCatalogSettingsPanel';
 import type { ProjectCatalogKind } from '@/types/project-catalog';
 import { taskDeletionConfirmationMessage } from '@/utils/task-deletion';
+import { useUpdateTaskAssignee } from '@/hooks/useTaskFieldMutations';
+import { RESOURCE_MEMBERS_QUERY } from '@/graphql/scheduling';
+
+interface ResourceMemberOption {
+  resource_member_id: string;
+  display_name: string;
+  user_id: string | null;
+}
 
 interface TaskDetailProps {
   task: Task;
@@ -53,8 +61,15 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
     variables: { taskId },
     skip: !isOpen || !taskId,
   });
+  const { data: resourceMemberData } = useQuery(RESOURCE_MEMBERS_QUERY, {
+    variables: { project_id: task.project_id, only_assignable: true },
+    skip: !isOpen || !task.project_id,
+    fetchPolicy: 'cache-and-network',
+  });
+  const resourceMembers = (resourceMemberData?.resource_members ?? []) as ResourceMemberOption[];
   const commentEditorRef = useRef<{ focus: () => void } | null>(null);
   const { updateTask } = useUpdateTask();
+  const { updateAssignee } = useUpdateTaskAssignee();
   const dispatch = useAppDispatch();
   const [createComment] = useMutation(CREATE_TASK_COMMENT);
 
@@ -150,6 +165,18 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
       const updates: Partial<Task> = {};
 
       const val = (editedTask as any)[fieldName];
+      if (fieldName === 'assignee') {
+        const selected = resourceMembers.find(member => member.resource_member_id === editedTask.assignee_resource_member_id);
+        const savedTask = await updateAssignee(taskId, selected ? {
+          assigneeId: selected.user_id,
+          assigneeResourceMemberId: selected.resource_member_id,
+        } : null);
+        setEditedTask(savedTask);
+        dispatch(upsertTask(savedTask));
+        setEditingField(null);
+        onTaskUpdate?.(taskId, savedTask);
+        return;
+      }
       switch (fieldName) {
         case 'title': updates.title = val; break;
         case 'description': updates.description = val; break;
@@ -162,7 +189,6 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
         case 'actual_start_date': updates.actual_start_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : null; break;
         case 'actual_end_date': updates.actual_end_date = val ? (val.includes('T') ? val : `${val}T00:00:00Z`) : null; break;
         case 'tags': updates.tags = Array.isArray(val) ? val : []; break;
-        case 'assignee': (updates as any).assignee = val !== undefined ? val : null; break;
         case 'progressCatalogItemId': updates.progressCatalogItemId = val ?? null; break;
         case 'categoryCatalogItemId': updates.categoryCatalogItemId = val ?? null; break;
         case 'taskTypeCatalogItemId': updates.taskTypeCatalogItemId = val ?? null; break;
@@ -524,33 +550,18 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
             {editingField === 'assignee' ? (
               <div>
                 <select
-                  value={editedTask.assignee?.userId || ''}
-                  onChange={(e) => {
-                    if (e.target.value) {
-                      const selectedMember = projectMembers?.find(m => m.user.userId === e.target.value);
-                      if (selectedMember) {
-                        setEditedTask({
-                          ...editedTask,
-                          assignee: {
-                            userId: selectedMember.user.userId,
-                            username: selectedMember.user.username || selectedMember.user.fullName || selectedMember.user.email,
-                            avatarUrl: selectedMember.user.avatarUrl,
-                            role: selectedMember.role,
-                          }
-                        } as Task);
-                      } else {
-                        setEditedTask({ ...editedTask, assignee: undefined } as Task);
-                      }
-                    } else {
-                      setEditedTask({ ...editedTask, assignee: undefined } as Task);
-                    }
-                  }}
+                  aria-label={t('tasks.fields.assignedTo')}
+                  value={editedTask.assignee_resource_member_id || ''}
+                  onChange={(e) => setEditedTask({
+                    ...editedTask,
+                    assignee_resource_member_id: e.target.value || null,
+                  })}
                   className="w-full text-sm rounded-md border-slate-300 focus:border-blue-500 focus:ring-blue-500 px-2 py-1.5"
                 >
                   <option value="">{t('tasks.notAssigned')}</option>
-                  {projectMembers?.map(m => (
-                    <option key={m.user.userId} value={m.user.userId}>
-                      {m.user.username || m.user.fullName || m.user.email}{m.position ? ` (${m.position})` : ''}
+                  {resourceMembers.map(member => (
+                    <option key={member.resource_member_id} value={member.resource_member_id}>
+                      {member.display_name}
                     </option>
                   ))}
                 </select>
@@ -587,13 +598,11 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
                 tabIndex={0}
                 onKeyDown={e => { if (e.key === 'Enter') setEditingField('assignee'); }}
               >
-                {editedTask.assignee ? (
+                {editedTask.assignee_resource_member_id || editedTask.assignee ? (
                   <span className="flex-1 text-sm text-slate-900">
-                    {editedTask.assignee.username}
-                    {(() => {
-                      const pos = projectMembers?.find(m => m.user.userId === editedTask.assignee?.userId)?.position;
-                      return pos ? <span className="text-slate-500"> ({pos})</span> : null;
-                    })()}
+                    {resourceMembers.find(member => member.resource_member_id === editedTask.assignee_resource_member_id)?.display_name
+                      ?? editedTask.assignee?.username
+                      ?? t('tasks.notAssigned')}
                   </span>
                 ) : (
                   <span className="flex-1 text-sm text-slate-400 italic">{t('tasks.notAssigned')}</span>
