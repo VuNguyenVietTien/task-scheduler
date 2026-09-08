@@ -1,5 +1,5 @@
 import type { Task } from '@/types/task';
-import { buildProjectBurndown, type BurndownPlanTask } from '../project-burndown';
+import { buildProjectBurndown, readBurndownPlan, type BurndownPlanTask } from '../project-burndown';
 
 function task(taskId: string, values: Partial<Task> = {}): Task {
   return {
@@ -19,6 +19,65 @@ function planTask(taskId: string, endDate: string, values: Partial<BurndownPlanT
 }
 
 describe('project task-count burndown', () => {
+  it('uses saved membership and dates when daily hours are invalid', () => {
+    const baseline = readBurndownPlan({
+      version: 2,
+      meta: { savedAt: '2026-06-01T00:00:00Z' },
+      tasks: [
+        {
+          taskId: 'task-1', startDate: '2026-06-01', endDate: '2026-06-10', priorityOrder: 1,
+          hoursPerDay: { '2026-05-31': 8 },
+        },
+        {
+          taskId: 'task-2', startDate: '2026-06-01', endDate: '2026-06-20', priorityOrder: 2,
+          hoursPerDay: { '2026-06-02': 'invalid' },
+        },
+      ],
+    });
+    const result = buildProjectBurndown(
+      baseline.tasks,
+      [
+        task('task-1', { status: 'DONE', actual_end_date: '2026-06-08', updated_at: '2026-06-09' }),
+        task('task-2', { status: 'DONE', updated_at: '2026-06-09' }),
+      ],
+      '2026-06-12',
+      baseline.contextTasks
+    );
+
+    expect(baseline.tasks.map(({ taskId, endDate }) => ({ taskId, endDate }))).toEqual([
+      { taskId: 'task-1', endDate: '2026-06-10' },
+      { taskId: 'task-2', endDate: '2026-06-20' },
+    ]);
+    expect(result.totalTasks).toBe(2);
+    expect(result.points.find((point) => point.date === '2026-06-12')).toMatchObject({
+      plannedRemaining: 1,
+      actualRemaining: 1,
+    });
+    expect(result.completedWithoutActualEndCount).toBe(1);
+  });
+
+  it('counts valid saved ends regardless of empty hours and never substitutes a legacy start', () => {
+    const dated = readBurndownPlan({
+      version: 2,
+      meta: { savedAt: '' },
+      tasks: [{ taskId: 'dated', startDate: '2026-06-01', endDate: '2026-06-10', hoursPerDay: {}, priorityOrder: 1 }],
+    });
+    const missingEnd = readBurndownPlan({
+      version: 1,
+      tasks: [{ task_id: 'missing-end', start_date: '2026-06-01', priority_order: 1 }],
+    });
+    const result = buildProjectBurndown(
+      [...dated.tasks, ...missingEnd.tasks],
+      [task('dated'), task('missing-end')],
+      '2026-06-05'
+    );
+
+    expect(missingEnd.tasks[0].endDate).toBeUndefined();
+    expect(result.totalTasks).toBe(1);
+    expect(result.unscheduledCount).toBe(1);
+    expect(result.scheduledRange).toEqual({ start: '2026-06-10', end: '2026-06-10' });
+  });
+
   it('uses each saved revision end date against the same canonical actual end', () => {
     const current = [task('task-1', { status: 'DONE', actual_end_date: '2026-06-15T23:00:00Z' })];
     const earlyBaseline = buildProjectBurndown([planTask('task-1', '2026-06-10')], current, '2026-06-16');

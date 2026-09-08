@@ -16,8 +16,7 @@ import {
 import { SAVED_PLANS_QUERY } from '@/graphql/scheduling';
 import { useAppSelector } from '@/redux/hooks';
 import { distinctTaskPopulation } from '@/components/reports/task-population';
-import { parsePlanSnapshot, snapshotToBars } from '@/utils/planLifecycle';
-import { buildProjectBurndown } from '@/utils/project-burndown';
+import { buildProjectBurndown, readBurndownPlan } from '@/utils/project-burndown';
 
 interface SavedPlan {
   plan_id: string;
@@ -61,23 +60,13 @@ export function ProjectBurndownView({ projectId }: { projectId: string }) {
   const calculation = useMemo(() => {
     if (!selectedPlan) return { result: null, message: null };
     try {
-      const snapshot = parsePlanSnapshot(selectedPlan.plan_data);
-      const bars = snapshotToBars(snapshot);
-      const currentById = new Map(currentTasks.map((task) => [task.task_id, task]));
-      const legacyDatesOnly = snapshot.meta.legacyHoursMissing === true;
+      const baseline = readBurndownPlan(selectedPlan.plan_data);
       return {
         result: buildProjectBurndown(
-          snapshot.tasks.map((task) => ({
-            taskId: task.taskId,
-            startDate: task.startDate,
-            endDate: task.endDate,
-            parentTaskId: task.parentTaskId,
-            status: task.status,
-            unscheduled: !legacyDatesOnly && bars[task.taskId]?.unscheduled && currentById.get(task.taskId)?.effort !== 0,
-          })),
+          baseline.tasks,
           currentTasks,
           todayKey(),
-          snapshot.meta.contextTasks ?? []
+          baseline.contextTasks
         ),
         message: null,
       };
