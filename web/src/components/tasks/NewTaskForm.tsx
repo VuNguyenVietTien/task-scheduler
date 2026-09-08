@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useForm, Controller } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from 'zod';
-import { taskFormSchema } from "@/schemas/taskForm";
 import { Task } from "@/types/task";
 import { TagInput } from "@/components/ui/tag-input";
 import { mockTasks } from "@/data/mockTasks";
@@ -24,32 +23,6 @@ interface NewTaskFormProps {
   parentTaskId?: string;
 }
 
-export interface TaskFormInputs {
-  title: string;
-  description: string;
-  assignee: string;
-  /** Set only for a project member who does not have a linked user account. */
-  assigneeResourceMemberId?: string;
-  startDate: string;
-  dueDate: string;
-  categoryCatalogItemId: string;
-  taskTypeCatalogItemId: string;
-  effort?: number;
-  progressCatalogItemId: string;
-  tags: string[];
-  parentTaskId?: string;
-  status:
-  | "TODO"
-  | "DOING"
-  | "DONE"
-  | "CLOSE"
-  | "PENDING"
-  | "REVIEW"
-  | "BLOCKED"
-  | "ARCHIVED";
-  priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT" | "CRITICAL";
-  priorityOrder: number;
-}
 
 interface ResourceMemberRow {
   resource_member_id: string;
@@ -161,13 +134,31 @@ function ComboboxField({
   );
 }
 
-const catalogTaskFormSchema = taskFormSchema
-  .omit({ category: true, type: true, progressType: true })
-  .extend({
-    categoryCatalogItemId: z.string(),
-    taskTypeCatalogItemId: z.string(),
-    progressCatalogItemId: z.string(),
-  });
+const optionalDate = z.string().trim().refine((value) =>
+  !value || !Number.isNaN(new Date(value).getTime()),
+  'Invalid date',
+);
+
+export const createTaskFormSchema = z.object({
+  title: z.string().trim().min(1, 'Title is required').max(200, 'Title must be less than 200 characters'),
+  description: z.string().optional(),
+  assignee: z.string().optional(),
+  /** Set only for a project member who does not have a linked user account. */
+  assigneeResourceMemberId: z.string().optional(),
+  startDate: optionalDate.optional(),
+  dueDate: optionalDate.refine((value) => !value || new Date(value) > new Date(), 'Due date must be in the future').optional(),
+  categoryCatalogItemId: z.string().optional(),
+  taskTypeCatalogItemId: z.string().optional(),
+  progressCatalogItemId: z.string().optional(),
+  effort: z.number().min(0, 'Effort must be positive').optional(),
+  tags: z.array(z.string()).max(5, 'Maximum 5 tags allowed').optional(),
+  parentTaskId: z.string().optional(),
+  status: z.enum(['TODO', 'DOING', 'DONE', 'CLOSE']).default('TODO'),
+  priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']).default('MEDIUM'),
+  priorityOrder: z.number().min(0, 'Priority order must be positive').default(0),
+});
+
+export type TaskFormInputs = z.infer<typeof createTaskFormSchema>;
 
 // Rust TaskStatus canonical values for task creation (review BD-3): restrict to
 // TODO/DOING/DONE/CLOSE regardless of broader SDL history.
@@ -185,24 +176,24 @@ export function buildCreateTaskInput(
 ) {
   return {
     title: data.title,
-    description: data.description || '',
+    description: data.description?.trim() || null,
     project_id: projectId,
     parent_task_id: parentTaskId || data.parentTaskId || null,
-    status: data.status,
-    priority: data.priority,
-    // CreateTaskInput.priority_order is Int! (non-null) — BD-2
+    status: data.status ?? 'TODO',
+    priority: data.priority ?? 'MEDIUM',
+    // CreateTaskInput.priority_order is Int! (non-null).
     priority_order: data.priorityOrder ?? 0,
-    start_date: data.startDate ? new Date().toISOString() : null,
+    start_date: data.startDate ? new Date(data.startDate).toISOString() : null,
     due_date: data.dueDate ? new Date(data.dueDate).toISOString() : null,
     // An unlinked resource member has no user id. Passing its resource id is
     // what allows the backend to retain the assignment until it is linked.
     assignee_id: data.assigneeResourceMemberId ? null : data.assignee || null,
     assignee_resource_member_id: data.assigneeResourceMemberId || null,
-    effort: data.effort || 0,
+    effort: data.effort ?? null,
     task_type_catalog_item_id: data.taskTypeCatalogItemId || null,
     category_catalog_item_id: data.categoryCatalogItemId || null,
     progress_catalog_item_id: data.progressCatalogItemId || null,
-    tags: data.tags || [],
+    tags: data.tags?.length ? data.tags : null,
   };
 }
 
@@ -247,13 +238,12 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
     setValue,
     watch,
   } = useForm<TaskFormInputs>({
-    resolver: zodResolver(catalogTaskFormSchema),
+    resolver: zodResolver(createTaskFormSchema),
     defaultValues: {
       tags: [],
       taskTypeCatalogItemId: "",
       categoryCatalogItemId: "",
       progressCatalogItemId: "",
-      effort: 0,
       status: "TODO", // Default to first status
       priority: "MEDIUM",
       priorityOrder: 0,
@@ -592,6 +582,26 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
 
         <div>
           <label
+            htmlFor="startDate"
+            className="block text-sm font-medium text-gray-700"
+          >
+            Start Date
+          </label>
+          <input
+            {...register("startDate")}
+            type="datetime-local"
+            id="startDate"
+            className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500"
+          />
+          {errors.startDate && (
+            <p className="mt-1 text-sm text-red-600">
+              {errors.startDate.message as string}
+            </p>
+          )}
+        </div>
+
+        <div>
+          <label
             htmlFor="dueDate"
             className="block text-sm font-medium text-gray-700"
           >
@@ -733,7 +743,6 @@ export default function NewTaskForm({ projectId, parentTaskId }: NewTaskFormProp
             id="effort"
             className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 shadow-sm focus:border-blue-500 focus:ring-blue-500"
             placeholder="Enter estimated effort in hours"
-            defaultValue={0}
             min={0}
             step="0.5"
           />
