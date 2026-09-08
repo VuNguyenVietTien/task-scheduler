@@ -1,40 +1,36 @@
 'use client';
 
 import React from 'react';
-import { useTranslation } from 'react-i18next';
 import type { MasterPhaseRow } from '@/types/schedule-projection';
+import { formatDateVN } from '@/lib/utils';
 
 export interface PhaseScheduleRowProps {
   group: MasterPhaseRow;
-  className?: string;
+  days: Date[];
+  dayWidth: number;
 }
 
-function formatHours(hours?: number): string {
-  return hours === undefined ? '—' : `${Math.round(hours * 10) / 10}h`;
-}
+/** One continuous Master span; phase metadata renders in the left table only. */
+export function PhaseScheduleRow({ group, days, dayWidth }: PhaseScheduleRowProps) {
+  const { start, end } = group;
+  if (!start || !end) return null;
+  const visible = days
+    .map((day, index) => ({ date: formatDateVN(day), index }))
+    .filter(({ date }) => date >= start && date <= end);
+  if (!visible.length) return null;
 
-/** Read-only, phase-only Master Schedule row. */
-export function PhaseScheduleRow({ group, className = '' }: PhaseScheduleRowProps) {
-  const { t } = useTranslation();
-
+  const first = visible[0].index;
+  const last = visible[visible.length - 1].index;
   return (
     <div
-      data-row-id={group.phase_id ? `phase:${group.phase_id}` : 'phase:unclassified'}
-      data-phase-summary="true"
-      data-nondraggable="true"
-      role="row"
-      aria-label={`${t('scheduling.phase')}: ${group.name}`}
-      className={`flex items-center h-10 gap-3 border-b border-gray-100 bg-gray-50 px-3 text-sm select-none ${className}`}
-    >
-      <span className="font-semibold text-gray-800 flex-1 truncate">{group.name}</span>
-      <span className="w-14 text-right text-gray-500" title="Allocated task count">{group.task_count}</span>
-      <span className="w-16 text-right text-gray-500" title="Known allocated hours">{formatHours(group.total_hours)}</span>
-      <span className="w-24 text-right text-gray-500" title="Start">{group.start ?? '—'}</span>
-      <span className="w-24 text-right text-gray-500" title="End">{group.end ?? '—'}</span>
-      {group.history_incomplete && (
-        <span data-testid="master-history-incomplete" role="status" className="text-xs text-amber-700" title="Saved history is incomplete">⚠</span>
-      )}
-    </div>
+      data-testid="master-phase-span"
+      data-phase-id={group.phase_id ?? 'unclassified'}
+      data-start={start}
+      data-end={end}
+      className="absolute rounded-full border border-indigo-300 bg-indigo-200"
+      title={`${start} – ${end}`}
+      style={{ left: `${first * dayWidth + 4}px`, top: '10px', width: `${(last - first + 1) * dayWidth - 8}px`, height: '28px' }}
+    />
   );
 }
 

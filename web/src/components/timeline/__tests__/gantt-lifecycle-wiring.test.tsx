@@ -193,6 +193,42 @@ describe('Authority regression wiring R1-R11', () => {
     expect(mockReorderMutation.mock.calls.at(-1)[0].taskOrders.map((t: any) => t.taskId)).toEqual(['open', 'hidden', 'closed']);
     expect(screen.getAllByTestId('gantt-name-row').map(r => r.textContent)).toEqual([expect.stringContaining('Match open'), expect.stringContaining('Match closed')]);
   });
+  it.each(['live', 'saved'] as const)('Master uses the same single-row continuous layout in %s mode', async mode => {
+    const progressCatalogItemId = '00000000-0000-0000-0000-000000000001';
+    const task = { ...liveTasks[2], task_id: 'phase-task', id: 'phase-task', title: 'Phase task', effort: 16, start_date: '2026-09-11', progressCatalogItemId } as Task;
+    const hoursPerDay = { '2026-09-11': 8, '2026-09-14': 8 };
+    const overrideBars = { 'phase-task': { start: '2026-09-11', end: '2026-09-14', hoursPerDay } };
+    const selected = mode === 'live' ? lifecycle({ overrideBars }) : lifecycle({
+      mode: 'saved',
+      loadedSnapshot: { version: 2, meta: { savedAt: '' }, tasks: [{
+        taskId: 'phase-task', title: 'Phase task', startDate: '2026-09-11', endDate: '2026-09-14',
+        hoursPerDay, priorityOrder: 1, progressCatalogItemId,
+      }] },
+      overrideBars,
+    });
+
+    renderTimeline(selected, [task]);
+    fireEvent.click(screen.getByRole('button', { name: /master/i }));
+
+    const rows = await screen.findAllByTestId('gantt-name-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent('Creation');
+    expect(rows[0]).toHaveTextContent('2026-09-11');
+    expect(rows[0]).toHaveTextContent('2026-09-14');
+    expect(screen.getAllByText('Creation')).toHaveLength(1);
+    expect(screen.getByTestId('master-phase-span')).toHaveStyle({ width: '312px' });
+    expect(screen.queryByTestId('master-phase-day-segment')).not.toBeInTheDocument();
+    expect(screen.queryByText('8h')).not.toBeInTheDocument();
+  });
+
+  it('old saved tasks without phase metadata produce one explicit unclassified row', async () => {
+    renderTimeline(savedLifecycle());
+    fireEvent.click(screen.getByRole('button', { name: /master/i }));
+    const rows = await screen.findAllByTestId('gantt-name-row');
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent('Unclassified / not recorded');
+  });
+
   // Master task-tree assertion was superseded: Master is phase-only; WBS remains hierarchical.
   it.each(['wbs'])('R6 %s uses local authoritative hierarchy/order', async mode => {
     const tasks = [{ ...liveTasks[0], title: 'Parent' }, { ...liveTasks[1], title: 'Child', parent_task_id: 'parent' }];
@@ -313,8 +349,8 @@ describe('Timeline selected-plan wiring', () => {
     ]));
     expect(screen.queryByText('Live only')).not.toBeInTheDocument();
     expect(rows.find((row) => row.textContent?.includes('Saved child'))).toHaveAttribute('data-depth', '1');
-    expect((await screen.findAllByTestId('task-day-segment')).map((segment) => [segment.dataset.taskId, segment.dataset.date, segment.textContent])).toEqual([
-      ['parent', '2026-09-07', '8h'], ['child', '2026-09-08', '2h'],
+    expect((await screen.findAllByTestId('task-day-segment')).map((segment) => [segment.dataset.taskId, segment.dataset.date, segment.dataset.hours])).toEqual([
+      ['parent', '2026-09-08', '2'], ['child', '2026-09-08', '2'],
     ]);
   });
 

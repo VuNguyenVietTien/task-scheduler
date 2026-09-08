@@ -103,7 +103,8 @@ export function buildMasterPhaseRows(
     };
   };
 
-  const rows = configured.map((item) => rowFor(item));
+  const rows = configured.map((item) => rowFor(item))
+    .filter((row) => row.task_count > 0 || row.history_incomplete);
   const unclassified = rowFor(null);
   return unclassified.task_count > 0 || unclassified.history_incomplete ? [...rows, unclassified] : rows;
 }
