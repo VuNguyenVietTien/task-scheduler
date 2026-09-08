@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, forwardRef, useMemo } from 'react';
-import { EDITABLE_TASK_STATUSES, Task, TaskStatus, Priority, TaskStatuses, Priorities, UserBasic, TaskComment } from '@/types/task';
+import { EDITABLE_TASK_STATUSES, Task, TaskStatus, Priority, TaskStatuses, Priorities, TaskComment } from '@/types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
 import { User } from '@/contexts/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
@@ -26,8 +26,7 @@ import {
   deleteTask,
   updateTaskStatus, 
   updateTaskPriority, 
-  updateTaskEffort, 
-  updateTaskAssignee
+  updateTaskEffort
 } from '@/redux/features/tasksSlice';
 import { 
   fetchTaskDetail, 
@@ -43,6 +42,7 @@ import { toast } from "sonner";
 import { ProjectCatalogSelect } from '@/components/projects/ProjectCatalogSettingsPanel';
 import type { ProjectCatalogKind } from '@/types/project-catalog';
 import { taskDeletionConfirmationMessage } from '@/utils/task-deletion';
+import { RESOURCE_MEMBERS_QUERY } from '@/graphql/scheduling';
 
 interface TaskDetailPageProps {
   task: Task;
@@ -66,6 +66,21 @@ interface TaskDetailPageProps {
   refetchMembers?: () => void;
   initialCommentId?: string | null;
   initialActiveTab?: string;
+}
+
+interface ResourceMemberOption {
+  resource_member_id: string;
+  display_name: string;
+  user_id: string | null;
+}
+
+interface AssignmentOption {
+  key: string;
+  label: string;
+  resourceMemberId: string;
+  userId?: string;
+  avatarUrl?: string;
+  role?: string;
 }
 
 interface Comment {
@@ -159,6 +174,26 @@ export function TaskDetailPage({
     skip: !taskId,
     fetchPolicy: 'cache-and-network',
   });
+  const { data: resourceMemberData } = useQuery(RESOURCE_MEMBERS_QUERY, {
+    variables: { project_id: projectId, only_assignable: true },
+    skip: !projectId,
+    fetchPolicy: 'cache-and-network',
+  });
+  const assigneeOptions = useMemo<AssignmentOption[]>(() =>
+    ((resourceMemberData?.resource_members ?? []) as ResourceMemberOption[])
+      .map((member) => {
+        const linked = projectMembers?.find((candidate) => candidate.user.userId === member.user_id);
+        return {
+          key: `resource:${member.resource_member_id}`,
+          label: member.display_name,
+          resourceMemberId: member.resource_member_id,
+          userId: member.user_id ?? undefined,
+          avatarUrl: linked?.user.avatarUrl,
+          role: linked?.role,
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label) || a.key.localeCompare(b.key)),
+  [projectMembers, resourceMemberData?.resource_members]);
   
   // State cho parent task search
   const [availableParentTasks, setAvailableParentTasks] = useState<Task[]>([]);
@@ -524,46 +559,23 @@ export function TaskDetailPage({
     } else if (type === 'date') {
       displayValue = value ? formatDate(value) : t('common.notSet');
     } else if (fieldName === 'assignee') {
-      // Xử lý đặc biệt cho assignee vì có thể là object hoặc id
-      if (typeof value === 'object' && value !== null) {
-        // Nếu value là object
-        displayValue = (
-          <div className="flex items-center">
-            {value.avatarUrl ? (
-              <img src={value.avatarUrl} alt={value.username} className="h-5 w-5 rounded-full mr-2" />
-            ) : (
-              <div className="h-5 w-5 bg-gray-300 rounded-full flex items-center justify-center mr-2">
-                <span className="text-xs font-medium text-gray-700">
-                  {value.username ? value.username.charAt(0).toUpperCase() : '?'}
-                </span>
-              </div>
-            )}
-            <span>{value.username || value.fullName || t('common.notAssigned')}{value.position ? ` (${value.position})` : ''}</span>
-          </div>
-        );
-      } else if (value) {
-        // Nếu value là ID
-        const assigneeData = projectMembers?.find(member => member.user.userId === value);
-        displayValue = (
-          <div className="flex items-center">
-            {assigneeData?.user?.avatarUrl ? (
-              <img src={assigneeData.user.avatarUrl} alt={assigneeData.user.username} className="h-5 w-5 rounded-full mr-2" />
-            ) : (
-              <div className="h-5 w-5 bg-gray-300 rounded-full flex items-center justify-center mr-2">
-                <span className="text-xs font-medium text-gray-700">
-                  {assigneeData?.user?.username ? assigneeData.user.username.charAt(0).toUpperCase() : '?'}
-                </span>
-              </div>
-            )}
-            <span>
-              {assigneeData?.user?.username || assigneeData?.user?.fullName || String(value)}
-              {assigneeData?.position ? ` (${assigneeData.position})` : ''}
-            </span>
-          </div>
-        );
-      } else {
-        displayValue = t('common.notAssigned');
-      }
+      const selected = assigneeOptions.find((option) =>
+        option.resourceMemberId === editedTask.assignee_resource_member_id ||
+        (!editedTask.assignee_resource_member_id && option.userId === editedTask.assignee?.userId)
+      );
+      const name = selected?.label ?? editedTask.assignee?.username;
+      displayValue = name ? (
+        <div className="flex items-center">
+          {selected?.avatarUrl || editedTask.assignee?.avatarUrl ? (
+            <img src={selected?.avatarUrl || editedTask.assignee?.avatarUrl} alt={name} className="h-5 w-5 rounded-full mr-2" />
+          ) : (
+            <div className="h-5 w-5 bg-gray-300 rounded-full flex items-center justify-center mr-2">
+              <span className="text-xs font-medium text-gray-700">{name.charAt(0).toUpperCase()}</span>
+            </div>
+          )}
+          <span>{name}</span>
+        </div>
+      ) : t('common.notAssigned');
     } else if (fieldName === 'created_by') {
       // Đặc biệt xử lý người tạo - hiển thị username thay vì ID
       if (typeof value === 'object' && value !== null) {
@@ -639,39 +651,26 @@ export function TaskDetailPage({
                 <select
                 id={`field-${fieldName}`}
                   title={`Chọn ${label.toLowerCase()}`}
-                value={typeof value === 'object' ? (value?.userId || value?.id || '') : (value || '')}
-                  onChange={(e) => {
-                    if (fieldName === 'assignee') {
-                      if (e.target.value) {
-                        const selectedMember = projectMembers?.find(member => 
-                          member.user.userId === e.target.value
-                        );
-
-                        if (selectedMember) {
-                        const userBasic: UserBasic = {
-                            userId: selectedMember.user.userId,
-                            username: selectedMember.user.username || selectedMember.user.fullName || selectedMember.user.email,
-                          avatarUrl: selectedMember.user.avatarUrl,
-                          role: selectedMember.role
-                        };
-                        
-                        setEditedTask({
-                          ...editedTask,
-                          assignee: userBasic
-                        });
-                      } else {
-                        setEditedTask({
-                          ...editedTask,
-                          assignee: undefined
-                        });
-                        }
-                      } else {
-                      setEditedTask({
-                        ...editedTask,
-                        assignee: undefined
-                      });
-                      }
-                    } else {
+                value={fieldName === 'assignee'
+                  ? assigneeOptions.find((option) =>
+                      option.resourceMemberId === editedTask.assignee_resource_member_id ||
+                      (!editedTask.assignee_resource_member_id && option.userId === editedTask.assignee?.userId)
+                    )?.key ?? ''
+                  : typeof value === 'object' ? (value?.userId || value?.id || '') : (value || '')}
+                onChange={(e) => {
+                  if (fieldName === 'assignee') {
+                    const selected = assigneeOptions.find((option) => option.key === e.target.value);
+                    setEditedTask({
+                      ...editedTask,
+                      assignee_resource_member_id: selected?.resourceMemberId ?? null,
+                      assignee: selected?.userId ? {
+                        userId: selected.userId,
+                        username: selected.label,
+                        avatarUrl: selected.avatarUrl,
+                        role: selected.role,
+                      } : undefined,
+                    });
+                  } else {
                     setEditedTask({...editedTask, [fieldName]: e.target.value});
                   }
                 }}
@@ -1199,6 +1198,7 @@ export function TaskDetailPage({
             break;
           case 'assignee':
             updates.assignee = editedTask.assignee;
+            updates.assignee_resource_member_id = editedTask.assignee_resource_member_id ?? null;
             break;
           case 'actual_start_date':
             updates.actual_start_date = editedTask.actual_start_date;
@@ -1232,6 +1232,9 @@ export function TaskDetailPage({
         if (editedTask.effort !== task.effort) updates.effort = editedTask.effort;
         if (editedTask.progress !== task.progress) updates.progress = editedTask.progress;
         if (JSON.stringify(editedTask.assignee) !== JSON.stringify(task.assignee)) updates.assignee = editedTask.assignee;
+        if (editedTask.assignee_resource_member_id !== task.assignee_resource_member_id) {
+          updates.assignee_resource_member_id = editedTask.assignee_resource_member_id ?? null;
+        }
         if (editedTask.actual_start_date !== task.actual_start_date) updates.actual_start_date = editedTask.actual_start_date;
         if (editedTask.actual_end_date !== task.actual_end_date) updates.actual_end_date = editedTask.actual_end_date;
         if (editedTask.progressCatalogItemId !== task.progressCatalogItemId) updates.progressCatalogItemId = editedTask.progressCatalogItemId ?? null;
@@ -2061,14 +2064,10 @@ export function TaskDetailPage({
                   {/* Assignees */}
                   <div className="mt-6 border-t border-gray-200 pt-4">
                     <h3 className="text-base font-medium text-gray-900 mb-3">{t('tasks.sections.assignees')}</h3>
-                    {renderEditableField(t('tasks.fields.assignedTo'), 'assignee', 'select',
-                      projectMembers && projectMembers.length > 0 ?
-                        [{ value: '', label: t('common.notAssigned') }, ...projectMembers.map(member => ({
-                          value: member.user.userId,
-                          label: (member.user.username || member.user.fullName || member.user.email) + (member.position ? ` (${member.position})` : '')
-                        }))] :
-                        [{ value: '', label: t('common.notAssigned') }]
-                    )}
+                    {renderEditableField(t('tasks.fields.assignedTo'), 'assignee', 'select', [
+                      { value: '', label: t('common.notAssigned') },
+                      ...assigneeOptions.map((option) => ({ value: option.key, label: option.label })),
+                    ])}
 
                     {renderEditableField(t('tasks.fields.createdBy'), 'created_by')}
                   </div>
