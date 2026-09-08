@@ -22,17 +22,38 @@ Browser
 | Vercel deployment | `dpl_GjrYjW8BTdF7yNEPqqD1ZuLaY2dF` (`task-scheduler-mhg3tac41-vunguyenviettiens-projects.vercel.app`, aliased `prjmngr.vercel.app`) |
 | Backend API | `https://pm-api.khampha.dpdns.org` |
 | Backend container | `task-scheduler-backend` |
-| Backend image | `task-scheduler-backend:20260908T0712-01f1718` |
-| Backend release | `/home/azuraith/task-scheduler/releases/20260908T0712-01f1718` |
+| Backend image | `task-scheduler-backend:20260908T0925-0218f17` |
+| Backend release | `/home/azuraith/task-scheduler/releases/20260908T0925-0218f17` |
 | PostgreSQL container | `task_scheduler_postgres` |
 | Cloudflare origin | `http://localhost:8081` |
 
 The immediate rollback container is retained, stopped, with the prior live image/configuration:
 
-- `task-scheduler-backend-prev-20260908T0712-01f1718`
-- `task-scheduler-backend:20260908T0626-54da8ec5`
+- `task-scheduler-backend-prev-20260908T0925-0218f17`
+- `task-scheduler-backend:20260908T0712-01f1718`
 
 The older rollback containers and images documented below remain retained too.
+
+## Release 20260908T0925-0218f17 (2026-09-08)
+
+Exact local-dashboard CORS release from committed source `0218f17`.
+
+- Immutable image: `task-scheduler-backend:20260908T0925-0218f17` (`sha256:0624fa1fb2c76cf7ca8d178e30527e832e06eac3b48ec9b6e35686d6ff9f1adc`).
+- Committed Git archive: `/home/azuraith/task-scheduler/releases/20260908T0925-0218f17/source.tar.gz`, SHA-256 `78cd254540d316ce7c60e362679a18fab902b4e2d2920134dcc1bc5e3806114b`.
+- Runtime allowlist is exactly `https://prjmngr.vercel.app,http://localhost:3000`. Production HTTPS support remains; only exact `http://localhost:3000` is accepted as the production HTTP exception. Other localhost ports, `127.0.0.1`, wildcards, and untrusted origins remain rejected.
+- No database/schema/task write or migration was run. Local and public readiness report `ready` / `up` / `current`.
+- Exact GraphQL preflight probes requesting `POST` with `authorization,content-type`: localhost and production return 200 with their matching `Access-Control-Allow-Origin`; an untrusted origin returns 400 without ACAO.
+- Checks: changed-file rustfmt and 7 focused production platform tests passed. Docker build used the existing database URL only for SQLx compile-time metadata and made no database writes.
+
+Immediate backend rollback:
+
+```bash
+docker stop task-scheduler-backend && docker rm task-scheduler-backend
+docker rename task-scheduler-backend-prev-20260908T0925-0218f17 task-scheduler-backend
+docker start task-scheduler-backend
+curl --fail --silent --show-error http://127.0.0.1:8081/health/ready
+curl --fail --silent --show-error https://pm-api.khampha.dpdns.org/health/ready
+```
 
 ## Release 20260908T0712-01f1718 (2026-09-08)
 
