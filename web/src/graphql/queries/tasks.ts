@@ -1,156 +1,74 @@
 import { gql } from '@apollo/client';
 
-export const GET_PROJECT_TASKS = gql`
-  query GetTasks($projectId: ID!) {
-    tasks(project_id: $projectId) {
-      priority_order
-      task_id
-      project_id
-      parent_task_id
-      title
-      assignee_resource_member_id
-      assignee {
-        user_id
-        username
-        full_name
-        avatar_url
-        role
-      }
-      start_date
-      due_date
-      actual_start_date
-      actual_end_date
-      effort
-      progress
-      created_by
-      created_at
-      updated_at
-      is_deleted
-      status
-      priority
-      type_
-      category
-      tags
-      progress_type
-      progress_catalog_item_id
-      category_catalog_item_id
-      task_type_catalog_item_id
-      child_tasks {
-        priority_order
-        task_id
-        project_id
-        parent_task_id
-        title
-        assignee_resource_member_id
-        assignee {
-          user_id
-          username
-          full_name
-          avatar_url
-          role
-        }
-        start_date
-        due_date
-        effort
-        progress
-        status
-        priority
-        type_
-        category
-        progress_catalog_item_id
-        category_catalog_item_id
-        task_type_catalog_item_id
-      }
+// List and update mutations intentionally select the same task contract. Keep
+// this fragment authoritative: callers normalize only returned task objects.
+export const TASK_FIELDS = gql`
+  fragment TaskFields on Task {
+    task_id
+    project_id
+    parent_task_id
+    title
+    description
+    assignee_resource_member_id
+    assignee { user_id username full_name avatar_url role }
+    creator { user_id username full_name avatar_url role }
+    priority_order
+    start_date
+    due_date
+    actual_start_date
+    actual_end_date
+    effort
+    progress
+    created_by
+    created_at
+    updated_at
+    is_deleted
+    status
+    priority
+    type_
+    category
+    tags
+    progress_type
+    progress_catalog_item_id
+    category_catalog_item_id
+    task_type_catalog_item_id
+  }
+`;
+
+export const TASK_WITH_CHILDREN_FIELDS = gql`
+  ${TASK_FIELDS}
+  fragment TaskWithChildrenFields on Task {
+    ...TaskFields
+    child_tasks {
+      ...TaskFields
+      child_tasks { ...TaskFields }
     }
+  }
+`;
+
+export const GET_PROJECT_TASKS = gql`
+  ${TASK_WITH_CHILDREN_FIELDS}
+  query GetTasks($projectId: ID!) {
+    tasks(project_id: $projectId) { ...TaskWithChildrenFields }
   }
 `;
 
 export const TASK_TREE_ROWS = gql`
+  ${TASK_FIELDS}
   query TaskTreeRows($projectId: ID!) {
-    task_tree_rows(project_id: $projectId) {
-      task_id
-      project_id
-      parent_task_id
-      title
-      description
-      assignee_resource_member_id
-      assignee {
-        user_id
-        username
-        full_name
-        avatar_url
-        role
-      }
-      priority_order
-      start_date
-      due_date
-      actual_start_date
-      actual_end_date
-      effort
-      progress
-      created_by
-      created_at
-      updated_at
-      is_deleted
-      status
-      priority
-      type_
-      category
-      tags
-      progress_type
-      progress_catalog_item_id
-      category_catalog_item_id
-      task_type_catalog_item_id
-    }
+    task_tree_rows(project_id: $projectId) { ...TaskFields }
   }
 `;
 
 export const GET_TASK_BY_ID = gql`
+  ${TASK_WITH_CHILDREN_FIELDS}
   query GetTaskById($taskId: ID!) {
-    task(task_id: $taskId) {
-      task_id
-      title
-      description
-      status
-      priority
-      effort
-      progress
-      start_date
-      due_date
-      actual_start_date
-      actual_end_date
-      created_at
-      updated_at
-      project_id
-      parent_task_id
-      assignee_resource_member_id
-      assignee {
-        user_id
-        username
-        full_name
-        avatar_url
-        role
-      }
-      creator {
-        user_id
-        username
-        full_name
-        avatar_url
-        role
-      }
-      priority_order
-      type_
-      category
-      progress_type
-      progress_catalog_item_id
-      category_catalog_item_id
-      task_type_catalog_item_id
-      tags
-    }
+    task(task_id: $taskId) { ...TaskWithChildrenFields }
   }
 `;
 
 export const GET_PROJECT_TASKS_PAGINATED = gql`
+  ${TASK_WITH_CHILDREN_FIELDS}
   query GetTasksPaginated(
     $projectId: ID!
     $page: Int
@@ -163,70 +81,8 @@ export const GET_PROJECT_TASKS_PAGINATED = gql`
       page_size: $pageSize
       filters: $filters
     ) {
-      tasks {
-        task_id
-        project_id
-        parent_task_id
-        title
-        assignee_resource_member_id
-        assignee {
-          user_id
-          username
-          full_name
-          avatar_url
-          role
-        }
-        start_date
-        due_date
-        actual_start_date
-        actual_end_date
-        effort
-        progress
-        created_by
-        created_at
-        updated_at
-        is_deleted
-        status
-        priority
-        type_
-        category
-        tags
-        progress_type
-        progress_catalog_item_id
-        category_catalog_item_id
-        task_type_catalog_item_id
-        child_tasks {
-          task_id
-          project_id
-          parent_task_id
-          title
-          assignee_resource_member_id
-          assignee {
-            user_id
-            username
-            full_name
-            avatar_url
-            role
-          }
-          start_date
-          due_date
-          effort
-          progress
-          status
-          priority
-          type_
-          category
-          progress_catalog_item_id
-          category_catalog_item_id
-          task_type_catalog_item_id
-        }
-      }
-      pagination {
-        total_items
-        total_pages
-        current_page
-        page_size
-      }
+      tasks { ...TaskWithChildrenFields }
+      pagination { total_items total_pages current_page page_size }
     }
   }
 `;
@@ -247,32 +103,9 @@ export const GET_TASK_COMMENTS = gql`
 `;
 
 export const GET_TASK_SUBTASKS = gql`
+  ${TASK_FIELDS}
   query GetTaskSubtasks($taskId: ID!) {
-    task_subtasks(task_id: $taskId) {
-      task_id
-      title
-      description
-      status
-      priority
-      effort
-      progress
-      start_date
-      due_date
-      assignee_resource_member_id
-      assignee {
-        user_id
-        username
-        full_name
-        avatar_url
-        role
-      }
-      priority_order
-      type_
-      category
-      progress_catalog_item_id
-      category_catalog_item_id
-      task_type_catalog_item_id
-    }
+    task_subtasks(task_id: $taskId) { ...TaskFields }
   }
 `;
 

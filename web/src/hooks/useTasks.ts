@@ -1,10 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Task, TaskStatus, Priority } from '@/types/task';
+import { Task } from '@/types/task';
 import { mockTasks } from '@/data/mockTasks';
 import { UPDATE_TASK, REORDER_TASKS } from '@/graphql/mutations/tasks';
 import { client } from '@/lib/apollo-client';
 import { useApolloClient } from '@apollo/client';
 import { useState, useCallback } from 'react';
+import { transformTaskFromAPI } from '@/redux/features/tasksSlice';
 
 // Function to fetch tasks
 const fetchTasks = async (): Promise<Task[]> => {
@@ -163,45 +164,8 @@ export const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
     // Result is already snake_case from backend
     const result = response.data.update_task;
 
-    const formattedResult: Partial<Task> = {
-      task_id: result.task_id,
-      project_id: result.project_id,
-      parent_task_id: result.parent_task_id,
-      title: result.title,
-      description: result.description,
-      status: result.status?.toUpperCase() as TaskStatus,
-      priority: result.priority?.toUpperCase() as Priority,
-      priority_order: result.priority_order,
-      start_date: result.start_date,
-      due_date: result.due_date,
-      actual_start_date: result.actual_start_date,
-      actual_end_date: result.actual_end_date,
-      effort: result.effort,
-      progress: result.progress,
-      assignee: result.assignee ? {
-        userId: result.assignee.user_id,
-        username: result.assignee.full_name || result.assignee.username,
-        avatarUrl: result.assignee.avatar_url,
-        role: result.assignee.role,
-      } : undefined,
-      created_by: result.created_by,
-      created_at: result.created_at,
-      updated_at: result.updated_at,
-      is_deleted: result.is_deleted,
-      type: result.type_,
-      category: result.category,
-      progress_type: result.progress_type?.toLowerCase() as any,
-      progressCatalogItemId: result.progress_catalog_item_id,
-      categoryCatalogItemId: result.category_catalog_item_id,
-      taskTypeCatalogItemId: result.task_type_catalog_item_id,
-      tags: result.tags,
-    };
-
-    console.log("Kết quả nhận từ GraphQL:", result);
-    console.log("Dữ liệu được định dạng lại:", formattedResult);
-
-    // Trả về kết quả từ API đã được định dạng lại
-    return formattedResult as Task;
+    // Keep every mutation surface on the Redux task normalizer.
+    return transformTaskFromAPI(result) as Task;
   } catch (error) {
     console.error('Không thể cập nhật công việc:', error);
     throw error instanceof Error ? error : new Error('Task update failed.');

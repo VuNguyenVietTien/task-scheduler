@@ -3,6 +3,7 @@ import { useApolloClient } from '@apollo/client';
 import { client } from '@/lib/apollo-client';
 import { UPDATE_TASK, UPDATE_TASK_EFFORT } from '@/graphql/mutations/tasks';
 import { Task, TaskStatus, Priority } from '@/types/task';
+import { transformTaskFromAPI } from '@/redux/features/tasksSlice';
 
 // Hook cho cập nhật trạng thái task
 export function useUpdateTaskStatus() {
@@ -437,20 +438,9 @@ export function useUpdateTaskAssignee() {
       }
 
       {
-        // Đảm bảo TypeScript nhận assignee có định dạng đúng (undefined thay vì null)
-        const formattedResult: Partial<Task> = {
-          task_id: result.task_id,
-          // Chuyển assignee từ null thành undefined để phù hợp với Task type
-          assignee_resource_member_id: result.assignee_resource_member_id,
-          assignee: result.assignee ? {
-            userId: result.assignee.user_id,
-            username: result.assignee.username,
-            avatarUrl: result.assignee.avatar_url,
-            role: result.assignee.role,
-          } : undefined
-        };
-        
-        // Broadcast event cập nhật
+        const formattedResult = transformTaskFromAPI(result) as Task;
+
+        // Broadcast the normalized authoritative task fields.
         if (typeof window !== 'undefined') {
           const event = new CustomEvent('task-assignee-updated', { 
             detail: { 

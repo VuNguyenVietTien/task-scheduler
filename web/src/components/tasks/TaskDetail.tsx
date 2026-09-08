@@ -7,7 +7,7 @@ import { Dialog } from '../ui/Dialog';
 import clsx from 'clsx';
 import { useUpdateTask } from '@/hooks/useTasks';
 import { useAppDispatch } from '@/redux/hooks';
-import { updateTaskLocally } from '@/redux/features/tasksSlice';
+import { upsertTask } from '@/redux/features/tasksSlice';
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { TagInput } from '@/components/ui/tag-input';
 import { useMutation, useQuery } from '@apollo/client';
@@ -151,12 +151,12 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
         default: return;
       }
 
-      await updateTask(taskId, updates);
-      // Exit edit mode but keep modal open
+      const savedTask = await updateTask(taskId, updates);
+      // The modal, List, and Gantt consume the same authoritative result.
+      setEditedTask(savedTask);
+      dispatch(upsertTask(savedTask));
       setEditingField(null);
-      // Sync Redux so all views (Kanban, Gantt, TaskList) reflect the change
-      dispatch(updateTaskLocally({ taskId, updates }));
-      if (onTaskUpdate) onTaskUpdate(taskId, updates);
+      onTaskUpdate?.(taskId, savedTask);
     } catch (err) {
       console.error('Error updating field:', err);
       setError(t('tasks.cannotUpdate'));

@@ -29,6 +29,7 @@ import {
   updateTaskEffort, 
   updateTaskAssignee,
   updateTaskDueDate,
+  upsertTask,
   updateTaskLocally,
   fetchProjectTasks
 } from '@/redux/features/tasksSlice';
@@ -185,6 +186,7 @@ export function TaskListView({
   // Requirement 7: normal ↔ Excel (staged bulk edit) list mode toggle.
   const [listMode, setListMode] = useState<'normal' | 'excel'>('normal');
   const [excelOpened, setExcelOpened] = useState(false);
+  const [excelDirty, setExcelDirty] = useState(false);
   // Confirmed patches bridge the independent flat query until it acknowledges them.
   const [assignmentPatches, setAssignmentPatches] = useState<Record<string, Partial<Task>>>({});
   const [excelPatches, setExcelPatches] = useState<Record<string, Partial<Task>>>({});
@@ -281,7 +283,8 @@ export function TaskListView({
       assignee: result.assignee,
     };
     updateSingleTaskInState(taskId, updates);
-    dispatch(updateTaskLocally({ taskId, updates }));
+    // Do not guess from the selected option: replace from mutation output.
+    dispatch(upsertTask(result as Task));
     setAssignmentPatches((current) => ({ ...current, [taskId]: updates }));
     // Task uses task_id, not Apollo's default id key: update this embedded query explicitly.
     taskTreeRowsQ.updateQuery?.((data: { task_tree_rows?: Task[] }) => data?.task_tree_rows ? {
@@ -492,9 +495,8 @@ export function TaskListView({
   const applyEffortPatch = useCallback((taskId: string, effort: number | undefined) => {
     const updates: Partial<Task> = { effort };
     updateSingleTaskInState(taskId, updates);
-    dispatch(updateTaskLocally({ taskId, updates }));
     setExcelPatches((current) => ({ ...current, [taskId]: updates }));
-  }, [dispatch, updateSingleTaskInState]);
+  }, [updateSingleTaskInState]);
 
   // Excel keeps the normal List's filtered roots, then projects every active
   // descendant from the flat arbitrary-depth query without changing normal List.
@@ -971,6 +973,7 @@ export function TaskListView({
 
   // Handle task click: left click -> modal, ctrl/middle -> new tab
   const handleTaskClick = useCallback((taskId: string, event?: React.MouseEvent) => {
+    if (excelDirty && !window.confirm('Discard unsaved Excel edits?')) return;
     const foundTask = findTaskInTree(tasks, taskId);
 
     if (!foundTask) {
@@ -991,7 +994,13 @@ export function TaskListView({
     router.push(taskUrl);
 
     if (onTaskClick) onTaskClick(taskId);
-  }, [tasks, onTaskClick, router]);
+  }, [excelDirty, tasks, onTaskClick, router]);
+
+  const changeListMode = useCallback((mode: 'normal' | 'excel') => {
+    if (mode !== listMode && excelDirty && !window.confirm('Discard unsaved Excel edits?')) return;
+    if (mode === 'excel') setExcelOpened(true);
+    setListMode(mode);
+  }, [excelDirty, listMode]);
 
   const handleTaskUpdate = (taskId: string, updates: Partial<Task>) => {
     // Cập nhật task trong state nếu cần
@@ -1278,9 +1287,11 @@ export function TaskListView({
         }));
       }
     } else {
-      await updateTask(edit.taskId, { title: edit.value });
+      const savedTask = await updateTask(edit.taskId, { title: edit.value });
+      dispatch(upsertTask(savedTask));
+      updateSingleTaskInState(edit.taskId, savedTask);
     }
-  }, [applyCanonicalAssignment, applyEffortPatch, dispatch, tasks, updateTask, updateAssignee, assigneeOptions, memberMappingUnavailable, memberMappingError]);
+  }, [applyCanonicalAssignment, applyEffortPatch, dispatch, tasks, updateSingleTaskInState, updateTask, updateAssignee, assigneeOptions, memberMappingUnavailable, memberMappingError]);
 
   const handleFilterChange = (newFilters: TaskFilter) => {
     if (setFilters) {
@@ -1320,11 +1331,8 @@ export function TaskListView({
         // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
         const originalTasks = [...tasks];
         
-        // Optimistic update cho UI - Chỉ cập nhật task được chọn
-        updateSingleTaskInState(taskId, { status });
-        
         try {
-          // CÁCH MỚI: Sử dụng Redux dispatch
+          // Redux replaces the task only from the confirmed mutation result.
           await dispatch(updateTaskStatus({ taskId, status })).unwrap();
           console.log(`Đã cập nhật trạng thái thành: ${status} (qua Redux)`);
           
@@ -1346,11 +1354,8 @@ export function TaskListView({
         // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
         const originalTasks = [...tasks];
         
-        // Optimistic update cho UI - Chỉ cập nhật task được chọn
-        updateSingleTaskInState(taskId, { priority });
-        
         try {
-          // CÁCH MỚI: Sử dụng Redux dispatch
+          // Redux replaces the task only from the confirmed mutation result.
           await dispatch(updateTaskPriority({ taskId, priority })).unwrap();
           console.log(`Đã cập nhật ưu tiên thành: ${priority} (qua Redux)`);
           
@@ -1408,11 +1413,8 @@ export function TaskListView({
         // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
         const originalTasks = [...tasks];
 
-        // Optimistic update cho UI - Chỉ cập nhật task được chọn
-        updateSingleTaskInState(taskId, { due_date: dueDate ?? undefined });
-
         try {
-          // CÁCH MỚI: Sử dụng Redux dispatch
+          // Redux replaces the task only from the confirmed mutation result.
           await dispatch(updateTaskDueDate({ taskId, dueDate: dueDate || '' })).unwrap();
           console.log(`Đã cập nhật hạn thành: ${dueDate} (qua Redux)`);
           
@@ -1497,7 +1499,7 @@ export function TaskListView({
           {/* Requirement 7: Normal ↔ Excel mode toggle */}
           <div className="inline-flex rounded-md border border-slate-300 overflow-hidden" role="group" aria-label="List mode">
             <button
-              onClick={() => setListMode('normal')}
+              onClick={() => changeListMode('normal')}
               className={`px-3 py-2 text-sm font-medium ${listMode === 'normal' ? 'bg-blue-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
               aria-pressed={listMode === 'normal'}
               data-testid="mode-normal-btn"
@@ -1505,7 +1507,7 @@ export function TaskListView({
               Normal
             </button>
             <button
-              onClick={() => { setExcelOpened(true); setListMode('excel'); }}
+              onClick={() => changeListMode('excel')}
               className={`px-3 py-2 text-sm font-medium ${listMode === 'excel' ? 'bg-emerald-600 text-white' : 'bg-white text-slate-700 hover:bg-slate-50'}`}
               aria-pressed={listMode === 'excel'}
               data-testid="mode-excel-btn"
@@ -1593,6 +1595,7 @@ export function TaskListView({
           active={listMode === 'excel'}
           onSaveEdit={handleExcelSave}
           onCloneTask={handleCloneTask}
+          onDirtyChange={setExcelDirty}
         />
         </div>
       )}
