@@ -4,6 +4,7 @@ import {
   defaultCloneSelection,
   getCloneCheckboxState,
   getClonePreview,
+  getSelectedCloneRootIds,
   parseCloneQuantity,
   updateCloneSelection,
   type CloneTreeNode,
@@ -44,7 +45,12 @@ describe('clone selection helpers', () => {
 
     expect(selected).toEqual(new Set(['root', 'branch', 'leaf-a']));
     expect(getCloneCheckboxState(tree, selected, 'branch')).toEqual({ checked: true, indeterminate: true });
-    expect(updateCloneSelection(tree, selected, 'root', false).has('root')).toBe(true);
+    selected = updateCloneSelection(tree, selected, 'root', false);
+    expect(selected.has('root')).toBe(false);
+    expect(getSelectedCloneRootIds(tree, selected)).toEqual(['branch']);
+    expect(createCloneSelectionInput(tree, selected, 2, { withoutParent: true })).toEqual({
+      source_task_id: 'root', selected_descendant_ids: ['branch', 'leaf-a'], quantity: 2, clone_without_parent: true,
+    });
   });
 
   it('builds exact payload and 3-parent/9-child/12-task preview', () => {

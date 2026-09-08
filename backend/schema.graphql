@@ -69,6 +69,8 @@ input CloneTaskSubtreeInput {
 	source_task_id: ID!
 	selected_descendant_ids: [ID!]!
 	quantity: Int!
+	destination_parent_task_id: ID
+	clone_without_parent: Boolean
 }
 
 type CloneTaskSubtreePayload {

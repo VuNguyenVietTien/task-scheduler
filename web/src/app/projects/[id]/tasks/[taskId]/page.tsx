@@ -10,7 +10,7 @@ import { Spinner } from '@/components/ui/Spinner';
 import { useUpdateTask } from '@/hooks/useTasks';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { fetchProjectMembers } from '@/redux/features/membersSlice';
-import { fetchTaskDetail } from '@/redux/features/taskDetailSlice';
+import { fetchTaskDetail, transformTaskFromAPI } from '@/redux/features/taskDetailSlice';
 
 // Import Apollo Client và GET_TASK_BY_ID query
 import { useLazyQuery } from '@apollo/client';
@@ -104,7 +104,8 @@ export default function TaskDetailsPage() {
           category: t.category || null,
           progress_type: t.progress_type?.toLowerCase() || null,
           tags: t.tags || [],
-          is_deleted: t.is_deleted || false
+          is_deleted: t.is_deleted || false,
+          child_tasks: (t.child_tasks ?? []).map(transformTaskFromAPI)
         };
         
         console.log('[TaskDetailsPage] Setting task from GraphQL:', {
@@ -193,15 +194,13 @@ export default function TaskDetailsPage() {
       currentTaskId: task?.task_id
     });
     
-    if (reduxTask) {
-      if (!task || task.task_id !== reduxTask.task_id || (task.parent_task_id ?? null) !== (reduxTask.parent_task_id ?? null)) {
-        console.log('[TaskDetailsPage] Setting task from Redux store:', {
-          id: reduxTask.task_id,
-          parent_id: reduxTask.parent_task_id
-        });
-        setTask(reduxTask);
-        setLoading(false);
-      }
+    if (reduxTask && task !== reduxTask) {
+      console.log('[TaskDetailsPage] Setting task from Redux store:', {
+        id: reduxTask.task_id,
+        parent_id: reduxTask.parent_task_id
+      });
+      setTask(reduxTask);
+      setLoading(false);
     }
   }, [reduxTask, task]);
 

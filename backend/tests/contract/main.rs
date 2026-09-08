@@ -205,11 +205,13 @@ fn clone_tree_contract_is_additive_and_non_nullable() {
     let input_start = sdl
         .find("input CloneTaskSubtreeInput {")
         .expect("CloneTaskSubtreeInput missing");
-    let input = &sdl[input_start..input_start + 220];
+    let input = &sdl[input_start..input_start + 320];
     for field in [
         "source_task_id: ID!",
         "selected_descendant_ids: [ID!]!",
         "quantity: Int!",
+        "destination_parent_task_id: ID",
+        "clone_without_parent: Boolean",
     ] {
         assert!(input.contains(field), "{field} missing:\n{input}");
     }

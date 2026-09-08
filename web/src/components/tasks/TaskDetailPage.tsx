@@ -15,7 +15,7 @@ import Link from 'next/link';
 import { useTranslation } from 'react-i18next';
 import { PencilIcon, CheckIcon, XMarkIcon, MagnifyingGlassIcon, BookOpenIcon, DocumentTextIcon, ChatBubbleLeftIcon } from '@heroicons/react/24/outline';
 import { useMutation, useQuery, useApolloClient } from '@apollo/client';
-import { GET_TASK_COMMENTS, GET_TASK_SUBTASKS, GET_TASK_BY_ID, GET_TASK_BASIC_INFO } from '@/graphql/queries/tasks';
+import { GET_TASK_COMMENTS, GET_TASK_BY_ID, GET_TASK_BASIC_INFO } from '@/graphql/queries/tasks';
 import { CREATE_TASK_COMMENT, DELETE_TASK_COMMENT } from '@/graphql/mutations/tasks';
 import TaskDescriptionPanel from './description/TaskDescriptionPanel';
 import { AdvancedEditor } from '@/components/common/AdvancedEditor';
@@ -29,7 +29,6 @@ import {
 } from '@/redux/features/tasksSlice';
 import { 
   fetchTaskDetail, 
-  fetchSubtasks, 
   fetchComments, 
   updateTaskParent,
   searchParentTaskById,
@@ -133,8 +132,9 @@ export function TaskDetailPage({
   const [activeTab, setActiveTab] = useState(initialActiveTab || 'description');
   const [userId, setUserId] = useState<string | null>(null);
   const [isProcessingImages, setIsProcessingImages] = useState(false);
-  const [subtasks, setSubtasks] = useState<Task[]>([]);
-  const [isLoadingSubtasks, setIsLoadingSubtasks] = useState(false);
+  const [subtasks, setSubtasks] = useState<Task[]>(
+    () => task.child_tasks?.filter((child) => child.parent_task_id === taskId) ?? []
+  );
   const [highlightedCommentId, setHighlightedCommentId] = useState<string | null>(initialCommentId);
   
   // Thêm refs để theo dõi trạng thái API call và tránh gọi trùng lặp
@@ -239,7 +239,6 @@ export function TaskDetailPage({
     
     // Tạo ID key duy nhất cho mỗi call API dựa trên taskId hiện tại
     const currentTaskDetailKey = `task_detail_${taskId}`;
-    const currentSubtasksKey = `subtasks_${taskId}`;
     const currentCommentsKey = `comments_${taskId}`;
     
     // Kiểm tra xem có đang trong quá trình navigation không
@@ -266,26 +265,6 @@ export function TaskDetailPage({
         });
     } else if (!shouldFetchTaskDetail) {
       console.log(`[TaskDetailPage] Skipping task detail fetch for ${taskId} - already fetched or in progress`);
-    }
-    
-    // Chỉ fetch subtasks nếu chưa có hoặc taskId thay đổi
-    const hasValidSubtasks = taskDetailState.subtasks.length > 0;
-    const shouldFetchSubtasks = (isNewTask || !hasValidSubtasks) && 
-                               !apiCallsInProgressRef.current[currentSubtasksKey] && 
-                               shouldFetchData(currentSubtasksKey, CACHE_TTL);
-    
-    if (shouldFetchSubtasks) {
-      console.log(`[TaskDetailPage] Fetching subtasks for task ID: ${taskId}`);
-      markApiCallStatus(currentSubtasksKey, true);
-      
-      dispatch(fetchSubtasks(taskId))
-        .then(() => markApiCallStatus(currentSubtasksKey, false))
-        .catch(err => {
-          console.error(`[TaskDetailPage] Error fetching subtasks:`, err);
-          markApiCallStatus(currentSubtasksKey, false);
-        });
-    } else if (!shouldFetchSubtasks) {
-      console.log(`[TaskDetailPage] Skipping subtasks fetch for ${taskId} - already fetched or in progress`);
     }
     
     // Chỉ fetch comments nếu chưa có hoặc taskId thay đổi
@@ -322,7 +301,7 @@ export function TaskDetailPage({
         return newSet;
       });
     }
-  }, [dispatch, taskId, taskDetailState.task?.task_id, shouldFetchData, markApiCallStatus, processedTaskIds, taskDetailState.subtasks.length, taskDetailState.comments.length]);
+  }, [dispatch, taskId, taskDetailState.task?.task_id, shouldFetchData, markApiCallStatus, processedTaskIds, taskDetailState.comments.length]);
   
   // Di chuyển useMemo ra khỏi useEffect và đặt nó trực tiếp trong component
   // Tạo hàm utility để so sánh dữ liệu thay vì dùng useMemo trong useEffect
@@ -348,14 +327,16 @@ export function TaskDetailPage({
 
   // Đồng bộ dữ liệu từ Redux store vào local state
   useEffect(() => {
-    // Kiểm tra sự thay đổi của subtasks và comments bằng cách gọi hàm so sánh
-    const hasSubtasksChanged = compareSubtasks(subtasks, taskDetailState.subtasks);
+    // Prefer the matching network detail; never show another task's cached children.
+    const nextSubtasks = taskDetailState.task?.task_id === taskId
+      ? taskDetailState.subtasks
+      : task.child_tasks?.filter((child) => child.parent_task_id === taskId) ?? [];
+    const hasSubtasksChanged = compareSubtasks(subtasks, nextSubtasks);
     const hasCommentsChanged = compareComments(comments, taskDetailState.comments);
 
-    // Cập nhật subtasks từ Redux nếu có sự thay đổi
-    if (hasSubtasksChanged && taskDetailState.subtasks.length > 0) {
-      console.log('[TaskDetailPage] Updating subtasks from Redux store');
-      setSubtasks(taskDetailState.subtasks);
+    // The detail query is authoritative for direct children, including an empty list.
+    if (hasSubtasksChanged) {
+      setSubtasks(nextSubtasks);
     }
     
     // Cập nhật comments từ Redux nếu có sự thay đổi
@@ -415,7 +396,8 @@ export function TaskDetailPage({
       }
     }
   }, [
-    taskDetailState, 
+    taskDetailState,
+    task,
     apolloClient, 
     editedTask.parent_task_id, 
     parentTaskTitle, 
@@ -429,46 +411,6 @@ export function TaskDetailPage({
     useQuery<TaskCommentsData>(GET_TASK_COMMENTS, {
       variables: { taskId },
       skip: !taskId,
-    });
-    
-  // Query để lấy subtasks
-  const { loading: subtasksLoading, data: subtasksData, refetch: refetchSubtasks } = 
-    useQuery(GET_TASK_SUBTASKS, {
-      variables: { taskId },
-      skip: !taskId,
-      onCompleted: (data) => {
-        if (data && data.taskSubtasks) {
-          // Chuyển đổi dữ liệu từ camelCase sang snake_case
-          const formattedSubtasks = data.taskSubtasks.map((subtask: any) => ({
-            task_id: subtask.taskId,
-            id: subtask.taskId,
-            title: subtask.title || '',
-            description: subtask.description || '',
-            status: (subtask.status?.toUpperCase() || 'TODO') as TaskStatus,
-            priority: (subtask.priority?.toUpperCase() || 'MEDIUM') as Priority,
-            effort: subtask.effort || 0,
-            progress: subtask.progress || 0,
-            start_date: subtask.startDate || null,
-            due_date: subtask.dueDate || null,
-            assignee: subtask.assignee ? {
-              userId: subtask.assignee.userId,
-              username: subtask.assignee.username,
-              avatarUrl: subtask.assignee.avatarUrl || '',
-              role: subtask.assignee.role || ''
-            } : undefined,
-            priority_order: subtask.priorityOrder || 0,
-            type: subtask.type || null,
-            category: subtask.category || null
-          }));
-          
-          setSubtasks(formattedSubtasks);
-          setIsLoadingSubtasks(false);
-        }
-      },
-      onError: (error) => {
-        console.error('Error fetching subtasks:', error);
-        setIsLoadingSubtasks(false);
-      }
     });
 
   const [createComment, { loading: createCommentLoading }] = 
@@ -2247,19 +2189,12 @@ export function TaskDetailPage({
                   </Link>
                 </div>
                 
-                {subtasksLoading ? (
-                  <div className="flex justify-center py-8">
-                    <Spinner size="lg" />
-                  </div>
-                ) : subtasks.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">{t('tasks.subtasks.noSubtasks')}</p>
-                ) : (
-                  // Sử dụng component mới cho task con thay vì SubtasksTable
-                  <TaskDetailSubtasks 
-                    taskId={taskId}
-                    projectId={projectId}
-                  />
-                )}
+                <TaskDetailSubtasks
+                  taskId={taskId}
+                  projectId={projectId}
+                  subtasks={subtasks}
+                  loading={taskDetailState.loadingTask && subtasks.length === 0}
+                />
               </div>
             </div>
 

@@ -289,6 +289,8 @@ pub struct CloneTaskSubtreeInput {
     pub source_task_id: ID,
     pub selected_descendant_ids: Vec<ID>,
     pub quantity: i32,
+    pub destination_parent_task_id: Option<ID>,
+    pub clone_without_parent: Option<bool>,
 }
 
 #[derive(SimpleObject)]

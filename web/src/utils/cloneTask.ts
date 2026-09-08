@@ -1,5 +1,6 @@
 export interface CloneTreeNode {
   task_id: string;
+  project_id?: string;
   parent_task_id?: string | null;
   title: string;
   is_deleted?: boolean;
@@ -19,6 +20,8 @@ export interface CloneTaskSelectionInput {
   source_task_id: string;
   selected_descendant_ids: string[];
   quantity: number;
+  destination_parent_task_id?: string;
+  clone_without_parent?: boolean;
 }
 
 export interface ClonePreview {
@@ -77,7 +80,12 @@ export function updateCloneSelection(
 ): Set<string> {
   const next = new Set(selected);
   const index = tree.items.findIndex(({ node }) => node.task_id === taskId);
-  if (index < 0 || (!checked && taskId === tree.sourceTaskId)) return next;
+  if (index < 0) return next;
+  if (taskId === tree.sourceTaskId) {
+    if (checked) next.add(taskId);
+    else next.delete(taskId);
+    return next;
+  }
 
   const depth = tree.items[index].depth;
   const branchIds = [taskId];
@@ -90,6 +98,7 @@ export function updateCloneSelection(
     const inTree = new Set(tree.items.map(({ node }) => node.task_id));
     let parentId = tree.items[index].node.parent_task_id;
     while (parentId && inTree.has(parentId)) {
+      if (parentId === tree.sourceTaskId && !selected.has(tree.sourceTaskId)) break;
       if (next.has(parentId)) break;
       next.add(parentId);
       parentId = tree.items.find(({ node }) => node.task_id === parentId)?.node.parent_task_id;
@@ -98,7 +107,6 @@ export function updateCloneSelection(
     branchIds.forEach((id) => next.delete(id));
   }
 
-  if (tree.items.length) next.add(tree.sourceTaskId);
   return next;
 }
 
@@ -117,7 +125,8 @@ export function getCloneCheckboxState(
   const selectedDescendants = descendantIds.filter((id) => selected.has(id)).length;
   return {
     checked: selected.has(taskId),
-    indeterminate: selectedDescendants > 0 && selectedDescendants < descendantIds.length,
+    indeterminate: selectedDescendants > 0
+      && (!selected.has(taskId) || selectedDescendants < descendantIds.length),
   };
 }
 
@@ -126,16 +135,24 @@ export function parseCloneQuantity(value: string): number | null {
   return Number.isSafeInteger(quantity) && quantity > 0 ? quantity : null;
 }
 
-export function getClonePreview(selectedCount: number, quantity: number): ClonePreview {
-  const parentCount = quantity;
-  const childCount = Math.max(0, selectedCount - 1) * quantity;
+export function getSelectedCloneRootIds(tree: CloneTree, selected: ReadonlySet<string>): string[] {
+  return tree.items
+    .map(({ node }) => node)
+    .filter((node) => selected.has(node.task_id) && (!node.parent_task_id || !selected.has(node.parent_task_id)))
+    .map((node) => node.task_id);
+}
+
+export function getClonePreview(selectedCount: number, quantity: number, selectedRootCount = 1): ClonePreview {
+  const parentCount = selectedRootCount * quantity;
+  const childCount = Math.max(0, selectedCount - selectedRootCount) * quantity;
   return { parentCount, childCount, totalCount: parentCount + childCount };
 }
 
 export function createCloneSelectionInput(
   tree: CloneTree,
   selected: ReadonlySet<string>,
-  quantity: number
+  quantity: number,
+  destination?: { parentTaskId: string } | { withoutParent: true }
 ): CloneTaskSelectionInput {
   return {
     source_task_id: tree.sourceTaskId,
@@ -143,5 +160,8 @@ export function createCloneSelectionInput(
       .map(({ node }) => node.task_id)
       .filter((id) => id !== tree.sourceTaskId && selected.has(id)),
     quantity,
+    ...(destination && 'parentTaskId' in destination
+      ? { destination_parent_task_id: destination.parentTaskId }
+      : destination ? { clone_without_parent: true } : {}),
   };
 }
