@@ -15,6 +15,7 @@ import {
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { updateTaskStatus } from '@/redux/features/tasksSlice';
 import { useSelector } from 'react-redux';
+import { useQuery } from '@apollo/client';
 import { RootState } from '@/redux/store';
 import { UserInfo } from '@/types/members';
 import Select, { SingleValue, MultiValue, ActionMeta, components } from 'react-select';
@@ -29,6 +30,7 @@ import {
 } from './kanban-tasks';
 import { getStatusLabel } from '@/constants/task-display-labels';
 import { filterTaskTreeByStatus, isTaskStatusVisible } from '@/utils/task-status-visibility';
+import { RESOURCE_MEMBERS_QUERY } from '@/graphql/scheduling';
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -39,6 +41,37 @@ interface KanbanBoardProps {
 interface UserOption {
   value: string;
   label: string;
+  userId?: string;
+}
+
+interface ResourceMemberRow {
+  resource_member_id: string;
+  display_name: string;
+  user_id: string | null;
+}
+
+export function buildKanbanMemberOptions(members: ResourceMemberRow[], allLabel: string): UserOption[] {
+  return [
+    { value: 'all', label: allLabel },
+    ...members
+      .map((member) => ({
+        value: `resource:${member.resource_member_id}`,
+        label: member.display_name,
+        userId: member.user_id ?? undefined,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label) || a.value.localeCompare(b.value)),
+  ];
+}
+
+export function matchesKanbanAssignee(task: Task, selected: UserOption): boolean {
+  if (selected.value === 'all') return true;
+  if (selected.value.startsWith('resource:')) {
+    const resourceMemberId = selected.value.slice('resource:'.length);
+    return task.assignee_resource_member_id
+      ? task.assignee_resource_member_id === resourceMemberId
+      : Boolean(selected.userId && task.assignee?.userId === selected.userId);
+  }
+  return task.assignee?.userId === (selected.userId ?? selected.value);
 }
 
 interface StatusOption {
@@ -87,6 +120,7 @@ const areTasksEqual = (tasksA: Task[], tasksB: Task[]): boolean => {
       parent?.task_id === other.parent?.task_id &&
       task.status === other.task.status &&
       task.priority === other.task.priority &&
+      task.assignee_resource_member_id === other.task.assignee_resource_member_id &&
       task.assignee?.userId === other.task.assignee?.userId;
   });
 };
@@ -116,8 +150,14 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
   // Đăng ký theo dõi thay đổi từ Redux store
   const tasksState = useSelector((state: RootState) => state.tasks);
   
-  // Lấy danh sách thành viên từ Redux store
-  const { members, loading: membersLoading } = useSelector((state: RootState) => state.members);
+  // Linked Redux members remain valid for account-only detail fields; assignment
+  // filters use canonical resource members so unlinked people are selectable.
+  const { members } = useSelector((state: RootState) => state.members);
+  const resourceMembersQ = useQuery(RESOURCE_MEMBERS_QUERY, {
+    variables: { project_id: projectId, only_assignable: true },
+    skip: !projectId,
+    fetchPolicy: 'cache-and-network',
+  });
   
   const statusOptions = useMemo<StatusOption[]>(() => KANBAN_COLUMNS.map(({ id }) => ({
     value: id,
@@ -138,7 +178,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
       selectedStatuses.map(({ value }) => value)
     ));
     if (selectedUser && selectedUser.value !== 'all') {
-      result = result.filter(({ task }) => task.assignee?.userId === selectedUser.value);
+      result = result.filter(({ task }) => matchesKanbanAssignee(task, selectedUser));
     }
     return result;
   }, [clonedTasks, selectedUser, selectedStatuses]);
@@ -228,16 +268,13 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
     updateClonedTasks(tasks);
   }, [tasks, tasksState, projectId, updateClonedTasks]);
 
-  // Tạo danh sách lựa chọn users từ members
-  const userOptions: UserOption[] = useMemo(() => {
-    const options = members.map(member => ({
-      value: member.user.userId,
-      label: member.user.username
-    }));
-    
-    // Thêm option "Tất cả" vào đầu danh sách
-    return [{ value: 'all', label: t('common.all') }, ...options];
-  }, [members]);
+  const userOptions = useMemo(
+    () => buildKanbanMemberOptions(
+      (resourceMembersQ.data?.resource_members ?? []) as ResourceMemberRow[],
+      t('common.all')
+    ),
+    [resourceMembersQ.data?.resource_members, t]
+  );
 
   // Lắng nghe sự kiện khi task status được cập nhật từ nơi khác
   useEffect(() => {
@@ -470,7 +507,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
               value={selectedUser}
               onChange={(newValue) => setSelectedUser(newValue)}
               options={userOptions}
-              isLoading={membersLoading}
+              isLoading={resourceMembersQ.loading}
               isClearable
               placeholder={t('common.all')}
               components={{
