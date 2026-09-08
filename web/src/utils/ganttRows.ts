@@ -22,6 +22,47 @@ export interface GanttTaskRow<T extends GanttRowTaskLike> {
 
 export type GanttRow<T extends GanttRowTaskLike> = GanttTaskRow<T>;
 
+export interface GanttTaskSummary {
+  effort: number;
+  hoursPerDay: Record<string, number>;
+}
+
+/** Derive parent values from executable (leaf) descendants only. */
+export function buildGanttTaskSummaries<T extends GanttRowTaskLike & { effort?: number | null }>(
+  tasks: readonly T[],
+  hoursByTaskId: Readonly<Record<string, Readonly<Record<string, number>>>> = {}
+): Map<string, GanttTaskSummary> {
+  const byId = new Map<string, T>();
+  for (const task of tasks) {
+    if (task.task_id && !byId.has(task.task_id)) byId.set(task.task_id, task);
+  }
+
+  const summaries = new Map<string, GanttTaskSummary>();
+  for (const task of Array.from(byId.values())) {
+    if (task.parent_task_id && byId.has(task.parent_task_id)) {
+      summaries.set(task.parent_task_id, summaries.get(task.parent_task_id) ?? { effort: 0, hoursPerDay: {} });
+    }
+  }
+
+  for (const task of Array.from(byId.values())) {
+    if (summaries.has(task.task_id)) continue;
+    const effort = typeof task.effort === 'number' && Number.isFinite(task.effort) && task.effort > 0 ? task.effort : 0;
+    const hours = Object.entries(hoursByTaskId[task.task_id] ?? {})
+      .filter(([, value]) => Number.isFinite(value) && value > 0);
+    let parentId = task.parent_task_id;
+    const visited = new Set([task.task_id]);
+    while (parentId && summaries.has(parentId) && !visited.has(parentId)) {
+      visited.add(parentId);
+      const summary = summaries.get(parentId)!;
+      summary.effort += effort;
+      for (const [date, value] of hours) summary.hoursPerDay[date] = (summary.hoursPerDay[date] ?? 0) + value;
+      parentId = byId.get(parentId)?.parent_task_id;
+    }
+  }
+
+  return summaries;
+}
+
 /**
  * Reorders only direct siblings. A moved parent is emitted with its complete
  * subtree, while filtered/collapsed siblings retain their original slots.

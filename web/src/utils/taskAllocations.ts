@@ -10,6 +10,7 @@
  */
 import { calculateTaskSchedule, type WorkSchedule } from '@/utils/taskScheduler';
 import type { CapacityResolver } from '@/utils/capacity';
+import { buildGanttTaskSummaries } from '@/utils/ganttRows';
 
 export const SCHEDULING_HORIZON_DAYS = 365;
 
@@ -22,6 +23,7 @@ export interface AllocatableTask {
    * scheduling key when present (herdr-260906 R5). */
   assignee_resource_member_id?: string | null;
   start_date?: string | null;
+  parent_task_id?: string | null;
   effort?: number | null;
   [k: string]: unknown;
 }
@@ -91,12 +93,14 @@ export function computeTaskAllocations(
   // share the final day's unused capacity, but never schedule before it.
   const plannedThrough: Record<string, Date> = {};
   const seenTaskIds = new Set<string>();
+  const summaryTaskIds = buildGanttTaskSummaries(orderedTasks);
 
   for (const task of orderedTasks) {
     const taskId = task.task_id || task.id;
     if (!taskId || seenTaskIds.has(taskId)) continue;
     seenTaskIds.add(taskId);
-    if (task.status === 'DONE' || task.status === 'CLOSE') continue;
+    // Parents are presentation summaries; only executable descendants consume capacity.
+    if (summaryTaskIds.has(taskId) || task.status === 'DONE' || task.status === 'CLOSE') continue;
     // R5: a direct resource-member assignment is the stable scheduling key
     // (survives user linking); fall back to userId→member mapping.
     const memberKey =

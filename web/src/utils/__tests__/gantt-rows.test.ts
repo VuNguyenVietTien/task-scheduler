@@ -5,6 +5,7 @@
  */
 import {
   buildGanttTaskRows,
+  buildGanttTaskSummaries,
   reorderGanttSiblingTaskIds,
   sortGanttSiblingTaskIds,
 } from '@/utils/ganttRows';
@@ -53,6 +54,31 @@ describe('buildGanttTaskRows', () => {
   it('DUPLICATE entries emit exactly one row per task_id (first wins)', () => {
     const rows = buildGanttTaskRows([t('a'), t('a'), t('b', 'a'), t('b', 'a')]);
     expect(rows.map((r) => r.task.task_id)).toEqual(['a', 'b']);
+  });
+
+  it('rolls executable descendants into nested summaries once and omits zero-hour gaps', () => {
+    const tasks = [
+      { ...t('root'), effort: 99 },
+      { ...t('nested', 'root'), effort: 50 },
+      { ...t('leaf-a', 'nested'), effort: 3 },
+      { ...t('leaf-b', 'root'), effort: 5 },
+      { ...t('ordinary'), effort: 7 },
+    ];
+    const summaries = buildGanttTaskSummaries(tasks, {
+      'leaf-a': { '2026-09-07': 3, '2026-09-08': 0 },
+      'leaf-b': { '2026-09-07': 2, '2026-09-09': 3 },
+    });
+
+    expect(summaries.get('nested')).toEqual({ effort: 3, hoursPerDay: { '2026-09-07': 3 } });
+    expect(summaries.get('root')).toEqual({ effort: 8, hoursPerDay: { '2026-09-07': 5, '2026-09-09': 3 } });
+    expect(summaries.has('ordinary')).toBe(false);
+  });
+
+  it('keeps an unscheduled descendant in effort without fabricating summary dates', () => {
+    expect(buildGanttTaskSummaries([
+      { ...t('parent'), effort: 100 },
+      { ...t('child', 'parent'), effort: 4 },
+    ]).get('parent')).toEqual({ effort: 4, hoursPerDay: {} });
   });
 
   it('moves a root subtree as a block while filtered sibling slots preserve hidden siblings', () => {
