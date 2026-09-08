@@ -185,7 +185,7 @@ describe('Save/load: snapshot stability + viewport independence', () => {
     })).toThrow();
   });
 
-  it('adapts legacy camelCase rows without inventing daily hours', () => {
+  it('adapts legacy rows without inventing daily hours', () => {
     const legacy = parsePlanSnapshot({
       tasks: [{
         taskId: 'legacy-1', startDate: '2026-09-07', endDate: '2026-09-08',
@@ -197,6 +197,19 @@ describe('Save/load: snapshot stability + viewport independence', () => {
       priorityOrder: 4, assigneeUserId: 'u-legacy', hoursPerDay: {},
     });
     expect(legacy.meta.legacyHoursMissing).toBe(true);
+
+    const legacyV2 = parsePlanSnapshot({
+      version: 2,
+      tasks: [{ taskId: 'legacy-v2', startDate: '2026-09-07', endDate: '2026-09-08', priorityOrder: 1 }],
+      meta: {},
+    });
+    expect(legacyV2.tasks[0].hoursPerDay).toEqual({});
+    expect(legacyV2.meta.legacyHoursMissing).toBe(true);
+    expect(() => parsePlanSnapshot({
+      version: 2,
+      tasks: [{ taskId: 'corrupt-v2', startDate: '2026-09-07', endDate: '2026-09-08', priorityOrder: 1, hoursPerDay: 'invalid' }],
+      meta: {},
+    })).toThrow(/invalid daily hours/);
   });
 
   it('rejects invalid optional snapshot identity metadata', () => {

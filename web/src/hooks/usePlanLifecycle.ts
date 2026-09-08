@@ -70,6 +70,8 @@ export interface UsePlanLifecycleResult {
   plansLoading: boolean;
   saving: boolean;
   error: string | null;
+  /** Newest saved plan was corrupt, so current scheduling remains visible. */
+  defaultPlanFallback: boolean;
   /** Task ids that could NOT be scheduled in the active draft (⚠ warning). */
   exhaustedTaskIds: string[];
   newPlan: () => void;
@@ -98,12 +100,15 @@ export function usePlanLifecycle(
   const [loadedSnapshot, setLoadedSnapshot] = useState<PlanSnapshot | null>(null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [defaultPlanFallback, setDefaultPlanFallback] = useState(false);
   const requestIdRef = useRef(0);
+  const selectionInitializedRef = useRef(false);
   const projectIdRef = useRef(projectId);
   projectIdRef.current = projectId;
 
   useEffect(() => {
     requestIdRef.current += 1;
+    selectionInitializedRef.current = false;
     setMode('live');
     setDraft(null);
     setDraftSource(null);
@@ -112,6 +117,7 @@ export function usePlanLifecycle(
     setSavedBars({});
     setLoadedSnapshot(null);
     setError(null);
+    setDefaultPlanFallback(false);
     setSaving(false);
     return () => { requestIdRef.current += 1; };
   }, [projectId]);
@@ -131,9 +137,22 @@ export function usePlanLifecycle(
   const beginIntent = useCallback(() => {
     const requestId = ++requestIdRef.current;
     const requestedProject = projectIdRef.current;
+    selectionInitializedRef.current = true;
     setError(null);
+    setDefaultPlanFallback(false);
     setSaving(false);
     return () => requestId === requestIdRef.current && requestedProject === projectIdRef.current;
+  }, []);
+
+  const installPlan = useCallback((plan: SavedPlanPayload) => {
+    const snap = parsePlanSnapshot(plan.plan_data);
+    setLoadedPlan(plan);
+    setLoadedSnapshot(snap);
+    setSavedBars(snapshotToBars(snap));
+    setDraft(null);
+    setDraftSource(null);
+    setBasePlanId(plan.plan_id);
+    setMode('saved');
   }, []);
 
   const newPlan = useCallback(() => {
@@ -197,22 +216,29 @@ export function usePlanLifecycle(
         if (!isCurrent()) return;
         const plan: SavedPlanPayload | null = res.data?.saved_plan ?? null;
         if (!plan || plan.project_id !== projectId) throw new Error('plan not found in this project');
-        const snap = parsePlanSnapshot(plan.plan_data);
-        setLoadedPlan(plan);
-        setLoadedSnapshot(snap);
-        setSavedBars(snapshotToBars(snap));
-        setDraft(null);
-        setDraftSource(null);
-        setBasePlanId(plan.plan_id);
-        setMode('saved');
+        installPlan(plan);
       } catch (e) {
         if (isCurrent()) {
           setError(e instanceof Error ? e.message : String(e));
         }
       }
     },
-    [beginIntent, client, projectId]
+    [beginIntent, client, installPlan, projectId]
   );
+
+  useEffect(() => {
+    if (!projectId || plansQ.loading || !plansQ.data || selectionInitializedRef.current) return;
+    const newest: SavedPlanPayload | undefined = plansQ.data.saved_plans?.[0];
+    if (newest && newest.project_id !== projectId) return;
+    selectionInitializedRef.current = true;
+    if (!newest) return;
+    try {
+      installPlan(newest);
+    } catch (e) {
+      setDefaultPlanFallback(true);
+      setError(e instanceof Error ? e.message : String(e));
+    }
+  }, [installPlan, plansQ.data, plansQ.loading, projectId]);
 
   const savePlan = useCallback(
     async (name: string, revisionMode: 'NEW_REVISION' | 'SAME_REVISION') => {
@@ -246,14 +272,7 @@ export function usePlanLifecycle(
         if (!isCurrent()) return null;
         const saved: SavedPlanPayload | null = res.data?.save_plan_snapshot ?? null;
         if (!saved || saved.project_id !== projectId) throw new Error('save returned no plan in this project');
-        const snap = parsePlanSnapshot(saved.plan_data);
-        setLoadedPlan(saved);
-        setLoadedSnapshot(snap);
-        setSavedBars(snapshotToBars(snap));
-        setDraft(null);
-        setDraftSource(null);
-        setBasePlanId(saved.plan_id);
-        setMode('saved');
+        installPlan(saved);
         void plansQ.refetch().catch((e: Error) => { if (isCurrent()) setError(e.message); });
         return saved;
       } catch (e) {
@@ -263,7 +282,7 @@ export function usePlanLifecycle(
         if (isCurrent()) setSaving(false);
       }
     },
-    [beginIntent, basePlanId, draft, draftSource, projectId, saveMutation, plansQ]
+    [beginIntent, basePlanId, draft, draftSource, installPlan, projectId, saveMutation, plansQ]
   );
 
   const reorderDraft = useCallback((taskIds: readonly string[]) => {
@@ -279,6 +298,9 @@ export function usePlanLifecycle(
     setDraft(null);
     setDraftSource(null);
     setBasePlanId(null);
+    setLoadedPlan(null);
+    setLoadedSnapshot(null);
+    setSavedBars({});
   }, [beginIntent]);
 
   const mutateDisplayedPlan = useCallback(async (remove: boolean) => {
@@ -288,12 +310,25 @@ export function usePlanLifecycle(
       const res = await client.mutate({ mutation: remove ? DELETE_PLAN : SET_PLAN_ACTIVE, variables: { id: loadedPlan.plan_id } });
       if (!isCurrent()) return;
       if (!(remove ? res.data?.deletePlan : res.data?.setPlanActive)) throw new Error('Plan mutation failed');
-      if (remove) {
-        setMode('live'); setLoadedPlan(null); setLoadedSnapshot(null); setSavedBars({}); setBasePlanId(null);
-      } else setLoadedPlan({ ...loadedPlan, is_active: true });
-      await plansQ.refetch();
+      if (!remove) {
+        setLoadedPlan({ ...loadedPlan, is_active: true });
+        await plansQ.refetch();
+        return;
+      }
+      setMode('live'); setLoadedPlan(null); setLoadedSnapshot(null); setSavedBars({}); setBasePlanId(null);
+      const refreshed = await plansQ.refetch();
+      if (!isCurrent()) return;
+      const newest = (refreshed.data?.saved_plans as SavedPlanPayload[] | undefined)?.find(plan => plan.plan_id !== loadedPlan.plan_id);
+      if (newest) {
+        try {
+          installPlan(newest);
+        } catch (e) {
+          setDefaultPlanFallback(true);
+          setError(e instanceof Error ? e.message : String(e));
+        }
+      }
     } catch (e) { if (isCurrent()) setError(e instanceof Error ? e.message : String(e)); }
-  }, [beginIntent, client, loadedPlan, mode, plansQ]);
+  }, [beginIntent, client, installPlan, loadedPlan, mode, plansQ]);
 
   const overrideBars = useMemo(() => {
     if (mode === 'saved' && loadedSnapshot) {
@@ -336,6 +371,7 @@ export function usePlanLifecycle(
     plansLoading: plansQ.loading,
     saving,
     error,
+    defaultPlanFallback,
     exhaustedTaskIds,
     newPlan,
     recalculate,

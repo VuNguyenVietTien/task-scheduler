@@ -1,4 +1,4 @@
-import { act, renderHook } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { usePlanLifecycle } from '../usePlanLifecycle';
 import { SAVED_PLAN_QUERY, PLAN_RECALC_METADATA_QUERY } from '@/graphql/scheduling';
 import { DELETE_PLAN, SET_PLAN_ACTIVE } from '@/graphql/mutations/plans';
@@ -8,11 +8,12 @@ const mockMutate = jest.fn();
 const mockSave = jest.fn();
 const mockRefetch = jest.fn().mockResolvedValue({ data: {} });
 const mockClient = { query: mockQuery, mutate: mockMutate };
+let mockPlans: ReturnType<typeof plan>[] = [];
 jest.mock('@apollo/client', () => ({
   ...jest.requireActual('@apollo/client'),
   useApolloClient: () => mockClient,
   useMutation: () => [mockSave],
-  useQuery: () => ({ data: { saved_plans: [] }, loading: false, refetch: mockRefetch }),
+  useQuery: () => ({ data: { saved_plans: mockPlans }, loading: false, refetch: mockRefetch }),
 }));
 const scheduling = {
   tasks: [{ task_id: 'a', title: 'Task A', priority_order: 1, effort: 8 }],
@@ -26,7 +27,12 @@ function plan(id: string, project = 'p') {
 function deferred<T>() { let resolve!: (value: T) => void; let reject!: (reason: Error) => void;
   const promise = new Promise<T>((yes, no) => { resolve = yes; reject = no; }); return { promise, resolve, reject }; }
 const setup = () => renderHook(({ project, inputs }) => usePlanLifecycle(project, inputs), { initialProps: { project: 'p', inputs: scheduling } });
-beforeEach(() => { jest.clearAllMocks(); mockQuery.mockImplementation(({ query, variables }) => Promise.resolve(query === SAVED_PLAN_QUERY ? { data: { saved_plan: plan(variables.plan_id) } } : { data: { plan_recalc_metadata: { task_ids: ['a'] } } })); });
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockPlans = [];
+  mockRefetch.mockImplementation(() => Promise.resolve({ data: { saved_plans: mockPlans } }));
+  mockQuery.mockImplementation(({ query, variables }) => Promise.resolve(query === SAVED_PLAN_QUERY ? { data: { saved_plan: plan(variables.plan_id) } } : { data: { plan_recalc_metadata: { task_ids: ['a'] } } }));
+});
 
 test('R3 slow load cannot replace a newer New Plan intent', async () => {
   const slow = deferred<any>(); mockQuery.mockReturnValueOnce(slow.promise);
@@ -77,16 +83,56 @@ test('R10 unavailable config refuses authoritative drafts and recalculation, the
   rerender({ project: 'p', inputs: scheduling });
   act(() => result.current.newPlan()); expect(result.current.mode).toBe('draft');
 });
-test('R4 delete/set-active explicitly mutate displayed B, not an unrelated active A', async () => {
+test('defaults once to the newest plan and keeps an explicit No plan selection', async () => {
+  mockPlans = [plan('newest'), plan('older')];
+  const { result, rerender } = setup();
+  await waitFor(() => expect(result.current.loadedPlan?.plan_id).toBe('newest'));
+  expect(mockQuery).not.toHaveBeenCalled();
+
+  act(() => result.current.backToLive());
+  mockPlans = [plan('newer'), ...mockPlans];
+  rerender({ project: 'p', inputs: { ...scheduling } });
+  await act(async () => Promise.resolve());
+  expect(result.current.mode).toBe('live');
+  expect(mockQuery).not.toHaveBeenCalled();
+});
+
+test('a corrupt newest plan falls back to No plan without selecting an older revision', async () => {
+  mockPlans = [
+    { ...plan('corrupt'), plan_data: { version: 2, tasks: [{ taskId: 'a', startDate: '2026-09-07', endDate: '2026-09-07', priorityOrder: 1, hoursPerDay: 'bad' }], meta: {} } },
+    plan('older'),
+  ];
+  const { result } = setup();
+  await waitFor(() => expect(result.current.defaultPlanFallback).toBe(true));
+  expect(result.current.mode).toBe('live');
+  expect(result.current.loadedPlan).toBeNull();
+  expect(result.current.error).toMatch(/invalid daily hours/);
+  expect(mockQuery).not.toHaveBeenCalled();
+});
+
+test('R4 delete/set-active explicitly mutate displayed B, then selects the newest remaining legacy plan', async () => {
   const { result } = setup(); await act(async () => result.current.loadPlan('B'));
   mockMutate.mockResolvedValueOnce({ data: { setPlanActive: { id: 'B' } } });
-  await act(async () => (result.current as any).setActivePlan());
+  await act(async () => result.current.setActivePlan());
   expect(mockMutate).toHaveBeenLastCalledWith(expect.objectContaining({ mutation: SET_PLAN_ACTIVE, variables: { id: 'B' } }));
   expect(result.current.loadedPlan?.is_active).toBe(true);
+  const legacy = { ...plan('A'), plan_data: { version: 2, tasks: [{ taskId: 'a', startDate: '2026-09-07', endDate: '2026-09-07', priorityOrder: 1 }], meta: {} } };
   mockMutate.mockResolvedValueOnce({ data: { deletePlan: true } });
-  await act(async () => (result.current as any).deletePlan());
+  mockRefetch.mockResolvedValueOnce({ data: { saved_plans: [legacy] } });
+  await act(async () => result.current.deletePlan());
   expect(mockMutate).toHaveBeenLastCalledWith(expect.objectContaining({ mutation: DELETE_PLAN, variables: { id: 'B' } }));
-  expect(result.current.mode).toBe('live'); expect(result.current.loadedPlan).toBeNull();
+  expect(result.current.loadedPlan?.plan_id).toBe('A');
+  expect(result.current.loadedSnapshot?.meta.legacyHoursMissing).toBe(true);
+  expect(result.current.error).toBeNull();
+});
+
+test('deleting the final plan transitions to No plan', async () => {
+  const { result } = setup(); await act(async () => result.current.loadPlan('B'));
+  mockMutate.mockResolvedValueOnce({ data: { deletePlan: true } });
+  mockRefetch.mockResolvedValueOnce({ data: { saved_plans: [] } });
+  await act(async () => result.current.deletePlan());
+  expect(result.current.mode).toBe('live');
+  expect(result.current.loadedPlan).toBeNull();
 });
 test('save serializes actual selected snapshot and explicit revision mode, returned bytes become authority', async () => {
   const { result } = setup(); await act(async () => result.current.loadPlan('A'));

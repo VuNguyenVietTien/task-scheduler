@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useEffect, type RefObject, type UIEventHandler } from 'react';
-import { findDayOff } from '@/utils/capacity';
 import {
   buildMemberDailyEffort,
   type DisplayedTaskEffort,
@@ -24,12 +23,10 @@ interface MemberDailyEffortMatrixProps {
 
 const formatHours = (hours: number) => `${Math.round(hours * 10) / 10}h`;
 
-function loadStatus(assigned: number, taskBudget: number, capacity: number, dayOff: boolean): string {
-  if (assigned > taskBudget) return 'over';
-  if (dayOff) return 'day-off';
-  if (capacity === 0) return 'non-working';
-  if (assigned === taskBudget && taskBudget > 0) return 'full';
-  if (assigned > 8) return 'over-baseline';
+function loadStatus(assigned: number, capacity: number): string {
+  if (assigned === 0) return 'empty';
+  if (assigned > capacity) return 'over';
+  if (assigned === capacity) return 'full';
   return 'under';
 }
 
@@ -37,9 +34,8 @@ function loadClass(status: string): string {
   switch (status) {
     case 'over': return 'bg-red-100 text-red-800';
     case 'full': return 'bg-emerald-100 text-emerald-800';
-    case 'over-baseline': return 'bg-blue-100 text-blue-800';
-    case 'day-off': return 'bg-amber-100 text-amber-800';
-    case 'non-working': return 'bg-slate-100 text-slate-500';
+    case 'under': return 'bg-yellow-100 text-yellow-800';
+    case 'unknown': return 'bg-slate-100 text-slate-600';
     default: return 'bg-white text-slate-700';
   }
 }
@@ -117,35 +113,21 @@ export function MemberDailyEffortMatrix({
                   const unknown = row.unknownDates.includes(dateKey);
                   const assignedLabel = unknown ? 'unknown/incomplete' : formatHours(assigned);
                   const capacity = row.isDiagnostic ? 0 : scheduling.capacityFor(row.resourceMemberId)(date);
-                  const dayOffRecord = row.isDiagnostic ? null : findDayOff(
-                    dateKey,
-                    row.resourceMemberId,
-                    scheduling.groupIdsFor(row.resourceMemberId),
-                    scheduling.daysOff
-                  );
-                  const reserved = row.isDiagnostic
-                    ? 0
-                    : scheduling.reservedFor(row.resourceMemberId, dateKey, dateKey)[dateKey] ?? 0;
-                  const taskBudget = Math.max(0, capacity - reserved);
-                  const status = unknown ? 'unknown' : loadStatus(assigned, taskBudget, capacity, Boolean(dayOffRecord));
-                  const overBaseline = assigned > 8;
-                  const totalLoadOver = assigned + reserved > capacity;
-                  const reason = dayOffRecord ? `; day off (${dayOffRecord.reason ?? dayOffRecord.scope})` : '';
-                  const details = `${row.displayName}, ${dateKey}: A ${assignedLabel} assigned; baseline 8h; C ${formatHours(capacity)} current capacity; R ${formatHours(reserved)} reserved; B ${formatHours(taskBudget)} task budget${overBaseline ? '; over baseline' : ''}${totalLoadOver ? '; total load overload' : ''}${reason}${snapshotFrozen ? '; allocation is saved, capacity and commitments are current' : ''}`;
+                  const status = unknown ? 'unknown' : loadStatus(assigned, capacity);
+                  const details = `${row.displayName}, ${dateKey}: ${assignedLabel} assigned hours; ${formatHours(capacity)} working hours${snapshotFrozen ? '; allocation is saved and capacity is current' : ''}`;
                   return (
                     <div
                       key={dateKey}
-                      className={`border-r border-b border-slate-200 px-1 flex items-center justify-center text-[0.65rem] ${loadClass(status)}`}
+                      className={`border-r border-b border-slate-200 px-1 flex flex-col items-center justify-center text-[0.65rem] leading-tight ${loadClass(status)}`}
                       data-testid="member-effort-cell"
                       data-member-id={row.resourceMemberId}
                       data-date={dateKey}
                       data-load-status={status}
-                      data-over-baseline={overBaseline || undefined}
-                      data-total-load-over={totalLoadOver || undefined}
                       title={details}
                       aria-label={details}
                     >
-                      A {assignedLabel} · C {formatHours(capacity)} · R {formatHours(reserved)} · B {formatHours(taskBudget)}{overBaseline ? ' · >8h' : ''}{totalLoadOver ? ' · overload' : ''}
+                      <span>Assigned {assignedLabel}</span>
+                      <span>Working {formatHours(capacity)}</span>
                     </div>
                   );
                 })}

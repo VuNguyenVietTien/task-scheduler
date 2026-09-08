@@ -19,6 +19,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import type { UsePlanLifecycleResult } from '@/hooks/usePlanLifecycle';
 
 export interface PlanLifecycleBarProps {
@@ -32,12 +33,12 @@ export function PlanLifecycleBar({
   lifecycle: lc,
   truncatedCommitmentRules,
 }: PlanLifecycleBarProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState('');
   const [revisionChoice, setRevisionChoice] = useState<'NEW_REVISION' | 'SAME_REVISION'>(
     'NEW_REVISION'
   );
   const [showRevisionChoice, setShowRevisionChoice] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   useEffect(() => { setDeleteTarget(null); setShowRevisionChoice(false); setRevisionChoice('NEW_REVISION'); }, [lc.mode, lc.loadedPlan?.plan_id, lc.draft]);
 
@@ -56,7 +57,7 @@ export function PlanLifecycleBar({
   };
 
   const modeBadge =
-    lc.mode === 'live' ? 'Live (current config)' : lc.mode === 'draft' ? `Draft — ${lc.draftSource === 'recalculate' ? 'recalculated' : 'new'} (unsaved)` : `Saved r${lc.loadedPlan?.revision ?? '?'}`;
+    lc.mode === 'live' ? t('gantt.noPlan') : lc.mode === 'draft' ? `Draft — ${lc.draftSource === 'recalculate' ? 'recalculated' : 'new'} (unsaved)` : `Saved r${lc.loadedPlan?.revision ?? '?'}`;
 
   return (
     <div
@@ -75,7 +76,7 @@ export function PlanLifecycleBar({
         className="px-2 py-1 rounded bg-blue-100 hover:bg-blue-200"
         title="Build a draft from current tasks + current config (nothing is saved yet)"
       >
-        New Plan
+        {t('gantt.newPlan')}
       </button>
 
       {lc.mode === 'draft' && (
@@ -144,13 +145,12 @@ export function PlanLifecycleBar({
             lc.backToLive();
             return;
           }
-          setLoadError(null);
           void lc.loadPlan(e.target.value);
         }}
         className="px-2 py-1 border rounded"
-        aria-label="Load saved plan"
+        aria-label={t('gantt.selectPlan')}
       >
-        <option value="">— Live view —</option>
+        <option value="">{t('gantt.noPlan')}</option>
         {lc.plans.map((p) => (
           <option key={p.plan_id} value={p.plan_id}>
             {p.name} (r{p.revision}){p.stale ? ' ⚠ stale' : ''}
@@ -168,10 +168,10 @@ export function PlanLifecycleBar({
       {lc.calculationsUnavailable && <span role="status">{lc.calculationsUnavailable}</span>}
       {lc.mode === 'saved' && lc.loadedPlan && <>
         <button type="button" data-testid="set-active-plan-btn" disabled={lc.loadedPlan.is_active} onClick={() => void lc.setActivePlan()}>Set active plan</button>
-        <button type="button" data-testid="delete-plan-btn" onClick={() => setDeleteTarget(lc.loadedPlan!.plan_id)}>Delete plan</button>
-        {deleteTarget === lc.loadedPlan.plan_id && <span data-testid="delete-plan-confirm">Delete {lc.loadedPlan.name}?
-          <button type="button" data-testid="confirm-delete-plan-btn" onClick={() => { setDeleteTarget(null); void lc.deletePlan(); }}>Confirm delete</button>
-          <button type="button" onClick={() => setDeleteTarget(null)}>Cancel</button>
+        <button type="button" data-testid="delete-plan-btn" className="px-2 py-1 rounded bg-red-100 text-red-800 hover:bg-red-200" onClick={() => setDeleteTarget(lc.loadedPlan!.plan_id)}>{t('gantt.deletePlan')}</button>
+        {deleteTarget === lc.loadedPlan.plan_id && <span data-testid="delete-plan-confirm">{t('gantt.deleteConfirm')}: {lc.loadedPlan.name}?
+          <button type="button" data-testid="confirm-delete-plan-btn" onClick={() => { setDeleteTarget(null); void lc.deletePlan(); }}>{t('gantt.deletePlan')}</button>
+          <button type="button" onClick={() => setDeleteTarget(null)}>{t('tasks.actions.cancel')}</button>
         </span>}
       </>}
       {lc.mode === 'saved' && lc.loadedPlan?.stale && (
@@ -221,9 +221,14 @@ export function PlanLifecycleBar({
         </span>
       )}
 
-      {(lc.error || loadError) && (
+      {lc.defaultPlanFallback && (
+        <span data-testid="default-plan-fallback" className="text-amber-700 text-xs">
+          {t('gantt.newestPlanFallback')}
+        </span>
+      )}
+      {lc.error && (
         <span data-testid="plan-error" className="text-red-600 text-xs">
-          {lc.error ?? loadError}
+          {lc.error}
         </span>
       )}
     </div>

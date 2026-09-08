@@ -310,6 +310,9 @@ describe('buildMasterPhaseRows (selected-plan allocation authority)', () => {
       { taskId: 'missing', hoursPerDay: { '2026-09-08': 3 } },
       { taskId: 'foreign', progressCatalogItemId: 'other-project', hoursPerDay: { '2026-09-09': 4 } },
       { taskId: 'legacy-hours', progressCatalogItemId: 'catalog-build', hoursPerDay: {}, allocationKnown: false },
+      { taskId: 'legacy-span', progressCatalogItemId: 'catalog-build', hoursPerDay: {}, start: '2026-09-06', end: '2026-09-10', allocationKnown: false },
+      { taskId: 'rejected', progressCatalogItemId: null, hoursPerDay: { '2026-09-08': 2 }, eligible: false },
+      { taskId: 'zero-hours', progressCatalogItemId: null, hoursPerDay: { '2026-09-08': 0 } },
     ], catalog, 'en');
 
     const unclassified = rows.at(-1)!;
@@ -319,9 +322,10 @@ describe('buildMasterPhaseRows (selected-plan allocation authority)', () => {
       total_hours: 9,
       history_incomplete: true,
     });
-    expect(rows[0]).toMatchObject({ task_ids: ['legacy-hours'], history_incomplete: true });
+    expect(rows).toHaveLength(2);
+    expect(rows[0]).toMatchObject({ task_ids: ['legacy-span'], start: '2026-09-06', end: '2026-09-10', history_incomplete: true });
     expect(rows[0].total_hours).toBeUndefined();
-    expect(rows[0].start).toBeUndefined();
+    expect(unclassified.task_ids).not.toEqual(expect.arrayContaining(['legacy-hours', 'rejected', 'zero-hours']));
   });
 
   it('uses stable catalog IDs for allocations while labels and display order change', () => {

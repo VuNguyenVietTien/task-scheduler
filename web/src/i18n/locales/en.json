@@ -453,6 +453,8 @@
     "planDeleteFailed": "Failed to delete plan",
     "planSelectFailed": "Failed to select plan",
     "noActivePlan": "No plan selected",
+    "noPlan": "No plan",
+    "newestPlanFallback": "The newest saved plan is invalid. Showing current scheduling instead.",
     "enterPlanNameRequired": "Please enter a plan name",
     "noTasksToSave": "No tasks to save to plan",
     "sortedByPriority": "Tasks sorted by priority",

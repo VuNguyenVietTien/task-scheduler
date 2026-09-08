@@ -102,7 +102,7 @@ function lifecycle(overrides: Partial<UsePlanLifecycleResult> = {}): UsePlanLife
   return {
     mode: 'live', draft: null, draftSource: null, basePlanId: null,
     loadedPlan: null, savedBars: {}, overrideBars: null, loadedSnapshot: null,
-    plans: [], plansLoading: false, saving: false, error: null, exhaustedTaskIds: [],
+    plans: [], plansLoading: false, saving: false, error: null, defaultPlanFallback: false, exhaustedTaskIds: [],
     newPlan: jest.fn(), recalculate: jest.fn(), loadPlan: jest.fn(), savePlan: jest.fn(),
     reorderDraft: jest.fn(), backToLive: jest.fn(), deletePlan: jest.fn(), setActivePlan: jest.fn(),
     ...overrides,
@@ -168,8 +168,8 @@ describe('Authority regression wiring R1-R11', () => {
   ])('R2 snapshot identity %j owns accounting after real API assignee normalization', async (assignment, expected) => {
     renderTimeline(savedLifecycle(assignment), [{ ...liveTasks[0], assignee: { user_id: 'u-current', username: 'Current' } } as unknown as Task]);
     const cells = await screen.findAllByTestId('member-effort-cell');
-    expect(cells.find(c => c.dataset.memberId === expected && c.dataset.date === '2026-09-08')).toHaveTextContent('A 8h');
-    if (expected !== 'rm-current') expect(cells.find(c => c.dataset.memberId === 'rm-current' && c.dataset.date === '2026-09-08')).toHaveTextContent('A 0h');
+    expect(cells.find(c => c.dataset.memberId === expected && c.dataset.date === '2026-09-08')).toHaveTextContent('Assigned 8h');
+    if (expected !== 'rm-current') expect(cells.find(c => c.dataset.memberId === 'rm-current' && c.dataset.date === '2026-09-08')).toHaveTextContent('Assigned 0h');
   });
   it('R4 one Recalculate and explicit delete/activate operate on selected B', async () => {
     const lc = savedLifecycle(); renderTimeline(lc);
@@ -278,7 +278,7 @@ describe('Authority regression wiring R1-R11', () => {
     const cells = await screen.findAllByTestId('member-effort-cell');
     const affected = cells.find(c => c.dataset.memberId === 'rm-current' && c.dataset.date === '2026-09-08')!;
     expect(affected).toHaveAttribute('data-load-status', 'unknown'); expect(affected).toHaveAttribute('aria-label', expect.stringContaining('unknown'));
-    expect(cells.find(c => c.dataset.memberId === 'rm-zero' && c.dataset.date === '2026-09-08')).toHaveTextContent('A 0h');
+    expect(cells.find(c => c.dataset.memberId === 'rm-zero' && c.dataset.date === '2026-09-08')).toHaveTextContent('Assigned 0h');
   });
 });
 
@@ -373,8 +373,16 @@ describe('Timeline selected-plan wiring', () => {
     const currentCell = screen.getAllByTestId('member-effort-cell').find(
       (cell) => cell.dataset.memberId === 'rm-current' && cell.dataset.date === '2026-09-07'
     );
-    expect(currentCell).toHaveTextContent('A 0h');
+    expect(currentCell).toHaveTextContent('Assigned 0h');
     expect(screen.getByText(/Unresolved assignment \(unassigned\)/)).toBeInTheDocument();
+  });
+
+  it('exposes localized No plan and a clear corrupt-newest fallback', async () => {
+    renderTimeline(lifecycle({ defaultPlanFallback: true, error: 'corrupt snapshot' }));
+    await screen.findByTestId('plan-lifecycle-bar');
+    expect(screen.getByRole('option', { name: 'No plan' })).toBeInTheDocument();
+    expect(screen.getByTestId('default-plan-fallback')).toHaveTextContent('newest saved plan is invalid');
+    expect(screen.queryByText(/Live view|Live \(current config\)/)).not.toBeInTheDocument();
   });
 
   it('exposes one plan selector/new/save lifecycle rather than parallel legacy controls', async () => {

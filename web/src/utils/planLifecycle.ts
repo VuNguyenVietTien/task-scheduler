@@ -310,6 +310,7 @@ export function parsePlanSnapshot(planData: unknown): PlanSnapshot {
   }
   const ids = new Set<string>();
   const orders = new Set<number>();
+  let legacyHoursMissing = false;
   const parsedTasks: SnapshotTask[] = tasks.map((raw, index) => {
     const t = raw as Partial<SnapshotTask> | null;
     const fields = raw as Record<string, unknown> | null;
@@ -334,10 +335,13 @@ export function parsePlanSnapshot(planData: unknown): PlanSnapshot {
     ) {
       throw new Error(`plan_data.tasks[${index}] has invalid assignee identity`);
     }
-    if (!t.hoursPerDay || typeof t.hoursPerDay !== 'object' || Array.isArray(t.hoursPerDay)) {
+    const hasDailyHours = Object.prototype.hasOwnProperty.call(fields, 'hoursPerDay');
+    const dailyHours = hasDailyHours ? t.hoursPerDay : {};
+    if (!hasDailyHours) legacyHoursMissing = true;
+    if (!dailyHours || typeof dailyHours !== 'object' || Array.isArray(dailyHours)) {
       throw new Error(`plan_data.tasks[${index}] has invalid daily hours`);
     }
-    for (const [date, hours] of Object.entries(t.hoursPerDay)) {
+    for (const [date, hours] of Object.entries(dailyHours)) {
       if (!isCalendarDate(date) || date < t.startDate || date > t.endDate || !Number.isFinite(hours) || hours < 0) {
         throw new Error(`plan_data.tasks[${index}] has invalid daily hours`);
       }
@@ -346,11 +350,12 @@ export function parsePlanSnapshot(planData: unknown): PlanSnapshot {
     const { progress_catalog_item_id: _legacyProgressCatalogItemId, ...canonical } = fields;
     return {
       ...canonical,
-      hoursPerDay: { ...t.hoursPerDay },
+      hoursPerDay: { ...dailyHours },
       ...(progressCatalog.present ? { progressCatalogItemId: progressCatalog.value } : {}),
     } as SnapshotTask;
   });
   const meta = { ...(obj.meta as PlanSnapshot['meta']) };
+  if (legacyHoursMissing) meta.legacyHoursMissing = true;
   if (meta.contextTasks !== undefined) {
     if (!Array.isArray(meta.contextTasks)) throw new Error('invalid ancestor context');
     meta.contextTasks = meta.contextTasks.map(context => {

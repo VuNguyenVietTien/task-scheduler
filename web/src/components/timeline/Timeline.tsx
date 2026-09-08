@@ -3,7 +3,7 @@
 import { useTranslation } from 'react-i18next';
 import { buildMasterPhaseRows, type MasterPhaseAllocation } from '@/lib/scheduling/build-master-rows';
 import { useProjectCatalogs } from '@/hooks/useProjectCatalogs';
-import { computeTaskAllocations, positiveWorkBounds, schedulingHorizon, type TaskAllocation } from '@/utils/taskAllocations';
+import { computeTaskAllocations, isTaskScheduleEligible, positiveWorkBounds, schedulingHorizon, type TaskAllocation } from '@/utils/taskAllocations';
 import { PlanLifecycleBar } from '@/components/timeline/PlanLifecycleBar';
 import { MemberDailyEffortMatrix } from '@/components/timeline/MemberDailyEffortMatrix';
 import { usePlanLifecycle } from '@/hooks/usePlanLifecycle';
@@ -803,21 +803,26 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   // Master consumes direct selected-plan task allocations only. In particular,
   // snapshot contextTasks remain WBS display metadata and never enter this sum.
   const masterAllocationInputs = useMemo<MasterPhaseAllocation[]>(() => {
+    const displayedById = new Map(selectedPlanTasks.map((task) => [task.task_id, task]));
     if (selectedSnapshot) {
       const allocationKnown = selectedSnapshot.meta.legacyHoursMissing !== true;
       return selectedSnapshot.tasks.filter((task) => !taskSummaries.has(task.taskId)).map((task) => ({
         taskId: task.taskId,
         progressCatalogItemId: task.progressCatalogItemId,
         hoursPerDay: taskAllocations[task.taskId]?.hoursPerDay ?? task.hoursPerDay,
+        start: task.startDate,
+        end: task.endDate,
         allocationKnown,
+        eligible: isTaskScheduleEligible(displayedById.get(task.taskId)?.status),
       }));
     }
     return planLifecycleScheduling.tasks.filter((task) => !taskSummaries.has(task.task_id || task.id || '')).map((task) => ({
       taskId: task.task_id || task.id || '',
       progressCatalogItemId: (task as { progressCatalogItemId?: string | null }).progressCatalogItemId,
       hoursPerDay: taskAllocations[task.task_id || task.id || '']?.hoursPerDay ?? {},
+      eligible: isTaskScheduleEligible(task.status),
     }));
-  }, [planLifecycleScheduling.tasks, selectedSnapshot, taskAllocations, taskSummaries]);
+  }, [planLifecycleScheduling.tasks, selectedPlanTasks, selectedSnapshot, taskAllocations, taskSummaries]);
   const masterRows = useMemo(
     () => progressCatalog.loading || progressCatalog.error
       ? []
@@ -1156,7 +1161,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   const dayWidth = Math.max(80, dimensions.width / days.length);
   const rowHeight = 48;
   const displayedTaskEfforts = useMemo<DisplayedTaskEffort[]>(
-    () => selectedPlanTasks.filter(task => !contextTaskIds.has(task.task_id) && !taskSummaries.has(task.task_id)).map((task) => ({
+    () => selectedPlanTasks.filter(task => isTaskScheduleEligible(task.status) && !contextTaskIds.has(task.task_id) && !taskSummaries.has(task.task_id)).map((task) => ({
       unknownSpan: selectedSnapshot?.meta.legacyHoursMissing === true
         ? { start: selectedSnapshot.tasks.find(t => t.taskId === task.task_id)!.startDate, end: selectedSnapshot.tasks.find(t => t.taskId === task.task_id)!.endDate }
         : undefined,

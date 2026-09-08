@@ -80,6 +80,17 @@ describe('computeTaskAllocations viewport-independence (R3/R6)', () => {
     expect(r.allocations.t1.hoursPerDay['2026-09-09']).toBe(2);
   });
 
+  it('does not allocate rejected or archived tasks', () => {
+    const r = computeTaskAllocations([
+      { ...task, task_id: 'rejected', status: 'REJECTED', effort: 2 },
+      { ...task, task_id: 'archived', status: 'ARCHIVED', effort: 2 },
+      { ...task, task_id: 'eligible', status: 'TODO', effort: 2 },
+    ], makeConfig(), schedulingHorizon(today), today);
+
+    expect(Object.keys(r.allocations)).toEqual(['eligible']);
+    expect(r.allocations.eligible.hoursPerDay).toEqual({ '2026-09-07': 2 });
+  });
+
   it('does not allocate summary parents or let their stored effort delay descendants', () => {
     const r = computeTaskAllocations([
       { task_id: 'parent', effort: 40, assignee_user_id: 'u1' },

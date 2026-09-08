@@ -73,6 +73,10 @@ export function schedulingHorizon(
   return { from: fmt(from), to: fmt(to) };
 }
 
+export function isTaskScheduleEligible(status?: string | null): boolean {
+  return !['DONE', 'CLOSE', 'REJECTED', 'ARCHIVED'].includes(status?.toUpperCase() ?? '');
+}
+
 export interface AllocationResult {
   allocations: Record<string, TaskAllocation>;
   /** Tasks whose effort could NOT be fully scheduled inside the horizon
@@ -100,7 +104,7 @@ export function computeTaskAllocations(
     if (!taskId || seenTaskIds.has(taskId)) continue;
     seenTaskIds.add(taskId);
     // Parents are presentation summaries; only executable descendants consume capacity.
-    if (summaryTaskIds.has(taskId) || task.status === 'DONE' || task.status === 'CLOSE') continue;
+    if (summaryTaskIds.has(taskId) || !isTaskScheduleEligible(task.status)) continue;
     // R5: a direct resource-member assignment is the stable scheduling key
     // (survives user linking); fall back to userId→member mapping.
     const memberKey =

@@ -33,8 +33,13 @@ export interface MasterPhaseAllocation {
   /** undefined is historical classification missing; null is known unclassified. */
   progressCatalogItemId?: string | null;
   hoursPerDay: Record<string, number>;
+  /** Saved span used only when a legacy snapshot has no daily vector. */
+  start?: string;
+  end?: string;
   /** False only when a legacy snapshot has no authoritative daily vector. */
   allocationKnown?: boolean;
+  /** False for terminal/excluded tasks that must not consume schedule. */
+  eligible?: boolean;
 }
 
 /**
@@ -55,6 +60,8 @@ export function buildMasterPhaseRows(
     hoursPerDay: Record<string, number>;
     hasKnownHours: boolean;
     historyIncomplete: boolean;
+    start?: string;
+    end?: string;
   }>();
   const bucketFor = (id: string | null) => {
     let bucket = buckets.get(id);
@@ -67,16 +74,21 @@ export function buildMasterPhaseRows(
   const seenTaskIds = new Set<string>();
 
   for (const allocation of allocations) {
-    if (!allocation.taskId || seenTaskIds.has(allocation.taskId)) continue;
+    if (!allocation.taskId || allocation.eligible === false) continue;
+    const positiveHours = Object.entries(allocation.hoursPerDay).filter(([, hours]) => Number.isFinite(hours) && hours > 0);
+    const legacySpan = allocation.allocationKnown === false && /^\d{4}-\d{2}-\d{2}$/.test(allocation.start ?? '') && /^\d{4}-\d{2}-\d{2}$/.test(allocation.end ?? '') && allocation.start! <= allocation.end!;
+    if ((!positiveHours.length && !legacySpan) || seenTaskIds.has(allocation.taskId)) continue;
     seenTaskIds.add(allocation.taskId);
     const item = allocation.progressCatalogItemId ? configuredById.get(allocation.progressCatalogItemId) : undefined;
     const id = item ? item.catalog_item_id : null;
     const bucket = bucketFor(id);
     bucket.taskIds.push(allocation.taskId);
     bucket.historyIncomplete ||= allocation.allocationKnown === false || allocation.progressCatalogItemId === undefined || (typeof allocation.progressCatalogItemId === 'string' && !item);
-    if (allocation.allocationKnown === false) continue;
-    for (const [date, hours] of Object.entries(allocation.hoursPerDay)) {
-      if (!Number.isFinite(hours) || hours <= 0) continue;
+    if (legacySpan) {
+      bucket.start = bucket.start === undefined || allocation.start! < bucket.start ? allocation.start! : bucket.start;
+      bucket.end = bucket.end === undefined || allocation.end! > bucket.end ? allocation.end! : bucket.end;
+    }
+    for (const [date, hours] of positiveHours) {
       bucket.hoursPerDay[date] = (bucket.hoursPerDay[date] ?? 0) + hours;
       bucket.hasKnownHours = true;
     }
@@ -87,6 +99,8 @@ export function buildMasterPhaseRows(
       taskIds: [], hoursPerDay: {}, hasKnownHours: false, historyIncomplete: false,
     };
     const dates = Object.keys(bucket.hoursPerDay).sort();
+    const start = [bucket.start, dates[0]].filter((date): date is string => Boolean(date)).sort()[0];
+    const end = [bucket.end, dates.at(-1)].filter((date): date is string => Boolean(date)).sort().at(-1);
     return {
       phase_id: item?.catalog_item_id ?? null,
       name: item ? resolveProjectCatalogLabel(item, locale) : UNCLASSIFIED_NAME,
@@ -98,7 +112,7 @@ export function buildMasterPhaseRows(
         ? { total_hours: Object.values(bucket.hoursPerDay).reduce((total, hours) => total + hours, 0) }
         : {}),
       hours_per_day: bucket.hoursPerDay,
-      ...(dates.length ? { start: dates[0], end: dates[dates.length - 1] } : {}),
+      ...(start && end ? { start, end } : {}),
       ...(bucket.historyIncomplete ? { history_incomplete: true } : {}),
     };
   };

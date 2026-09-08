@@ -16,7 +16,7 @@ let mockMasterRows: ReturnType<typeof masterRowsFromProjection> | undefined;
 const mockReorder = jest.fn();
 jest.mock('@/hooks/usePlanLifecycle', () => ({ usePlanLifecycle: () => ({
   mode: 'live', draft: null, draftSource: null, basePlanId: null, loadedPlan: null, savedBars: {},
-  overrideBars: null, loadedSnapshot: null, plans: [], plansLoading: false, saving: false, error: null,
+  overrideBars: null, loadedSnapshot: null, plans: [], plansLoading: false, saving: false, error: null, defaultPlanFallback: false,
   exhaustedTaskIds: [], newPlan: jest.fn(), recalculate: jest.fn(), loadPlan: jest.fn(), savePlan: jest.fn(),
   reorderDraft: jest.fn(), backToLive: jest.fn(), deletePlan: jest.fn(), setActivePlan: jest.fn(),
 }) }));
