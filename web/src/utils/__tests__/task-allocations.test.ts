@@ -80,6 +80,22 @@ describe('computeTaskAllocations viewport-independence (R3/R6)', () => {
     expect(r.allocations.t1.hoursPerDay['2026-09-09']).toBe(2);
   });
 
+  it('keeps only explicitly dated zero-effort tasks with a canonical assignee as date-only allocations', () => {
+    const r = computeTaskAllocations([
+      { ...task, task_id: 'milestone', effort: 0, start_date: '2026-09-10', assignee_resource_member_id: 'rm-1' },
+      { ...task, task_id: 'linked', effort: 0, start_date: '2026-09-11', assignee_user_id: 'u1' },
+      { ...task, task_id: 'unassigned', effort: 0, start_date: '2026-09-11' },
+      { ...task, task_id: 'undated', effort: 0, start_date: null, assignee_resource_member_id: 'rm-1' },
+      { ...task, task_id: 'invalid-date', effort: 0, start_date: 'not-a-date', assignee_resource_member_id: 'rm-1' },
+      { ...task, task_id: 'rejected-zero', status: 'REJECTED', effort: 0, start_date: '2026-09-12', assignee_resource_member_id: 'rm-1' },
+    ], makeConfig({}, { u1: 'rm-1' }), schedulingHorizon(today), today);
+
+    expect(Object.keys(r.allocations)).toEqual(['milestone', 'linked']);
+    expect(r.allocations.milestone).toMatchObject({ dateOnly: true, hoursPerDay: { '2026-09-10': 0 } });
+    expect(r.allocations.linked).toMatchObject({ dateOnly: true, hoursPerDay: { '2026-09-11': 0 } });
+    expect(r.allocations.milestone.start).toEqual(new Date(2026, 8, 10));
+  });
+
   it('does not allocate rejected or archived tasks', () => {
     const r = computeTaskAllocations([
       { ...task, task_id: 'rejected', status: 'REJECTED', effort: 2 },

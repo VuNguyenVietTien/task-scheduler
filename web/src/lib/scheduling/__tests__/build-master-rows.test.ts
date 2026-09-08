@@ -328,6 +328,18 @@ describe('buildMasterPhaseRows (selected-plan allocation authority)', () => {
     expect(unclassified.task_ids).not.toEqual(expect.arrayContaining(['legacy-hours', 'rejected', 'zero-hours']));
   });
 
+  it('keeps an explicit zero-effort date-only span without inventing hours', () => {
+    const rows = buildMasterPhaseRows([
+      { taskId: 'milestone', progressCatalogItemId: 'catalog-build', hoursPerDay: { '2026-09-10': 0 }, start: '2026-09-10', end: '2026-09-10', dateOnly: true },
+      { taskId: 'ordinary-zero', progressCatalogItemId: 'catalog-review', hoursPerDay: { '2026-09-08': 0 }, start: '2026-09-08', end: '2026-09-08' },
+    ], catalog, 'en');
+
+    expect(rows).toEqual([expect.objectContaining({
+      name: 'Build', task_ids: ['milestone'], start: '2026-09-10', end: '2026-09-10', hours_per_day: {},
+    })]);
+    expect(rows[0].total_hours).toBeUndefined();
+  });
+
   it('uses stable catalog IDs for allocations while labels and display order change', () => {
     const allocation = [{ taskId: 'task', progressCatalogItemId: 'catalog-build', hoursPerDay: { '2026-09-07': 5 } }];
     const renamed = [

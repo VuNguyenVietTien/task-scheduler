@@ -40,6 +40,8 @@ export interface TaskAllocation {
   start: Date;
   end: Date;
   hoursPerDay: Record<string, number>;
+  /** Explicit zero-effort task anchored to its real start date. */
+  dateOnly?: boolean;
 }
 
 /** Positive work, not the requested span, owns rendered date bounds. */
@@ -105,10 +107,18 @@ export function computeTaskAllocations(
     seenTaskIds.add(taskId);
     // Parents are presentation summaries; only executable descendants consume capacity.
     if (summaryTaskIds.has(taskId) || !isTaskScheduleEligible(task.status)) continue;
+    const effort = task.effort ?? 0;
     // R5: a direct resource-member assignment is the stable scheduling key
     // (survives user linking); fall back to userId→member mapping.
-    const memberKey =
-      task.assignee_resource_member_id || config.memberKeyFor(task.assignee_user_id ?? null);
+    const memberKey = task.assignee_resource_member_id?.trim() || config.memberKeyFor(task.assignee_user_id ?? null);
+    if (effort <= 0) {
+      if (memberKey === 'unassigned' || !task.start_date) continue;
+      const start = new Date(task.start_date);
+      if (Number.isNaN(start.getTime())) continue;
+      start.setHours(0, 0, 0, 0);
+      allocations[taskId] = { start, end: new Date(start), hoursPerDay: { [fmt(start)]: 0 }, dateOnly: true };
+      continue;
+    }
     const capacity = config.capacityFor(memberKey);
     const schedule = (schedules[memberKey] ??= {});
     // Seed reserved (capacity − commitments) across the WHOLE horizon once.
@@ -123,11 +133,6 @@ export function computeTaskAllocations(
     start.setHours(0, 0, 0, 0);
     const priorEnd = plannedThrough[memberKey];
     if (priorEnd && priorEnd > start) start = new Date(priorEnd);
-    const effort = task.effort ?? 0;
-    if (effort <= 0) {
-      allocations[taskId] = { start, end: new Date(start), hoursPerDay: { [fmt(start)]: 0 } };
-      continue;
-    }
     const { endDate, updatedSchedule, hoursPerDay, exhausted } = calculateTaskSchedule(
       start,
       effort,

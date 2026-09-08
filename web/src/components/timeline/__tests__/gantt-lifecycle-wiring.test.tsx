@@ -221,6 +221,29 @@ describe('Authority regression wiring R1-R11', () => {
     expect(screen.queryByText('8h')).not.toBeInTheDocument();
   });
 
+  it('renders a canonically assigned zero-effort task on its explicit date in WBS and Master', async () => {
+    const task = {
+      ...liveTasks[0], task_id: 'milestone', id: 'milestone', title: 'Milestone', effort: 0,
+      start_date: '2026-09-10', due_date: undefined,
+      progressCatalogItemId: '00000000-0000-0000-0000-000000000001',
+    } as Task;
+    renderTimeline(lifecycle(), [task]);
+
+    const milestone = await screen.findByTestId('task-day-segment');
+    expect(milestone).toHaveAttribute('data-task-id', 'milestone');
+    expect(milestone).toHaveAttribute('data-date', '2026-09-10');
+    expect(milestone).toHaveAttribute('data-hours', '0');
+    expect(screen.getByTestId('gantt-row-start')).toHaveTextContent('2026-09-10');
+    expect(screen.getByTestId('gantt-row-end')).toHaveTextContent('2026-09-10');
+
+    fireEvent.click(screen.getByRole('button', { name: /master/i }));
+    const row = (await screen.findAllByTestId('gantt-name-row'))[0];
+    expect(row).toHaveTextContent('Creation');
+    expect(row).toHaveTextContent('2026-09-10');
+    expect(screen.getByTestId('master-phase-span')).toHaveAttribute('data-start', '2026-09-10');
+    expect(screen.getByTestId('master-phase-span')).toHaveAttribute('data-end', '2026-09-10');
+  });
+
   it('old saved tasks without phase metadata produce one explicit unclassified row', async () => {
     renderTimeline(savedLifecycle());
     fireEvent.click(screen.getByRole('button', { name: /master/i }));

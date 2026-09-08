@@ -63,7 +63,7 @@ export interface UsePlanLifecycleResult {
   loadedPlan: SavedPlanPayload | null;
   savedBars: Record<string, PlanBar>;
   /** Bars the Timeline should render instead of computing (null = live). */
-  overrideBars: Record<string, { start: string; end: string; hoursPerDay: Record<string, number> }> | null;
+  overrideBars: Record<string, { start: string; end: string; hoursPerDay: Record<string, number>; dateOnly?: boolean }> | null;
   /** Snapshot bytes of the loaded plan (stable across config changes). */
   loadedSnapshot: PlanSnapshot | null;
   plans: SavedPlanPayload[];
@@ -335,7 +335,7 @@ export function usePlanLifecycle(
       return Object.fromEntries(
         Object.entries(snapshotToBars(loadedSnapshot)).map(([id, b]) => [
           id,
-          { start: b.start, end: b.end, hoursPerDay: b.hoursPerDay },
+          { start: b.start, end: b.end, hoursPerDay: b.hoursPerDay, dateOnly: b.dateOnly },
         ])
       );
     }
@@ -347,6 +347,7 @@ export function usePlanLifecycle(
             start: fmt(a.start),
             end: fmt(a.end),
             hoursPerDay: a.hoursPerDay,
+            dateOnly: a.dateOnly,
           },
         ])
       );

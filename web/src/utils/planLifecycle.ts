@@ -32,6 +32,7 @@ export interface SnapshotTask {
   startDate: string;
   endDate: string;
   hoursPerDay: Record<string, number>;
+  dateOnly?: boolean;
   assigneeUserId?: string | null;
   assigneeResourceMemberId?: string | null;
   priorityOrder: number;
@@ -62,6 +63,7 @@ export interface PlanBar {
   start: string;
   end: string;
   hoursPerDay: Record<string, number>;
+  dateOnly?: boolean;
   unscheduled?: boolean;
 }
 
@@ -142,6 +144,7 @@ function draftFromOrderedTasks(
         startDate: a ? fmt(a.start) : fmt(inputs.today),
         endDate: a ? fmt(a.end) : fmt(inputs.today),
         hoursPerDay: a ? { ...a.hoursPerDay } : {},
+        ...(a?.dateOnly ? { dateOnly: true } : {}),
         assigneeUserId: t.assignee_user_id ?? null,
         assigneeResourceMemberId:
           (t as { assignee_resource_member_id?: string | null }).assignee_resource_member_id ?? null,
@@ -198,11 +201,18 @@ export function snapshotToBars(snapshot: PlanSnapshot): Record<string, PlanBar> 
     seen.add(t.taskId);
     const totalHours = Object.values(t.hoursPerDay ?? {}).reduce((s, h) => s + (h || 0), 0);
     const bounds = positiveWorkBounds(t.hoursPerDay);
+    const dateOnly = Boolean(
+      (t.dateOnly === true || t.assigneeResourceMemberId || t.assigneeUserId) &&
+      t.startDate === t.endDate &&
+      Object.keys(t.hoursPerDay ?? {}).length === 1 &&
+      t.hoursPerDay?.[t.startDate] === 0
+    );
     bars[t.taskId] = {
       start: bounds?.start ?? t.startDate,
       end: bounds?.end ?? t.endDate,
       hoursPerDay: { ...(t.hoursPerDay ?? {}) },
-      unscheduled: totalHours <= 0,
+      ...(dateOnly ? { dateOnly: true } : {}),
+      unscheduled: !dateOnly && totalHours <= 0,
     };
   }
   return bars;

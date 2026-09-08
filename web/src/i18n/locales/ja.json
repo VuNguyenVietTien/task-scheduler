@@ -454,6 +454,8 @@
     "planSelectFailed": "計画の選択に失敗しました",
     "noActivePlan": "計画なし",
     "noPlan": "計画なし",
+    "assigned": "割り当て",
+    "working": "稼働可能",
     "newestPlanFallback": "最新の保存済み計画が無効なため、現在のスケジュールを表示しています。",
     "enterPlanNameRequired": "計画名を入力してください",
     "noTasksToSave": "保存するタスクがありません",

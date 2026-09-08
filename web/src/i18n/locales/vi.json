@@ -454,6 +454,8 @@
     "planSelectFailed": "Lỗi khi chọn kế hoạch",
     "noActivePlan": "Không chọn kế hoạch",
     "noPlan": "Không chọn kế hoạch",
+    "assigned": "Được giao",
+    "working": "Làm việc",
     "newestPlanFallback": "Kế hoạch mới nhất không hợp lệ. Đang hiển thị lịch hiện tại.",
     "enterPlanNameRequired": "Vui lòng nhập tên kế hoạch",
     "noTasksToSave": "Không có task nào để lưu vào kế hoạch",

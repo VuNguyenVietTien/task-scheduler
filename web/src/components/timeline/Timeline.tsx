@@ -81,6 +81,7 @@ interface TimelineBarsOverride {
   start: string;
   end: string;
   hoursPerDay: Record<string, number>;
+  dateOnly?: boolean;
 }
 
 interface TimelineProps {
@@ -792,7 +793,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
     if (!displayedBarsOverride) return taskAllocationResult.allocations;
     return Object.fromEntries(Object.entries(displayedBarsOverride).map(([taskId, bar]) => [
       taskId,
-      { start: new Date(bar.start), end: new Date(bar.end), hoursPerDay: bar.hoursPerDay },
+      { start: new Date(bar.start), end: new Date(bar.end), hoursPerDay: bar.hoursPerDay, dateOnly: bar.dateOnly },
     ])) as Record<string, TaskAllocation>;
   }, [displayedBarsOverride, taskAllocationResult.allocations]);
   const taskSummaries = useMemo(() => buildGanttTaskSummaries(
@@ -813,6 +814,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
         start: task.startDate,
         end: task.endDate,
         allocationKnown,
+        dateOnly: taskAllocations[task.taskId]?.dateOnly,
         eligible: isTaskScheduleEligible(displayedById.get(task.taskId)?.status),
       }));
     }
@@ -820,6 +822,9 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
       taskId: task.task_id || task.id || '',
       progressCatalogItemId: (task as { progressCatalogItemId?: string | null }).progressCatalogItemId,
       hoursPerDay: taskAllocations[task.task_id || task.id || '']?.hoursPerDay ?? {},
+      start: taskAllocations[task.task_id || task.id || ''] ? formatDateVN(taskAllocations[task.task_id || task.id || ''].start) : undefined,
+      end: taskAllocations[task.task_id || task.id || ''] ? formatDateVN(taskAllocations[task.task_id || task.id || ''].end) : undefined,
+      dateOnly: taskAllocations[task.task_id || task.id || '']?.dateOnly,
       eligible: isTaskScheduleEligible(task.status),
     }));
   }, [planLifecycleScheduling.tasks, selectedPlanTasks, selectedSnapshot, taskAllocations, taskSummaries]);
@@ -1549,6 +1554,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                       const summary = taskSummaries.get(row.task.task_id);
                       const hoursPerDay = summary?.hoursPerDay ?? allocation?.hoursPerDay;
                       const bounds = hoursPerDay && positiveWorkBounds(hoursPerDay);
+                      const dateOnly = allocation?.dateOnly ? formatDateVN(allocation.start) : undefined;
                       return (
                         <SortableGanttTaskRow
                           key={row.key}
@@ -1557,8 +1563,8 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                           rowHeight={rowHeight}
                           hasChildren={rowHasChildren.get(row.key) ?? false}
                           collapsed={collapsedRows.has(row.key)}
-                          startLabel={bounds?.start ?? (summary || allocation ? 'Unscheduled' : '—')}
-                          endLabel={bounds?.end ?? (summary || allocation ? 'Unscheduled' : '—')}
+                          startLabel={bounds?.start ?? dateOnly ?? (summary || allocation ? 'Unscheduled' : '—')}
+                          endLabel={bounds?.end ?? dateOnly ?? (summary || allocation ? 'Unscheduled' : '—')}
                           assigneeName={row.task.assignee_resource_member_id
                             ? memberNames.get(row.task.assignee_resource_member_id)
                             : row.task.assignee?.username}
@@ -1740,9 +1746,13 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                         // Requirement 5: render per-day hour segments
                         // (effort 10h → “8h” + “2h” cells; zero days blank).
                         if (hoursPerDay) {
-                          const segments = Object.entries(hoursPerDay)
-                            .filter(([, hours]) => hours > 0)
-                            .map(([dateKey, hours]) => {
+                          const positiveEntries = Object.entries(hoursPerDay).filter(([, hours]) => hours > 0);
+                          const segmentEntries = positiveEntries.length
+                            ? positiveEntries
+                            : allocation?.dateOnly
+                              ? [[formatDateVN(allocation.start), 0] as const]
+                              : [];
+                          const segments = segmentEntries.map(([dateKey, hours]) => {
                               const idx = days.findIndex((d) => formatDateVN(d) === dateKey);
                               if (idx === -1) return null;
                               return (
@@ -1765,7 +1775,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                                   data-date={dateKey}
                                   data-hours={hours}
                                 >
-                                  <span>{Math.round(hours * 10) / 10}h</span>
+                                  <span>{hours > 0 ? `${Math.round(hours * 10) / 10}h` : '◆'}</span>
                                   {(task.assignee_resource_member_id || task.assignee) && (
                                     <span className="ml-1 max-w-[60%] truncate">· {task.assignee_resource_member_id
                                       ? memberNames.get(task.assignee_resource_member_id) ?? 'Unknown member'

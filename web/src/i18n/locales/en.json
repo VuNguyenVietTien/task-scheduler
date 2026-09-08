@@ -454,6 +454,8 @@
     "planSelectFailed": "Failed to select plan",
     "noActivePlan": "No plan selected",
     "noPlan": "No plan",
+    "assigned": "Assigned",
+    "working": "Working",
     "newestPlanFallback": "The newest saved plan is invalid. Showing current scheduling instead.",
     "enterPlanNameRequired": "Please enter a plan name",
     "noTasksToSave": "No tasks to save to plan",

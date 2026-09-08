@@ -38,6 +38,8 @@ export interface MasterPhaseAllocation {
   end?: string;
   /** False only when a legacy snapshot has no authoritative daily vector. */
   allocationKnown?: boolean;
+  /** Explicit zero-effort task anchored to its real start date. */
+  dateOnly?: boolean;
   /** False for terminal/excluded tasks that must not consume schedule. */
   eligible?: boolean;
 }
@@ -76,15 +78,16 @@ export function buildMasterPhaseRows(
   for (const allocation of allocations) {
     if (!allocation.taskId || allocation.eligible === false) continue;
     const positiveHours = Object.entries(allocation.hoursPerDay).filter(([, hours]) => Number.isFinite(hours) && hours > 0);
-    const legacySpan = allocation.allocationKnown === false && /^\d{4}-\d{2}-\d{2}$/.test(allocation.start ?? '') && /^\d{4}-\d{2}-\d{2}$/.test(allocation.end ?? '') && allocation.start! <= allocation.end!;
-    if ((!positiveHours.length && !legacySpan) || seenTaskIds.has(allocation.taskId)) continue;
+    const validSpan = /^\d{4}-\d{2}-\d{2}$/.test(allocation.start ?? '') && /^\d{4}-\d{2}-\d{2}$/.test(allocation.end ?? '') && allocation.start! <= allocation.end!;
+    const dateSpan = validSpan && (allocation.allocationKnown === false || allocation.dateOnly === true);
+    if ((!positiveHours.length && !dateSpan) || seenTaskIds.has(allocation.taskId)) continue;
     seenTaskIds.add(allocation.taskId);
     const item = allocation.progressCatalogItemId ? configuredById.get(allocation.progressCatalogItemId) : undefined;
     const id = item ? item.catalog_item_id : null;
     const bucket = bucketFor(id);
     bucket.taskIds.push(allocation.taskId);
     bucket.historyIncomplete ||= allocation.allocationKnown === false || allocation.progressCatalogItemId === undefined || (typeof allocation.progressCatalogItemId === 'string' && !item);
-    if (legacySpan) {
+    if (dateSpan) {
       bucket.start = bucket.start === undefined || allocation.start! < bucket.start ? allocation.start! : bucket.start;
       bucket.end = bucket.end === undefined || allocation.end! > bucket.end ? allocation.end! : bucket.end;
     }

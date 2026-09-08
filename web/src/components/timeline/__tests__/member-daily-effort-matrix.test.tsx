@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, screen, within } from '@testing-library/react';
 import { MemberDailyEffortMatrix } from '../MemberDailyEffortMatrix';
+import i18n from '@/i18n/i18n-config';
 import type { SchedulingConfig, SchedulingResourceMember } from '@/hooks/useProjectSchedulingConfig';
 
 const members = ['under', 'full', 'over', 'empty'].map((id) => ({
@@ -18,6 +19,8 @@ const scheduling = {
   groupIdsFor: () => [],
   reservedFor: () => ({ '2026-09-07': 7 }),
 } as unknown as SchedulingConfig;
+
+beforeEach(async () => { await i18n.changeLanguage('en'); });
 
 it('shows only assigned and working hours with capacity-based colors', () => {
   render(
@@ -44,4 +47,25 @@ it('shows only assigned and working hours with capacity-based colors', () => {
   expect(within(cells.under).getByText('Working 8h')).toBeInTheDocument();
   expect(cells.under.children).toHaveLength(2);
   expect(cells.under).not.toHaveTextContent(/reserved|budget|remaining/i);
+});
+
+it.each([
+  ['en', 'Assigned', 'Working'],
+  ['ja', '割り当て', '稼働可能'],
+  ['vi', 'Được giao', 'Làm việc'],
+])('localizes member cell labels in %s', async (language, assigned, working) => {
+  await i18n.changeLanguage(language);
+  render(
+    <MemberDailyEffortMatrix
+      members={[members[0]]}
+      dates={[new Date(2026, 8, 7)]}
+      taskEfforts={[]}
+      scheduling={scheduling}
+      snapshotFrozen={false}
+      dayWidth={80}
+    />
+  );
+
+  expect(screen.getByText(`${assigned} 0h`)).toBeInTheDocument();
+  expect(screen.getByText(`${working} 8h`)).toBeInTheDocument();
 });

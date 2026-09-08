@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useEffect, type RefObject, type UIEventHandler } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   buildMemberDailyEffort,
   type DisplayedTaskEffort,
@@ -52,6 +53,7 @@ export function MemberDailyEffortMatrix({
   onScroll,
   scrollLeft = 0,
 }: MemberDailyEffortMatrixProps) {
+  const { t } = useTranslation();
   const dateKeys = useMemo(() => dates.map(formatDateVN), [dates]);
   const rows = useMemo(
     () => buildMemberDailyEffort(
@@ -126,8 +128,8 @@ export function MemberDailyEffortMatrix({
                       title={details}
                       aria-label={details}
                     >
-                      <span>Assigned {assignedLabel}</span>
-                      <span>Working {formatHours(capacity)}</span>
+                      <span>{t('gantt.assigned')} {assignedLabel}</span>
+                      <span>{t('gantt.working')} {formatHours(capacity)}</span>
                     </div>
                   );
                 })}
