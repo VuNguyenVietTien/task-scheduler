@@ -479,8 +479,8 @@ impl ResourceMemberMutation {
         Ok(fetch_member(&context.db, member_id).await?.into())
     }
 
-    /// Remove one canonical project member. Cascading scheduling configuration
-    /// follows DB constraints; assigned members are rejected by the task FK.
+    /// Remove one canonical project member. Task assignments are cleared while
+    /// scheduling configuration follows its existing cascade constraints.
     async fn remove_resource_member(
         &self,
         ctx: &Context<'_>,
@@ -493,18 +493,30 @@ impl ResourceMemberMutation {
         let member_id = parse_id(&member_id, "member_id")?;
         let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
         project_authz::require_project_write_tx(&mut tx, caller_id, project_id).await?;
-        let user_id: Option<Option<Uuid>> = sqlx::query_scalar(
-            "SELECT user_id FROM project_members WHERE project_id = $1 AND member_id = $2 FOR UPDATE",
+        let member: Option<(Uuid, Option<Uuid>)> = sqlx::query_as(
+            "SELECT resource_member_id, user_id FROM project_members \
+             WHERE project_id = $1 AND member_id = $2 FOR UPDATE",
         )
         .bind(project_id)
         .bind(member_id)
         .fetch_optional(&mut *tx)
         .await
         .map_err(AuthError::Database)?;
-        let Some(user_id) = user_id else {
+        let Some((resource_member_id, user_id)) = member else {
             return Err(coded_error("project member not found", "NOT_FOUND"));
         };
         project_authz::require_member_removal_tx(&mut tx, caller_id, project_id, user_id).await?;
+        sqlx::query(
+            "UPDATE tasks SET assignee_resource_member_id = NULL, assignee_id = NULL \
+             WHERE project_id = $1 AND (assignee_resource_member_id = $2 \
+                OR ($3::uuid IS NOT NULL AND assignee_id = $3))",
+        )
+        .bind(project_id)
+        .bind(resource_member_id)
+        .bind(user_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
         let removed =
             sqlx::query("DELETE FROM project_members WHERE project_id = $1 AND member_id = $2")
                 .bind(project_id)
