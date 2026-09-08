@@ -275,8 +275,8 @@ const catalogIdFromAPI = (apiTask: any, snakeCase: string, camelCase: string): s
 // Hàm tiện ích để chuyển đổi task từ snake_case (API) sang dạng dùng trong UI
 export const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
   if (!apiTask) return {};
-
-  return {
+  const has = (key: string) => Object.prototype.hasOwnProperty.call(apiTask, key);
+  const transformed: Record<string, unknown> = {
     task_id: apiTask.task_id,
     id: apiTask.task_id,
     project_id: apiTask.project_id,
@@ -284,7 +284,7 @@ export const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
     parent_task_id: apiTask.parent_task_id,
     title: apiTask.title,
     description: apiTask.description,
-    assignee_resource_member_id: apiTask.assignee_resource_member_id ?? null,
+    assignee_resource_member_id: apiTask.assignee_resource_member_id,
     assignee: apiTask.assignee ? {
       userId: apiTask.assignee.user_id,
       username: apiTask.assignee.full_name || apiTask.assignee.username,
@@ -305,18 +305,24 @@ export const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
     status: apiTask.status as TaskStatus,
     priority: apiTask.priority as Priority,
     // GraphQL exposes DB column 'type' as 'type_' to avoid keyword conflict
-    type: apiTask.type_ ?? apiTask.type,
+    type: has('type_') ? apiTask.type_ : apiTask.type,
     category: apiTask.category,
     progress_type: apiTask.progress_type,
     progressCatalogItemId: catalogIdFromAPI(apiTask, 'progress_catalog_item_id', 'progressCatalogItemId'),
     categoryCatalogItemId: catalogIdFromAPI(apiTask, 'category_catalog_item_id', 'categoryCatalogItemId'),
     taskTypeCatalogItemId: catalogIdFromAPI(apiTask, 'task_type_catalog_item_id', 'taskTypeCatalogItemId'),
-    // Normalize JSONB tags to string[] (handles null, array, or legacy object shapes)
-    tags: Array.isArray(apiTask.tags)
-      ? apiTask.tags.filter((t: unknown): t is string => typeof t === 'string')
-      : [],
-    child_tasks: apiTask.child_tasks ? apiTask.child_tasks.map(transformTaskFromAPI) : undefined
+    // Missing fields are omitted; explicit null still clears normalized state.
+    tags: has('tags')
+      ? (Array.isArray(apiTask.tags) ? apiTask.tags.filter((t: unknown): t is string => typeof t === 'string') : [])
+      : undefined,
+    child_tasks: has('child_tasks')
+      ? (apiTask.child_tasks ?? []).map(transformTaskFromAPI)
+      : undefined
   };
+
+  return Object.fromEntries(Object.entries(transformed).filter(([key, value]) =>
+    value !== undefined || (key === 'assignee' && has('assignee'))
+  )) as Partial<Task>;
 };
 
 function findTaskInTree(tasks: readonly Task[], taskId: string): Task | undefined {
@@ -337,7 +343,9 @@ export function upsertTaskInTree(tasks: Task[], incoming: Task): Task[] {
         const previous = findTaskInTree(current.child_tasks ?? [], child.task_id);
         return previous ? merge(previous, child) : child;
       });
-    return { ...current, ...next, child_tasks: childTasks };
+    const definedNext = Object.fromEntries(Object.entries(next).filter(([, value]) => value !== undefined));
+    if ('assignee' in next) definedNext.assignee = next.assignee;
+    return { ...current, ...definedNext, child_tasks: childTasks };
   };
   let replaced = false;
   const replace = (nodes: Task[]): Task[] => nodes.map((task) => {
