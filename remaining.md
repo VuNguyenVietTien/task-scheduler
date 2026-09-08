@@ -45,3 +45,9 @@ Only optional, non-blocking Chrome feedback remains:
 - Clone multi-parent dialog/callback integrated6094b2e;30focused tests passed. Chrome verified simultaneous two-parent selection and correct preview without creating data. Grouping integrated255a38c: children sorted by project Progress display order in Normal/Excel, same-group priority preserved;79combined focused tests passed. Chrome verified formerly interleaved MST-02-05 children now grouped. Backend exact clone-title preservation0ce6e93 is LIVE on Ubuntu20260908T1306-0ce6e937;1focused unit passed, immutable build and public/local readiness passed. Existing task names unchanged. Vercel frontend remains quota-blocked.
 
 
+
+## Date clear delivery
+- Delivered on localhost and Ubuntu release20260908T1328-c6fd89b7: List Normal/Excel date clears send explicit null; Gantt modal has visible Clear buttons beside date editors, then Save. Backend preserves omitted dates and clears explicit null.7focused frontend tests and1backend unit passed; image build/local/public readiness passed. No migration or production test mutation. See plans/reports/DATE-CLEAR-0908.md.
+- One broader-run inline-draft timing assertion failed, then passed isolated on unchanged current code; recorded rather than hidden. No exhaustive reruns per user preference.
+- Latest frontend changes pushedmain for production deployment; Vercel remains subject to known24h quota. Localhost is ready for user testing.
+
