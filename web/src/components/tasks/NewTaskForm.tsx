@@ -46,7 +46,6 @@ export interface TaskFormInputs {
   | "PENDING"
   | "REVIEW"
   | "BLOCKED"
-  | "REJECTED"
   | "ARCHIVED";
   priority: "LOW" | "MEDIUM" | "HIGH" | "URGENT" | "CRITICAL";
   priorityOrder: number;

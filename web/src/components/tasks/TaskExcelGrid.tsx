@@ -16,7 +16,7 @@
  * thunks/mutations — no new backend entities).
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { Task } from '@/types/task';
+import { EDITABLE_TASK_STATUSES, Task } from '@/types/task';
 
 export type ExcelField = 'title' | 'status' | 'priority' | 'effort' | 'due_date' | 'assignee';
 export type ExcelCatalogField = 'progress' | 'category' | 'taskType';
@@ -57,6 +57,7 @@ interface Props {
   /** Restore the keyboard target whenever a retained grid becomes visible. */
   active?: boolean;
   onCloneTask?: (taskId: string) => void;
+  onDeleteTask?: (task: Task) => void;
   onDirtyChange?: (dirty: boolean) => void;
 }
 
@@ -72,7 +73,7 @@ const COLUMNS: ExcelColumn[] = [
   { catalogField: 'taskType', label: 'Task type', width: '140px' },
 ];
 
-const VALID_STATUSES = ['TODO', 'DOING', 'DONE', 'CLOSE', 'PENDING', 'REVIEW', 'BLOCKED', 'REJECTED', 'ARCHIVED'];
+const VALID_STATUSES = [...EDITABLE_TASK_STATUSES];
 const VALID_PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL'];
 
 export interface CellValidationError {
@@ -90,7 +91,7 @@ export function validateCellValue(
   switch (field) {
     case 'status': {
       const upper = value.toUpperCase();
-      if (!VALID_STATUSES.includes(upper)) {
+      if (!VALID_STATUSES.includes(upper as typeof VALID_STATUSES[number])) {
         return { ok: false, message: `Invalid status "${raw}" (expected one of ${VALID_STATUSES.slice(0, 5).join('/')}…)` };
       }
       return { ok: true, value: upper };
@@ -147,7 +148,7 @@ export function parseTsv(text: string): string[][] {
     .map((line) => line.split('\t'));
 }
 
-export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOptions = [], assigneeValue, catalogLabel, catalogOptions = {}, catalogValue, active = true, onCloneTask, onDirtyChange }: Props) {
+export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOptions = [], assigneeValue, catalogLabel, catalogOptions = {}, catalogValue, active = true, onCloneTask, onDeleteTask, onDirtyChange }: Props) {
   const [staged, setStaged] = useState<Map<string, StagedEdit>>(new Map());
   const [anchor, setAnchor] = useState<{ row: number; col: number } | null>(null);
   const [focusCell, setFocusCell] = useState<{ row: number; col: number } | null>(null);
@@ -511,7 +512,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
         <colgroup>
           <col style={{ width: '32px' }} />
           {COLUMNS.map((column) => <col key={column.field ?? column.catalogField} style={{ width: column.width }} />)}
-          {onCloneTask && <col style={{ width: '64px' }} />}
+          {(onCloneTask || onDeleteTask) && <col style={{ width: '112px' }} />}
         </colgroup>
         <thead>
           <tr className="bg-slate-50 text-left text-slate-500">
@@ -521,7 +522,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                 {c.label}
               </th>
             ))}
-            {onCloneTask && <th className="border border-slate-200 px-2 py-1 w-16">Clone</th>}
+            {(onCloneTask || onDeleteTask) && <th className="border border-slate-200 px-2 py-1">Actions</th>}
           </tr>
         </thead>
         <tbody>
@@ -608,16 +609,28 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                   </td>
                 );
               })}
-              {onCloneTask && (
-                <td className="border border-slate-200 px-2 py-1 text-center">
-                  <button
-                    className="px-2 py-0.5 border rounded hover:bg-slate-100"
-                    onClick={() => onCloneTask(task.task_id)}
-                    aria-label={`Clone ${task.title}`}
-                    data-testid={`excel-clone-${task.task_id}`}
-                  >
-                    ⧉
-                  </button>
+              {(onCloneTask || onDeleteTask) && (
+                <td className="border border-slate-200 px-2 py-1 text-center whitespace-nowrap">
+                  {onCloneTask && (
+                    <button
+                      className="px-2 py-0.5 border rounded hover:bg-slate-100"
+                      onClick={() => onCloneTask(task.task_id)}
+                      aria-label={`Clone ${task.title}`}
+                      data-testid={`excel-clone-${task.task_id}`}
+                    >
+                      ⧉
+                    </button>
+                  )}
+                  {onDeleteTask && (
+                    <button
+                      className="ml-1 px-2 py-0.5 border border-red-200 text-red-600 rounded hover:bg-red-50"
+                      onClick={() => onDeleteTask(task)}
+                      aria-label={`Delete ${task.title}`}
+                      data-testid={`excel-delete-${task.task_id}`}
+                    >
+                      Delete
+                    </button>
+                  )}
                 </td>
               )}
             </tr>

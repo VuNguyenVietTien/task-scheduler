@@ -16,12 +16,10 @@ export function countTaskDescendants(task: Pick<Task, 'task_id' | 'child_tasks'>
 
 export function taskDeletionConfirmationMessage(
   task: Pick<Task, 'task_id' | 'title' | 'child_tasks'>,
-  reason: 'delete' | 'reject' = 'delete',
 ): string {
   const descendantCount = countTaskDescendants(task);
   const impact = task.child_tasks === undefined
-    ? ' and any descendant tasks'
-    : descendantCount ? ` and ${descendantCount} descendant task${descendantCount === 1 ? '' : 's'}` : '';
-  const action = reason === 'reject' ? 'Rejecting' : 'Deleting';
-  return `${action} “${task.title}” permanently deletes it${impact}. This cannot be undone. Continue?`;
+    ? ' and all descendant tasks'
+    : descendantCount ? ` and all ${descendantCount} descendant task${descendantCount === 1 ? '' : 's'}` : '';
+  return `Delete “${task.title}”${impact}? ${impact ? 'They' : 'It'} will be permanently deleted and cannot be recovered. Continue?`;
 }

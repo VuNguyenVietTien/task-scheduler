@@ -1,7 +1,7 @@
 import React from 'react';
 import { useForm, Controller, ControllerRenderProps } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Task, TaskStatus, Priority, User } from '@/types/task';
+import { EDITABLE_TASK_STATUSES, Task, TaskStatus, Priority, User } from '@/types/task';
 import { taskFormSchema, type TaskFormSchema } from '@/schemas/taskForm';
 import clsx from 'clsx';
 
@@ -129,7 +129,7 @@ export const TaskForm: React.FC<TaskFormProps> = ({
                 : 'border-gray-300 focus:border-blue-500 focus:ring-blue-500'
             )}
           >
-            {Object.values(TaskStatus).map(status => (
+            {EDITABLE_TASK_STATUSES.map(status => (
               <option key={status} value={status}>
                 {status.replace(/_/g, ' ')}
               </option>

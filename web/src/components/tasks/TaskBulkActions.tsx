@@ -1,4 +1,4 @@
-import { TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
+import { EDITABLE_TASK_STATUSES, TaskStatus, Priority, Priorities } from '@/types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
 
 interface TaskBulkActionsProps {
@@ -46,7 +46,7 @@ export function TaskBulkActions({
             aria-label="Thay đổi trạng thái hàng loạt"
           >
             <option value="" disabled>Trạng thái</option>
-            {Object.values(TaskStatuses).map((status) => (
+            {EDITABLE_TASK_STATUSES.map((status) => (
               <option key={status} value={status}>
                 {getStatusLabel(status)}
               </option>

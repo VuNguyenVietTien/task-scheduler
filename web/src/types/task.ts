@@ -17,6 +17,10 @@ export const TaskStatuses = {
   ARCHIVED: 'ARCHIVED' as TaskStatus
 };
 
+/** Persisted historical statuses remain filterable; REJECTED is never editable. */
+export const EDITABLE_TASK_STATUSES: readonly TaskStatus[] = Object.values(TaskStatuses)
+  .filter((status) => status !== TaskStatuses.REJECTED);
+
 export const Priorities = {
   LOW: 'LOW' as Priority,
   MEDIUM: 'MEDIUM' as Priority,

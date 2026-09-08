@@ -1,5 +1,5 @@
 import React from 'react';
-import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
+import { EDITABLE_TASK_STATUSES, Task, TaskStatus, Priority, Priorities } from '@/types/task';
 import { useTranslation } from 'react-i18next';
 
 interface DetailsTabProps {
@@ -46,7 +46,7 @@ export default function DetailsTab({
       <div className="grid grid-cols-1 gap-2">
         {/* Status */}
         {renderEditableField(t('tasks.fields.status'), 'status', 'select',
-          Object.entries(TaskStatuses).map(([_, value]) => ({
+          EDITABLE_TASK_STATUSES.map((value) => ({
             value,
             label: value.charAt(0).toUpperCase() + value.slice(1)
           })))}
