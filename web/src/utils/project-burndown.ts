@@ -18,6 +18,11 @@ export interface BurndownContextTask {
   parentTaskId?: string | null;
 }
 
+export interface BurndownPlan {
+  tasks: BurndownPlanTask[];
+  contextTasks: BurndownContextTask[];
+}
+
 export interface BurndownPoint {
   date: string;
   plannedRemaining: number;
@@ -51,6 +56,41 @@ function calendarDate(value: string | null | undefined): string | null {
   const [year, month, day] = key.split('-').map(Number);
   const date = new Date(Date.UTC(year, month - 1, day));
   return date.getUTCFullYear() === year && date.getUTCMonth() === month - 1 && date.getUTCDate() === day ? key : null;
+}
+
+function record(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, unknown> : null;
+}
+
+function stringField(value: Record<string, unknown>, canonical: string, legacy: string): string | undefined {
+  const field = value[canonical] ?? value[legacy];
+  return typeof field === 'string' ? field : undefined;
+}
+
+/** Read only the saved membership and dates needed by task-count burndown. */
+export function readBurndownPlan(planData: unknown): BurndownPlan {
+  if (typeof planData === 'string') planData = JSON.parse(planData);
+  const plan = record(planData);
+  if (!plan || !Array.isArray(plan.tasks)) throw new Error('plan_data.tasks is not an array');
+  const tasks = plan.tasks.map((value, index): BurndownPlanTask => {
+    const task = record(value);
+    const taskId = task && stringField(task, 'taskId', 'task_id');
+    if (!taskId) throw new Error(`plan_data.tasks[${index}] has no task id`);
+    return {
+      taskId,
+      startDate: stringField(task, 'startDate', 'start_date'),
+      endDate: stringField(task, 'endDate', 'end_date'),
+      parentTaskId: stringField(task, 'parentTaskId', 'parent_task_id') ?? null,
+      status: typeof task.status === 'string' ? task.status : undefined,
+    };
+  });
+  const meta = record(plan.meta);
+  const contextTasks = (Array.isArray(meta?.contextTasks) ? meta.contextTasks : []).flatMap((value) => {
+    const task = record(value);
+    const taskId = task && stringField(task, 'taskId', 'task_id');
+    return taskId ? [{ taskId, parentTaskId: stringField(task, 'parentTaskId', 'parent_task_id') ?? null }] : [];
+  });
+  return { tasks, contextTasks };
 }
 
 function shiftDate(key: string, days: number): string {
