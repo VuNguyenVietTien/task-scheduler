@@ -17,9 +17,10 @@
  */
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { EDITABLE_TASK_STATUSES, Task } from '@/types/task';
+import type { TaskListColumnId } from '@/utils/task-list-preferences';
 
-export type ExcelField = 'title' | 'status' | 'priority' | 'effort' | 'due_date' | 'assignee';
-export type ExcelCatalogField = 'progress' | 'category' | 'taskType';
+export type ExcelField = 'title' | 'status' | 'priority' | 'effort' | 'progress' | 'start_date' | 'due_date' | 'actual_start_date' | 'actual_end_date' | 'tags' | 'assignee';
+export type ExcelCatalogField = 'progressType' | 'category' | 'taskType';
 export type ExcelEditableField = ExcelField | ExcelCatalogField;
 
 export interface ExcelSelectOption {
@@ -30,6 +31,7 @@ export interface ExcelSelectOption {
 export type ExcelAssigneeOption = ExcelSelectOption;
 
 type ExcelColumn = {
+  id: TaskListColumnId;
   field?: ExcelField;
   catalogField?: ExcelCatalogField;
   label: string;
@@ -59,18 +61,27 @@ interface Props {
   onCloneTask?: (taskId: string) => void;
   onDeleteTask?: (task: Task) => void;
   onDirtyChange?: (dirty: boolean) => void;
+  visibleColumns?: readonly TaskListColumnId[];
 }
 
 const COLUMNS: ExcelColumn[] = [
-  { field: 'title', label: 'Title', width: '220px' },
-  { field: 'status', label: 'Status', width: '110px' },
-  { field: 'priority', label: 'Priority', width: '100px' },
-  { field: 'effort', label: 'Effort (h)', width: '90px' },
-  { field: 'due_date', label: 'Due date', width: '120px' },
-  { field: 'assignee', label: 'Assignee', width: '140px' },
-  { catalogField: 'progress', label: 'Progress type', width: '140px' },
-  { catalogField: 'category', label: 'Category', width: '140px' },
-  { catalogField: 'taskType', label: 'Task type', width: '140px' },
+  { id: 'title', field: 'title', label: 'Title', width: '220px' },
+  { id: 'status', field: 'status', label: 'Status', width: '110px' },
+  { id: 'priority', field: 'priority', label: 'Priority', width: '100px' },
+  { id: 'effort', field: 'effort', label: 'Effort (h)', width: '90px' },
+  { id: 'plannedEnd', field: 'due_date', label: 'Planned end', width: '120px' },
+  { id: 'assignee', field: 'assignee', label: 'Assignee', width: '140px' },
+  { id: 'progressType', catalogField: 'progressType', label: 'Progress type', width: '140px' },
+  { id: 'category', catalogField: 'category', label: 'Category', width: '140px' },
+  { id: 'taskType', catalogField: 'taskType', label: 'Task type', width: '140px' },
+  { id: 'progress', field: 'progress', label: 'Progress (%)', width: '100px' },
+  { id: 'plannedStart', field: 'start_date', label: 'Start date', width: '120px' },
+  { id: 'actualStart', field: 'actual_start_date', label: 'Actual start', width: '120px' },
+  { id: 'actualEnd', field: 'actual_end_date', label: 'Actual end', width: '120px' },
+  { id: 'tags', field: 'tags', label: 'Tags', width: '160px' },
+  { id: 'createdAt', label: 'Created', width: '150px' },
+  { id: 'updatedAt', label: 'Updated', width: '150px' },
+  { id: 'creator', label: 'Creator', width: '140px' },
 ];
 
 const VALID_STATUSES = [...EDITABLE_TASK_STATUSES];
@@ -103,17 +114,22 @@ export function validateCellValue(
       }
       return { ok: true, value: upper };
     }
-    case 'effort': {
+    case 'effort':
+    case 'progress': {
       const cleaned = value.replace(/h$/i, '').trim();
-      if (cleaned === '') return { ok: true, value: '' }; // backend contract: blank saves as 0
+      if (cleaned === '') return { ok: true, value: '' };
       const num = Number(cleaned);
-      if (Number.isNaN(num) || num < 0 || num > 24 * 30) {
-        return { ok: false, message: `Invalid effort "${raw}" (non-negative hours)` };
+      const max = field === 'progress' ? 100 : 24 * 30;
+      if (Number.isNaN(num) || num < 0 || num > max) {
+        return { ok: false, message: `Invalid ${field} "${raw}" (expected 0-${max})` };
       }
       return { ok: true, value: String(num) };
     }
-    case 'due_date': {
-      if (value === '') return { ok: true, value: '' }; // empty = clear due date
+    case 'start_date':
+    case 'due_date':
+    case 'actual_start_date':
+    case 'actual_end_date': {
+      if (value === '') return { ok: true, value: '' }; // empty explicitly clears the date
       // STRICT calendar validation: JS Date normalizes impossible dates
       // (2026-02-31 → Mar 3), so verify the parsed components round-trip.
       const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
@@ -129,10 +145,9 @@ export function validateCellValue(
       }
       return { ok: true, value };
     }
-    case 'assignee': {
-      // Empty = clear assignment (handleExcelSave unassigns on '').
+    case 'assignee':
+    case 'tags':
       return { ok: true, value };
-    }
     default:
       if (value === '') return { ok: false, message: 'Empty value' };
       return { ok: true, value };
@@ -148,7 +163,8 @@ export function parseTsv(text: string): string[][] {
     .map((line) => line.split('\t'));
 }
 
-export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOptions = [], assigneeValue, catalogLabel, catalogOptions = {}, catalogValue, active = true, onCloneTask, onDeleteTask, onDirtyChange }: Props) {
+export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOptions = [], assigneeValue, catalogLabel, catalogOptions = {}, catalogValue, active = true, onCloneTask, onDeleteTask, onDirtyChange, visibleColumns }: Props) {
+  const columns = useMemo(() => visibleColumns ? COLUMNS.filter((column) => visibleColumns.includes(column.id)) : COLUMNS, [visibleColumns]);
   const [staged, setStaged] = useState<Map<string, StagedEdit>>(new Map());
   const [anchor, setAnchor] = useState<{ row: number; col: number } | null>(null);
   const [focusCell, setFocusCell] = useState<{ row: number; col: number } | null>(null);
@@ -179,12 +195,17 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
       if (column.catalogField) {
         const stagedEdit = staged.get(keyFor(task.task_id, column.catalogField));
         if (stagedEdit) return catalogOptions[column.catalogField]?.find((option) => option.key === stagedEdit.value)?.label ?? stagedEdit.value;
-        const fallback = column.catalogField === 'progress' ? task.progress_type
+        const fallback = column.catalogField === 'progressType' ? task.progress_type
           : column.catalogField === 'category' ? task.category
             : task.type;
         return catalogLabel?.(task, column.catalogField) ?? fallback ?? '';
       }
-      if (!column.field) return '';
+      if (!column.field) {
+        const raw = column.id === 'createdAt' ? task.created_at
+          : column.id === 'updatedAt' ? task.updated_at
+            : typeof task.created_by === 'string' ? task.created_by : task.created_by?.username;
+        return raw ?? '';
+      }
       const stagedEdit = staged.get(keyFor(task.task_id, column.field));
       if (stagedEdit) {
         return column.field === 'assignee'
@@ -200,8 +221,15 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
           return task.priority ?? '';
         case 'effort':
           return task.effort !== undefined && task.effort !== null ? String(task.effort) : '';
+        case 'progress':
+          return task.progress !== undefined && task.progress !== null ? String(task.progress) : '';
+        case 'start_date':
         case 'due_date':
-          return task.due_date ? task.due_date.slice(0, 10) : '';
+        case 'actual_start_date':
+        case 'actual_end_date':
+          return task[column.field]?.slice(0, 10) ?? '';
+        case 'tags':
+          return task.tags?.join(', ') ?? '';
         case 'assignee':
           return assigneeLabel?.(task) ?? task.assignee?.username ?? '';
       }
@@ -225,7 +253,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
   const stageCell = useCallback(
     (row: number, col: number, raw: string): string | null => {
       const task = tasks[row];
-      const column = COLUMNS[col];
+      const column = columns[col];
       const field = column?.field ?? column?.catalogField;
       if (!task || !field) return null;
       let value: string;
@@ -250,7 +278,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
       });
       return null;
     },
-    [catalogOptions, tasks]
+    [catalogOptions, columns, tasks]
   );
 
   const handleMouseDown = (row: number, col: number) => {
@@ -284,7 +312,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
     for (let r = r1; r <= r2; r++) {
       for (let c = c1; c <= c2; c++) {
         const err = stageCell(r, c, value);
-        if (err) cellErrors.push(`Row ${r + 1} ${COLUMNS[c].label}: ${err}`);
+        if (err) cellErrors.push(`Row ${r + 1} ${columns[c].label}: ${err}`);
       }
     }
     setErrors(cellErrors);
@@ -294,34 +322,35 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
     const current = focusCell ?? anchor;
     if (!current || !tasks.length) return;
     let { row, col } = current;
-    for (let attempt = 0; attempt < tasks.length * COLUMNS.length; attempt++) {
+    for (let attempt = 0; attempt < tasks.length * columns.length; attempt++) {
       col += backward ? -1 : 1;
       if (col < 0) {
-        col = COLUMNS.length - 1;
+        col = columns.length - 1;
         row = row === 0 ? tasks.length - 1 : row - 1;
-      } else if (col === COLUMNS.length) {
+      } else if (col === columns.length) {
         col = 0;
         row = row === tasks.length - 1 ? 0 : row + 1;
       }
-      if (COLUMNS[col].field || COLUMNS[col].catalogField) {
+      if (columns[col].field || columns[col].catalogField) {
         setAnchor({ row, col });
         setFocusCell({ row, col });
         return;
       }
     }
-  }, [anchor, focusCell, tasks.length]);
+  }, [anchor, columns, focusCell, tasks.length]);
 
   const navigateFromEditor = useCallback((row: number, col: number, key: string) => {
     const next = {
       row: Math.max(0, Math.min(tasks.length - 1, row + (key === 'ArrowUp' ? -1 : key === 'ArrowDown' || key === 'Enter' ? 1 : 0))),
-      col: Math.max(0, Math.min(COLUMNS.length - 1, col + (key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : 0))),
+      col: Math.max(0, Math.min(columns.length - 1, col + (key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : 0))),
     };
     setAnchor(next);
     setFocusCell(next);
-    const column = COLUMNS[next.col];
-    setSelectionEditor(column.field === 'effort' || column.field === 'due_date' ? next : null);
-    if (column.field !== 'effort' && column.field !== 'due_date') focusTypingInput();
-  }, [focusTypingInput, tasks.length]);
+    const column = columns[next.col];
+    const inlineEditor = ['effort', 'progress', 'start_date', 'due_date', 'actual_start_date', 'actual_end_date'].includes(column.field ?? '');
+    setSelectionEditor(inlineEditor ? next : null);
+    if (!inlineEditor) focusTypingInput();
+  }, [columns, focusTypingInput, tasks.length]);
 
   /** Enter commits the typed value; Tab commits then moves to the next editable cell. */
   const handleGridKeyDown = (e: React.KeyboardEvent) => {
@@ -361,10 +390,10 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
       cells.forEach((cellText, dc) => {
         const r = anchor.row + dr;
         const c = anchor.col + dc;
-        if (r >= tasks.length || c >= COLUMNS.length) return; // clipped
+        if (r >= tasks.length || c >= columns.length) return; // clipped
         const err = stageCell(r, c, cellText);
         if (err) {
-          cellErrors.push(`Row ${r + 1} ${COLUMNS[c].label}: ${err}`);
+          cellErrors.push(`Row ${r + 1} ${columns[c].label}: ${err}`);
         } else {
           applied += 1;
         }
@@ -374,7 +403,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
     if (applied > 0 && cellErrors.length === 0) {
       setFocusCell({
         row: Math.min(tasks.length - 1, anchor.row + rows.length - 1),
-        col: Math.min(COLUMNS.length - 1, anchor.col + (rows[0]?.length ?? 1) - 1),
+        col: Math.min(columns.length - 1, anchor.col + (rows[0]?.length ?? 1) - 1),
       });
     }
   };
@@ -387,7 +416,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
     const c1 = Math.min(anchor.col, other.col);
     const c2 = Math.max(anchor.col, other.col);
     const text = tasks.slice(r1, r2 + 1)
-      .map((task) => COLUMNS.slice(c1, c2 + 1).map((column) => cellValue(task, column)).join('\t'))
+      .map((task) => columns.slice(c1, c2 + 1).map((column) => cellValue(task, column)).join('\t'))
       .join('\r\n');
     e.preventDefault();
     e.clipboardData.setData('text/plain', text);
@@ -511,14 +540,14 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
       <table className="min-w-full text-xs border-collapse select-none" style={{ tableLayout: 'fixed', width: '100%' }}>
         <colgroup>
           <col style={{ width: '32px' }} />
-          {COLUMNS.map((column) => <col key={column.field ?? column.catalogField} style={{ width: column.width }} />)}
+          {columns.map((column) => <col key={column.id} style={{ width: column.width }} />)}
           {(onCloneTask || onDeleteTask) && <col style={{ width: '112px' }} />}
         </colgroup>
         <thead>
           <tr className="bg-slate-50 text-left text-slate-500">
             <th className="w-8 border border-slate-200 px-2 py-1">#</th>
-            {COLUMNS.map((c) => (
-              <th key={c.field ?? c.catalogField} className="border border-slate-200 px-2 py-1" style={{ width: c.width }}>
+            {columns.map((c) => (
+              <th key={c.id} className="border border-slate-200 px-2 py-1" style={{ width: c.width }}>
                 {c.label}
               </th>
             ))}
@@ -529,16 +558,18 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
           {tasks.map((task, row) => (
             <tr key={task.task_id}>
               <td className="border border-slate-200 px-2 py-1 text-slate-400">{row + 1}</td>
-              {COLUMNS.map((col, c) => {
+              {columns.map((col, c) => {
                 const selected = inSelection(row, c);
                 const editableField = col.field ?? col.catalogField;
                 const isStaged = Boolean(editableField && staged.has(keyFor(task.task_id, editableField)));
                 const isTypingCell = selected && typing !== '';
                 const isSelectionEditor = selectionEditor?.row === row && selectionEditor.col === c;
+                const isNumber = col.field === 'effort' || col.field === 'progress';
+                const isDate = col.field === 'start_date' || col.field === 'due_date' || col.field === 'actual_start_date' || col.field === 'actual_end_date';
                 const value = cellValue(task, col);
                 return (
                   <td
-                    key={col.field ?? col.catalogField}
+                    key={col.id}
                     className={`border px-2 py-1 ${editableField ? 'cursor-cell' : 'cursor-default text-slate-600'} ${
                       selected ? 'bg-blue-100 border-blue-400' : 'border-slate-200'
                     } ${isStaged ? 'bg-amber-100' : ''}`}
@@ -549,7 +580,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                     }}
                     onMouseOver={() => handleMouseOver(row, c)}
                     onClick={() => {
-                      if (col.field === 'assignee' || col.field === 'effort' || col.field === 'due_date' || col.catalogField) {
+                      if (col.field === 'assignee' || isNumber || isDate || col.catalogField) {
                         setSelectionEditor({ row, col: c });
                       }
                     }}
@@ -558,12 +589,13 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                     data-task-id={task.task_id}
                     data-field={col.field ?? col.catalogField}
                   >
-                    {isSelectionEditor && (col.field === 'effort' || col.field === 'due_date') ? (
+                    {isSelectionEditor && (isNumber || isDate) ? (
                       <input
-                        type={col.field === 'effort' ? 'number' : 'date'}
-                        aria-label={col.field === 'effort' ? 'Excel effort' : 'Excel due date'}
+                        type={isNumber ? 'number' : 'date'}
+                        aria-label={col.field === 'effort' ? 'Excel effort' : col.field === 'due_date' ? 'Excel due date' : `Excel ${col.label.toLowerCase()}`}
                         autoFocus
-                        min={col.field === 'effort' ? 0 : undefined}
+                        min={isNumber ? 0 : undefined}
+                        max={col.field === 'progress' ? 100 : undefined}
                         step={col.field === 'effort' ? 0.5 : undefined}
                         value={value}
                         onMouseDown={(event) => event.stopPropagation()}
@@ -637,7 +669,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
           ))}
           {tasks.length === 0 && (
             <tr>
-              <td colSpan={COLUMNS.length + 2} className="px-4 py-6 text-center text-slate-400">
+              <td colSpan={columns.length + 2} className="px-4 py-6 text-center text-slate-400">
                 No tasks
               </td>
             </tr>

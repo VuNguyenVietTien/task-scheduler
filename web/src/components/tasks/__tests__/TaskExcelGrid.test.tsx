@@ -37,7 +37,7 @@ const task = (id: string, title: string, effort?: number): Task =>
 
 const tasks = [task('t1', 'Alpha', 8), task('t2', 'Beta', 4)];
 const catalogOptions = {
-  progress: [{ key: 'progress-create', label: 'Creation' }],
+  progressType: [{ key: 'progress-create', label: 'Creation' }],
   category: [{ key: 'category-ui', label: 'UI' }],
   taskType: [{ key: 'type-feature', label: 'Feature' }],
 };
@@ -177,8 +177,8 @@ describe('TaskExcelGrid interactions', () => {
     await user.selectOptions(screen.getByRole('combobox', { name: 'Excel Progress type' }), '');
     expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('2 unsaved');
     fireEvent.click(screen.getByTestId('excel-save-btn'));
-    await waitFor(() => expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'progress', value: 'progress-create' }));
-    expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't2', field: 'progress', value: '' });
+    await waitFor(() => expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'progressType', value: 'progress-create' }));
+    expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't2', field: 'progressType', value: '' });
   });
 
   it('single-click Assignee opens canonical member choices and stages the selected unlinked member', async () => {
@@ -339,6 +339,38 @@ describe('TaskExcelGrid interactions', () => {
     fireEvent.keyDown(screen.getByTestId('excel-typing-input'), { key: 'Enter' });
     fireEvent.click(screen.getByTestId('excel-save-btn'));
     await waitFor(() => expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 'child', field: 'effort', value: '3' }));
+  });
+
+  it('projects navigation and rectangular paste over visible columns only', async () => {
+    const onSaveEdit = jest.fn().mockResolvedValue(undefined);
+    render(<TaskExcelGrid tasks={tasks} onSaveEdit={onSaveEdit} visibleColumns={['status', 'effort']} />);
+
+    expect(screen.queryByText('Priority')).not.toBeInTheDocument();
+    fireEvent.mouseDown(screen.getByTestId('excel-cell-0-0'));
+    fireEvent(screen.getByTestId('excel-typing-input'), pasteEvent('DOING\t6'));
+    expect(screen.getByTestId('excel-cell-0-0')).toHaveTextContent('DOING');
+    expect(screen.getByTestId('excel-cell-0-1')).toHaveTextContent('6');
+
+    fireEvent.click(screen.getByTestId('excel-save-btn'));
+    await waitFor(() => expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'status', value: 'DOING' }));
+    expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'effort', value: '6' });
+  });
+
+  it('keeps staged drafts when columns toggle and saves an explicit Start date clear', async () => {
+    const onSaveEdit = jest.fn().mockResolvedValue(undefined);
+    const { rerender } = render(<TaskExcelGrid tasks={[{ ...tasks[0], start_date: '2026-09-09' }]} onSaveEdit={onSaveEdit} visibleColumns={['title', 'plannedStart']} />);
+    fireEvent.mouseDown(screen.getByTestId('excel-cell-0-0'));
+    fireEvent.change(screen.getByTestId('excel-typing-input'), { target: { value: 'Draft title' } });
+    fireEvent.keyDown(screen.getByTestId('excel-typing-input'), { key: 'Enter' });
+
+    rerender(<TaskExcelGrid tasks={[{ ...tasks[0], start_date: '2026-09-09' }]} onSaveEdit={onSaveEdit} visibleColumns={['plannedStart']} />);
+    expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('1 unsaved');
+    await userEvent.click(screen.getByTestId('excel-cell-0-0'));
+    fireEvent.change(screen.getByLabelText('Excel start date'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('excel-save-btn'));
+
+    await waitFor(() => expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'start_date', value: '' }));
+    expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'title', value: 'Draft title' });
   });
 
   it('clone button calls onCloneTask for the row', () => {

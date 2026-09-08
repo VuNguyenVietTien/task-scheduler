@@ -62,7 +62,7 @@ const parent: Task = {
   task_id: 'parent', project_id: 'project-1', title: 'Parent task', description: 'keep parent description',
   assignee_resource_member_id: 'linked-member', assignee: { userId: 'linked-user', username: 'Linked Member' },
   progressCatalogItemId: 'progress-create', categoryCatalogItemId: 'category-ui', taskTypeCatalogItemId: 'type-feature',
-  priority_order: 1, status: 'TODO', priority: 'MEDIUM', effort: 8, created_by: 'owner', child_tasks: [],
+  priority_order: 1, status: 'TODO', priority: 'MEDIUM', effort: 8, start_date: '2026-09-09T00:00:00.000Z', created_by: 'owner', child_tasks: [],
 };
 const catalogItems = [
   { catalog_item_id: 'progress-create', project_id: 'project-1', kind: 'PROGRESS_TYPE', display_order: 0, labels: [{ locale: 'en', name: 'Create' }, { locale: 'ja', name: '作成' }, { locale: 'vi', name: 'Tạo' }] },
@@ -120,6 +120,7 @@ function assignResult(taskId: string, value: unknown) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  localStorage.clear();
   mockLocale = 'en';
   mockUpdateAssignee.mockImplementation(async (taskId: string, value: unknown) => ({
     ...(taskId === 'parent' ? parent : child), child_tasks: undefined, ...assignResult(taskId, value),
@@ -172,6 +173,18 @@ describe('TaskListView canonical assignment source wiring', () => {
     });
   });
 
+  it('edits and clears canonical Start date in Normal mode from the authoritative result', async () => {
+    mockUpdateTask.mockResolvedValueOnce({ ...parent, start_date: null });
+    const store = renderList();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Start date Parent task' }));
+    const input = screen.getByLabelText('Start date');
+    fireEvent.change(input, { target: { value: '' } });
+    fireEvent.click(input.parentElement!.querySelector('button[title="Lưu"]')!);
+
+    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', { start_date: '' }));
+    expect(taskFromStore(store, 'parent')?.start_date).toBeNull();
+  });
+
   it('reflects a confirmed normal List effort save immediately from the authoritative result', async () => {
     client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'parent', effort: 13 } } });
     const store = renderList();
@@ -198,6 +211,18 @@ describe('TaskListView canonical assignment source wiring', () => {
     expect(screen.getByRole('spinbutton', { name: 'Công sức' })).toHaveValue(13);
     expect(taskFromStore(store, 'parent')?.effort).toBe(8);
     alert.mockRestore();
+  });
+
+  it('clears canonical Start date in Excel and applies the authoritative result immediately', async () => {
+    mockUpdateTask.mockResolvedValueOnce({ ...parent, start_date: null });
+    const store = renderList();
+    fireEvent.click(screen.getByTestId('mode-excel-btn'));
+    fireEvent.click(screen.getByTestId('excel-cell-0-9'));
+    fireEvent.change(screen.getByLabelText('Excel start date'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('excel-save-btn'));
+
+    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', { start_date: '' }));
+    expect(taskFromStore(store, 'parent')?.start_date).toBeNull();
   });
 
   it('reflects confirmed Excel effort immediately without a task-row reload', async () => {

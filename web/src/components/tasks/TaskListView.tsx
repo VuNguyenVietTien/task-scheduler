@@ -50,8 +50,18 @@ import { RESOURCE_MEMBERS_QUERY } from '@/graphql/scheduling';
 import { toast } from 'sonner';
 import { useProjectCatalogs } from '@/hooks/useProjectCatalogs';
 import { resolveProjectCatalogLabel } from '@/utils/project-catalog';
-import { filterTaskTree, isTaskStatusVisible } from '@/utils/task-status-visibility';
+import { filterTaskTree } from '@/utils/task-status-visibility';
+import { filterListTaskTreeByStatus } from '@/utils/task-list-visibility';
 import { taskDeletionConfirmationMessage } from '@/utils/task-deletion';
+import {
+  DEFAULT_TASK_LIST_COLUMNS,
+  TASK_LIST_COLUMN_IDS,
+  TASK_LIST_COLUMN_LABELS,
+  loadTaskListPreferences,
+  saveTaskListPreferences,
+  taskListPreferenceKey,
+  type TaskListColumnId,
+} from '@/utils/task-list-preferences';
 
 export interface CloneRecoveryState {
   kind: 'committed' | 'unknown' | 'reselect';
@@ -170,9 +180,13 @@ export function TaskListView({
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
+  const [isColumnsOpen, setIsColumnsOpen] = useState(false);
+  const [visibleColumns, setVisibleColumns] = useState<TaskListColumnId[]>([...DEFAULT_TASK_LIST_COLUMNS]);
+  const [preferencesLoaded, setPreferencesLoaded] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const { user } = useAuth();
+  const preferenceKey = useMemo(() => taskListPreferenceKey(projectId, user?.id), [projectId, user?.id]);
   const [editingCell, setEditingCell] = useState<{taskId: string, field: string} | null>(null);
   const [editValue, setEditValue] = useState<string>('');
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
@@ -234,20 +248,20 @@ export function TaskListView({
       category_catalog_item_id?: string | null;
       task_type_catalog_item_id?: string | null;
     };
-    return (field === 'progress' ? task.progressCatalogItemId ?? raw.progress_catalog_item_id
+    return (field === 'progressType' ? task.progressCatalogItemId ?? raw.progress_catalog_item_id
       : field === 'category' ? task.categoryCatalogItemId ?? raw.category_catalog_item_id
         : task.taskTypeCatalogItemId ?? raw.task_type_catalog_item_id) ?? '';
   }, []);
   const catalogLabel = useCallback((task: Task, field: ExcelCatalogField): string => {
     const id = catalogValue(task, field);
-    const fallback = field === 'progress' ? task.progress_type
+    const fallback = field === 'progressType' ? task.progress_type
       : field === 'category' ? task.category
         : task.type;
     const item = id ? catalogItemsById.get(id) : undefined;
     return item ? resolveProjectCatalogLabel(item, catalogLocale) : fallback ?? id ?? '';
   }, [catalogItemsById, catalogLocale, catalogValue]);
   const catalogOptions = useMemo(() => ({
-    progress: progressCatalogItems,
+    progressType: progressCatalogItems,
     category: categoryCatalogItems,
     taskType: taskTypeCatalogItems,
   } as const), [progressCatalogItems, categoryCatalogItems, taskTypeCatalogItems]);
@@ -288,6 +302,23 @@ export function TaskListView({
   useEffect(() => {
     setTasks(initialTasks);
   }, [initialTasks]);
+
+  useEffect(() => {
+    const preferences = loadTaskListPreferences(preferenceKey);
+    setVisibleColumns(preferences.columns);
+    setFilters?.(preferences.filters);
+    setPreferencesLoaded(true);
+  }, [preferenceKey, setFilters]);
+
+  useEffect(() => {
+    if (preferencesLoaded) saveTaskListPreferences(preferenceKey, { filters, columns: visibleColumns });
+  }, [filters, preferenceKey, preferencesLoaded, visibleColumns]);
+
+  const toggleColumn = useCallback((column: TaskListColumnId) => {
+    setVisibleColumns((current) => current.includes(column)
+      ? current.length === 1 ? current : current.filter((item) => item !== column)
+      : TASK_LIST_COLUMN_IDS.filter((item) => item === column || current.includes(item)));
+  }, []);
 
   const applyCanonicalAssignment = useCallback((taskId: string, result: Partial<Task>) => {
     const updates: Partial<Task> = {
@@ -416,7 +447,7 @@ export function TaskListView({
       : '');
 
   const saveCatalog = useCallback(async (taskId: string, field: ExcelCatalogField, value: string | null) => {
-    const key = field === 'progress' ? 'progressCatalogItemId'
+    const key = field === 'progressType' ? 'progressCatalogItemId'
       : field === 'category' ? 'categoryCatalogItemId'
         : 'taskTypeCatalogItemId';
     const saved = await updateTask(taskId, { [key]: value });
@@ -493,8 +524,8 @@ export function TaskListView({
 
   const displayedTasks = useMemo(() => {
     const query = filters.searchQuery?.toLowerCase();
-    return filterTaskTree(tasks, (task) => {
-      if (!isTaskStatusVisible(task.status, filters.status ? [filters.status] : [])) return false;
+    const statusFiltered = filterListTaskTreeByStatus(tasks, filters.status);
+    return filterTaskTree(statusFiltered, (task) => {
       if (query && !task.title.toLowerCase().includes(query) && !task.description?.toLowerCase().includes(query)) return false;
       if (filters.priority && task.priority !== filters.priority) return false;
       if (filters.assigneeId && task.assignee?.userId !== filters.assigneeId) return false;
@@ -510,6 +541,16 @@ export function TaskListView({
       return sortConfig.direction === 'asc' ? comparison : -comparison;
     });
   }, [tasks, filters, sortConfig]);
+
+  const hiddenNormalColumnIndexes = useMemo(() => {
+    const positions: Array<[TaskListColumnId, number]> = [
+      ['title', 2], ['status', 3], ['priority', 4], ['progressType', 5], ['category', 6],
+      ['taskType', 7], ['assignee', 8], ['plannedEnd', 9], ['effort', 10], ['progress', 12],
+      ['plannedStart', 13], ['actualStart', 14], ['actualEnd', 15], ['tags', 16], ['createdAt', 17],
+      ['updatedAt', 18], ['creator', 19],
+    ];
+    return positions.filter(([id]) => !visibleColumns.includes(id)).map(([, index]) => index);
+  }, [visibleColumns]);
 
   const applyExcelPatch = useCallback((taskId: string, updates: Partial<Task>) => {
     updateSingleTaskInState(taskId, updates);
@@ -614,6 +655,33 @@ export function TaskListView({
       </button>
     </div>;
   }
+
+  const renderSupplementalCells = (task: Task) => {
+    const date = (value?: string) => value ? new Date(value).toLocaleDateString() : '-';
+    const creator = typeof task.created_by === 'string' ? task.created_by : task.created_by?.username;
+    return <>
+      <td className="px-3 py-4 text-sm text-slate-500">{task.progress ?? '-'}</td>
+      <td className="px-3 py-4 text-sm text-slate-500">
+        {editingCell?.taskId === task.task_id && editingCell.field === 'start_date' ? (
+          <div className="flex items-center gap-1">
+            <input type="date" aria-label="Start date" autoFocus value={editValue} onChange={(event) => setEditValue(event.target.value)} onKeyDown={(event) => handleKeyDown(event, task.task_id, 'start_date')} />
+            <button title="Lưu" onClick={(event) => { event.stopPropagation(); void handleSaveEditing(task.task_id, 'start_date'); }}>✓</button>
+            <button title="Hủy" onClick={(event) => { event.stopPropagation(); handleCancelEditing(); }}>×</button>
+          </div>
+        ) : (
+          <button aria-label={`Edit Start date ${task.title}`} className="hover:text-blue-600 hover:underline" onClick={(event) => { event.stopPropagation(); handleStartEditing(task.task_id, 'start_date', task.start_date?.slice(0, 10) ?? ''); }}>
+            {date(task.start_date)}
+          </button>
+        )}
+      </td>
+      <td className="px-3 py-4 text-sm text-slate-500">{date(task.actual_start_date)}</td>
+      <td className="px-3 py-4 text-sm text-slate-500">{date(task.actual_end_date)}</td>
+      <td className="px-3 py-4 text-sm text-slate-500">{task.tags?.join(', ') || '-'}</td>
+      <td className="px-3 py-4 text-sm text-slate-500">{date(task.created_at)}</td>
+      <td className="px-3 py-4 text-sm text-slate-500">{date(task.updated_at)}</td>
+      <td className="px-3 py-4 text-sm text-slate-500">{creator || '-'}</td>
+    </>;
+  };
 
   const renderChildTasks = (parentTask: Task, level: number = 1) => {
     if (!hasChildTasks(parentTask) || !expandedTasks.has(parentTask.task_id)) {
@@ -759,7 +827,7 @@ export function TaskListView({
               </span>
             )}
           </td>
-          <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(childTask, 'progress', 'Progress type')}</td>
+          <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(childTask, 'progressType', 'Progress type')}</td>
           <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(childTask, 'category', 'Category')}</td>
           <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(childTask, 'taskType', 'Task type')}</td>
           <td className="px-3 py-4 text-sm">{renderAssigneeSelect(childTask)}</td>
@@ -878,6 +946,7 @@ export function TaskListView({
               </svg>
             </button>
           </td>
+          {renderSupplementalCells(childTask)}
         </tr>
         {renderChildTasks(childTask, level + 1)}
       </React.Fragment>
@@ -1204,8 +1273,18 @@ export function TaskListView({
     } else if (edit.field === 'due_date') {
       const result = await dispatch(updateTaskDueDate({ taskId: edit.taskId, dueDate: edit.value })).unwrap();
       if (result.task) applyExcelPatch(edit.taskId, { due_date: result.task.due_date });
-    } else if (edit.field === 'progress' || edit.field === 'category' || edit.field === 'taskType') {
+    } else if (edit.field === 'progressType' || edit.field === 'category' || edit.field === 'taskType') {
       await saveCatalog(edit.taskId, edit.field, edit.value || null);
+    } else if (edit.field === 'start_date' || edit.field === 'actual_start_date' || edit.field === 'actual_end_date') {
+      const savedTask = await updateTask(edit.taskId, { [edit.field]: edit.value } as Partial<Task>);
+      applyExcelPatch(edit.taskId, savedTask);
+    } else if (edit.field === 'progress') {
+      const savedTask = await updateTask(edit.taskId, { progress: Number(edit.value) });
+      applyExcelPatch(edit.taskId, savedTask);
+    } else if (edit.field === 'tags') {
+      const tags = edit.value.split(',').map((tag) => tag.trim()).filter(Boolean);
+      const savedTask = await updateTask(edit.taskId, { tags });
+      applyExcelPatch(edit.taskId, savedTask);
     } else if (edit.field === 'assignee') {
       if (memberMappingUnavailable) throw new Error(memberMappingError ?? 'Member mapping is loading. Retry after it loads.');
       const value = edit.value.trim();
@@ -1350,6 +1429,16 @@ export function TaskListView({
           return;
         }
       }
+      else if (field === 'start_date') {
+        try {
+          const saved = await updateTask(taskId, { start_date: editValue });
+          dispatch(upsertTask(saved));
+          updateSingleTaskInState(taskId, saved);
+        } catch (error) {
+          alert(`Could not update start date: ${error}`);
+          return;
+        }
+      }
       else if (field === 'due_date') {
         const dueDate = editValue || null;
 
@@ -1438,6 +1527,27 @@ export function TaskListView({
               Excel
             </button>
           </div>
+          <div className="relative">
+            <button
+              type="button"
+              className="px-3 py-2 text-sm font-medium rounded-md border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+              aria-expanded={isColumnsOpen}
+              aria-controls="task-list-column-settings"
+              onClick={() => setIsColumnsOpen((open) => !open)}
+            >
+              Columns
+            </button>
+            {isColumnsOpen && (
+              <div id="task-list-column-settings" className="absolute left-0 z-20 mt-1 w-52 max-h-80 overflow-auto rounded-md border border-slate-200 bg-white p-2 shadow-lg">
+                {TASK_LIST_COLUMN_IDS.map((column) => (
+                  <label key={column} className="flex items-center gap-2 px-2 py-1 text-sm text-slate-700">
+                    <input type="checkbox" checked={visibleColumns.includes(column)} onChange={() => toggleColumn(column)} />
+                    {TASK_LIST_COLUMN_LABELS[column]}
+                  </label>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         
         {/* Status Summary */}
@@ -1523,12 +1633,14 @@ export function TaskListView({
           onCloneTask={handleCloneTask}
           onDeleteTask={(task) => void deleteTaskWithConfirmation(task)}
           onDirtyChange={setExcelDirty}
+          visibleColumns={visibleColumns}
         />
         </div>
       )}
       {listMode === 'normal' && (
       <div className="overflow-x-auto grow border border-slate-200 rounded-lg bg-white min-h-0">
-        <table className="min-w-full divide-y divide-slate-200">
+        <style>{hiddenNormalColumnIndexes.map((index) => `.task-normal-table :is(th,td):nth-child(${index}){display:none}`).join('')}</style>
+        <table className="task-normal-table min-w-full divide-y divide-slate-200">
           <thead className="bg-slate-50">
             <tr>
               <th scope="col" className="w-8 px-6 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">
@@ -1571,6 +1683,9 @@ export function TaskListView({
               <th scope="col" className="relative px-3 py-3">
                 <span className="sr-only">{t('tasks.colActions')}</span>
               </th>
+              {(['Progress', 'Start date', 'Actual start', 'Actual end', 'Tags', 'Created', 'Updated', 'Creator'] as const).map((label) => (
+                <th key={label} scope="col" className="px-3 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</th>
+              ))}
             </tr>
           </thead>
           <tbody className="bg-white divide-y divide-slate-200">
@@ -1710,7 +1825,7 @@ export function TaskListView({
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(task, 'progress', 'Progress type')}</td>
+                    <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(task, 'progressType', 'Progress type')}</td>
                     <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(task, 'category', 'Category')}</td>
                     <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(task, 'taskType', 'Task type')}</td>
                     <td className="px-3 py-4 text-sm">{renderAssigneeSelect(task)}</td>
@@ -1829,13 +1944,14 @@ export function TaskListView({
                         </svg>
                       </button>
                     </td>
+                    {renderSupplementalCells(task)}
                   </tr>
                   {renderChildTasks(task)}
                 </React.Fragment>
               ))
             ) : (
               <tr>
-                <td colSpan={9} className="px-6 py-8 text-center text-slate-500">
+                <td colSpan={19} className="px-6 py-8 text-center text-slate-500">
                   <div className="py-12">
                     <svg xmlns="http://www.w3.org/2000/svg" className="h-12 w-12 mx-auto text-slate-400 mb-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
