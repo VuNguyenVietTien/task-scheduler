@@ -19,6 +19,7 @@ pub async fn update_member(
     let caller = project_authz::require_user(context)?;
     let mut tx = pool.begin().await.map_err(AuthError::Database)?;
     project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+    project_authz::require_role_assignment_tx(&mut tx, caller, project_id, role.as_str()).await?;
     project_authz::require_access_target_tx(&mut tx, caller, project_id, user_id).await?;
 
     // Get user info

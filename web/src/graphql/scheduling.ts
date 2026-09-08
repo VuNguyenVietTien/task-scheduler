@@ -74,6 +74,12 @@ export const REMOVE_RESOURCE_MEMBER = gql`
   }
 `;
 
+export const TRANSFER_PROJECT_OWNERSHIP = gql`
+  mutation TransferProjectOwnership($project_id: ID!, $new_owner_user_id: ID!) {
+    transfer_project_ownership(project_id: $project_id, new_owner_user_id: $new_owner_user_id)
+  }
+`;
+
 /* ---------------------------------- capacity --------------------------------- */
 
 export const CAPACITY_SETTINGS_QUERY = gql`
@@ -249,8 +255,8 @@ export const DELETE_RECURRING_COMMITMENT = gql`
 /* --------------------------------- timesheet --------------------------------- */
 
 export const TIMESHEET_ENTRIES_QUERY = gql`
-  query TimesheetEntries($project_id: ID!, $from: NaiveDate!, $to: NaiveDate!) {
-    my_timesheet_entries(project_id: $project_id, from: $from, to: $to) {
+  query TimesheetEntries($project_id: ID!, $from: NaiveDate!, $to: NaiveDate!, $user_id: ID) {
+    my_timesheet_entries(project_id: $project_id, from: $from, to: $to, user_id: $user_id) {
       id
       project_id
       user_id

@@ -28,7 +28,8 @@ pub async fn remove_multiple_members(
         .await
         .map_err(AuthError::Database)?;
         if let Some(Some(user_id)) = user {
-            project_authz::require_access_target_tx(&mut tx, caller, project_id, user_id).await?;
+            project_authz::require_member_removal_tx(&mut tx, caller, project_id, Some(user_id))
+                .await?;
             let result = sqlx::query("UPDATE project_members SET role = NULL, updated_at = now() WHERE member_id = $1 AND project_id = $2 AND role IS NOT NULL")
                 .bind(member_id).bind(project_id).execute(&mut *tx).await.map_err(AuthError::Database)?;
             if result.rows_affected() > 0 {

@@ -14,6 +14,7 @@ export const GET_USER_PROJECTS = gql`
       priority
       visibility
       icon_url
+      user_role
       owner {
         user_id
         email

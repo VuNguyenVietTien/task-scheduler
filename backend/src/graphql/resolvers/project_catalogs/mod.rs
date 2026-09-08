@@ -1,4 +1,4 @@
-use async_graphql::{Context, Enum, ID, InputObject, MaybeUndefined, Object, Result, SimpleObject};
+use async_graphql::{Context, Enum, InputObject, MaybeUndefined, Object, Result, SimpleObject, ID};
 use sqlx::{Row, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::str::FromStr;
@@ -118,14 +118,18 @@ fn parse_id(id: &ID, field: &str) -> Result<Uuid> {
 fn clean(value: &str, field: &str, maximum: usize) -> Result<String> {
     let value = value.trim();
     if value.is_empty() || value.chars().count() > maximum {
-        return Err(bad(format!("{field} must be nonempty and at most {maximum} characters")));
+        return Err(bad(format!(
+            "{field} must be nonempty and at most {maximum} characters"
+        )));
     }
     Ok(value.to_owned())
 }
 
 fn validate_labels(labels: &[ProjectCatalogLabelInput]) -> Result<Vec<ValidatedLabel>> {
     if labels.is_empty() || labels.len() > MAX_LABELS_PER_ITEM {
-        return Err(bad(format!("labels must contain 1..{MAX_LABELS_PER_ITEM} entries")));
+        return Err(bad(format!(
+            "labels must contain 1..{MAX_LABELS_PER_ITEM} entries"
+        )));
     }
     let mut locales = HashSet::with_capacity(labels.len());
     labels
@@ -145,7 +149,9 @@ fn validate_labels(labels: &[ProjectCatalogLabelInput]) -> Result<Vec<ValidatedL
 
 fn validate_batch(items: &[ProjectCatalogItemDraftInput]) -> Result<Vec<Vec<ValidatedLabel>>> {
     if items.is_empty() || items.len() > MAX_ITEMS_PER_BATCH {
-        return Err(bad(format!("items must contain 1..{MAX_ITEMS_PER_BATCH} entries")));
+        return Err(bad(format!(
+            "items must contain 1..{MAX_ITEMS_PER_BATCH} entries"
+        )));
     }
     let mut all_pairs = HashSet::new();
     items
@@ -255,7 +261,7 @@ impl ProjectCatalogMutation {
         let labels_by_item = validate_batch(&input.items)?;
         let caller = project_authz::require_user(context)?;
         let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
-        project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+        project_authz::require_project_manager_tx(&mut tx, caller, project_id).await?;
         let next_order: i32 = sqlx::query_scalar(
             "SELECT COALESCE(max(display_order) + 1, 0) FROM project_task_catalog_items \
              WHERE project_id = $1 AND kind = $2",
@@ -320,7 +326,7 @@ impl ProjectCatalogMutation {
             "TASK_TYPE" => ProjectCatalogKind::TaskType,
             _ => return Err(bad("catalog item is not available")),
         };
-        project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+        project_authz::require_project_manager_tx(&mut tx, caller, project_id).await?;
         let locked: Option<Uuid> = sqlx::query_scalar(
             "SELECT catalog_item_id FROM project_task_catalog_items \
              WHERE catalog_item_id = $1 AND project_id = $2 FOR UPDATE",
@@ -350,11 +356,13 @@ impl ProjectCatalogMutation {
             .await
             .map_err(AuthError::Database)?;
         }
-        sqlx::query("UPDATE project_task_catalog_items SET updated_at = now() WHERE catalog_item_id = $1")
-            .bind(catalog_item_id)
-            .execute(&mut *tx)
-            .await
-            .map_err(AuthError::Database)?;
+        sqlx::query(
+            "UPDATE project_task_catalog_items SET updated_at = now() WHERE catalog_item_id = $1",
+        )
+        .bind(catalog_item_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
         let item = list_in_tx(&mut tx, project_id, kind)
             .await?
             .into_iter()
@@ -383,7 +391,7 @@ impl ProjectCatalogMutation {
         let Some(project_id) = project_id else {
             return Err(bad("catalog item is not available"));
         };
-        project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+        project_authz::require_project_manager_tx(&mut tx, caller, project_id).await?;
         let kind: Option<String> = sqlx::query_scalar(
             "SELECT kind FROM project_task_catalog_items \
              WHERE catalog_item_id = $1 AND project_id = $2 FOR UPDATE",
@@ -459,7 +467,7 @@ impl ProjectCatalogMutation {
             .collect::<Result<_>>()?;
         let caller = project_authz::require_user(context)?;
         let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
-        project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+        project_authz::require_project_manager_tx(&mut tx, caller, project_id).await?;
         let current: Vec<Uuid> = sqlx::query_scalar(
             "SELECT catalog_item_id FROM project_task_catalog_items \
              WHERE project_id = $1 AND kind = $2 ORDER BY display_order, catalog_item_id FOR UPDATE",
@@ -514,7 +522,9 @@ pub fn task_catalog_id(value: &MaybeUndefined<ID>) -> Result<TaskCatalogId> {
         MaybeUndefined::Undefined => Ok(TaskCatalogId::Omitted),
         MaybeUndefined::Null => Ok(TaskCatalogId::Null),
         MaybeUndefined::Value(value) if value.to_string().is_empty() => Ok(TaskCatalogId::Null),
-        MaybeUndefined::Value(value) => Ok(TaskCatalogId::Value(parse_id(value, "catalog item id")?)),
+        MaybeUndefined::Value(value) => {
+            Ok(TaskCatalogId::Value(parse_id(value, "catalog item id")?))
+        }
     }
 }
 
@@ -529,21 +539,25 @@ pub struct TaskCatalogState {
 }
 
 pub fn progress_legacy(value: Option<TaskProgressType>) -> Option<String> {
-    value.map(|value| match value {
-        TaskProgressType::Study => "study",
-        TaskProgressType::Investigate => "investigate",
-        TaskProgressType::Code => "code",
-        TaskProgressType::Test => "test",
-        TaskProgressType::ReviewCode => "review_code",
-        TaskProgressType::ReviewTestReport => "review_test_report",
-        TaskProgressType::Release => "release",
-    }
-    .to_owned())
+    value.map(|value| {
+        match value {
+            TaskProgressType::Study => "study",
+            TaskProgressType::Investigate => "investigate",
+            TaskProgressType::Code => "code",
+            TaskProgressType::Test => "test",
+            TaskProgressType::ReviewCode => "review_code",
+            TaskProgressType::ReviewTestReport => "review_test_report",
+            TaskProgressType::Release => "release",
+        }
+        .to_owned()
+    })
 }
 
 pub fn progress_type(value: Option<String>) -> Result<Option<TaskProgressType>> {
     value
-        .map(|value| TaskProgressType::from_str(&value).map_err(|_| bad("invalid progress catalog bridge")))
+        .map(|value| {
+            TaskProgressType::from_str(&value).map_err(|_| bad("invalid progress catalog bridge"))
+        })
         .transpose()
 }
 
@@ -599,7 +613,9 @@ async fn resolve_one(
             let bridge = legacy_for_item(tx, project_id, kind, item_id).await?;
             if let Some(supplied) = supplied_legacy {
                 if bridge.as_deref() != Some(supplied.as_str()) {
-                    return Err(bad("catalog item conflicts with supplied legacy classification"));
+                    return Err(bad(
+                        "catalog item conflicts with supplied legacy classification",
+                    ));
                 }
             }
             Ok((Some(item_id), bridge))
@@ -607,7 +623,9 @@ async fn resolve_one(
         TaskCatalogId::Null => {
             let clear_legacy = match current_id {
                 Some(item_id) => {
-                    legacy_for_item(tx, project_id, kind, item_id).await?.as_deref()
+                    legacy_for_item(tx, project_id, kind, item_id)
+                        .await?
+                        .as_deref()
                         == current_legacy.as_deref()
                 }
                 None => false,
@@ -615,7 +633,10 @@ async fn resolve_one(
             Ok((None, if clear_legacy { None } else { current_legacy }))
         }
         TaskCatalogId::Omitted => match supplied_legacy {
-            Some(legacy) => Ok((item_for_legacy(tx, project_id, kind, &legacy).await?, Some(legacy))),
+            Some(legacy) => Ok((
+                item_for_legacy(tx, project_id, kind, &legacy).await?,
+                Some(legacy),
+            )),
             None => Ok((current_id, current_legacy)),
         },
     }
@@ -635,7 +656,9 @@ pub async fn resolve_create_task_catalogs(
         tx,
         project_id,
         ProjectCatalogKind::ProgressType,
-        progress_id.map(TaskCatalogId::Value).unwrap_or(TaskCatalogId::Omitted),
+        progress_id
+            .map(TaskCatalogId::Value)
+            .unwrap_or(TaskCatalogId::Omitted),
         progress_legacy,
         None,
         None,
@@ -645,7 +668,9 @@ pub async fn resolve_create_task_catalogs(
         tx,
         project_id,
         ProjectCatalogKind::Category,
-        category_id.map(TaskCatalogId::Value).unwrap_or(TaskCatalogId::Omitted),
+        category_id
+            .map(TaskCatalogId::Value)
+            .unwrap_or(TaskCatalogId::Omitted),
         category_legacy,
         None,
         None,
@@ -655,7 +680,9 @@ pub async fn resolve_create_task_catalogs(
         tx,
         project_id,
         ProjectCatalogKind::TaskType,
-        task_type_id.map(TaskCatalogId::Value).unwrap_or(TaskCatalogId::Omitted),
+        task_type_id
+            .map(TaskCatalogId::Value)
+            .unwrap_or(TaskCatalogId::Omitted),
         task_type_legacy,
         None,
         None,
@@ -683,18 +710,33 @@ pub async fn resolve_update_task_catalogs(
     current: TaskCatalogState,
 ) -> Result<TaskCatalogState> {
     let (progress_id, progress_legacy) = resolve_one(
-        tx, project_id, ProjectCatalogKind::ProgressType, progress_request, progress_legacy,
-        current.progress_id, current.progress_legacy,
+        tx,
+        project_id,
+        ProjectCatalogKind::ProgressType,
+        progress_request,
+        progress_legacy,
+        current.progress_id,
+        current.progress_legacy,
     )
     .await?;
     let (category_id, category_legacy) = resolve_one(
-        tx, project_id, ProjectCatalogKind::Category, category_request, category_legacy,
-        current.category_id, current.category_legacy,
+        tx,
+        project_id,
+        ProjectCatalogKind::Category,
+        category_request,
+        category_legacy,
+        current.category_id,
+        current.category_legacy,
     )
     .await?;
     let (task_type_id, task_type_legacy) = resolve_one(
-        tx, project_id, ProjectCatalogKind::TaskType, task_type_request, task_type_legacy,
-        current.task_type_id, current.task_type_legacy,
+        tx,
+        project_id,
+        ProjectCatalogKind::TaskType,
+        task_type_request,
+        task_type_legacy,
+        current.task_type_id,
+        current.task_type_legacy,
     )
     .await?;
     Ok(TaskCatalogState {

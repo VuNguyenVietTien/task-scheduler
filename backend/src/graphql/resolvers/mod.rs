@@ -35,6 +35,7 @@ pub mod project_authz {
     use uuid::Uuid;
 
     use crate::auth::error::AuthError;
+    use crate::domain::project_permissions::{ProjectActor, ProjectRole};
     use crate::graphql::context::Context as GraphQLContext;
 
     /// Write gate predicate: owner OR manager/leader/admin member.
@@ -156,6 +157,165 @@ pub mod project_authz {
         Ok(())
     }
 
+    async fn actor_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        user_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<ProjectActor> {
+        let row: Option<(bool, Option<String>)> = sqlx::query_as(
+            "SELECT p.owner_id = $2, pm.role::text FROM projects p \
+             LEFT JOIN project_members pm ON pm.project_id = p.project_id AND pm.user_id = $2 \
+             WHERE p.project_id = $1",
+        )
+        .bind(project_id)
+        .bind(user_id)
+        .fetch_optional(&mut **tx)
+        .await
+        .map_err(AuthError::Database)?;
+        let (is_owner, role) = row.ok_or_else(|| coded_error("project not found", "NOT_FOUND"))?;
+        Ok(ProjectActor {
+            is_owner,
+            role: role.as_deref().and_then(ProjectRole::parse),
+        })
+    }
+
+    pub async fn require_project_manager_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        user_id: Uuid,
+        project_id: Uuid,
+    ) -> Result<()> {
+        sqlx::query("SELECT project_id FROM projects WHERE project_id = $1 FOR UPDATE")
+            .bind(project_id)
+            .fetch_optional(&mut **tx)
+            .await
+            .map_err(AuthError::Database)?;
+        if !actor_tx(tx, user_id, project_id).await?.can_view_settings() {
+            return Err(coded_error(
+                "Only a project manager may manage settings",
+                "FORBIDDEN",
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn require_member_list(pool: &PgPool, user_id: Uuid, project_id: Uuid) -> Result<()> {
+        let row: Option<(bool, Option<String>)> = sqlx::query_as(
+            "SELECT p.owner_id = $2, pm.role::text FROM projects p \
+             LEFT JOIN project_members pm ON pm.project_id = p.project_id AND pm.user_id = $2 \
+             WHERE p.project_id = $1",
+        )
+        .bind(project_id)
+        .bind(user_id)
+        .fetch_optional(pool)
+        .await
+        .map_err(AuthError::Database)?;
+        let (is_owner, role) = row.ok_or_else(|| coded_error("project not found", "NOT_FOUND"))?;
+        let actor = ProjectActor {
+            is_owner,
+            role: role.as_deref().and_then(ProjectRole::parse),
+        };
+        if !actor.can_view_members() {
+            return Err(coded_error(
+                "Guests cannot view project members",
+                "FORBIDDEN",
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn require_role_assignment_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        caller: Uuid,
+        project_id: Uuid,
+        role: &str,
+    ) -> Result<()> {
+        let role = ProjectRole::parse(role)
+            .ok_or_else(|| coded_error("invalid project role", "BAD_USER_INPUT"))?;
+        if !actor_tx(tx, caller, project_id)
+            .await?
+            .can_assign_role(role)
+        {
+            return Err(coded_error(
+                "You cannot assign this project role",
+                "FORBIDDEN",
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn require_member_removal_tx(
+        tx: &mut sqlx::Transaction<'_, sqlx::Postgres>,
+        caller: Uuid,
+        project_id: Uuid,
+        target: Option<Uuid>,
+    ) -> Result<()> {
+        let actor = actor_tx(tx, caller, project_id).await?;
+        let (target_is_owner, target_role) = match target {
+            Some(target) => {
+                let row: (bool, Option<String>) = sqlx::query_as(
+                    "SELECT p.owner_id = $2, pm.role::text FROM projects p \
+                     LEFT JOIN project_members pm ON pm.project_id = p.project_id AND pm.user_id = $2 \
+                     WHERE p.project_id = $1",
+                )
+                .bind(project_id)
+                .bind(target)
+                .fetch_one(&mut **tx)
+                .await
+                .map_err(AuthError::Database)?;
+                (row.0, row.1.as_deref().and_then(ProjectRole::parse))
+            }
+            None => (false, None),
+        };
+        if !actor.can_remove(target_is_owner, target_role, target == Some(caller)) {
+            return Err(coded_error(
+                "You cannot remove this project member",
+                "FORBIDDEN",
+            ));
+        }
+        Ok(())
+    }
+
+    pub async fn require_timesheet_access(
+        pool: &PgPool,
+        caller: Uuid,
+        project_id: Uuid,
+        target: Uuid,
+        edit: bool,
+    ) -> Result<()> {
+        let row: Option<(bool, Option<String>, bool)> = sqlx::query_as(
+            "SELECT p.owner_id = $2, pm.role::text, \
+             (p.owner_id = $3 OR EXISTS (SELECT 1 FROM project_members target \
+              WHERE target.project_id = p.project_id AND target.user_id = $3 AND target.role IS NOT NULL)) \
+             FROM projects p LEFT JOIN project_members pm \
+             ON pm.project_id = p.project_id AND pm.user_id = $2 WHERE p.project_id = $1",
+        )
+        .bind(project_id)
+        .bind(caller)
+        .bind(target)
+        .fetch_optional(pool)
+        .await
+        .map_err(AuthError::Database)?;
+        let (is_owner, role, target_has_access) =
+            row.ok_or_else(|| coded_error("project not found", "NOT_FOUND"))?;
+        let actor = ProjectActor {
+            is_owner,
+            role: role.as_deref().and_then(ProjectRole::parse),
+        };
+        let allowed = target_has_access
+            && if edit {
+                actor.can_edit_timesheet(caller == target)
+            } else {
+                actor.can_view_timesheet(caller == target)
+            };
+        if !allowed {
+            return Err(coded_error(
+                "You cannot access this member's timesheet",
+                "FORBIDDEN",
+            ));
+        }
+        Ok(())
+    }
+
     /// Read authorization: caller must be owner or member of the project.
     /// Runs BEFORE any project-scoped read.
     pub async fn require_project_read(
@@ -191,8 +351,8 @@ pub use members::{MemberMutation, MemberQuery};
 pub use notifications::{NotificationMutation, NotificationQuery};
 pub use plan_lifecycle::{PlanLifecycleMutation, PlanLifecycleQuery};
 pub use plans::{PlanMutation, PlanQuery};
-pub use project_catalogs::{ProjectCatalogMutation, ProjectCatalogQuery};
 pub use project::{ProjectMutation, ProjectQuery};
+pub use project_catalogs::{ProjectCatalogMutation, ProjectCatalogQuery};
 pub use project_member::{ProjectMemberMutation, ProjectMemberQuery};
 pub use scheduling::{SchedulingMutation, SchedulingQuery};
 pub use tasks::{TaskMutation, TaskQuery};

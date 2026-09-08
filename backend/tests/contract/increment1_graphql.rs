@@ -95,23 +95,27 @@ fn sdl_resource_member_reads_and_writes() {
 }
 
 #[test]
-fn member_removal_uses_canonical_id_and_owner_guard_in_one_transaction() {
+fn member_removal_uses_canonical_id_and_permission_guard_in_one_transaction() {
     let source = include_str!("../../src/graphql/resolvers/resource_members/mod.rs");
     let operation = &source[source.find("async fn remove_resource_member").unwrap()
-        ..source.find("async fn classify_resource_member").unwrap()];
+        ..source.find("async fn transfer_project_ownership").unwrap()];
     for required in [
         "context.db.begin()",
         "require_project_write_tx",
         "SELECT user_id FROM project_members WHERE project_id = $1 AND member_id = $2 FOR UPDATE",
-        "require_access_target_tx",
+        "require_member_removal_tx",
         "DELETE FROM project_members WHERE project_id = $1 AND member_id = $2",
         "tx.commit()",
     ] {
-        assert!(operation.contains(required), "member removal missing {required}");
+        assert!(
+            operation.contains(required),
+            "member removal missing {required}"
+        );
     }
     assert!(
-        operation.find("require_access_target_tx").unwrap() < operation.find("DELETE FROM project_members").unwrap(),
-        "owner/privileged guard must run before canonical deletion"
+        operation.find("require_member_removal_tx").unwrap()
+            < operation.find("DELETE FROM project_members").unwrap(),
+        "role/owner guard must run before canonical deletion"
     );
 }
 
@@ -689,7 +693,7 @@ fn authz_guards_are_wired_into_every_scheduling_resolver() {
         // Six mounted writes: create, both link variants, explicit access,
         // removal, and classification. The per-operation assertions below
         // keep this count from becoming a blind number as APIs evolve.
-        ("resource_members/mod.rs", 6, 2),
+        ("resource_members/mod.rs", 6, 0),
         ("schedule_projection/mod.rs", 0, 1),
     ] {
         let src = fs::read_to_string(base.join(file))
@@ -730,8 +734,8 @@ fn authz_guards_are_wired_into_every_scheduling_resolver() {
     }
     for name in ["resource_members", "resource_member"] {
         assert!(
-            method(name).contains("require_project_read"),
-            "resource query {name} must retain a project read guard"
+            method(name).contains("require_member_list"),
+            "resource query {name} must retain the role-aware member-list guard"
         );
     }
 }
@@ -742,13 +746,17 @@ fn catalog_delete_contract_clears_only_the_matching_task_slot_in_one_authorized_
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
     let source = fs::read_to_string(root.join("src/graphql/resolvers/project_catalogs/mod.rs"))
         .expect("read catalog resolver");
-    let start = source.find("async fn delete_project_catalog_item")
+    let start = source
+        .find("async fn delete_project_catalog_item")
         .expect("catalog delete mutation must exist");
-    let body = &source[start..source[start..].find("async fn reorder_project_catalog_items")
-        .expect("catalog delete must precede reorder") + start];
+    let body = &source[start
+        ..source[start..]
+            .find("async fn reorder_project_catalog_items")
+            .expect("catalog delete must precede reorder")
+            + start];
     for required in [
         "context.db.begin()",
-        "require_project_write_tx",
+        "require_project_manager_tx",
         "WHERE catalog_item_id = $1 AND project_id = $2 FOR UPDATE",
         "DELETE FROM project_task_catalog_labels",
         "DELETE FROM project_task_catalog_items",
@@ -762,17 +770,30 @@ fn catalog_delete_contract_clears_only_the_matching_task_slot_in_one_authorized_
         ("TaskType", "task_type_catalog_item_id", "type"),
     ] {
         assert!(body.contains(kind), "catalog delete must handle {kind}");
-        assert!(body.contains(&format!("SET {id_column} = NULL, {legacy_column} = NULL")),
-            "{kind} delete must clear only its ID and legacy task columns");
+        assert!(
+            body.contains(&format!("SET {id_column} = NULL, {legacy_column} = NULL")),
+            "{kind} delete must clear only its ID and legacy task columns"
+        );
     }
-    assert!(body.find("require_project_write_tx").unwrap() < body.find("FOR UPDATE").unwrap(),
-        "project authorization/lock must precede catalog-item lock");
-    assert!(body.find("FOR UPDATE").unwrap() < body.find("UPDATE tasks").unwrap(),
-        "catalog item must be locked before affected tasks are cleared");
-    assert!(body.find("UPDATE tasks").unwrap() < body.find("DELETE FROM project_task_catalog_labels").unwrap(),
-        "task clears must roll back with label/item deletion on failure");
+    assert!(
+        body.find("require_project_manager_tx").unwrap() < body.find("FOR UPDATE").unwrap(),
+        "manager authorization/lock must precede catalog-item lock"
+    );
+    assert!(
+        body.find("FOR UPDATE").unwrap() < body.find("UPDATE tasks").unwrap(),
+        "catalog item must be locked before affected tasks are cleared"
+    );
+    assert!(
+        body.find("UPDATE tasks").unwrap()
+            < body
+                .find("DELETE FROM project_task_catalog_labels")
+                .unwrap(),
+        "task clears must roll back with label/item deletion on failure"
+    );
     let sdl = fs::read_to_string(root.join("schema.graphql")).expect("read schema SDL");
-    assert!(sdl.contains("delete_project_catalog_item(catalog_item_id: ID!): DeleteProjectCatalogItemPayload!"));
+    assert!(sdl.contains(
+        "delete_project_catalog_item(catalog_item_id: ID!): DeleteProjectCatalogItemPayload!"
+    ));
     assert!(sdl.contains("affected_task_ids: [ID!]!"));
 }
 

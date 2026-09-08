@@ -57,6 +57,7 @@ pub struct Projects {
     pub visibility: ProjectVisibility,
     pub icon_url: Option<String>,
     pub owner: User,
+    pub user_role: MemberRole,
 }
 
 #[derive(SimpleObject, Debug)]
@@ -185,6 +186,15 @@ pub enum MemberRole {
 }
 
 impl MemberRole {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Manager => "manager",
+            Self::Leader => "leader",
+            Self::Member => "member",
+            Self::Guest => "guest",
+        }
+    }
+
     /// Read the text projection of a stored role without changing its DB value.
     /// Unknown, NULL or missing columns are errors, never a default access grant.
     pub fn from_database_row(row: &sqlx::postgres::PgRow) -> Result<Self> {

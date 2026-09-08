@@ -4,12 +4,14 @@ import React from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
 import { useTranslation } from 'react-i18next';
+import { canViewMembers, canViewSettings } from '@/utils/project-permissions';
 
 interface Project {
   project_id: string;
   name: string;
   icon_url?: string;
   status?: string;
+  user_role?: string;
 }
 
 interface SidebarProjectTreeItemProps {
@@ -46,7 +48,10 @@ export function SidebarProjectTreeItem({ project, isExpanded, onToggle }: Sideba
     { id: 'settings', label: t('settings.title') },
     // Requirement 8: per-user timesheet (logwork) screen.
     { id: 'timesheet', label: 'Timesheet' },
-  ];
+  ].filter((tab) =>
+    (tab.id !== 'members' || canViewMembers(project.user_role)) &&
+    (tab.id !== 'settings' || canViewSettings(project.user_role))
+  );
 
   return (
     <div className={isExpanded ? 'bg-slate-800/50 rounded-md' : ''}>

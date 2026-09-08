@@ -465,6 +465,10 @@ type Mutation {
 	"""
 	remove_resource_member(project_id: ID!, member_id: ID!): Boolean!
 	"""
+	Transfer ownership to another linked project member. Owner only.
+	"""
+	transfer_project_ownership(project_id: ID!, new_owner_user_id: ID!): Boolean!
+	"""
 	Classify a concrete MEMBER by a COMPANY/GROUP of the same project.
 	Classification only: no assignment/capacity semantics.
 	"""
@@ -747,6 +751,7 @@ type Projects {
 	visibility: ProjectVisibility!
 	icon_url: String
 	owner: User!
+	user_role: MemberRole!
 }
 
 type Query {
@@ -824,11 +829,10 @@ type Query {
 	"""
 	recurring_commitments(project_id: ID!): [RecurringCommitment!]!
 	"""
-	The CURRENT user's timesheet entries for a project within a date
-	range. Authorization: caller must be owner/member of the project;
-	rows are always scoped to the caller's own user_id.
+	Timesheet entries for the caller, or a selected member when the caller
+	is a manager/leader. Leaders cannot edit another member's entries.
 	"""
-	my_timesheet_entries(project_id: ID!, from: NaiveDate!, to: NaiveDate!): [TimesheetEntry!]!
+	my_timesheet_entries(project_id: ID!, from: NaiveDate!, to: NaiveDate!, user_id: ID): [TimesheetEntry!]!
 	"""
 	Load one saved plan (snapshot bars + computed staleness). Rendering a
 	saved plan uses ONLY plan_data — current config affects nothing until
@@ -961,6 +965,7 @@ input SavePlanSnapshotInput {
 
 input SaveTimesheetBatchInput {
 	project_id: ID!
+	user_id: ID
 	entries: [TimesheetEntryInput!]!
 }
 

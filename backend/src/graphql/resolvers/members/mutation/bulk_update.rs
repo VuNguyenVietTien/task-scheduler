@@ -22,6 +22,13 @@ pub async fn update_multiple_members(
     let mut members = Vec::new();
     for update in updates {
         let user_id = Uuid::parse_str(&update.user_id)?;
+        project_authz::require_role_assignment_tx(
+            &mut tx,
+            caller,
+            project_id,
+            update.role.as_str(),
+        )
+        .await?;
         project_authz::require_access_target_tx(&mut tx, caller, project_id, user_id).await?;
         let row = sqlx::query(
             "WITH changed AS (UPDATE project_members SET role = $3, updated_at = now() \

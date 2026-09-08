@@ -124,7 +124,7 @@ impl ResourceMemberQuery {
         let context = ctx.data::<GraphQLContext>()?;
         let project_id = parse_id(&project_id, "project_id")?;
         let user_id = project_authz::require_user(context)?;
-        project_authz::require_project_read(&context.db, user_id, project_id).await?;
+        project_authz::require_member_list(&context.db, user_id, project_id).await?;
         let rows = sqlx::query_as::<_, ResourceMemberRow>(
             "SELECT member_id, resource_member_id, project_id, display_name, email, user_id, member_kind, \
              linked_at, role::text AS access_role, joined_at, invited_by, created_at, updated_at \
@@ -166,7 +166,7 @@ impl ResourceMemberQuery {
         .await?;
         // Same-project relation guard: the caller must belong to the
         // member's project before any project-scoped data is returned.
-        project_authz::require_project_read(&context.db, user_id, member.project_id).await?;
+        project_authz::require_member_list(&context.db, user_id, member.project_id).await?;
         Ok(member.into())
     }
 }
@@ -463,6 +463,8 @@ impl ResourceMemberMutation {
                     "BAD_USER_INPUT",
                 ));
             }
+            project_authz::require_role_assignment_tx(&mut tx, caller_id, project_id, value)
+                .await?;
         }
         sqlx::query(
             "UPDATE project_members SET role = $2::member_role, updated_at = now() \
@@ -502,21 +504,85 @@ impl ResourceMemberMutation {
         let Some(user_id) = user_id else {
             return Err(coded_error("project member not found", "NOT_FOUND"));
         };
-        if let Some(target) = user_id {
-            project_authz::require_access_target_tx(&mut tx, caller_id, project_id, target).await?;
-        }
-        let removed = sqlx::query(
-            "DELETE FROM project_members WHERE project_id = $1 AND member_id = $2",
-        )
-        .bind(project_id)
-        .bind(member_id)
-        .execute(&mut *tx)
-        .await
-        .map_err(AuthError::Database)?
-        .rows_affected()
-            > 0;
+        project_authz::require_member_removal_tx(&mut tx, caller_id, project_id, user_id).await?;
+        let removed =
+            sqlx::query("DELETE FROM project_members WHERE project_id = $1 AND member_id = $2")
+                .bind(project_id)
+                .bind(member_id)
+                .execute(&mut *tx)
+                .await
+                .map_err(AuthError::Database)?
+                .rows_affected()
+                > 0;
         tx.commit().await.map_err(AuthError::Database)?;
         Ok(removed)
+    }
+
+    /// Transfer project ownership to a linked member. The former owner keeps
+    /// manager access and may remove themselves after the transfer.
+    async fn transfer_project_ownership(
+        &self,
+        ctx: &Context<'_>,
+        project_id: ID,
+        new_owner_user_id: ID,
+    ) -> Result<bool> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let caller = project_authz::require_user(context)?;
+        let project_id = parse_id(&project_id, "project_id")?;
+        let new_owner = parse_id(&new_owner_user_id, "new_owner_user_id")?;
+        if caller == new_owner {
+            return Err(coded_error(
+                "new owner must be another project member",
+                "BAD_USER_INPUT",
+            ));
+        }
+        let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
+        let current_owner: Uuid =
+            sqlx::query_scalar("SELECT owner_id FROM projects WHERE project_id = $1 FOR UPDATE")
+                .bind(project_id)
+                .fetch_optional(&mut *tx)
+                .await
+                .map_err(AuthError::Database)?
+                .ok_or_else(|| coded_error("project not found", "NOT_FOUND"))?;
+        if current_owner != caller {
+            return Err(coded_error(
+                "Only the project owner may transfer ownership",
+                "FORBIDDEN",
+            ));
+        }
+        let eligible: bool = sqlx::query_scalar(
+            "SELECT EXISTS(SELECT 1 FROM project_members WHERE project_id = $1 \
+             AND user_id = $2 AND member_kind = 'MEMBER' AND role IS NOT NULL)",
+        )
+        .bind(project_id)
+        .bind(new_owner)
+        .fetch_one(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        if !eligible {
+            return Err(coded_error(
+                "new owner must be a linked project member",
+                "BAD_USER_INPUT",
+            ));
+        }
+        sqlx::query("UPDATE projects SET owner_id = $2, updated_at = now() WHERE project_id = $1")
+            .bind(project_id)
+            .bind(new_owner)
+            .execute(&mut *tx)
+            .await
+            .map_err(AuthError::Database)?;
+        sqlx::query(
+            "UPDATE project_members SET role = 'manager', updated_at = now() \
+                     WHERE project_id = $1 AND user_id IN ($2, $3)",
+        )
+        .bind(project_id)
+        .bind(current_owner)
+        .bind(new_owner)
+        .execute(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        tx.commit().await.map_err(AuthError::Database)?;
+        Ok(true)
     }
 
     /// Classify a concrete MEMBER by a COMPANY/GROUP of the same project.
