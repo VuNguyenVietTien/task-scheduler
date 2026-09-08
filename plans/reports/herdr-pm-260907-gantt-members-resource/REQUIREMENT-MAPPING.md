@@ -6,7 +6,7 @@ Updated 2026-09-08. `LIVE` means the matching frontend and backend artifact is o
 |---|---|---|---|---|
 | Gantt tree, discontinuous daily-hour bars, resource matrix | `Timeline` and scheduling components | plan/resource GraphQL | focused Gantt/lifecycle suites | LIVE |
 | Canonical linked/unlinked project members | single Members UI and assignment selectors | physical `project_members`, compatibility view | member/backend contract suites | LIVE |
-| Gantt User picker includes unlinked members | `Timeline` canonical resource-member filter | existing scheduling member query | 28 focused cases | LIVE |
+| List/Gantt canonical assignee sync, including unlinked members | `TaskDetail` queries assignable resource members; `Timeline` resolves canonical member IDs; authoritative mutation result is upserted into Redux | existing `resource_members` query and shared complete task mutation fragment; no backend change | Gantt modal 2/2 + List assignment 11/11 | READY TO DEPLOY |
 | Fixed en/ja/vi project catalogs | Settings three-field editor; shared locale selector | catalog item/label mutations | 19 focused cases plus paste alignment regression | LIVE |
 | Excel cell edit, assignment, rectangular copy/paste, fixed widths, effort refresh | `TaskExcelGrid` / `TaskListView` | existing task update mutation | 20 grid + 7 List cases | LIVE from main `d6c25d7` |
 | Rename project | Settings name form, refresh project/sidebar | `update_project` returns authoritative name | 12 combined member/rename frontend cases; backend contract | LIVE |
