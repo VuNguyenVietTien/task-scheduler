@@ -167,6 +167,9 @@ describe('TaskListView canonical assignment source wiring', () => {
     expect(screen.getByLabelText('Subtask title for child')).toHaveValue('Grandchild');
     expect(screen.getByRole('alert')).toHaveTextContent('temporary failure');
     expect(taskFromStore(store, 'parent')?.child_tasks?.filter((task) => ['created-one', 'created-three'].includes(task.task_id))).toHaveLength(2);
+    expect(mockCreateTask.mock.calls[0][0].variables.input.priority_order).toBe(3);
+    expect(mockCreateTask.mock.calls[1][0].variables.input.priority_order).toBe(4);
+    expect(mockCreateTask.mock.calls[2][0].variables.input.priority_order).toBe(0);
 
     mockCreateTask.mockResolvedValueOnce({ data: { create_task: { ...child, task_id: 'created-two', parent_task_id: 'child', title: 'Grandchild' } } });
     fireEvent.click(screen.getByRole('button', { name: 'OK / Create all' }));

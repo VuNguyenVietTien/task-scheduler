@@ -229,6 +229,23 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
     const edit = staged.get(keyFor(task.task_id, 'effort'));
     return edit ? Number(edit.value || 0) : task.effort;
   }), [staged, tasks]);
+  const rowsById = useMemo(() => new Map(tasks.map((task) => [task.task_id, task])), [tasks]);
+  const draftRowsAfter = (task: Task, row: number) => {
+    const nextDepth = tasks[row + 1]?.excelDepth ?? -1;
+    const endingParents: Task[] = [];
+    const seen = new Set<string>();
+    let current: Task | undefined = task;
+    while (current && !seen.has(current.task_id) && (current.excelDepth ?? 0) >= nextDepth) {
+      endingParents.push(current);
+      seen.add(current.task_id);
+      current = current.parent_task_id ? rowsById.get(current.parent_task_id) : undefined;
+    }
+    return endingParents.map((parent) => (
+      <React.Fragment key={`drafts-${parent.task_id}`}>
+        {renderSubtaskRows?.(parent.task_id, columns.length + 2, (parent.excelDepth ?? 0) + 1)}
+      </React.Fragment>
+    ));
+  };
 
   useEffect(() => {
     if (active) focusTypingInput();
@@ -756,7 +773,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                 </td>
               )}
             </tr>
-            {renderSubtaskRows?.(task.task_id, columns.length + 2, (task.excelDepth ?? 0) + 1)}
+            {draftRowsAfter(task, row)}
             </React.Fragment>
           ))}
           {tasks.length === 0 && (

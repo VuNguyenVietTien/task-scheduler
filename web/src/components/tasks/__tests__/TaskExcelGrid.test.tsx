@@ -452,10 +452,15 @@ describe('TaskExcelGrid interactions', () => {
     expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'title', value: 'Draft title' });
   });
 
-  it('offers inline subtask creation on every Excel row and renders drafts immediately after their parent', () => {
+  it('offers inline subtask creation on every Excel row and renders drafts after existing descendants', () => {
     const onAddSubtask = jest.fn();
+    const nestedRows = [
+      { ...tasks[0], excelDepth: 0 },
+      { ...task('child', 'Existing child'), parent_task_id: 't1', excelDepth: 1 },
+      { ...tasks[1], excelDepth: 0 },
+    ];
     render(<TaskExcelGrid
-      tasks={tasks}
+      tasks={nestedRows}
       onSaveEdit={jest.fn()}
       onAddSubtask={onAddSubtask}
       renderSubtaskRows={(parentId, colSpan) => parentId === 't1' ? <tr data-testid="excel-inline-draft"><td colSpan={colSpan}>Draft</td></tr> : null}
@@ -463,7 +468,7 @@ describe('TaskExcelGrid interactions', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add subtask to Alpha' }));
     fireEvent.click(screen.getByRole('button', { name: 'Add subtask to Beta' }));
     expect(onAddSubtask.mock.calls).toEqual([['t1'], ['t2']]);
-    expect(screen.getByTestId('excel-inline-draft').previousElementSibling).toContainElement(screen.getByTestId('excel-cell-0-0'));
+    expect(screen.getByTestId('excel-inline-draft').previousElementSibling).toContainElement(screen.getByTestId('excel-cell-1-0'));
   });
 
   it('clone button calls onCloneTask for the row', () => {

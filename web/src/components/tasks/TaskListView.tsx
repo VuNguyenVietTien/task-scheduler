@@ -58,7 +58,7 @@ import { filterTaskTree } from '@/utils/task-status-visibility';
 import { filterListTaskTreeByStatus } from '@/utils/task-list-visibility';
 import { taskDeletionConfirmationMessage } from '@/utils/task-deletion';
 import { InlineSubtaskRows } from './InlineSubtaskRows';
-import { buildInlineSubtaskInput, newInlineSubtaskDraft, type InlineSubtaskDraft } from './inline-subtask';
+import { buildInlineSubtaskInput, newInlineSubtaskDraft, nextSiblingPriorityOrder, upsertTaskTreeRow, type InlineSubtaskDraft } from './inline-subtask';
 import {
   DEFAULT_TASK_LIST_COLUMNS,
   TASK_LIST_COLUMN_IDS,
@@ -439,9 +439,16 @@ export function TaskListView({
     setSubtasksSubmitting(true);
     const succeeded = new Set<string>();
     const failures = new Map<string, string>();
+    const prioritySource = ((taskTreeRowsQ.data?.task_tree_rows as Task[] | undefined)?.length
+      ? taskTreeRowsQ.data.task_tree_rows
+      : tasks) as Task[];
+    const nextPriorityByParent = new Map<string, number>();
     for (const draft of subtaskDrafts) {
       try {
-        const input = buildInlineSubtaskInput(draft, taxonomyProjectId, assigneeOptions);
+        const priorityOrder = nextPriorityByParent.get(draft.parentTaskId)
+          ?? nextSiblingPriorityOrder(prioritySource, draft.parentTaskId);
+        nextPriorityByParent.set(draft.parentTaskId, priorityOrder + 1);
+        const input = buildInlineSubtaskInput(draft, taxonomyProjectId, assigneeOptions, priorityOrder);
         const result = await createTaskMut({ variables: { input }, errorPolicy: 'all' });
         if (result.errors?.length) throw new Error(result.errors.map((error) => error.message).join('; '));
         const returned = result.data?.create_task;
@@ -449,6 +456,10 @@ export function TaskListView({
         const created = transformTaskFromAPI(returned) as Task;
         dispatch(upsertTask(created));
         setTasks((current) => upsertTaskInTree(current, created));
+        taskTreeRowsQ.updateQuery?.((data: { task_tree_rows?: Task[] }) => data?.task_tree_rows ? {
+          ...data,
+          task_tree_rows: upsertTaskTreeRow(data.task_tree_rows, created),
+        } : data);
         setExpandedTasks((current) => new Set(current).add(draft.parentTaskId));
         succeeded.add(draft.id);
       } catch (error) {
@@ -459,7 +470,7 @@ export function TaskListView({
       .filter((draft) => !succeeded.has(draft.id))
       .map((draft) => ({ ...draft, error: failures.get(draft.id) ?? draft.error })));
     setSubtasksSubmitting(false);
-  }, [assigneeOptions, createTaskMut, dispatch, subtaskDrafts, subtasksSubmitting, taxonomyProjectId]);
+  }, [assigneeOptions, createTaskMut, dispatch, subtaskDrafts, subtasksSubmitting, taskTreeRowsQ, tasks, taxonomyProjectId]);
 
   const renderInlineSubtasks = useCallback((parentTaskId: string, colSpan: number, depth: number) => (
     <InlineSubtaskRows
@@ -986,8 +997,8 @@ export function TaskListView({
           </td>
           {renderSupplementalCells(childTask)}
         </tr>
-        {renderInlineSubtasks(childTask.task_id, 19, level + 1)}
         {renderChildTasks(childTask, level + 1)}
+        {renderInlineSubtasks(childTask.task_id, 19, level + 1)}
       </React.Fragment>
     ));
   };
@@ -1963,8 +1974,8 @@ export function TaskListView({
                     </td>
                     {renderSupplementalCells(task)}
                   </tr>
-                  {renderInlineSubtasks(task.task_id, 19, 1)}
                   {renderChildTasks(task)}
+                  {renderInlineSubtasks(task.task_id, 19, 1)}
                 </React.Fragment>
               ))
             ) : (
