@@ -240,31 +240,34 @@ describe('TaskListView canonical assignment source wiring', () => {
     expect(taskFromStore(store, 'parent')?.start_date).toBeNull();
   });
 
-  it('reflects a confirmed normal List effort save immediately from the authoritative result', async () => {
-    client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'parent', effort: 13 } } });
+  it('keeps parent effort derived and reflects a canonical leaf save in the normal List total', async () => {
+    client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'child', effort: 13 } } });
     const store = renderList();
-    const row = screen.getByText('Parent task').closest('tr')!;
-    fireEvent.click(within(row).getByText('8h'));
+    expect(screen.getByTestId('task-effort-parent')).toHaveTextContent('4h');
+    expect(screen.getByTestId('task-effort-parent')).toHaveAttribute('title', 'Sum of descendant leaf effort');
+    fireEvent.click(screen.getByRole('button', { name: 'Mở rộng task con' }));
+    fireEvent.click(screen.getByTestId('task-effort-child'));
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Công sức' }), { target: { value: '13' } });
-    fireEvent.click(within(row).getByTitle('Lưu'));
+    fireEvent.click(screen.getByText('Deep child').closest('tr')!.querySelector('button[title="Lưu"]')!);
 
-    await waitFor(() => expect(within(row).getByText('13h')).toBeInTheDocument());
-    expect(taskFromStore(store, 'parent')?.effort).toBe(13);
-    expect(client.mutate).toHaveBeenCalledWith(expect.objectContaining({ variables: { input: { task_id: 'parent', effort: 13 } } }));
+    await waitFor(() => expect(screen.getByTestId('task-effort-parent')).toHaveTextContent('13h'));
+    expect(taskFromStore(store, 'child')?.effort).toBe(13);
+    expect(taskFromStore(store, 'parent')?.effort).toBe(8);
+    expect(client.mutate).toHaveBeenCalledWith(expect.objectContaining({ variables: { input: { task_id: 'child', effort: 13 } } }));
   });
 
-  it('keeps normal List effort editor and error after a rejected or incomplete save', async () => {
+  it('keeps normal leaf effort editor and error after a rejected or incomplete save', async () => {
     const alert = jest.spyOn(window, 'alert').mockImplementation(() => {});
-    client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'parent' } } });
+    client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'child' } } });
     const store = renderList();
-    const row = screen.getByText('Parent task').closest('tr')!;
-    fireEvent.click(within(row).getByText('8h'));
+    fireEvent.click(screen.getByRole('button', { name: 'Mở rộng task con' }));
+    fireEvent.click(screen.getByTestId('task-effort-child'));
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Công sức' }), { target: { value: '13' } });
-    fireEvent.click(within(row).getByTitle('Lưu'));
+    fireEvent.click(screen.getByText('Deep child').closest('tr')!.querySelector('button[title="Lưu"]')!);
 
     await waitFor(() => expect(alert).toHaveBeenCalledWith(expect.stringContaining('Effort update returned no complete task result.')));
     expect(screen.getByRole('spinbutton', { name: 'Công sức' })).toHaveValue(13);
-    expect(taskFromStore(store, 'parent')?.effort).toBe(8);
+    expect(taskFromStore(store, 'child')?.effort).toBe(4);
     alert.mockRestore();
   });
 
@@ -272,7 +275,7 @@ describe('TaskListView canonical assignment source wiring', () => {
     mockUpdateTask.mockResolvedValueOnce({ ...parent, start_date: null });
     const store = renderList();
     fireEvent.click(screen.getByTestId('mode-excel-btn'));
-    fireEvent.click(screen.getByTestId('excel-cell-0-9'));
+    fireEvent.doubleClick(screen.getByTestId('excel-cell-0-9'));
     fireEvent.change(screen.getByLabelText('Excel start date'), { target: { value: '' } });
     fireEvent.click(screen.getByTestId('excel-save-btn'));
 
@@ -280,30 +283,34 @@ describe('TaskListView canonical assignment source wiring', () => {
     expect(taskFromStore(store, 'parent')?.start_date).toBeNull();
   });
 
-  it('reflects confirmed Excel effort immediately without a task-row reload', async () => {
-    client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'parent', effort: 14 } } });
+  it('reflects staged and confirmed Excel leaf effort in its read-only parent total', async () => {
+    client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'child', effort: 14 } } });
     const store = renderList();
     fireEvent.click(screen.getByTestId('mode-excel-btn'));
-    fireEvent.mouseDown(screen.getByTestId('excel-cell-0-3'));
+    expect(screen.getByTestId('excel-cell-0-3')).toHaveTextContent('4');
+    fireEvent.mouseDown(screen.getByTestId('excel-cell-1-3'));
     fireEvent.change(screen.getByTestId('excel-typing-input'), { target: { value: '14' } });
     fireEvent.keyDown(screen.getByTestId('excel-typing-input'), { key: 'Enter' });
+    expect(screen.getByTestId('excel-cell-0-3')).toHaveTextContent('14');
     fireEvent.click(screen.getByTestId('excel-save-btn'));
 
-    await waitFor(() => expect(screen.getByTestId('excel-cell-0-3')).toHaveTextContent('14'));
-    expect(taskFromStore(store, 'parent')?.effort).toBe(14);
+    await waitFor(() => expect(screen.getByTestId('excel-cell-1-3')).toHaveTextContent('14'));
+    expect(taskFromStore(store, 'child')?.effort).toBe(14);
+    expect(taskFromStore(store, 'parent')?.effort).toBe(8);
   });
 
-  it('clears Excel effort through the backend zero contract and renders it immediately', async () => {
-    client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'parent', effort: 0 } } });
+  it('clears Excel leaf effort through the backend zero contract and updates its parent total', async () => {
+    client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'child', effort: 0 } } });
     const store = renderList();
     fireEvent.click(screen.getByTestId('mode-excel-btn'));
-    fireEvent.click(screen.getByTestId('excel-cell-0-3'));
+    fireEvent.doubleClick(screen.getByTestId('excel-cell-1-3'));
     fireEvent.change(screen.getByRole('spinbutton', { name: 'Excel effort' }), { target: { value: '' } });
+    expect(screen.getByTestId('excel-cell-0-3')).toHaveTextContent('0');
     fireEvent.click(screen.getByTestId('excel-save-btn'));
 
-    await waitFor(() => expect(screen.getByTestId('excel-cell-0-3')).toHaveTextContent('0'));
-    expect(taskFromStore(store, 'parent')?.effort).toBe(0);
-    expect(client.mutate).toHaveBeenCalledWith(expect.objectContaining({ variables: { input: { task_id: 'parent', effort: 0 } } }));
+    await waitFor(() => expect(screen.getByTestId('excel-cell-1-3')).toHaveTextContent('0'));
+    expect(taskFromStore(store, 'child')?.effort).toBe(0);
+    expect(client.mutate).toHaveBeenCalledWith(expect.objectContaining({ variables: { input: { task_id: 'child', effort: 0 } } }));
   });
 
   it('applies an authoritative null to every saved Excel row without a reload', async () => {
