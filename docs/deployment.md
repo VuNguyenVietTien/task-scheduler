@@ -22,17 +22,40 @@ Browser
 | Vercel deployment | `dpl_GjrYjW8BTdF7yNEPqqD1ZuLaY2dF` (`task-scheduler-mhg3tac41-vunguyenviettiens-projects.vercel.app`, aliased `prjmngr.vercel.app`) |
 | Backend API | `https://pm-api.khampha.dpdns.org` |
 | Backend container | `task-scheduler-backend` |
-| Backend image | `task-scheduler-backend:20260908T0925-0218f17` |
-| Backend release | `/home/azuraith/task-scheduler/releases/20260908T0925-0218f17` |
+| Backend image | `task-scheduler-backend:20260908T0952-53011ef` |
+| Backend release | `/home/azuraith/task-scheduler/releases/20260908T0952-53011ef` |
 | PostgreSQL container | `task_scheduler_postgres` |
 | Cloudflare origin | `http://localhost:8081` |
 
 The immediate rollback container is retained, stopped, with the prior live image/configuration:
 
-- `task-scheduler-backend-prev-20260908T0925-0218f17`
-- `task-scheduler-backend:20260908T0712-01f1718`
+- `task-scheduler-backend-prev-20260908T0952-53011ef`
+- `task-scheduler-backend:20260908T0925-0218f17`
 
 The older rollback containers and images documented below remain retained too.
+
+## Release 20260908T0952-53011ef (2026-09-08)
+
+Atomic project-member removal release from committed source `53011efe21a52219e603bfdbc8f2286877d3e65a`.
+
+- Immutable image: `task-scheduler-backend:20260908T0952-53011ef` (`sha256:88ed2f11577ebc223b446a0b95473e24fb8a3dd484bfe623753985346198eb22`).
+- Committed Git archive: `/home/azuraith/task-scheduler/releases/20260908T0952-53011ef/source.tar.gz`, SHA-256 `016ef34481b25423d3bee773ed201f65d1d277297a4f061568f3377fa2680e1d`.
+- Verified pre-cutover backup: `/home/azuraith/task-scheduler/releases/20260908T0952-53011ef/backup/db-before-20260908T0952-53011ef.sql.gz` (33,565 bytes; SHA-256 `2e96debaf6ed7520648ecdfbc0e298956626cdb7c5cf3345a6bbe3cdaa0fa9ad`; gzip verified).
+- No migration or production member/task/timesheet mutation was run. Local/public readiness reports `ready` / `up` / `current`.
+- Existing CORS environment was preserved exactly; localhost and production GraphQL preflights remain 200 with matching exact ACAO.
+- Focused DB-backed GraphQL integrity test passed 1/1 before release; it used and then removed a disposable isolated database, not production data.
+
+Immediate backend rollback:
+
+```bash
+docker stop task-scheduler-backend && docker rm task-scheduler-backend
+docker rename task-scheduler-backend-prev-20260908T0952-53011ef task-scheduler-backend
+docker start task-scheduler-backend
+curl --fail --silent --show-error http://127.0.0.1:8081/health/ready
+curl --fail --silent --show-error https://pm-api.khampha.dpdns.org/health/ready
+```
+
+Database rollback is not required for this code-only release; the verified backup is retained as an additional safeguard.
 
 ## Release 20260908T0925-0218f17 (2026-09-08)
 
