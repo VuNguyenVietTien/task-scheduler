@@ -4,11 +4,10 @@
 //! `timesheet_entries` (migration 20260905000002) is the canonical store.
 //!
 //! Authorization:
-//! - reads (`my_timesheet_entries`) return ONLY the caller's own entries and
-//!   require project read (owner or member);
-//! - `save_timesheet_batch` requires project read membership; every written
-//!   row is stamped with the CALLER's user_id — a caller can never write
-//!   hours on behalf of someone else — and each row's task must belong to
+//! - every role can read/write its own entries; managers/leaders may read
+//!   others, while only managers may edit others;
+//! - `save_timesheet_batch` resolves an optional target user under that matrix,
+//!   and each row's task must belong to
 //!   the same project;
 //! - duplicate prevention: UNIQUE (user_id, task_id, work_date) + upsert
 //!   (ON CONFLICT DO UPDATE) so re-saving a day overwrites instead of
@@ -106,11 +105,13 @@ impl TimesheetQuery {
         project_id: ID,
         from: NaiveDate,
         to: NaiveDate,
+        user_id: Option<ID>,
     ) -> Result<Vec<TimesheetEntry>> {
         let context = ctx.data::<GraphQLContext>()?;
         let project_id = parse_id(&project_id, "project_id")?;
-        let user_id = project_authz::require_user(context)?;
-        project_authz::require_project_read(&context.db, user_id, project_id).await?;
+        let caller = project_authz::require_user(context)?;
+        let user_id = user_id.as_ref().map(|id| parse_id(id, "user_id")).transpose()?.unwrap_or(caller);
+        project_authz::require_timesheet_access(&context.db, caller, project_id, user_id, false).await?;
         if to < from {
             return Err(async_graphql::Error::new("to must be >= from"));
         }
@@ -148,8 +149,8 @@ impl TimesheetMutation {
         let context = ctx.data::<GraphQLContext>()?;
         let caller = project_authz::require_user(context)?;
         let project_id = parse_id(&input.project_id, "project_id")?;
-        // Any project member may log their own work on the project's tasks.
-        project_authz::require_project_read(&context.db, caller, project_id).await?;
+        let target = input.user_id.as_ref().map(|id| parse_id(id, "user_id")).transpose()?.unwrap_or(caller);
+        project_authz::require_timesheet_access(&context.db, caller, project_id, target, true).await?;
 
         let mut saved = 0i32;
         let mut errors: Vec<TimesheetBatchError> = Vec::new();
@@ -197,7 +198,7 @@ impl TimesheetMutation {
                     "DELETE FROM timesheet_entries \
                      WHERE user_id = $1 AND task_id = $2 AND work_date = $3",
                 )
-                .bind(caller)
+                .bind(target)
                 .bind(task_id)
                 .bind(entry.work_date)
                 .execute(&mut *tx)
@@ -215,7 +216,7 @@ impl TimesheetMutation {
                  SET hours = EXCLUDED.hours, note = EXCLUDED.note, updated_at = now()",
             )
             .bind(project_id)
-            .bind(caller) // rows are always the caller's own
+            .bind(target)
             .bind(task_id)
             .bind(entry.work_date)
             .bind(entry.hours)
@@ -235,6 +236,7 @@ impl TimesheetMutation {
 #[graphql(rename_fields = "snake_case")]
 pub struct SaveTimesheetBatchInput {
     pub project_id: ID,
+    pub user_id: Option<ID>,
     pub entries: Vec<TimesheetEntryInput>,
 }
 

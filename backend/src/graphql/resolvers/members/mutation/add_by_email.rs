@@ -21,6 +21,7 @@ pub async fn add_member_by_email(
     let caller = project_authz::require_user(context)?;
     let mut tx = pool.begin().await.map_err(AuthError::Database)?;
     project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+    project_authz::require_role_assignment_tx(&mut tx, caller, project_id, role.as_str()).await?;
 
     // Find user by email
     let users = sqlx::query(

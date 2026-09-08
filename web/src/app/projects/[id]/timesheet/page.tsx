@@ -19,9 +19,13 @@ import { useParams } from 'next/navigation';
 import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
 import { GET_PROJECT_TASKS } from '@/graphql/queries/tasks';
 import {
+  RESOURCE_MEMBERS_QUERY,
   TIMESHEET_ENTRIES_QUERY,
   SAVE_TIMESHEET_BATCH,
 } from '@/graphql/scheduling';
+import { useAuth } from '@/contexts/AuthContext';
+import { useProject } from '@/hooks/useProject';
+import { canEditOtherTimesheets, canViewOtherTimesheets } from '@/utils/project-permissions';
 import { toast } from 'sonner';
 
 function key(d: Date): string {
@@ -76,6 +80,14 @@ function mondayOf(date: Date): Date {
 }
 
 function TimesheetContent({ projectId }: { projectId: string }) {
+  const { user } = useAuth();
+  const { data: projectData } = useProject(projectId);
+  const role = projectData?.project?.user_role;
+  const [selectedUserId, setSelectedUserId] = useState<string>('');
+  const targetUserId = selectedUserId || user?.id || '';
+  const viewingOwn = targetUserId === user?.id;
+  const canViewOthers = canViewOtherTimesheets(role);
+  const canEdit = viewingOwn || canEditOtherTimesheets(role);
   const [weekStart, setWeekStart] = useState(() => mondayOf(new Date()));
   const days = useMemo(
     () => Array.from({ length: 7 }, (_, i) => {
@@ -98,8 +110,13 @@ function TimesheetContent({ projectId }: { projectId: string }) {
     variables: { projectId },
     fetchPolicy: 'cache-and-network',
   });
+  const membersQ = useQuery(RESOURCE_MEMBERS_QUERY, {
+    variables: { project_id: projectId, only_assignable: true },
+    skip: !canViewOthers,
+  });
   const entriesQ = useQuery(TIMESHEET_ENTRIES_QUERY, {
-    variables: { project_id: projectId, from, to },
+    variables: { project_id: projectId, from, to, user_id: targetUserId || null },
+    skip: !targetUserId,
     fetchPolicy: 'cache-and-network',
   });
   const [saveBatch] = useMutation(SAVE_TIMESHEET_BATCH);
@@ -167,6 +184,7 @@ function TimesheetContent({ projectId }: { projectId: string }) {
         variables: {
           input: {
             project_id: projectId,
+            user_id: targetUserId || null,
             entries: stagedNonZero.map(([k, hours]) => {
               const [task_id, work_date] = k.split('|');
               return { task_id, work_date, hours };
@@ -199,7 +217,26 @@ function TimesheetContent({ projectId }: { projectId: string }) {
   return (
     <div className="p-4 space-y-4" data-testid="timesheet-screen">
       <div className="flex items-center gap-3">
-        <h1 className="text-xl font-semibold">My timesheet</h1>
+        <h1 className="text-xl font-semibold">{viewingOwn ? 'My timesheet' : 'Member timesheet'}</h1>
+        {canViewOthers && (
+          <select
+            aria-label="Timesheet member"
+            value={targetUserId}
+            onChange={(event) => {
+              setSelectedUserId(event.target.value);
+              setStaged({});
+              setErrors([]);
+            }}
+            className="px-2 py-1 border rounded text-sm"
+          >
+            <option value={user?.id ?? ''}>My timesheet</option>
+            {(membersQ.data?.resource_members ?? [])
+              .filter((member: { user_id?: string | null }) => member.user_id && member.user_id !== user?.id)
+              .map((member: { user_id: string; display_name: string }) => (
+                <option key={member.user_id} value={member.user_id}>{member.display_name}</option>
+              ))}
+          </select>
+        )}
         <button className="px-3 py-1 border rounded" onClick={() => shiftWeek(-1)} aria-label="Previous week">‹ Prev</button>
         <span className="text-sm">
           {from} → {to}
@@ -214,7 +251,7 @@ function TimesheetContent({ projectId }: { projectId: string }) {
         <button
           className="px-4 py-1.5 bg-emerald-600 text-white rounded text-sm disabled:opacity-40"
           onClick={handleBatchSave}
-          disabled={saving || stagedNonZero.length === 0}
+          disabled={!canEdit || saving || stagedNonZero.length === 0}
           data-testid="timesheet-save-btn"
         >
           {saving ? 'Saving…' : 'Batch Save'}
@@ -259,6 +296,7 @@ function TimesheetContent({ projectId }: { projectId: string }) {
                         className="w-full h-8 px-1 text-center focus:outline-none focus:ring-1 focus:ring-blue-400 bg-transparent"
                         aria-label={`${task.title} ${key(d)} hours`}
                         value={cellValue(task.task_id, key(d))}
+                        disabled={!canEdit}
                         onChange={(e) => setCell(task.task_id, key(d), e.target.value)}
                         onFocus={() => setAnchorCell({ row, col })}
                         data-testid={`ts-cell-${task.task_id}-${key(d)}`}

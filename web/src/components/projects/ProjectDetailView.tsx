@@ -23,6 +23,8 @@ import { fetchProjectPlans, fetchLatestProjectPlan } from '@/redux/features/plan
 import { processTasksAndUpdateStore, processTasksBasedOnPlan } from '@/utils/taskScheduler';
 import { selectPlans } from '@/redux/features/plansSlice';
 import { updateAutoSort } from '@/redux/features/taskOrderStore';
+import { useAuth } from '@/contexts/AuthContext';
+import { canAddMembers, canViewMembers, canViewSettings } from '@/utils/project-permissions';
 
 type ViewType = 'list' | 'kanban' | 'gantt' | 'members' | 'report' | 'documents' | 'settings' | 'timesheet';
 const VALID_VIEWS: ViewType[] = ['list', 'kanban', 'gantt', 'members', 'report', 'documents', 'settings', 'timesheet'];
@@ -60,6 +62,7 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
 
   const { data: users, loading: usersLoading } = useUsers();
   const { data: projectData, refetch: refetchProject } = useProject(project.id);
+  const { user } = useAuth();
 
   const dispatch = useAppDispatch();
   const { tasks: reduxTasks, loading: loadingTasks, error } = useAppSelector(state => state.tasks);
@@ -268,8 +271,12 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
 
   const currentUserRole = projectData?.project?.user_role || 'guest';
 
-  const isProjectAdmin = ['manager', 'leader', 'admin'].includes(String(currentUserRole).toLowerCase());
-  const canManageProject = isProjectAdmin;
+  const isProjectAdmin = canAddMembers(currentUserRole);
+  const canManageProject = canViewSettings(currentUserRole);
+  const forbiddenView = Boolean(projectData?.project) && (
+    (activeView === 'members' && !canViewMembers(currentUserRole)) ||
+    (activeView === 'settings' && !canManageProject)
+  );
 
   console.log('===== THÔNG TIN QUYỀN HẠN =====');
   console.log('Project role từ API:', currentUserRole);
@@ -342,12 +349,16 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
       )}
 
       <div className={activeView === 'gantt' ? '' : 'h-[calc(100vh-100px)]'}>
-        {activeView === 'members' ? (
+        {forbiddenView ? (
+          <div role="alert" className="p-6 text-red-700">You do not have permission to view this project section.</div>
+        ) : activeView === 'members' ? (
           projectData?.project ? (
             <MembersView
               projectId={project.id}
               members={displayedMembers}
               currentUserRole={currentUserRole}
+              currentUserId={user?.id}
+              ownerUserId={projectData.project.owner.user_id}
               refetch={() => Promise.all([
                 dispatch(fetchProjectMembers(project.id)),
                 dispatch(fetchProjectTasks(project.id)),

@@ -5,5 +5,6 @@
 //! real-task hierarchy rules (design doc §4/§6).
 
 pub mod project_member_identity;
+pub mod project_permissions;
 pub mod resource_identity;
 pub mod taxonomy;

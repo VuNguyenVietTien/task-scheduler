@@ -130,6 +130,29 @@ test('partial GraphQL refresh errors are not confirmed member data', async () =>
   expect(screen.getByRole('button', { name: 'Retry members' })).toBeEnabled();
 });
 
+test('owner alone gets transfer control and may remove another manager, never the owner row', async () => {
+  const rows = [
+    { ...member, member_id: 'owner-member', resource_member_id: 'owner-resource', display_name: 'Owner', user_id: 'owner', access_role: 'manager' },
+    { ...member, member_id: 'peer-member', resource_member_id: 'peer-resource', display_name: 'Peer Manager', user_id: 'peer', access_role: 'manager' },
+  ];
+  query.mockImplementation((document: string) => ({
+    data: document.includes('query ResourceMembers(') ? { resource_members: rows } : {},
+    loading: false, error: undefined, refetch,
+  }));
+  render(<MembersView projectId="project-1" currentUserRole="manager" currentUserId="owner" ownerUserId="owner" members={[]} refetch={jest.fn()} />);
+  expect(screen.queryByRole('button', { name: 'Remove Owner' })).not.toBeInTheDocument();
+  expect(screen.getByRole('button', { name: 'Remove Peer Manager' })).toBeInTheDocument();
+  const transfer = screen.getByRole('button', { name: 'Transfer ownership to Peer Manager' });
+  expect(transfer).toBeInTheDocument();
+  expect(screen.queryByRole('button', { name: 'Transfer ownership to Owner' })).not.toBeInTheDocument();
+  jest.spyOn(window, 'confirm').mockReturnValue(true);
+  mutate.mockResolvedValueOnce({ data: { transfer_project_ownership: true } });
+  fireEvent.click(transfer);
+  await waitFor(() => expect(mutate).toHaveBeenCalledWith(expect.stringContaining('mutation TransferProjectOwnership'), {
+    variables: { project_id: 'project-1', new_owner_user_id: 'peer' },
+  }));
+});
+
 test.each([null, 'linked-user'])('confirmed remove sends canonical member_id for unlinked or linked row (%s)', async (userId) => {
   const row = { ...member, user_id: userId };
   query.mockImplementation((document: string) => ({

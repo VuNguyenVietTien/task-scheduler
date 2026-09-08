@@ -740,6 +740,7 @@ impl SchedulingMutation {
         let role = role.unwrap_or(MemberRole::Member);
         let mut tx = context.db.begin().await.map_err(db_err)?;
         project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+        project_authz::require_role_assignment_tx(&mut tx, caller, project_id, role.as_str()).await?;
         let users: Vec<Uuid> = sqlx::query_scalar(
             "SELECT rm.user_id FROM resource_group_members gm \
              JOIN project_members rm ON rm.resource_member_id = gm.resource_member_id \

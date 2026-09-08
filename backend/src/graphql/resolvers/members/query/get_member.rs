@@ -16,7 +16,7 @@ pub async fn project_member(
     let project_id = Uuid::parse_str(&project_id)?;
     let user_id = Uuid::parse_str(&user_id)?;
     let caller = crate::graphql::resolvers::project_authz::require_user(context)?;
-    crate::graphql::resolvers::project_authz::require_project_read(pool, caller, project_id)
+    crate::graphql::resolvers::project_authz::require_member_list(pool, caller, project_id)
         .await?;
 
     let member = sqlx::query(
