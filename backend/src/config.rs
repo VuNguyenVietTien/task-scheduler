@@ -427,9 +427,9 @@ fn validate_origin(origin: &str, production: bool) -> Result<(), ConfigError> {
             origin
         )));
     }
-    if production && scheme != "https" {
+    if production && scheme != "https" && origin != "http://localhost:3000" {
         return Err(ConfigError::InvalidVar(format!(
-            "production frontend origin must use https: {}",
+            "production frontend origin must use https (except http://localhost:3000): {}",
             origin
         )));
     }

@@ -80,6 +80,25 @@ fn production_container_sets_explicit_public_bind() {
 }
 
 #[test]
+fn production_allows_only_the_exact_http_local_development_origin() {
+    let mut values = production_values();
+    values.insert(
+        "FRONTEND_ORIGINS".into(),
+        "https://prjmngr.vercel.app,http://localhost:3000".into(),
+    );
+    let config = Config::from_map(&values).unwrap();
+    assert_eq!(
+        config.frontend_origins,
+        vec!["https://prjmngr.vercel.app", "http://localhost:3000"]
+    );
+
+    for rejected in ["http://localhost:3001", "http://127.0.0.1:3000"] {
+        values.insert("FRONTEND_ORIGINS".into(), rejected.into());
+        assert!(Config::from_map(&values).is_err(), "accepted {rejected}");
+    }
+}
+
+#[test]
 fn production_rejects_missing_origins_weak_secrets_and_wildcards() {
     let mut values = production_values();
     values.remove("FRONTEND_ORIGINS");
