@@ -57,11 +57,19 @@ npm test -- --config jest.config.js --reporters=default --runInBand --runTestsBy
   'src/app/projects/[id]/timesheet/__tests__/timesheet-helpers.test.ts'
 ```
 
-Backend unit/SDL contract coverage added in `backend/tests/project_permissions.rs`. Local Windows image has no Cargo toolchain; Ubuntu release must run `cargo fmt --check` and `cargo test --test project_permissions` (plus its normal backend contract suite).
+Backend unit/SDL contract coverage added in `backend/tests/project_permissions.rs`.
+
+Release validation:
+
+- frontend focused suites: 21/21;
+- Ubuntu changed-file rustfmt and `cargo check --locked`: passed;
+- Ubuntu `project_permissions`: 4/4; `contract`: 33/33;
+- backend image `task-scheduler-backend:20260908T0712-01f1718` is live with local/public readiness green;
+- public GraphQL introspection confirms role-aware member, ownership, settings, and timesheet schema.
 
 ## Production impact
 
-No deployment, production mutation, or database migration performed.
+Backend deployed from `01f1718cd7d59a54e67a3a1f8c18544c9c0774b3`. No migration or real member removal, owner transfer, or timesheet mutation performed. See `docs/deployment.md` for artifact, backup, and rollback evidence.
 
 ## Unresolved questions
 

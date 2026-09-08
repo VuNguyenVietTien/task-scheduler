@@ -22,17 +22,39 @@ Browser
 | Vercel deployment | `dpl_GjrYjW8BTdF7yNEPqqD1ZuLaY2dF` (`task-scheduler-mhg3tac41-vunguyenviettiens-projects.vercel.app`, aliased `prjmngr.vercel.app`) |
 | Backend API | `https://pm-api.khampha.dpdns.org` |
 | Backend container | `task-scheduler-backend` |
-| Backend image | `task-scheduler-backend:20260908T0626-54da8ec5` |
-| Backend release | `/home/azuraith/task-scheduler/releases/20260908T0626-54da8ec5` |
+| Backend image | `task-scheduler-backend:20260908T0712-01f1718` |
+| Backend release | `/home/azuraith/task-scheduler/releases/20260908T0712-01f1718` |
 | PostgreSQL container | `task_scheduler_postgres` |
 | Cloudflare origin | `http://localhost:8081` |
 
 The immediate rollback container is retained, stopped, with the prior live image/configuration:
 
-- `task-scheduler-backend-prev-20260908T0626-54da8ec5`
-- `task-scheduler-backend:20260908T0453-a73fff41`
+- `task-scheduler-backend-prev-20260908T0712-01f1718`
+- `task-scheduler-backend:20260908T0626-54da8ec5`
 
 The older rollback containers and images documented below remain retained too.
+
+## Release 20260908T0712-01f1718 (2026-09-08)
+
+Member, ownership, settings, and timesheet permission release from committed source `01f1718cd7d59a54e67a3a1f8c18544c9c0774b3`.
+
+- Immutable image: `task-scheduler-backend:20260908T0712-01f1718` (`sha256:c817f5595c6dc7d3620a2d8b0faf01d33583210cf059f133c8099c322e57ee96`).
+- Committed Git archive (`backend` + `web`, LF): `/home/azuraith/task-scheduler/releases/20260908T0712-01f1718/source.tar.gz`, SHA-256 `0bef323a75559db74e788249a29b8bc4ef4aadc98f7b3e1393bccf2058a7170a`.
+- Backup before replacement: `/home/azuraith/task-scheduler/releases/20260908T0712-01f1718/backup/db-before-20260908T0712-01f1718.sql.gz` (33,685 bytes; SHA-256 `9e8077d2c2e0f4358c2a5d614b8820b5ebe7ccb34bde4663037a2e5a466c37c8`; gzip verified).
+- No migration or production member/owner/timesheet mutation was run. Local/public readiness reports `ready` / `up` / `current`; public introspection exposes the role enum, role-aware member queries, `Projects.user_role`, `transfer_project_ownership`, and optional timesheet `user_id` fields.
+- Checks: frontend focused Jest 21/21; Ubuntu changed-file rustfmt, `cargo check --locked`, permission 4/4, contract 33/33, and immutable Docker image passed.
+
+Immediate backend rollback:
+
+```bash
+docker stop task-scheduler-backend && docker rm task-scheduler-backend
+docker rename task-scheduler-backend-prev-20260908T0712-01f1718 task-scheduler-backend
+docker start task-scheduler-backend
+curl --fail --silent --show-error http://127.0.0.1:8081/health/ready
+curl --fail --silent --show-error https://pm-api.khampha.dpdns.org/health/ready
+```
+
+Database rollback requires a validated restore from the named pre-release backup; do not overwrite the live database in place.
 
 ## Release 20260908T0626-54da8ec5 (2026-09-08)
 
@@ -188,7 +210,7 @@ Production E2E data retained for inspection:
 ## Rollback outline
 
 1. Stop and remove only the current `task-scheduler-backend` container.
-2. Rename and start the retained immediate rollback container `task-scheduler-backend-prev-20260908T0626-54da8ec5`.
+2. Rename and start the retained immediate rollback container `task-scheduler-backend-prev-20260908T0712-01f1718`.
 3. Confirm local readiness at `http://127.0.0.1:8081/health/ready`.
 4. Confirm public readiness through `pm-api.khampha.dpdns.org`.
 
