@@ -8,7 +8,7 @@ DONE
 
 - Branch: `codex/list-member-filter-0908`
 - Prerequisite modal/member options: `47300152c52c80ac67a0db7c6a2b73c59b28ee8e` (cherry-picked as `5b30588`)
-- List wiring: `e2b0eca`
+- List wiring: `e2b0eca` (integrated on `dev` as `02261ec`)
 
 ## Delivered
 
@@ -26,14 +26,16 @@ DONE
 
 ## Verification
 
+Integrated `dev` at `d352f3e`:
+
 ```text
-TaskListView.assignment.test.tsx
- task-filter-modal-member-options.test.tsx
- task-list-member-filter.test.ts
-3 suites passed; 20 tests passed; 0 failed
+task-list-member-filter.test.ts
+task-filter-modal-member-options.test.tsx
+kanban-member-options.test.ts
+3 suites passed; 7 tests passed; 0 failed
 ```
 
-Tests used dependencies from `dev-0908/web` to avoid duplicate React resolution. Existing Headless UI `act(...)` warnings and the expected assignment failure-path console error remained non-failing.
+Tests ran from `dev-0908/web` with its existing dependencies.
 
 ## Unresolved questions
 
