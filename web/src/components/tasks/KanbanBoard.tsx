@@ -13,7 +13,7 @@ import {
   type DropResult
 } from '@/components/dnd/DragDropProvider';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
-import { deleteTask, removeTasksFromTree, updateTaskStatus } from '@/redux/features/tasksSlice';
+import { updateTaskStatus } from '@/redux/features/tasksSlice';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { UserInfo } from '@/types/members';
@@ -29,7 +29,6 @@ import {
 } from './kanban-tasks';
 import { getStatusLabel } from '@/constants/task-display-labels';
 import { filterTaskTreeByStatus, isTaskStatusVisible } from '@/utils/task-status-visibility';
-import { taskDeletionConfirmationMessage } from '@/utils/task-deletion';
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -352,25 +351,6 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
 
     console.log(`Dragging task ${taskId} from ${previousStatus} to ${newStatus}`);
 
-    if (newStatus === TaskStatuses.REJECTED) {
-      const task = flattenKanbanTasks(clonedTasks).find((item) => item.task.task_id === taskId)?.task;
-      if (!task || !window.confirm(taskDeletionConfirmationMessage(task, 'reject'))) return;
-      dispatch(deleteTask({ taskId }))
-        .unwrap()
-        .then((result) => {
-          setClonedTasks((current) => removeTasksFromTree(current, result.deletedTaskIds));
-          setSelectedTask((current) => current && result.deletedTaskIds.includes(current.task_id) ? null : current);
-          setIsTaskDetailOpen(false);
-          window.dispatchEvent(new CustomEvent('show-notification', {
-            detail: { type: 'success', message: 'Task deleted.' },
-          }));
-        })
-        .catch(() => window.dispatchEvent(new CustomEvent('show-notification', {
-          detail: { type: 'error', message: 'Could not delete task.' },
-        })));
-      return;
-    }
-
     // Optimistically update the matching node without flattening its tree.
     const optimisticTasks = updateKanbanTaskInTree(clonedTasks, taskId, { status: newStatus });
     setClonedTasks(optimisticTasks);
@@ -575,7 +555,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
                   </span>
                 </div>
 
-                <Droppable droppableId={column.id}>
+                <Droppable droppableId={column.id} isDropDisabled={column.id === TaskStatuses.REJECTED}>
                   {(provided: DroppableProvided, snapshot) => (
                     <div
                       ref={provided.innerRef}
@@ -593,7 +573,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
                             key={task.task_id}
                             draggableId={task.task_id}
                             index={index}
-                            isDragDisabled={updateTaskStatusMutation.isLoading}
+                            isDragDisabled={updateTaskStatusMutation.isLoading || task.status === TaskStatuses.REJECTED}
                           >
                             {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
                               <div

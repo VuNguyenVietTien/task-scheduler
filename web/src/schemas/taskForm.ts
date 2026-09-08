@@ -39,7 +39,6 @@ export const taskFormSchema = z.object({
     'PENDING',
     'REVIEW',
     'BLOCKED',
-    'REJECTED',
     'ARCHIVED'
   ], {
     required_error: 'Status is required',
@@ -106,7 +105,6 @@ export const statusOptions = [
   'PENDING',
   'REVIEW',
   'BLOCKED',
-  'REJECTED',
   'ARCHIVED'
 ] as const;
 

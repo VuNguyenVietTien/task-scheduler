@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect, useCallback, useRef, forwardRef, useMemo } from 'react';
-import { Task, TaskStatus, Priority, TaskStatuses, Priorities, UserBasic, TaskComment } from '@/types/task';
+import { EDITABLE_TASK_STATUSES, Task, TaskStatus, Priority, TaskStatuses, Priorities, UserBasic, TaskComment } from '@/types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
 import { User } from '@/contexts/AuthContext';
 import { Spinner } from '@/components/ui/Spinner';
@@ -1144,8 +1144,8 @@ export function TaskDetailPage({
     });
   }, [task, taskId, latestTaskData]);
 
-  const handleDelete = async (reason: 'delete' | 'reject') => {
-    if (!window.confirm(taskDeletionConfirmationMessage(task, reason))) return false;
+  const handleDelete = async () => {
+    if (!window.confirm(taskDeletionConfirmationMessage(task))) return false;
     try {
       setIsSaving(true);
       setError(null);
@@ -1239,11 +1239,6 @@ export function TaskDetailPage({
         if (editedTask.taskTypeCatalogItemId !== task.taskTypeCatalogItemId) updates.taskTypeCatalogItemId = editedTask.taskTypeCatalogItemId ?? null;
       }
       
-      if (updates.status === TaskStatuses.REJECTED) {
-        await handleDelete('reject');
-        return;
-      }
-
       // Gọi hàm update từ props
       const success = await onTaskUpdate(updates);
       
@@ -1840,7 +1835,7 @@ export function TaskDetailPage({
                   <button
                     type="button"
                     disabled={isSaving}
-                    onClick={() => void handleDelete('delete')}
+                    onClick={() => void handleDelete()}
                     className="text-sm text-red-600 hover:text-red-700 disabled:opacity-50"
                   >
                     Delete
@@ -2030,7 +2025,7 @@ export function TaskDetailPage({
                 <div className="grid grid-cols-1 gap-2">
                   {/* Status */}
                   {renderEditableField(t('tasks.fields.status'), 'status', 'select',
-                    Object.values(TaskStatuses).map(value => ({
+                    EDITABLE_TASK_STATUSES.map(value => ({
                       value,
                       label: getStatusLabel(value)
                     })))}

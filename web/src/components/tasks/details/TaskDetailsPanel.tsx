@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
+import { EDITABLE_TASK_STATUSES, Task, TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
 import { User } from '@/contexts/AuthContext';
 import { PencilIcon, CheckIcon, XMarkIcon } from '@heroicons/react/24/outline';
@@ -447,7 +447,7 @@ export default function TaskDetailsPanel({
             <h3 className="text-base font-medium text-gray-900 mb-3">Thông tin cơ bản</h3>
             
             {renderEditableField('Trạng thái', 'status', 'select',
-              Object.values(TaskStatuses).map(status => ({ value: status, label: getStatusLabel(status) })))}
+              EDITABLE_TASK_STATUSES.map(status => ({ value: status, label: getStatusLabel(status) })))}
 
             {renderEditableField('Người được giao', 'assignee', 'select')}
 

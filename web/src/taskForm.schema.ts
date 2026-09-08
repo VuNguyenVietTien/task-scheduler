@@ -19,7 +19,6 @@ export const taskFormSchema = z.object({
     'PENDING',
     'REVIEW',
     'BLOCKED',
-    'REJECTED',
     'ARCHIVED'
   ]),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'URGENT', 'CRITICAL']),

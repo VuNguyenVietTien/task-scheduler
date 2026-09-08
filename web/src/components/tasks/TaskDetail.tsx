@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Task, TaskStatus, Priority, TaskStatuses, Priorities } from '../../types/task';
+import { EDITABLE_TASK_STATUSES, Task, TaskStatus, Priority, TaskStatuses, Priorities } from '../../types/task';
 import { User } from '../../contexts/AuthContext';
 import { getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
 import { Dialog } from '../ui/Dialog';
@@ -124,8 +124,8 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
     return colors[priority] || colors.MEDIUM;
   };
 
-  const handleDelete = async (reason: 'delete' | 'reject') => {
-    if (!window.confirm(taskDeletionConfirmationMessage(task, reason))) return false;
+  const handleDelete = async () => {
+    if (!window.confirm(taskDeletionConfirmationMessage(task))) return false;
     try {
       setIsSaving(true);
       setError(null);
@@ -150,10 +150,6 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
       const updates: Partial<Task> = {};
 
       const val = (editedTask as any)[fieldName];
-      if (fieldName === 'status' && val === TaskStatuses.REJECTED) {
-        await handleDelete('reject');
-        return;
-      }
       switch (fieldName) {
         case 'title': updates.title = val; break;
         case 'description': updates.description = val; break;
@@ -282,7 +278,7 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
   };
 
 
-  const statusOptions = Object.values(TaskStatuses).map(s => ({
+  const statusOptions = EDITABLE_TASK_STATUSES.map(s => ({
     value: s, label: getStatusLabel(s)
   }));
   const priorityOptions = Object.values(Priorities).map(p => ({
@@ -450,7 +446,7 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
         <button
           type="button"
           disabled={isSaving}
-          onClick={() => void handleDelete('delete')}
+          onClick={() => void handleDelete()}
           className="absolute top-4 right-12 px-2 py-1 text-sm text-red-600 hover:text-red-700 disabled:opacity-50 z-10"
         >
           Delete

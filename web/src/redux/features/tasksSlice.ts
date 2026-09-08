@@ -118,12 +118,10 @@ export const deleteTask = createAsyncThunk(
   }
 );
 
-// REJECTED is a confirmed-delete UI action, never a persisted status.
 export const updateTaskStatus = createAsyncThunk(
   'tasks/updateTaskStatus',
   async ({ taskId, status }: { taskId: string, status: TaskStatus }, { rejectWithValue }) => {
     try {
-      if (status === 'REJECTED') return await requestTaskDeletion(taskId);
       const response = await client.mutate({
         mutation: UPDATE_TASK,
         variables: { input: { task_id: taskId, status } },
@@ -478,10 +476,7 @@ const tasksSlice = createSlice({
       if (result?.deletedTaskIds.length) state.tasks = removeTasksFromTree(state.tasks, result.deletedTaskIds);
     };
     builder.addCase(deleteTask.fulfilled, (state, action) => applyDeletedTasks(state, action.payload));
-    builder.addCase(updateTaskStatus.fulfilled, (state, action) => {
-      if ('deletedTaskIds' in action.payload) applyDeletedTasks(state, action.payload);
-      else applyReturnedTask(state, action.payload.task);
-    });
+    builder.addCase(updateTaskStatus.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));
     builder.addCase(updateTaskAssignee.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));
     builder.addCase(updateTaskPriority.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));
     builder.addCase(updateTaskEffort.fulfilled, (state, action) => applyReturnedTask(state, action.payload.task));

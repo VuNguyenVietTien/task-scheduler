@@ -4,7 +4,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { CloneTaskSelectionInput, CloneTreeNode } from '@/utils/cloneTask';
 import { useTranslation } from 'react-i18next';
-import { Task, TaskStatus, Priority, TaskFilter, TaskStatuses, Priorities, UserBasic } from '@/types/task';
+import { Task, TaskStatus, Priority, TaskFilter, TaskStatuses, EDITABLE_TASK_STATUSES, Priorities, UserBasic } from '@/types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
 import { ProjectData } from '@/types/project';
 import { TaskFilterBar } from './TaskFilterBar';
@@ -673,7 +673,7 @@ export function TaskListView({
                     aria-label="Trạng thái"
                     title="Chọn trạng thái"
                   >
-                    {Object.values(TaskStatuses).map((status) => (
+                    {EDITABLE_TASK_STATUSES.map((status) => (
                       <option key={status} value={status}>
                         {getStatusLabel(status)}
                       </option>
@@ -964,8 +964,8 @@ export function TaskListView({
     document.body.removeChild(link);
   }, [tasks, selectedTasks]);
 
-  const deleteTaskWithConfirmation = useCallback(async (task: Task, reason: 'delete' | 'reject' = 'delete') => {
-    if (!window.confirm(taskDeletionConfirmationMessage(task, reason))) return false;
+  const deleteTaskWithConfirmation = useCallback(async (task: Task) => {
+    if (!window.confirm(taskDeletionConfirmationMessage(task))) return false;
     try {
       const result = await dispatch(deleteTask({ taskId: task.task_id })).unwrap();
       setTasks((current) => removeTasksFromTree(current, result.deletedTaskIds));
@@ -1182,10 +1182,6 @@ export function TaskListView({
   const handleExcelSave = useCallback(async (edit: StagedEdit) => {
     if (edit.field === 'status') {
       const task = findTaskInTree(tasks, edit.taskId) ?? excelTasks.find((item) => item.task_id === edit.taskId);
-      if (edit.value === TaskStatuses.REJECTED && task) {
-        if (!await deleteTaskWithConfirmation(task, 'reject')) throw new Error('Task deletion was cancelled or failed.');
-        return;
-      }
       const result = await dispatch(updateTaskStatus({ taskId: edit.taskId, status: edit.value as TaskStatus })).unwrap();
       if ('task' in result && result.task) applyExcelPatch(edit.taskId, { status: result.task.status });
     } else if (edit.field === 'priority') {
@@ -1275,11 +1271,6 @@ export function TaskListView({
       }
       else if (field === 'status') {
         const status = editValue as TaskStatus;
-        if (status === TaskStatuses.REJECTED) {
-          if (await deleteTaskWithConfirmation(currentTask, 'reject')) handleCancelEditing();
-          return;
-        }
-        
         // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
         const originalTasks = [...tasks];
         
@@ -1530,6 +1521,7 @@ export function TaskListView({
           active={listMode === 'excel'}
           onSaveEdit={handleExcelSave}
           onCloneTask={handleCloneTask}
+          onDeleteTask={(task) => void deleteTaskWithConfirmation(task)}
           onDirtyChange={setExcelDirty}
         />
         </div>
@@ -1632,7 +1624,7 @@ export function TaskListView({
                               aria-label="Trạng thái"
                               title="Chọn trạng thái"
                             >
-                              {Object.values(TaskStatuses).map((status) => (
+                              {EDITABLE_TASK_STATUSES.map((status) => (
                                 <option key={status} value={status}>
                                   {getStatusLabel(status)}
                                 </option>
