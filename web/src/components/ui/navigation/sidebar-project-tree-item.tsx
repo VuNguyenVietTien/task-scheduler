@@ -24,6 +24,7 @@ const SUB_TAB_ICONS = {
   list: 'M4 6h16M4 10h16M4 14h16M4 18h16',
   kanban: 'M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2',
   gantt: 'M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z',
+  burndown: 'M4 5v14h16M6 8l4 4 3-2 5 6',
   members: 'M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z',
   report: 'M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z',
   documents: 'M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z',
@@ -42,6 +43,7 @@ export function SidebarProjectTreeItem({ project, isExpanded, onToggle }: Sideba
     { id: 'list', label: t('projects.viewList') },
     { id: 'kanban', label: t('projects.viewKanban') },
     { id: 'gantt', label: t('projects.viewGantt') },
+    { id: 'burndown', label: t('projects.viewBurndown') },
     { id: 'members', label: t('projects.viewMembers') },
     { id: 'report', label: t('projects.viewReport') },
     { id: 'documents', label: t('projects.viewDocuments') },
@@ -79,7 +81,7 @@ export function SidebarProjectTreeItem({ project, isExpanded, onToggle }: Sideba
       {/* Sub-tabs (expanded) */}
       <div
         className={`overflow-hidden transition-all duration-200 ${
-          isExpanded ? 'max-h-80 opacity-100' : 'max-h-0 opacity-0'
+          isExpanded ? 'max-h-96 opacity-100' : 'max-h-0 opacity-0'
         }`}
       >
         <div className="pl-8 pb-1">
