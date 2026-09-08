@@ -34,10 +34,10 @@ export function newInlineSubtaskDraft(id: string, parentTaskId: string): InlineS
   };
 }
 
-export function nextSiblingPriorityOrder(tasks: readonly Task[], parentTaskId: string): number {
+export function nextSiblingPriorityOrder(tasks: readonly Task[], parentTaskId: string | null): number {
   let max = -1;
   const visit = (nodes: readonly Task[], nestedParent?: string) => nodes.forEach((task) => {
-    const parentId = task.parent_task_id ?? nestedParent;
+    const parentId = task.parent_task_id ?? nestedParent ?? null;
     if (parentId === parentTaskId && Number.isFinite(task.priority_order)) max = Math.max(max, task.priority_order);
     if (task.child_tasks?.length) visit(task.child_tasks, task.task_id);
   });

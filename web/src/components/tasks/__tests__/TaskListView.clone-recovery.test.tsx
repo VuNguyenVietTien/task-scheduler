@@ -6,6 +6,7 @@ import type { Task } from '@/types/task';
 const cloneMutation = jest.fn();
 const refetch = jest.fn();
 const dispatch = jest.fn(() => ({ unwrap: () => Promise.resolve([]) }));
+const mockUpdateTask = jest.fn();
 let treeQuery: Record<string, unknown>;
 
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
@@ -24,7 +25,7 @@ jest.mock('@/hooks/useTaskFieldMutations', () => ({
 }));
 jest.mock('@/hooks/useTasks', () => ({
   useUpdateTaskPriorityOrder: () => jest.fn(),
-  useUpdateTask: () => ({ updateTask: jest.fn() }),
+  useUpdateTask: () => ({ updateTask: mockUpdateTask }),
 }));
 jest.mock('@/hooks/useProjectTaxonomies', () => ({
   useProjectTaxonomies: () => ({
@@ -72,6 +73,9 @@ beforeEach(() => {
   jest.clearAllMocks();
   treeQuery = { data: { task_tree_rows: [root] }, loading: false, error: undefined, refetch };
   refetch.mockResolvedValue({ data: { task_tree_rows: [root] } });
+  mockUpdateTask.mockImplementation(async (taskId: string, updates: Partial<Task>) => ({
+    ...root, task_id: taskId, ...updates,
+  }));
 });
 
 describe('TaskListView clone recovery', () => {
@@ -93,18 +97,50 @@ describe('TaskListView clone recovery', () => {
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Clone task' })).not.toBeInTheDocument());
   });
 
-  it('locks the committed clone flow when refresh fails rather than offering a duplicate mutation', async () => {
-    cloneMutation.mockResolvedValue({ data: { clone_task_subtree: { created_task_ids: ['created-root'] } } });
+  it('retains a confirmed clone checkpoint when append refresh fails instead of cloning twice', async () => {
+    cloneMutation.mockResolvedValue({ data: { clone_task_subtree: { root_task_ids: ['created-root'], created_task_ids: ['created-root'] } } });
     refetch.mockRejectedValue(new Error('refresh down'));
     openClone();
     submitClone();
 
     await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent(
-      'Created 1 copies (1 tasks), but the task list could not be refreshed. Refresh task list before creating another copy.'
+      '0 of 1 clone destinations completed. Created tasks are safe; retry to finish append ordering.'
     ));
-    expect(screen.getByRole('button', { name: 'Create 1 copy (1 task)' })).toBeDisabled();
-    expect(screen.getByRole('button', { name: 'Refresh task list' })).toBeEnabled();
+    fireEvent.click(screen.getByRole('button', { name: 'Create 1 copy (1 task)' }));
+    await waitFor(() => expect(refetch).toHaveBeenCalledTimes(2));
     expect(cloneMutation).toHaveBeenCalledTimes(1);
+  });
+
+  it('retries only unfinished destinations and appends each canonical root after existing children', async () => {
+    const child: Task = { ...root, task_id: 'child', parent_task_id: 'root', title: 'Child', priority_order: 2 };
+    const targetA: Task = { ...root, task_id: 'target-a', title: 'Target A', priority_order: 3 };
+    const targetB: Task = { ...root, task_id: 'target-b', title: 'Target B', priority_order: 4 };
+    const existingA: Task = { ...root, task_id: 'existing-a', parent_task_id: 'target-a', title: 'Existing A', priority_order: 7 };
+    const existingB: Task = { ...root, task_id: 'existing-b', parent_task_id: 'target-b', title: 'Existing B', priority_order: 11 };
+    const rows = [root, child, targetA, existingA, targetB, existingB];
+    treeQuery = { data: { task_tree_rows: rows }, loading: false, error: undefined, refetch };
+    refetch.mockResolvedValue({ data: { task_tree_rows: rows } });
+    cloneMutation
+      .mockResolvedValueOnce({ data: { clone_task_subtree: { root_task_ids: ['clone-a'], created_task_ids: ['clone-a'] } } })
+      .mockRejectedValueOnce({ graphQLErrors: [{ message: 'destination failed' }] })
+      .mockResolvedValueOnce({ data: { clone_task_subtree: { root_task_ids: ['clone-b'], created_task_ids: ['clone-b'] } } });
+
+    openClone();
+    fireEvent.click(screen.getByRole('checkbox', { name: /Clone parent task: Root task/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Destination parent: Target A' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Destination parent: Target B' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create 1 copy per destination (2 tasks)' }));
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('1 of 2 clone destinations completed. Retry to continue.'));
+    expect(mockUpdateTask).toHaveBeenCalledWith('clone-a', { priority_order: 8 });
+    fireEvent.click(screen.getByRole('button', { name: 'Create 1 copy per destination (2 tasks)' }));
+
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Clone task' })).not.toBeInTheDocument());
+    expect(cloneMutation).toHaveBeenCalledTimes(3);
+    expect(cloneMutation.mock.calls[0][0].variables.input.destination_parent_task_id).toBe('target-a');
+    expect(cloneMutation.mock.calls[1][0].variables.input.destination_parent_task_id).toBe('target-b');
+    expect(cloneMutation.mock.calls[2][0].variables.input.destination_parent_task_id).toBe('target-b');
+    expect(mockUpdateTask).toHaveBeenCalledWith('clone-b', { priority_order: 12 });
   });
 
   it('does not claim a refresh after an unknown network outcome when refresh also fails', async () => {

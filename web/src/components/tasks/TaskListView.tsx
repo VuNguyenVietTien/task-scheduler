@@ -2,7 +2,7 @@
 
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import type { CloneTaskSelectionInput, CloneTreeNode } from '@/utils/cloneTask';
+import { expandCloneSelectionInputs, type CloneTaskSelectionInput, type CloneTreeNode } from '@/utils/cloneTask';
 import { useTranslation } from 'react-i18next';
 import { Task, TaskStatus, Priority, TaskFilter, TaskStatuses, EDITABLE_TASK_STATUSES, Priorities } from '@/types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
@@ -73,6 +73,13 @@ export interface CloneRecoveryState {
   kind: 'committed' | 'unknown' | 'reselect';
   message: string;
   busy?: 'mutation' | 'refresh';
+}
+
+interface CloneJobCheckpoint {
+  rootTaskIds: string[];
+  createdCount: number;
+  targetOrders?: number[];
+  ordered?: boolean;
 }
 
 interface TaskListViewProps {
@@ -206,6 +213,7 @@ export function TaskListView({
   const [memberRefreshing, setMemberRefreshing] = useState(false);
   const [cloneSourceTaskId, setCloneSourceTaskId] = useState<string | null>(null);
   const [cloneError, setCloneError] = useState<string | null>(null);
+  const cloneJobCheckpoints = React.useRef(new Map<string, CloneJobCheckpoint>());
   const [localRecovery, setLocalRecovery] = useState<CloneRecoveryState | null>(null);
   const recoveryState = parentRecovery === undefined ? localRecovery : parentRecovery;
   const cloneRecovery = recoveryState?.kind ?? null;
@@ -1180,9 +1188,10 @@ export function TaskListView({
 
   const updateTaskPriorityOrder = useUpdateTaskPriorityOrder();
 
-  // Clone is a single atomic server mutation. Opening works for normal and
-  // deep Excel rows because its source is resolved from task_tree_rows.
+  // Each destination is one atomic backend clone. The callback checkpoints
+  // confirmed jobs so partial retry cannot duplicate completed destinations.
   const handleCloneTask = useCallback((taskId: string) => {
+    cloneJobCheckpoints.current.clear();
     setCloneError(null);
     setCloneSourceTaskId(taskId);
   }, []);
@@ -1200,6 +1209,7 @@ export function TaskListView({
     if (treeResult.error || treeResult.errors?.length || !treeResult.data?.task_tree_rows) {
       throw treeResult.error ?? new Error(treeResult.errors?.[0]?.message ?? 'Task tree refresh returned no data.');
     }
+    return treeResult.data.task_tree_rows as Task[];
   }, [dispatch, taskTreeRowsQ, taxonomyProjectId]);
 
   const finishCloneRefresh = useCallback(async (
@@ -1233,39 +1243,83 @@ export function TaskListView({
   const handleCloneSubmit = useCallback(async (input: CloneTaskSelectionInput) => {
     if (cloneRecovery || cloneRefreshing) return;
     setCloneError(null);
-    setCloneRecovery({ kind: 'unknown', busy: 'mutation', message: 'Clone outcome is not yet confirmed. Refresh task list before retrying.' });
-    try {
-      const result = await cloneTaskSubtreeMut({ variables: { input } });
-      const createdCount = result.data?.clone_task_subtree?.created_task_ids?.length;
-      if (result.errors?.length) throw { graphQLErrors: result.errors };
-      if (!createdCount) throw { networkError: new Error('Clone returned no created tasks') };
-      await finishCloneRefresh(
-        `Created ${input.quantity} copies (${createdCount} tasks).`,
-        `Created ${input.quantity} copies (${createdCount} tasks), but the task list could not be refreshed. Refresh task list before creating another copy.`,
-        'success'
-      );
-    } catch (error) {
-      const code = graphQLErrorCode(error);
-      if (code === 'CONFLICT' || code === 'NOT_FOUND') {
-        await finishCloneRefresh(
-          'Task tree changed. Task list refreshed. Select the source again.',
-          'Task tree changed, but the task list could not be refreshed. Refresh it before selecting again.',
-          'reselect'
+    const jobs = expandCloneSelectionInputs(input);
+    const keyForJob = (job: CloneTaskSelectionInput) => JSON.stringify(job);
+
+    for (const job of jobs) {
+      const key = keyForJob(job);
+      let checkpoint = cloneJobCheckpoints.current.get(key);
+      if (!checkpoint) {
+        setCloneRecovery({ kind: 'unknown', busy: 'mutation', message: 'Clone outcome is not yet confirmed. Refresh task list before retrying.' });
+        try {
+          const result = await cloneTaskSubtreeMut({ variables: { input: job } });
+          if (result.errors?.length) throw { graphQLErrors: result.errors };
+          const payload = result.data?.clone_task_subtree;
+          const rootTaskIds = payload?.root_task_ids as string[] | undefined;
+          const createdCount = payload?.created_task_ids?.length;
+          if (!createdCount || !rootTaskIds?.length) throw { networkError: new Error('Clone returned no complete result') };
+          checkpoint = { rootTaskIds, createdCount };
+          cloneJobCheckpoints.current.set(key, checkpoint);
+        } catch (error) {
+          const code = graphQLErrorCode(error);
+          if (code === 'CONFLICT' || code === 'NOT_FOUND') {
+            await finishCloneRefresh(
+              'Task tree changed. Task list refreshed. Select the source again.',
+              'Task tree changed, but the task list could not be refreshed. Refresh it before selecting again.',
+              'reselect'
+            );
+            return;
+          }
+          if ((error as { networkError?: unknown }).networkError) {
+            await finishCloneRefresh(
+              'Could not confirm clone; task list refreshed. Check results before retrying.',
+              'Could not confirm clone. The task list could not be refreshed; do not retry until it succeeds.',
+              'unknown'
+            );
+            return;
+          }
+          const completed = jobs.filter((candidate) => cloneJobCheckpoints.current.get(keyForJob(candidate))?.ordered).length;
+          setCloneRecovery(null);
+          setCloneError(`${completed} of ${jobs.length} clone destinations completed. Retry to continue.`);
+          return;
+        }
+      }
+      if (checkpoint.ordered) continue;
+
+      setCloneRecovery({ kind: 'committed', busy: 'refresh', message: 'Clone confirmed. Appending after existing children…' });
+      try {
+        const rows = await refreshClonedTasks();
+        const parentTaskId = job.destination_parent_task_id
+          ?? (job.clone_without_parent ? null : rows.find((task) => task.task_id === job.source_task_id)?.parent_task_id ?? null);
+        const firstOrder = nextSiblingPriorityOrder(
+          rows.filter((task) => !checkpoint!.rootTaskIds.includes(task.task_id)),
+          parentTaskId
         );
+        const targetOrders = checkpoint.targetOrders ?? checkpoint.rootTaskIds.map((_, index) => firstOrder + index);
+        checkpoint.targetOrders = targetOrders;
+        for (let index = 0; index < checkpoint.rootTaskIds.length; index += 1) {
+          const saved = await updateTask(checkpoint.rootTaskIds[index], { priority_order: targetOrders[index] });
+          dispatch(upsertTask(saved));
+          setTasks((current) => upsertTaskInTree(current, saved));
+        }
+        checkpoint.ordered = true;
+      } catch {
+        const completed = jobs.filter((candidate) => cloneJobCheckpoints.current.get(keyForJob(candidate))?.ordered).length;
+        setCloneRecovery(null);
+        setCloneError(`${completed} of ${jobs.length} clone destinations completed. Created tasks are safe; retry to finish append ordering.`);
         return;
       }
-      if ((error as { networkError?: unknown }).networkError) {
-        await finishCloneRefresh(
-          'Could not confirm clone; task list refreshed. Check results before retrying.',
-          'Could not confirm clone. The task list could not be refreshed; do not retry until it succeeds.',
-          'unknown'
-        );
-        return;
-      }
-      setCloneRecovery(null);
-      setCloneError(error instanceof Error ? error.message : 'Could not clone task tree.');
     }
-  }, [cloneTaskSubtreeMut, finishCloneRefresh, cloneRecovery, cloneRefreshing, setCloneRecovery]);
+
+    const totalCreated = jobs.reduce((total, job) => total + (cloneJobCheckpoints.current.get(keyForJob(job))?.createdCount ?? 0), 0);
+    const copies = jobs.length === 1 ? `${input.quantity} copies` : `${jobs.length} destinations × ${input.quantity} copies`;
+    const refreshed = await finishCloneRefresh(
+      `Created ${copies} (${totalCreated} tasks).`,
+      `Created ${copies} (${totalCreated} tasks), but the task list could not be refreshed. Refresh task list before creating another copy.`,
+      'success'
+    );
+    if (refreshed) cloneJobCheckpoints.current.clear();
+  }, [cloneTaskSubtreeMut, finishCloneRefresh, cloneRecovery, cloneRefreshing, dispatch, refreshClonedTasks, setCloneRecovery, updateTask]);
 
   const handleRetryCloneRefresh = useCallback(async () => {
     if (recoveryState?.busy || cloneRefreshing) return;
@@ -2045,6 +2099,7 @@ export function TaskListView({
           retrying={cloneRefreshing || recoveryState?.busy === 'refresh'}
           onRetry={handleRetryCloneRefresh}
           onClose={() => {
+            cloneJobCheckpoints.current.clear();
             setCloneSourceTaskId(null);
             setCloneError(null);
           }}
