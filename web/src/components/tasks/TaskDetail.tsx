@@ -341,20 +341,19 @@ export function TaskDetail({ task, isOpen, onClose, onTaskUpdate, currentUser, p
             <div className="flex items-center gap-1">
               <input
                 type="date"
+                aria-label={label}
                 value={val?.split?.('T')?.[0] || val || ''}
                 onChange={(e) => setEditedTask({ ...editedTask, [fieldName]: e.target.value || null } as Task)}
                 className="flex-1 text-sm rounded-md border-slate-300 focus:border-blue-500 focus:ring-blue-500 px-2 py-1.5"
               />
-              {val && (
-                <button
-                  type="button"
-                  onClick={() => setEditedTask({ ...editedTask, [fieldName]: null } as Task)}
-                  className="text-gray-400 hover:text-gray-600 text-xs"
-                  title="Xóa ngày"
-                >
-                  ✕
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => setEditedTask({ ...editedTask, [fieldName]: null } as Task)}
+                className="rounded border border-slate-300 px-2 py-1 text-xs text-slate-600 hover:bg-slate-50"
+                aria-label={`Clear ${label}`}
+              >
+                Clear
+              </button>
             </div>
           ) : type === 'number' ? (
             <input

@@ -255,7 +255,7 @@ describe('TaskListView canonical assignment source wiring', () => {
       const input = within(screen.getByText('Parent task').closest('tr')!).getByLabelText(label);
       fireEvent.change(input, { target: { value: '' } });
       fireEvent.click(input.parentElement!.querySelector('button[title="Lưu"]')!);
-      await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', field === 'tags' ? { tags: [] } : { [field]: field === 'progress' ? null : '' }));
+      await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', field === 'tags' ? { tags: [] } : { [field]: null }));
     }
 
     expect(taskFromStore(store, 'parent')).toMatchObject({ progress: null, actual_start_date: null, actual_end_date: null, tags: [] });
@@ -269,7 +269,7 @@ describe('TaskListView canonical assignment source wiring', () => {
     fireEvent.change(input, { target: { value: '' } });
     fireEvent.click(input.parentElement!.querySelector('button[title="Lưu"]')!);
 
-    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', { start_date: '' }));
+    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', { start_date: null }));
     expect(taskFromStore(store, 'parent')?.start_date).toBeNull();
   });
 
@@ -312,7 +312,7 @@ describe('TaskListView canonical assignment source wiring', () => {
     fireEvent.change(screen.getByLabelText('Excel start date'), { target: { value: '' } });
     fireEvent.click(screen.getByTestId('excel-save-btn'));
 
-    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', { start_date: '' }));
+    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', { start_date: null }));
     expect(taskFromStore(store, 'parent')?.start_date).toBeNull();
   });
 

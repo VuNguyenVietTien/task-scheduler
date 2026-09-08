@@ -1389,7 +1389,7 @@ export function TaskListView({
     } else if (edit.field === 'progressType' || edit.field === 'category' || edit.field === 'taskType') {
       await saveCatalog(edit.taskId, edit.field, edit.value || null);
     } else if (edit.field === 'start_date' || edit.field === 'actual_start_date' || edit.field === 'actual_end_date') {
-      const savedTask = await updateTask(edit.taskId, { [edit.field]: edit.value } as Partial<Task>);
+      const savedTask = await updateTask(edit.taskId, { [edit.field]: edit.value || null } as Partial<Task>);
       applyExcelPatch(edit.taskId, savedTask);
     } else if (edit.field === 'progress') {
       const savedTask = await updateTask(edit.taskId, { progress: Number(edit.value) });
@@ -1547,7 +1547,7 @@ export function TaskListView({
           ? ({ progress: editValue === '' ? null : Number(editValue) } as Partial<Task>)
           : field === 'tags'
             ? { tags: editValue.split(',').map((tag) => tag.trim()).filter(Boolean) }
-            : ({ [field]: editValue } as Partial<Task>);
+            : ({ [field]: editValue || null } as Partial<Task>);
         if (field === 'progress' && editValue !== '' && (!Number.isFinite(Number(editValue)) || Number(editValue) < 0 || Number(editValue) > 100)) {
           alert('Progress must be between 0 and 100.');
           return;
@@ -1563,7 +1563,7 @@ export function TaskListView({
       }
       else if (field === 'start_date') {
         try {
-          const saved = await updateTask(taskId, { start_date: editValue });
+          const saved = await updateTask(taskId, { start_date: editValue || null } as Partial<Task>);
           dispatch(upsertTask(saved));
           updateSingleTaskInState(taskId, saved);
         } catch (error) {

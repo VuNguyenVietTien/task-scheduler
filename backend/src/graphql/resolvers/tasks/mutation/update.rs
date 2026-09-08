@@ -1,4 +1,5 @@
 use async_graphql::{Context, MaybeUndefined};
+use chrono::{DateTime, Utc};
 use serde_json::{json, Value as JsonValue};
 use sqlx::Row;
 use uuid::Uuid;
@@ -20,6 +21,14 @@ fn id_field(
     }
 }
 
+fn date_field(value: MaybeUndefined<DateTime<Utc>>) -> (bool, Option<DateTime<Utc>>) {
+    match value {
+        MaybeUndefined::Undefined => (false, None),
+        MaybeUndefined::Null => (true, None),
+        MaybeUndefined::Value(date) => (true, Some(date)),
+    }
+}
+
 pub async fn update_task(
     ctx: &Context<'_>,
     input: UpdateTaskInput,
@@ -29,6 +38,10 @@ pub async fn update_task(
             "REJECTED permanently deletes a task; use delete_task after confirmation",
         ));
     }
+    let (start_date_changed, start_date) = date_field(input.start_date);
+    let (due_date_changed, due_date) = date_field(input.due_date);
+    let (actual_start_date_changed, actual_start_date) = date_field(input.actual_start_date);
+    let (actual_end_date_changed, actual_end_date) = date_field(input.actual_end_date);
 
     let context = ctx.data::<GraphQLContext>()?;
     let caller_id = project_authz::require_user(context)?;
@@ -110,23 +123,23 @@ pub async fn update_task(
                 status = COALESCE($4::task_status, status),
                 priority = COALESCE($5::task_priority, priority),
                 priority_order = COALESCE($6, priority_order),
-                start_date = COALESCE($7, start_date),
-                due_date = COALESCE($8, due_date),
-                actual_start_date = COALESCE($9, actual_start_date),
-                actual_end_date = COALESCE($10, actual_end_date),
-                effort = COALESCE($11, effort),
-                progress = COALESCE($12, progress),
-                type = $13,
-                category = $14,
-                progress_type = $15::task_progress_type,
-                tags = COALESCE($16, tags),
-                is_deleted = COALESCE($17, is_deleted),
-                parent_task_id = CASE WHEN $18 THEN $19 ELSE parent_task_id END,
-                assignee_resource_member_id = CASE WHEN $20 THEN $21 ELSE assignee_resource_member_id END,
-                assignee_id = CASE WHEN $20 THEN $22 ELSE assignee_id END,
-                progress_catalog_item_id = $23,
-                category_catalog_item_id = $24,
-                task_type_catalog_item_id = $25,
+                start_date = CASE WHEN $7 THEN $8 ELSE start_date END,
+                due_date = CASE WHEN $9 THEN $10 ELSE due_date END,
+                actual_start_date = CASE WHEN $11 THEN $12 ELSE actual_start_date END,
+                actual_end_date = CASE WHEN $13 THEN $14 ELSE actual_end_date END,
+                effort = COALESCE($15, effort),
+                progress = COALESCE($16, progress),
+                type = $17,
+                category = $18,
+                progress_type = $19::task_progress_type,
+                tags = COALESCE($20, tags),
+                is_deleted = COALESCE($21, is_deleted),
+                parent_task_id = CASE WHEN $22 THEN $23 ELSE parent_task_id END,
+                assignee_resource_member_id = CASE WHEN $24 THEN $25 ELSE assignee_resource_member_id END,
+                assignee_id = CASE WHEN $24 THEN $26 ELSE assignee_id END,
+                progress_catalog_item_id = $27,
+                category_catalog_item_id = $28,
+                task_type_catalog_item_id = $29,
                 updated_at = now()
             WHERE task_id = $1 RETURNING *
         )
@@ -145,10 +158,14 @@ pub async fn update_task(
     .bind(input.status)
     .bind(input.priority)
     .bind(input.priority_order)
-    .bind(input.start_date)
-    .bind(input.due_date)
-    .bind(input.actual_start_date)
-    .bind(input.actual_end_date)
+    .bind(start_date_changed)
+    .bind(start_date)
+    .bind(due_date_changed)
+    .bind(due_date)
+    .bind(actual_start_date_changed)
+    .bind(actual_start_date)
+    .bind(actual_end_date_changed)
+    .bind(actual_end_date)
     .bind(input.effort)
     .bind(input.progress)
     .bind(classifications.task_type_legacy)
@@ -220,4 +237,19 @@ pub async fn update_task(
     };
     tx.commit().await.map_err(AuthError::Database)?;
     Ok(task)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::date_field;
+    use async_graphql::MaybeUndefined;
+    use chrono::{TimeZone, Utc};
+
+    #[test]
+    fn date_patch_distinguishes_clear_from_omission() {
+        assert_eq!(date_field(MaybeUndefined::Undefined), (false, None));
+        assert_eq!(date_field(MaybeUndefined::Null), (true, None));
+        let date = Utc.with_ymd_and_hms(2026, 9, 8, 0, 0, 0).unwrap();
+        assert_eq!(date_field(MaybeUndefined::Value(date)), (true, Some(date)));
+    }
 }

@@ -7,6 +7,7 @@ import tasksReducer from '@/redux/features/tasksSlice';
 import type { Task } from '@/types/task';
 
 const mutate = jest.fn();
+const mockUpdateTask = jest.fn();
 const onTaskUpdate = jest.fn();
 const members = [
   { resource_member_id: 'linked-resource', display_name: 'Linked Member', user_id: 'linked-user' },
@@ -17,7 +18,7 @@ const membersQueryResult = { data: { resource_members: members }, loading: false
 
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key }) }));
 jest.mock('@/lib/apollo-client', () => ({ client: { mutate: (...args: unknown[]) => mutate(...args) } }));
-jest.mock('@/hooks/useTasks', () => ({ useUpdateTask: () => ({ updateTask: jest.fn() }) }));
+jest.mock('@/hooks/useTasks', () => ({ useUpdateTask: () => ({ updateTask: mockUpdateTask }) }));
 jest.mock('@/components/common/AdvancedEditor', () => ({ AdvancedEditor: () => null }));
 jest.mock('@/components/projects/ProjectCatalogSettingsPanel', () => ({ ProjectCatalogSelect: () => null }));
 jest.mock('@/services/imageService', () => ({ imageService: {} }), { virtual: true });
@@ -35,6 +36,8 @@ const task: Task = {
   assignee_resource_member_id: 'linked-resource',
   assignee: { userId: 'linked-user', username: 'Old account name' },
   priority_order: 1, status: 'TODO', priority: 'MEDIUM', created_by: 'owner',
+  start_date: '2026-09-08T00:00:00Z', due_date: '2026-09-09T00:00:00Z',
+  actual_start_date: '2026-09-10T00:00:00Z', actual_end_date: '2026-09-11T00:00:00Z',
 };
 
 function renderModal() {
@@ -51,6 +54,7 @@ function renderModal() {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockUpdateTask.mockImplementation(async (_taskId: string, updates: Partial<Task>) => ({ ...task, ...updates }));
   mutate.mockImplementation(async ({ variables: { input } }: any) => ({ data: { update_task: {
     ...task,
     assignee_resource_member_id: input.assignee_resource_member_id,
@@ -73,6 +77,20 @@ test('Gantt modal lists name-only members and saves canonical resource assignmen
     task_id: 'task-1', assignee_resource_member_id: 'unlinked-resource', title: 'Assigned task',
   });
   expect(onTaskUpdate).toHaveBeenCalledWith('task-1', expect.objectContaining({ assignee_resource_member_id: 'unlinked-resource' }));
+});
+
+test('Gantt modal exposes a visible date Clear action and saves explicit null', async () => {
+  const store = renderModal();
+  const label = screen.getByText('tasks.fields.startDate');
+  fireEvent.click(label.nextElementSibling!);
+  fireEvent.click(screen.getByRole('button', { name: 'Clear tasks.fields.startDate' }));
+
+  expect(screen.getByLabelText('tasks.fields.startDate')).toHaveValue('');
+  fireEvent.click(screen.getByTitle('tasks.confirm'));
+
+  await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('task-1', { start_date: null }));
+  expect(store.getState().tasks.tasks[0].start_date).toBeNull();
+  expect(onTaskUpdate).toHaveBeenCalledWith('task-1', expect.objectContaining({ start_date: null }));
 });
 
 test('Gantt modal unsets both canonical assignment fields', async () => {
