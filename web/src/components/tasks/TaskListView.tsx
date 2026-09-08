@@ -10,7 +10,6 @@ import { ProjectData } from '@/types/project';
 import { TaskFilterBar } from './TaskFilterBar';
 import { TaskBulkActions } from './TaskBulkActions';
 import { useUpdateTaskPriorityOrder, useUpdateTask } from '@/hooks/useTasks';
-import { UserAvatar } from '@/components/common/UserAvatar';
 import { TaskFilterModal } from './TaskFilterModal';
 import { Pagination } from '@/components/common/Pagination';
 import { TaskDetail } from './TaskDetail';
@@ -30,7 +29,6 @@ import {
   updateTaskAssignee,
   updateTaskDueDate,
   upsertTask,
-  updateTaskLocally,
   fetchProjectTasks
 } from '@/redux/features/tasksSlice';
 import { useProjectTaxonomies } from '@/hooks/useProjectTaxonomies';
@@ -118,14 +116,6 @@ function findTaskInTree(tasks: readonly Task[], taskId: string): Task | undefine
   }
   return undefined;
 }
-
-// Task type badge colors following design system
-const TYPE_BADGE_COLORS: Record<string, string> = {
-  'Bug': 'bg-red-50 text-red-700 border border-red-200',
-  'Feature': 'bg-blue-50 text-blue-700 border border-blue-200',
-  'Enhancement': 'bg-purple-50 text-purple-700 border border-purple-200',
-  'Documentation': 'bg-emerald-50 text-emerald-700 border border-emerald-200',
-};
 
 // Thêm CSS bên ngoài component
 const taskNestedStyles = `
@@ -235,16 +225,34 @@ export function TaskListView({
     [...progressCatalogItems, ...categoryCatalogItems, ...taskTypeCatalogItems]
       .map((item) => [item.catalog_item_id, item])
   ), [progressCatalogItems, categoryCatalogItems, taskTypeCatalogItems]);
+  const catalogValue = useCallback((task: Task, field: ExcelCatalogField): string => {
+    const raw = task as Task & {
+      progress_catalog_item_id?: string | null;
+      category_catalog_item_id?: string | null;
+      task_type_catalog_item_id?: string | null;
+    };
+    return (field === 'progress' ? task.progressCatalogItemId ?? raw.progress_catalog_item_id
+      : field === 'category' ? task.categoryCatalogItemId ?? raw.category_catalog_item_id
+        : task.taskTypeCatalogItemId ?? raw.task_type_catalog_item_id) ?? '';
+  }, []);
   const catalogLabel = useCallback((task: Task, field: ExcelCatalogField): string => {
-    const id = field === 'progress' ? task.progressCatalogItemId
-      : field === 'category' ? task.categoryCatalogItemId
-        : task.taskTypeCatalogItemId;
+    const id = catalogValue(task, field);
     const fallback = field === 'progress' ? task.progress_type
       : field === 'category' ? task.category
         : task.type;
     const item = id ? catalogItemsById.get(id) : undefined;
     return item ? resolveProjectCatalogLabel(item, catalogLocale) : fallback ?? id ?? '';
-  }, [catalogItemsById, catalogLocale]);
+  }, [catalogItemsById, catalogLocale, catalogValue]);
+  const catalogOptions = useMemo(() => ({
+    progress: progressCatalogItems,
+    category: categoryCatalogItems,
+    taskType: taskTypeCatalogItems,
+  } as const), [progressCatalogItems, categoryCatalogItems, taskTypeCatalogItems]);
+  const excelCatalogOptions = useMemo(() => Object.fromEntries(
+    Object.entries(catalogOptions).map(([field, items]) => [field, [...items]
+      .sort((a, b) => a.display_order - b.display_order || a.catalog_item_id.localeCompare(b.catalog_item_id))
+      .map((item) => ({ key: item.catalog_item_id, label: resolveProjectCatalogLabel(item, catalogLocale) }))])
+  ), [catalogOptions, catalogLocale]);
   const [phaseFilter, setPhaseFilter] = useState<PhaseFilterValue>('ALL');
   const [showPhaseSettings, setShowPhaseSettings] = useState(false);
   
@@ -257,6 +265,7 @@ export function TaskListView({
   const { updateEffort, isUpdating: isUpdatingEffort } = useUpdateTaskEffort();
   const { updateDueDate, isUpdating: isUpdatingDueDate } = useUpdateTaskDueDate();
   const { updateAssignee, isUpdating: isUpdatingAssignee } = useUpdateTaskAssignee();
+  const { updateTask } = useUpdateTask();
   
   // Lấy danh sách members từ Redux store
   const reduxMembers = useAppSelector(state => state.members.members);
@@ -307,13 +316,20 @@ export function TaskListView({
       return next;
     });
     setExcelPatches((current) => {
-      const acknowledged = Object.keys(current).filter((id) => rows.some((row) => row.task_id === id && row.effort === current[id].effort));
+      const acknowledged = Object.keys(current).filter((id) => rows.some((row) => {
+        const patch = current[id];
+        return row.task_id === id &&
+          (patch.effort === undefined || row.effort === patch.effort) &&
+          (patch.progressCatalogItemId === undefined || catalogValue(row, 'progress') === patch.progressCatalogItemId) &&
+          (patch.categoryCatalogItemId === undefined || catalogValue(row, 'category') === patch.categoryCatalogItemId) &&
+          (patch.taskTypeCatalogItemId === undefined || catalogValue(row, 'taskType') === patch.taskTypeCatalogItemId);
+      }));
       if (!acknowledged.length) return current;
       const next = { ...current };
       acknowledged.forEach((id) => delete next[id]);
       return next;
     });
-  }, [taskTreeRowsQ.data, taskTreeRowsQ.loading, taskTreeRowsQ.error]);
+  }, [taskTreeRowsQ.data, taskTreeRowsQ.loading, taskTreeRowsQ.error, catalogValue]);
 
   // Memoize assignees and projects
   const { assignees, projects } = useMemo(() => {
@@ -393,6 +409,67 @@ export function TaskListView({
     (task.assignee_resource_member_id || task.assignee?.userId
       ? (resourceMembersQ.loading ? 'Loading assigned member…' : task.assignee?.username ?? 'Assigned member unavailable')
       : '');
+
+  const saveCatalog = useCallback(async (taskId: string, field: ExcelCatalogField, value: string | null) => {
+    const key = field === 'progress' ? 'progressCatalogItemId'
+      : field === 'category' ? 'categoryCatalogItemId'
+        : 'taskTypeCatalogItemId';
+    const saved = await updateTask(taskId, { [key]: value });
+    dispatch(upsertTask(saved));
+    updateSingleTaskInState(taskId, saved);
+    setExcelPatches((current) => ({ ...current, [taskId]: { ...current[taskId], [key]: saved[key] } }));
+  }, [dispatch, updateSingleTaskInState, updateTask]);
+
+  const handleCatalogChange = useCallback(async (taskId: string, field: ExcelCatalogField, value: string) => {
+    try {
+      await saveCatalog(taskId, field, value || null);
+    } catch (error) {
+      updateSingleTaskInState(taskId, {});
+      alert(`Could not update ${field}: ${error}`);
+    }
+  }, [saveCatalog, updateSingleTaskInState]);
+
+  const handleAssigneeChange = useCallback(async (taskId: string, value: string) => {
+    if (memberMappingUnavailable) return;
+    const option = assigneeOptions.find((candidate) => candidate.key === value);
+    if (value && !option) return;
+    try {
+      applyCanonicalAssignment(taskId, await updateAssignee(taskId, option ? {
+        assigneeId: option.userId,
+        assigneeResourceMemberId: option.resourceMemberId,
+      } : null));
+    } catch (error) {
+      updateSingleTaskInState(taskId, {});
+      alert(`Could not update assignee: ${error}`);
+    }
+  }, [applyCanonicalAssignment, assigneeOptions, memberMappingUnavailable, updateAssignee, updateSingleTaskInState]);
+
+  const renderCatalogSelect = (task: Task, field: ExcelCatalogField, label: string) => (
+    <select
+      aria-label={label}
+      className="w-full min-w-28 rounded border-slate-300 bg-white text-sm"
+      value={catalogValue(task, field)}
+      onClick={(event) => event.stopPropagation()}
+      onChange={(event) => void handleCatalogChange(task.task_id, field, event.target.value)}
+    >
+      <option value="">Not set</option>
+      {excelCatalogOptions[field].map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+    </select>
+  );
+
+  const renderAssigneeSelect = (task: Task) => (
+    <select
+      aria-label="Người được giao"
+      className="w-full min-w-36 rounded border-slate-300 bg-white text-sm"
+      value={assigneeOptionForTask(task)?.key ?? ''}
+      disabled={memberMappingUnavailable}
+      onClick={(event) => event.stopPropagation()}
+      onChange={(event) => void handleAssigneeChange(task.task_id, event.target.value)}
+    >
+      <option value="">Chưa gán</option>
+      {assigneeOptions.map((option) => <option key={option.key} value={option.key}>{option.label}{option.userId ? '' : ' (unlinked)'}</option>)}
+    </select>
+  );
 
   // Count identities, not just root rows. Do not flatten the rendering forest.
   const { statusCounts, totalTaskCount } = useMemo(() => {
@@ -495,8 +572,9 @@ export function TaskListView({
   const applyEffortPatch = useCallback((taskId: string, effort: number | undefined) => {
     const updates: Partial<Task> = { effort };
     updateSingleTaskInState(taskId, updates);
+    dispatch(upsertTask({ task_id: taskId, ...updates } as Task));
     setExcelPatches((current) => ({ ...current, [taskId]: updates }));
-  }, [updateSingleTaskInState]);
+  }, [dispatch, updateSingleTaskInState]);
 
   // Excel keeps the normal List's filtered roots, then projects every active
   // descendant from the flat arbitrary-depth query without changing normal List.
@@ -626,6 +704,40 @@ export function TaskListView({
     return task.child_tasks && task.child_tasks.length > 0;
   };
 
+  function renderTaskTitle(task: Task) {
+    if (editingCell?.taskId === task.task_id && editingCell.field === 'title') {
+      return <div className="flex items-center gap-1">
+        <input
+          aria-label="Task title"
+          autoFocus
+          className="min-w-40 rounded border-slate-300 text-sm"
+          value={editValue}
+          onChange={(event) => setEditValue(event.target.value)}
+          onKeyDown={(event) => handleKeyDown(event, task.task_id, 'title')}
+        />
+        <button title="Lưu" onClick={(event) => { event.stopPropagation(); void handleSaveEditing(task.task_id, 'title'); }}>✓</button>
+        <button title="Hủy" onClick={(event) => { event.stopPropagation(); handleCancelEditing(); }}>×</button>
+      </div>;
+    }
+    return <div className="flex items-center gap-1">
+      <div
+        className="font-medium text-slate-900 cursor-pointer hover:text-blue-600"
+        onClick={(event) => handleTaskClick(task.task_id, event)}
+        onMouseDown={(event) => { if (event.button === 1) { event.preventDefault(); handleTaskClick(task.task_id, event); } }}
+      >
+        {task.title}
+      </div>
+      <button
+        type="button"
+        className="text-slate-400 hover:text-blue-600"
+        aria-label={`Edit title ${task.title}`}
+        onClick={(event) => { event.stopPropagation(); handleStartEditing(task.task_id, 'title', task.title); }}
+      >
+        ✎
+      </button>
+    </div>;
+  }
+
   const renderChildTasks = (parentTask: Task, level: number = 1) => {
     if (!hasChildTasks(parentTask) || !expandedTasks.has(parentTask.task_id)) {
       return null;
@@ -668,15 +780,7 @@ export function TaskListView({
                   </button>
                 )}
                 
-                <div>
-                  <div
-                    className="font-medium text-slate-900 cursor-pointer hover:text-blue-600"
-                    onClick={(e) => handleTaskClick(childTask.task_id, e)}
-                    onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); handleTaskClick(childTask.task_id, e); } }}
-                  >
-                    {childTask.title}
-                  </div>
-                </div>
+                {renderTaskTitle(childTask)}
               </div>
             </div>
           </td>
@@ -778,78 +882,10 @@ export function TaskListView({
               </span>
             )}
           </td>
-          <td className="px-3 py-4 whitespace-nowrap">{catalogLabel(childTask, 'progress') || <span className="text-slate-400">-</span>}</td>
-          <td className="px-3 py-4 whitespace-nowrap">{catalogLabel(childTask, 'category') || <span className="text-slate-400">-</span>}</td>
-          <td className="px-3 py-4 whitespace-nowrap">
-            {catalogLabel(childTask, 'taskType') ? (
-              <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE_COLORS[childTask.type ?? ''] || 'bg-gray-100 text-gray-800'}`}>
-                {catalogLabel(childTask, 'taskType')}
-              </span>
-            ) : (
-              <span className="text-slate-400">-</span>
-            )}
-          </td>
-          <td className="px-3 py-4 text-sm">
-            {editingCell?.taskId === childTask.task_id && editingCell?.field === 'assignee_id' ? (
-              <div className="relative flex items-center">
-                <div className="w-36 min-w-36 max-w-36">
-                  <select
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
-                    autoFocus
-                    aria-label="Người được giao"
-                    title="Chọn người được giao"
-                  >
-                    <option value="">Chưa gán</option>
-                    {assigneeOptions.map((option) => (
-                      <option key={option.key} value={option.key}>
-                        {option.label}{option.userId ? '' : ' (unlinked)'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <div className="flex ml-2">
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleSaveEditing(childTask.task_id, 'assignee_id'); }}
-                    className="text-green-600 hover:text-green-800 mr-1" 
-                    title="Lưu"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </button>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
-                    className="text-red-600 hover:text-red-800" 
-                    title="Hủy"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <div 
-                className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1 rounded"
-                onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'assignee_id', assigneeOptionForTask(childTask)?.key || ''); }}
-              >
-                {assigneeOptionForTask(childTask) ? (
-                  <>
-                    <UserAvatar
-                      username={assigneeOptionForTask(childTask)!.label}
-                      avatarUrl={childTask.assignee?.avatarUrl}
-                      size="md"
-                    />
-                    <span>{assigneeOptionForTask(childTask)!.label}</span>
-                  </>
-                ) : (
-                  <span className="text-slate-400">{assignmentLabel(childTask) || 'Chưa gán'}</span>
-                )}
-              </div>
-            )}
-          </td>
+          <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(childTask, 'progress', 'Progress type')}</td>
+          <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(childTask, 'category', 'Category')}</td>
+          <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(childTask, 'taskType', 'Task type')}</td>
+          <td className="px-3 py-4 text-sm">{renderAssigneeSelect(childTask)}</td>
           <td className="px-3 py-4 text-sm text-slate-500">
             {editingCell?.taskId === childTask.task_id && editingCell?.field === 'due_date' ? (
               <div className="relative flex items-center">
@@ -1129,7 +1165,6 @@ export function TaskListView({
   };
 
   const updateTaskPriorityOrder = useUpdateTaskPriorityOrder();
-  const { updateTask } = useUpdateTask();
 
   // Clone is a single atomic server mutation. Opening works for normal and
   // deep Excel rows because its source is resolved from task_tree_rows.
@@ -1270,6 +1305,8 @@ export function TaskListView({
       }
     } else if (edit.field === 'due_date') {
       await dispatch(updateTaskDueDate({ taskId: edit.taskId, dueDate: edit.value })).unwrap();
+    } else if (edit.field === 'progress' || edit.field === 'category' || edit.field === 'taskType') {
+      await saveCatalog(edit.taskId, edit.field, edit.value || null);
     } else if (edit.field === 'assignee') {
       if (memberMappingUnavailable) throw new Error(memberMappingError ?? 'Member mapping is loading. Retry after it loads.');
       const value = edit.value.trim();
@@ -1291,7 +1328,7 @@ export function TaskListView({
       dispatch(upsertTask(savedTask));
       updateSingleTaskInState(edit.taskId, savedTask);
     }
-  }, [applyCanonicalAssignment, applyEffortPatch, dispatch, tasks, updateSingleTaskInState, updateTask, updateAssignee, assigneeOptions, memberMappingUnavailable, memberMappingError]);
+  }, [applyCanonicalAssignment, applyEffortPatch, dispatch, tasks, updateSingleTaskInState, updateTask, updateAssignee, assigneeOptions, memberMappingUnavailable, memberMappingError, saveCatalog]);
 
   const handleFilterChange = (newFilters: TaskFilter) => {
     if (setFilters) {
@@ -1325,7 +1362,16 @@ export function TaskListView({
     
     try {
       // Sử dụng hook riêng biệt cho từng loại trường
-      if (field === 'status') {
+      if (field === 'title') {
+        if (!editValue.trim()) {
+          alert('Task title cannot be empty.');
+          return;
+        }
+        const saved = await updateTask(taskId, { title: editValue.trim() });
+        dispatch(upsertTask(saved));
+        updateSingleTaskInState(taskId, saved);
+      }
+      else if (field === 'status') {
         const status = editValue as TaskStatus;
         
         // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
@@ -1592,6 +1638,8 @@ export function TaskListView({
           assigneeOptions={assigneeOptions}
           assigneeValue={(task) => assigneeOptionForTask(task)?.key ?? ''}
           catalogLabel={catalogLabel}
+          catalogOptions={excelCatalogOptions}
+          catalogValue={catalogValue}
           active={listMode === 'excel'}
           onSaveEdit={handleExcelSave}
           onCloneTask={handleCloneTask}
@@ -1682,15 +1730,7 @@ export function TaskListView({
                           </button>
                         )}
                         
-                        <div>
-                          <div 
-                            className="font-medium text-slate-900 cursor-pointer hover:text-blue-600"
-                            onClick={(e) => handleTaskClick(task.task_id, e)}
-                            onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); handleTaskClick(task.task_id, e); } }}
-                          >
-                            {task.title}
-                          </div>
-                        </div>
+                        {renderTaskTitle(task)}
                       </div>
                     </td>
                     <td className="px-3 py-4 text-sm">
@@ -1791,78 +1831,10 @@ export function TaskListView({
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-4 whitespace-nowrap">{catalogLabel(task, 'progress') || <span className="text-slate-400">-</span>}</td>
-                    <td className="px-3 py-4 whitespace-nowrap">{catalogLabel(task, 'category') || <span className="text-slate-400">-</span>}</td>
-                    <td className="px-3 py-4 whitespace-nowrap">
-                      {catalogLabel(task, 'taskType') ? (
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${TYPE_BADGE_COLORS[task.type ?? ''] || 'bg-gray-100 text-gray-800'}`}>
-                          {catalogLabel(task, 'taskType')}
-                        </span>
-                      ) : (
-                        <span className="text-slate-400">-</span>
-                      )}
-                    </td>
-                    <td className="px-3 py-4 text-sm">
-                      {editingCell?.taskId === task.task_id && editingCell?.field === 'assignee_id' ? (
-                        <div className="relative flex items-center">
-                          <div className="w-36 min-w-36 max-w-36">
-                            <select
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
-                              autoFocus
-                              aria-label="Người được giao"
-                              title="Chọn người được giao"
-                            >
-                              <option value="">Chưa gán</option>
-                              {assigneeOptions.map((option) => (
-                                <option key={option.key} value={option.key}>
-                                  {option.label}{option.userId ? '' : ' (unlinked)'}
-                                </option>
-                              ))}
-                            </select>
-                          </div>
-                          <div className="flex ml-2">
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleSaveEditing(task.task_id, 'assignee_id'); }}
-                              className="text-green-600 hover:text-green-800 mr-1" 
-                              title="Lưu"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            </button>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
-                              className="text-red-600 hover:text-red-800" 
-                              title="Hủy"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <div 
-                          className="flex items-center gap-2 cursor-pointer hover:bg-slate-100 p-1 rounded"
-                          onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'assignee_id', assigneeOptionForTask(task)?.key || ''); }}
-                        >
-                          {assigneeOptionForTask(task) ? (
-                            <>
-                              <UserAvatar
-                                username={assigneeOptionForTask(task)!.label}
-                                avatarUrl={task.assignee?.avatarUrl}
-                                size="md"
-                              />
-                              <span>{assigneeOptionForTask(task)!.label}</span>
-                            </>
-                          ) : (
-                            <span className="text-slate-400">{assignmentLabel(task) || 'Chưa gán'}</span>
-                          )}
-                        </div>
-                      )}
-                    </td>
+                    <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(task, 'progress', 'Progress type')}</td>
+                    <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(task, 'category', 'Category')}</td>
+                    <td className="px-3 py-4 whitespace-nowrap">{renderCatalogSelect(task, 'taskType', 'Task type')}</td>
+                    <td className="px-3 py-4 text-sm">{renderAssigneeSelect(task)}</td>
                     <td className="px-3 py-4 text-sm text-slate-500">
                       {editingCell?.taskId === task.task_id && editingCell?.field === 'due_date' ? (
                         <div className="relative flex items-center">
