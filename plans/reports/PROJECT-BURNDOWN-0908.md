@@ -28,7 +28,7 @@ Complete on `codex/project-burndown-0908` from `6469574`.
 - Full repository `tsc --noEmit` remains blocked by existing errors in untouched rich-text/task legacy modules; no errors referenced burndown files.
 
 ## Commit
-Planned commit: `feat(projects): add saved-plan burndown chart`.
+Implementation commit: `1d5539f feat(projects): add saved-plan burndown chart`.
 
 ## Unresolved questions
 - None.
