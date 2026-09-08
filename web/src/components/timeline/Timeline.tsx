@@ -74,6 +74,7 @@ import { convertTaskOrderToTask, isWeekend, getNextWorkDay, findNextAvailableSta
 import { useProjectSchedulingConfig } from '@/hooks/useProjectSchedulingConfig';
 import { useParams } from 'next/navigation';
 import { ArrowUpDown } from 'lucide-react';
+import { isTaskStatusVisible } from '@/utils/task-status-visibility';
 
 interface TimelineBarsOverride {
   start: string;
@@ -667,8 +668,9 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   const matchesTaskFilter = useCallback((task: Task) => {
     if (viewMode === 'user' && selectedUserId && !matchesSelectedMember(task.assignee_resource_member_id, task.assignee?.userId)) return false;
     const { searchQuery, status, priority, type, tags } = ganttFilter;
+    if (!isTaskStatusVisible(task.status, status ? [status] : [])) return false;
     if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-    if (status && task.status !== status || priority && task.priority !== priority || type && task.type !== type) return false;
+    if (priority && task.priority !== priority || type && task.type !== type) return false;
     return !tags?.length || tags.some(tag => (task.tags ?? []).some(value => value.toLowerCase() === tag.toLowerCase()));
   }, [ganttFilter, matchesSelectedMember, selectedUserId, viewMode]);
   const calculationsUnavailable = schedulingConfig.loading ? 'Loading member capacity data' : schedulingConfig.error;
@@ -876,13 +878,9 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   // keeps a filtered child in its real hierarchy instead of promoting it root.
   const visibleTasks = useMemo(() => {
     const { searchQuery, status, priority, type, tags } = ganttFilter;
-    const hasGanttFilter = Boolean(searchQuery || status || priority || type || tags?.length);
-    const hasUserFilter = viewMode === 'user' && Boolean(selectedUserId);
-    if (!hasGanttFilter && !hasUserFilter) return filteredTasks;
-
     const matching = filteredTasks.filter(task => {
+      if (!isTaskStatusVisible(task.status, status ? [status] : [])) return false;
       if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-      if (status && task.status !== status) return false;
       if (priority && task.priority !== priority) return false;
       if (!type && !tags?.length) return true;
       const fullTask = tasks.find(t => t.task_id === task.task_id || t.id === task.task_id);
@@ -908,20 +906,13 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
     return selectedPlanTasks.filter(task => visibleIds.has(task.task_id));
   }, [filteredTasks, ganttFilter, selectedPlanTasks, selectedUserId, tasks, viewMode]);
 
-  const visibleTaskIds = useMemo(
-    () => new Set(visibleTasks.map((task) => task.task_id)),
-    [visibleTasks]
-  );
   // Ancestors kept only to explain a filtered match are context, not drop
   // targets. DnD therefore cannot turn filtering into a reparenting path.
   const draggableTaskIds = useMemo(() => {
     const { searchQuery, status, priority, type, tags } = ganttFilter;
-    const hasGanttFilter = Boolean(searchQuery || status || priority || type || tags?.length);
-    const hasUserFilter = viewMode === 'user' && Boolean(selectedUserId);
-    if (!hasGanttFilter && !hasUserFilter) return new Set(Array.from(visibleTaskIds).filter(id => !contextTaskIds.has(id)));
     return new Set(filteredTasks.filter(task => !contextTaskIds.has(task.task_id)).filter((task) => {
+      if (!isTaskStatusVisible(task.status, status ? [status] : [])) return false;
       if (searchQuery && !task.title.toLowerCase().includes(searchQuery.toLowerCase())) return false;
-      if (status && task.status !== status) return false;
       if (priority && task.priority !== priority) return false;
       if (!type && !tags?.length) return true;
       const fullTask = tasks.find((candidate) => candidate.task_id === task.task_id || candidate.id === task.task_id);
@@ -929,7 +920,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
       const lowerTaskTags = (fullTask.tags || []).map((tag) => tag.toLowerCase());
       return !tags?.length || tags.some((tag) => lowerTaskTags.includes(tag.toLowerCase()));
     }).map((task) => task.task_id));
-  }, [contextTaskIds, filteredTasks, ganttFilter, selectedUserId, tasks, viewMode, visibleTaskIds]);
+  }, [contextTaskIds, filteredTasks, ganttFilter, selectedUserId, tasks, viewMode]);
 
   // ── Increment 1: unified grid rows for the schedule modes ───────────────────
   // TASK rows reuse the existing TaskBar rendering below; HEADING/PHASE rows

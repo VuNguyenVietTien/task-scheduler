@@ -22,6 +22,8 @@ import Select, { SingleValue, MultiValue, ActionMeta, components } from 'react-s
 import makeAnimated from 'react-select/animated';
 import { TaskDetail } from './TaskDetail';
 import { useAuth } from '@/contexts/AuthContext';
+import { getStatusLabel } from '@/constants/task-display-labels';
+import { filterTaskTreeByStatus, isTaskStatusVisible } from '@/utils/task-status-visibility';
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -130,25 +132,17 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
   // Lấy danh sách thành viên từ Redux store
   const { members, loading: membersLoading } = useSelector((state: RootState) => state.members);
   
-  // Tạo danh sách columns mặc định
-  const defaultColumns: Column[] = [
-    { id: TaskStatuses.TODO, title: 'Todo' },
-    { id: TaskStatuses.DOING, title: 'In Progress' },
-    { id: TaskStatuses.PENDING, title: 'Pending' },
-    { id: TaskStatuses.REVIEW, title: 'Review' },
-    { id: TaskStatuses.BLOCKED, title: 'Blocked' },
-    { id: TaskStatuses.DONE, title: 'Done' },
-  ];
+  const statusOptions = useMemo<StatusOption[]>(() => Object.values(TaskStatuses).map((status) => ({
+    value: status,
+    label: getStatusLabel(status),
+  })), [t]);
 
-  // Các columns hiển thị dựa trên selectedStatuses
-  const visibleColumns = useMemo(() => {
-    if (selectedStatuses.length === 0) {
-      return defaultColumns; // Hiển thị tất cả columns nếu không có lựa chọn
-    }
-    return defaultColumns.filter(column => 
-      selectedStatuses.some(status => status.value === column.id)
-    );
-  }, [selectedStatuses]);
+  const visibleColumns = useMemo<Column[]>(() => {
+    const selected = selectedStatuses.map(({ value }) => value);
+    return statusOptions
+      .filter((column) => isTaskStatusVisible(column.value, selected))
+      .map(({ value, label }) => ({ id: value, title: label }));
+  }, [selectedStatuses, statusOptions]);
   
   // Hàm tính toán chiều cao của columns
   const calculateColumnHeight = useCallback(() => {
@@ -235,12 +229,6 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
     updateClonedTasks(tasks);
   }, [tasks, tasksState, projectId, updateClonedTasks]);
 
-  // Tạo danh sách lựa chọn cho Status
-  const statusOptions: StatusOption[] = defaultColumns.map(column => ({
-    value: column.id,
-    label: column.title
-  }));
-
   // Tạo danh sách lựa chọn users từ members
   const userOptions: UserOption[] = useMemo(() => {
     const options = members.map(member => ({
@@ -263,12 +251,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
       );
     }
     
-    // Lọc theo statuses nếu có lựa chọn
-    if (selectedStatuses.length > 0) {
-      const statusValues = selectedStatuses.map(status => status.value);
-      result = result.filter(task => statusValues.includes(task.status));
-    }
-    
+    result = filterTaskTreeByStatus(result, selectedStatuses.map(({ value }) => value));
     setFilteredTasks(result);
   }, [clonedTasks, selectedUser, selectedStatuses]);
 

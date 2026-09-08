@@ -50,6 +50,7 @@ import { RESOURCE_MEMBERS_QUERY } from '@/graphql/scheduling';
 import { toast } from 'sonner';
 import { useProjectCatalogs } from '@/hooks/useProjectCatalogs';
 import { resolveProjectCatalogLabel } from '@/utils/project-catalog';
+import { filterTaskTree, isTaskStatusVisible } from '@/utils/task-status-visibility';
 
 export interface CloneRecoveryState {
   kind: 'committed' | 'unknown' | 'reselect';
@@ -174,7 +175,6 @@ export function TaskListView({
   const [filter, setFilter] = useState<TaskFilter>({});
   const [sortConfig, setSortConfig] = useState<SortConfig>({ key: 'created_at', direction: 'desc' });
   const [selectedTasks, setSelectedTasks] = useState<Set<string>>(new Set());
-  const [showCompletedTasks, setShowCompletedTasks] = useState(false);
   const [expandedTasks, setExpandedTasks] = useState<Set<string>>(new Set());
   const [isFilterModalOpen, setIsFilterModalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
@@ -409,88 +409,25 @@ export function TaskListView({
     return { statusCounts: counts, totalTaskCount: seen.size };
   }, [tasks]);
 
-  // Filter tasks client-side when server pagination is not available
-  const { completedTasks, incompleteTasks } = useMemo(() => {
-    // Nếu có pagination từ server, chỉ phân loại theo hoàn thành/chưa hoàn thành
-    // không lọc thêm vì server đã xử lý
-    if (pagination) {
-      return {
-        completedTasks: tasks.filter(task => task.status === TaskStatuses.DONE),
-        incompleteTasks: tasks.filter(task => task.status !== TaskStatuses.DONE),
-      };
-    }
-
-    // Ngược lại, lọc client-side khi không có pagination từ server
-    const filteredTasks = tasks.filter(task => {
-      // Skip child tasks as they will be displayed under parent
-      if (task.parent_task_id) return false;
-
-      // Apply filters only when no pagination is provided
-      if (filters.searchQuery) {
-        const query = filters.searchQuery.toLowerCase();
-        if (!task.title.toLowerCase().includes(query) &&
-            !task.description?.toLowerCase().includes(query)) {
-          return false;
-        }
-      }
-
-      if (filters.status && task.status !== filters.status) {
-        return false;
-      }
-
-      if (filters.priority && task.priority !== filters.priority) {
-        return false;
-      }
-
-      if (filters.assigneeId && task.assignee?.userId !== filters.assigneeId) {
-        return false;
-      }
-
-      if (filters.startDate && task.start_date && 
-          new Date(task.start_date) < new Date(filters.startDate)) {
-        return false;
-      }
-
-      if (filters.endDate && task.due_date && 
-          new Date(task.due_date) > new Date(filters.endDate)) {
-        return false;
-      }
-
-      if (filters.projectId && task.project_id !== filters.projectId) {
-        return false;
-      }
-
-      return true;
-    });
-
-    return {
-      completedTasks: filteredTasks.filter(task => task.status === TaskStatuses.DONE),
-      incompleteTasks: filteredTasks.filter(task => task.status !== TaskStatuses.DONE),
-    };
-  }, [tasks, filters, pagination]);
-
-  // Sort tasks
-  const sortedIncompleteTasks = useMemo(() => {
-    return [...incompleteTasks].sort((a, b) => a.priority_order - b.priority_order);
-  }, [incompleteTasks]);
-
-  const sortedCompletedTasks = useMemo(() => {
-    return [...completedTasks].sort((a, b) => {
+  const displayedTasks = useMemo(() => {
+    const query = filters.searchQuery?.toLowerCase();
+    return filterTaskTree(tasks, (task) => {
+      if (!isTaskStatusVisible(task.status, filters.status ? [filters.status] : [])) return false;
+      if (query && !task.title.toLowerCase().includes(query) && !task.description?.toLowerCase().includes(query)) return false;
+      if (filters.priority && task.priority !== filters.priority) return false;
+      if (filters.assigneeId && task.assignee?.userId !== filters.assigneeId) return false;
+      if (filters.startDate && task.start_date && new Date(task.start_date) < new Date(filters.startDate)) return false;
+      if (filters.endDate && task.due_date && new Date(task.due_date) > new Date(filters.endDate)) return false;
+      return !filters.projectId || task.project_id === filters.projectId;
+    }).sort((a, b) => {
+      if (filters.status !== TaskStatuses.DONE) return a.priority_order - b.priority_order;
       const aValue = a[sortConfig.key];
       const bValue = b[sortConfig.key];
-      
       if (!aValue || !bValue) return 0;
-      
       const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
       return sortConfig.direction === 'asc' ? comparison : -comparison;
     });
-  }, [completedTasks, sortConfig]);
-
-  const displayedTasks = useMemo(() => {
-    return showCompletedTasks 
-      ? [...sortedIncompleteTasks, ...sortedCompletedTasks]
-      : sortedIncompleteTasks;
-  }, [sortedIncompleteTasks, sortedCompletedTasks, showCompletedTasks]);
+  }, [tasks, filters, sortConfig]);
 
   const applyEffortPatch = useCallback((taskId: string, effort: number | undefined) => {
     const updates: Partial<Task> = { effort };
@@ -531,83 +468,15 @@ export function TaskListView({
     return flattened;
   }, [displayedTasks, taskTreeRowsQ.data?.task_tree_rows, assignmentPatches, excelPatches]);
 
-  // Function cập nhật task trực tiếp vào danh sách hiện tại
-  const updateDisplayedTask = useCallback((taskId: string, updates: Partial<Task>) => {
-    const taskIndex = displayedTasks.findIndex(t => t.task_id === taskId);
-    if (taskIndex !== -1) {
-      const newTasks = [...displayedTasks];
-      newTasks[taskIndex] = {
-        ...newTasks[taskIndex],
-        ...updates
-      };
-      
-      // Cập nhật dữ liệu trong các collection gốc để tránh bị reset
-      const updatedTask = newTasks[taskIndex];
-      
-      // Cập nhật trong incompleteTasks và completedTasks để memoized state được cập nhật
-      const incompleteCopy = [...incompleteTasks];
-      const completeCopy = [...completedTasks];
-      
-      if (updatedTask.status === TaskStatuses.DONE) {
-        // Nếu task chuyển sang trạng thái hoàn thành
-        const incompleteIndex = incompleteCopy.findIndex(t => t.task_id === taskId);
-        if (incompleteIndex !== -1) {
-          // Xóa khỏi incompleteTasks và thêm vào completedTasks
-          incompleteCopy.splice(incompleteIndex, 1);
-          if (!completeCopy.some(t => t.task_id === taskId)) {
-            completeCopy.push(updatedTask);
-          } else {
-            // Cập nhật trong completedTasks nếu đã tồn tại
-            const completeIndex = completeCopy.findIndex(t => t.task_id === taskId);
-            completeCopy[completeIndex] = updatedTask;
-          }
-        }
-      } else {
-        // Nếu task không phải trạng thái hoàn thành
-        const completeIndex = completeCopy.findIndex(t => t.task_id === taskId);
-        if (completeIndex !== -1) {
-          // Xóa khỏi completedTasks và thêm vào incompleteTasks
-          completeCopy.splice(completeIndex, 1);
-          if (!incompleteCopy.some(t => t.task_id === taskId)) {
-            incompleteCopy.push(updatedTask);
-          }
-        } else {
-          // Cập nhật trong incompleteTasks nếu đã tồn tại
-          const incompleteIndex = incompleteCopy.findIndex(t => t.task_id === taskId);
-          if (incompleteIndex !== -1) {
-            incompleteCopy[incompleteIndex] = updatedTask;
-          }
-        }
-      }
-      
-      // Cập nhật cả trong mảng tasks gốc để đảm bảo dữ liệu nhất quán
-      const originalTaskIndex = tasks.findIndex(t => t.task_id === taskId);
-      if (originalTaskIndex !== -1) {
-        const updatedTasks = [...tasks];
-        updatedTasks[originalTaskIndex] = {
-          ...updatedTasks[originalTaskIndex],
-          ...updates
-        };
-        
-        // Không thể cập nhật trực tiếp 'tasks' nếu nó là prop, nhưng ta đã cập nhật các mảng dẫn xuất
-      }
-      
-      // Trả về danh sách mới
-      return newTasks;
-    }
-    return displayedTasks;
-  }, [displayedTasks, incompleteTasks, completedTasks, tasks]);
-
   // Increment 1: gán phase cho task qua set_task_taxonomy (NULL = Unphased)
   const handleSetTaskPhase = useCallback(async (taskId: string, phaseId: string | null) => {
     try {
       await setTaskPhase(taskId, phaseId);
       updateSingleTaskInState(taskId, { phase_id: phaseId });
-      updateDisplayedTask(taskId, { phase_id: phaseId });
     } catch (error) {
       console.error('Không thể cập nhật phase của task:', error);
     }
-  }, [setTaskPhase, updateSingleTaskInState, updateDisplayedTask]);
+  }, [setTaskPhase, updateSingleTaskInState]);
 
   const toggleTaskExpansion = (taskId: string, e: React.MouseEvent) => {
     e.stopPropagation(); // Ngăn sự kiện click lan ra và kích hoạt handleTaskClick
@@ -1476,26 +1345,6 @@ export function TaskListView({
             )}
           </button>
           
-          <button
-            onClick={() => setShowCompletedTasks(!showCompletedTasks)}
-            className={`inline-flex items-center px-3 py-2 border text-sm font-medium rounded-md transition-colors 
-              ${showCompletedTasks 
-                ? 'bg-slate-200 text-slate-800 border-slate-300' 
-                : 'bg-white text-slate-700 border-slate-300 hover:bg-slate-50'}`}
-            aria-label={showCompletedTasks ? t('tasks.hideCompleted') : t('tasks.showCompleted')}
-          >
-            <svg 
-              xmlns="http://www.w3.org/2000/svg" 
-              className={`h-5 w-5 mr-2 ${showCompletedTasks ? 'text-green-600' : 'text-slate-400'}`} 
-              fill="none" 
-              viewBox="0 0 24 24" 
-              stroke="currentColor"
-            >
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
-            {showCompletedTasks ? t('tasks.hideCompleted') : t('tasks.showCompleted')}
-          </button>
-
           {/* Requirement 7: Normal ↔ Excel mode toggle */}
           <div className="inline-flex rounded-md border border-slate-300 overflow-hidden" role="group" aria-label="List mode">
             <button
