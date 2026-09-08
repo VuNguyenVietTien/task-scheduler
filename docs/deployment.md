@@ -22,17 +22,39 @@ Browser
 | Vercel deployment | `dpl_GjrYjW8BTdF7yNEPqqD1ZuLaY2dF` (`task-scheduler-mhg3tac41-vunguyenviettiens-projects.vercel.app`, aliased `prjmngr.vercel.app`) |
 | Backend API | `https://pm-api.khampha.dpdns.org` |
 | Backend container | `task-scheduler-backend` |
-| Backend image | `task-scheduler-backend:20260908T0952-53011ef` |
-| Backend release | `/home/azuraith/task-scheduler/releases/20260908T0952-53011ef` |
+| Backend image | `task-scheduler-backend:20260908T1306-0ce6e937` |
+| Backend release | `/home/azuraith/task-scheduler/releases/20260908T1306-0ce6e937` |
 | PostgreSQL container | `task_scheduler_postgres` |
 | Cloudflare origin | `http://localhost:8081` |
 
 The immediate rollback container is retained, stopped, with the prior live image/configuration:
 
-- `task-scheduler-backend-prev-20260908T0952-53011ef`
-- `task-scheduler-backend:20260908T0925-0218f17`
+- `task-scheduler-backend-prev-20260908T1306-0ce6e937`
+- `task-scheduler-backend:20260908T0952-53011ef`
 
 The older rollback containers and images documented below remain retained too.
+
+## Release 20260908T1306-0ce6e937 (2026-09-08)
+
+Exact clone-title preservation release from integrated source `0ce6e937fc231c48e261909b675a75e06303528d`.
+
+- Immutable image: `task-scheduler-backend:20260908T1306-0ce6e937` (`sha256:6dc08b3a24dc3e9059c7efb6f919e47e416c028d437af5d63cc39916e89478f8`).
+- Committed Git archive: `/home/azuraith/task-scheduler/releases/20260908T1306-0ce6e937/source.tar.gz`, SHA-256 `2e1b82e6c069f557b7cd5eaff1e410636eefbf9435cc276f8bfb292442b6843e`.
+- Verified pre-cutover backup: `/home/azuraith/task-scheduler/releases/20260908T1306-0ce6e937/backup/db-before-20260908T1306-0ce6e937.sql.gz` (33,043 bytes; SHA-256 `7fa312c45945d188525c48cf5421afc70713bf900a6293040cdbcf5c449fb1c7`; mode `0600`; gzip verified).
+- No migration or production task mutation was run. Existing runtime environment, CORS, host network, user, restart policy, logging, config, and uploads were preserved exactly.
+- Focused clone-title unit test passed 1/1 (71 filtered); the DB-backed clone flow was updated but not run. Immutable Docker build passed. Local/public readiness report `ready` / `up` / `current`.
+
+Immediate backend rollback:
+
+```bash
+docker stop task-scheduler-backend && docker rm task-scheduler-backend
+docker rename task-scheduler-backend-prev-20260908T1306-0ce6e937 task-scheduler-backend
+docker start task-scheduler-backend
+curl --fail --silent --show-error http://127.0.0.1:8081/health/ready
+curl --fail --silent --show-error https://pm-api.khampha.dpdns.org/health/ready
+```
+
+Database rollback is not required for this code-only release; the verified backup is retained as an additional safeguard.
 
 ## Release 20260908T0952-53011ef (2026-09-08)
 
