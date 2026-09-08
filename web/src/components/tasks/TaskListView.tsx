@@ -321,11 +321,13 @@ export function TaskListView({
     setExcelPatches((current) => {
       const acknowledged = Object.keys(current).filter((id) => rows.some((row) => {
         const patch = current[id];
-        return row.task_id === id &&
-          (patch.effort === undefined || row.effort === patch.effort) &&
-          (patch.progressCatalogItemId === undefined || catalogValue(row, 'progress') === patch.progressCatalogItemId) &&
-          (patch.categoryCatalogItemId === undefined || catalogValue(row, 'category') === patch.categoryCatalogItemId) &&
-          (patch.taskTypeCatalogItemId === undefined || catalogValue(row, 'taskType') === patch.taskTypeCatalogItemId);
+        if (row.task_id !== id) return false;
+        return Object.entries(patch).every(([key, value]) => {
+          if (key === 'progressCatalogItemId') return catalogValue(row, 'progress') === value;
+          if (key === 'categoryCatalogItemId') return catalogValue(row, 'category') === value;
+          if (key === 'taskTypeCatalogItemId') return catalogValue(row, 'taskType') === value;
+          return (row as unknown as Record<string, unknown>)[key] === value;
+        });
       }));
       if (!acknowledged.length) return current;
       const next = { ...current };
@@ -509,12 +511,15 @@ export function TaskListView({
     });
   }, [tasks, filters, sortConfig]);
 
-  const applyEffortPatch = useCallback((taskId: string, effort: number | undefined) => {
-    const updates: Partial<Task> = { effort };
+  const applyExcelPatch = useCallback((taskId: string, updates: Partial<Task>) => {
     updateSingleTaskInState(taskId, updates);
     dispatch(upsertTask({ task_id: taskId, ...updates } as Task));
-    setExcelPatches((current) => ({ ...current, [taskId]: updates }));
+    setExcelPatches((current) => ({ ...current, [taskId]: { ...current[taskId], ...updates } }));
   }, [dispatch, updateSingleTaskInState]);
+
+  const applyEffortPatch = useCallback((taskId: string, effort: number | undefined) => {
+    applyExcelPatch(taskId, { effort });
+  }, [applyExcelPatch]);
 
   // Excel keeps the normal List's filtered roots, then projects every active
   // descendant from the flat arbitrary-depth query without changing normal List.
@@ -1181,9 +1186,11 @@ export function TaskListView({
         if (!await deleteTaskWithConfirmation(task, 'reject')) throw new Error('Task deletion was cancelled or failed.');
         return;
       }
-      await dispatch(updateTaskStatus({ taskId: edit.taskId, status: edit.value as TaskStatus })).unwrap();
+      const result = await dispatch(updateTaskStatus({ taskId: edit.taskId, status: edit.value as TaskStatus })).unwrap();
+      if ('task' in result && result.task) applyExcelPatch(edit.taskId, { status: result.task.status });
     } else if (edit.field === 'priority') {
-      await dispatch(updateTaskPriority({ taskId: edit.taskId, priority: edit.value as Priority })).unwrap();
+      const result = await dispatch(updateTaskPriority({ taskId: edit.taskId, priority: edit.value as Priority })).unwrap();
+      if (result.task) applyExcelPatch(edit.taskId, { priority: result.task.priority });
     } else if (edit.field === 'effort') {
       const priorEffort = findTaskInTree(tasks, edit.taskId)?.effort;
       try {
@@ -1199,7 +1206,8 @@ export function TaskListView({
         throw error;
       }
     } else if (edit.field === 'due_date') {
-      await dispatch(updateTaskDueDate({ taskId: edit.taskId, dueDate: edit.value })).unwrap();
+      const result = await dispatch(updateTaskDueDate({ taskId: edit.taskId, dueDate: edit.value })).unwrap();
+      if (result.task) applyExcelPatch(edit.taskId, { due_date: result.task.due_date });
     } else if (edit.field === 'progress' || edit.field === 'category' || edit.field === 'taskType') {
       await saveCatalog(edit.taskId, edit.field, edit.value || null);
     } else if (edit.field === 'assignee') {
@@ -1220,10 +1228,9 @@ export function TaskListView({
       }
     } else {
       const savedTask = await updateTask(edit.taskId, { title: edit.value });
-      dispatch(upsertTask(savedTask));
-      updateSingleTaskInState(edit.taskId, savedTask);
+      applyExcelPatch(edit.taskId, { title: savedTask.title });
     }
-  }, [applyCanonicalAssignment, applyEffortPatch, deleteTaskWithConfirmation, dispatch, excelTasks, tasks, updateSingleTaskInState, updateTask, updateAssignee, assigneeOptions, memberMappingUnavailable, memberMappingError, saveCatalog]);
+  }, [applyCanonicalAssignment, applyEffortPatch, applyExcelPatch, deleteTaskWithConfirmation, dispatch, excelTasks, tasks, updateTask, updateAssignee, assigneeOptions, memberMappingUnavailable, memberMappingError, saveCatalog]);
 
   const handleFilterChange = (newFilters: TaskFilter) => {
     if (setFilters) {

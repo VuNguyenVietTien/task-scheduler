@@ -43,9 +43,10 @@ const catalogOptions = {
 };
 
 describe('validateCellValue', () => {
-  it('accepts numeric effort with optional h suffix', () => {
+  it('accepts numeric effort with optional h suffix and a complete clear', () => {
     expect(validateCellValue('effort', '10h')).toEqual({ ok: true, value: '10' });
     expect(validateCellValue('effort', '2.5')).toEqual({ ok: true, value: '2.5' });
+    expect(validateCellValue('effort', '')).toEqual({ ok: true, value: '' });
   });
   it('rejects invalid effort/status/priority/date', () => {
     expect(validateCellValue('effort', 'abc').ok).toBe(false);
@@ -144,6 +145,27 @@ describe('TaskExcelGrid interactions', () => {
     expect(onSaveEdit).not.toHaveBeenCalled();
   });
 
+  it('clears effort and commits before arrow/Enter navigation instead of incrementing the number', async () => {
+    const user = userEvent.setup();
+    const onSaveEdit = jest.fn().mockResolvedValue(undefined);
+    renderGrid(onSaveEdit);
+
+    await user.click(screen.getByTestId('excel-cell-0-3'));
+    const firstEffort = screen.getByRole('spinbutton', { name: 'Excel effort' });
+    fireEvent.change(firstEffort, { target: { value: '' } });
+    fireEvent.keyDown(firstEffort, { key: 'ArrowDown' });
+    const secondEffort = screen.getByRole('spinbutton', { name: 'Excel effort' });
+    expect(secondEffort).toHaveValue(4);
+    fireEvent.change(secondEffort, { target: { value: '7' } });
+    fireEvent.keyDown(secondEffort, { key: 'ArrowRight' });
+    expect(screen.getByLabelText('Excel due date')).toBeInTheDocument();
+    fireEvent.keyDown(screen.getByLabelText('Excel due date'), { key: 'Enter' });
+
+    fireEvent.click(screen.getByTestId('excel-save-btn'));
+    await waitFor(() => expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'effort', value: '' }));
+    expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't2', field: 'effort', value: '7' });
+  });
+
   it('single-click catalog selector stages its stable ID and supports clearing', async () => {
     const user = userEvent.setup();
     const onSaveEdit = jest.fn().mockResolvedValue(undefined);
@@ -178,13 +200,13 @@ describe('TaskExcelGrid interactions', () => {
     await waitFor(() => expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'assignee', value: 'resource:unlinked' }));
   });
 
-  it('copies the selected rectangle as CRLF TSV from the focused cell input', () => {
+  it('copies a rectangular multi-cell selection as row-major CRLF TSV', () => {
     renderGrid();
     fireEvent.mouseDown(screen.getByTestId('excel-cell-0-0'));
-    fireEvent.mouseOver(screen.getByTestId('excel-cell-1-1'));
+    fireEvent.mouseOver(screen.getByTestId('excel-cell-1-2'));
     const setData = jest.fn();
     fireEvent(screen.getByTestId('excel-typing-input'), copyEvent(setData));
-    expect(setData).toHaveBeenCalledWith('text/plain', 'Alpha\tTODO\r\nBeta\tTODO');
+    expect(setData).toHaveBeenCalledWith('text/plain', 'Alpha\tTODO\tMEDIUM\r\nBeta\tTODO\tMEDIUM');
   });
 
   it('TSV paste stages a block anchored at the selected cell, clipping overflow', () => {
