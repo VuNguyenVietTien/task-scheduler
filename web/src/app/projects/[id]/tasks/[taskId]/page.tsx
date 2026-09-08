@@ -8,6 +8,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import { PageHeader } from '@/components/common/PageHeader';
 import { Spinner } from '@/components/ui/Spinner';
 import { useUpdateTask } from '@/hooks/useTasks';
+import { useUpdateTaskAssignee } from '@/hooks/useTaskFieldMutations';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { fetchProjectMembers } from '@/redux/features/membersSlice';
 import { fetchTaskDetail, transformTaskFromAPI } from '@/redux/features/taskDetailSlice';
@@ -50,6 +51,7 @@ export default function TaskDetailsPage() {
   const [previousTaskId, setPreviousTaskId] = useState<string | null>(null);
   const [commentId, setCommentId] = useState<string | null>(null);
   const updateTaskHook = useUpdateTask();
+  const { updateAssignee } = useUpdateTaskAssignee();
   const dispatch = useAppDispatch();
   
   console.log(`[TaskDetailsPage] Current params:`, { 
@@ -87,6 +89,7 @@ export default function TaskDetailsPage() {
             avatarUrl: t.assignee.avatar_url || '',
             role: t.assignee.role || ''
           } : undefined,
+          assignee_resource_member_id: t.assignee_resource_member_id ?? null,
           priority_order: t.priority_order || 0,
           start_date: t.start_date || null,
           due_date: t.due_date || null,
@@ -220,8 +223,13 @@ export default function TaskDetailsPage() {
       console.log('[TaskDetailsPage] handleTaskUpdate called with:', updates);
       setLoading(true);
       
-      // Sử dụng updateTask từ hook, nhưng làm rõ cách gọi
-      const updatedTask = await updateTaskHook.updateTask(taskId, updates);
+      const updatesResourceAssignment = Object.prototype.hasOwnProperty.call(updates, 'assignee_resource_member_id');
+      const updatedTask = updatesResourceAssignment
+        ? await updateAssignee(taskId, updates.assignee_resource_member_id ? {
+            assigneeId: updates.assignee?.userId ?? null,
+            assigneeResourceMemberId: updates.assignee_resource_member_id,
+          } : null)
+        : await updateTaskHook.updateTask(taskId, updates);
       
       console.log('[TaskDetailsPage] Task updated successfully:', {
         id: updatedTask.task_id,

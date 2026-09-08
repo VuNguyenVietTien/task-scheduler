@@ -186,6 +186,8 @@ export const transformTaskFromAPI = (apiTask: any): Task => {
       avatarUrl: apiTask.assignee.avatar_url || apiTask.assignee.avatarUrl || "",
       role: apiTask.assignee.role || ""
     } : undefined,
+    assignee_resource_member_id:
+      (apiTask.assignee_resource_member_id ?? apiTask.assigneeResourceMemberId) ?? null,
     priority_order: apiTask.priority_order || apiTask.priorityOrder || 0,
     start_date: apiTask.start_date || apiTask.startDate,
     due_date: apiTask.due_date || apiTask.dueDate,

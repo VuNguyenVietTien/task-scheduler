@@ -47,4 +47,26 @@ describe('Task Detail subtasks', () => {
     />);
     expect(screen.getByText('No subtasks.')).toBeInTheDocument();
   });
+
+  it('preserves canonical unlinked assignments while normalizing detail tasks', () => {
+    const normalized = transformTaskFromAPI({
+      ...task('parent', null, 'TODO'),
+      assignee_resource_member_id: 'resource-unlinked',
+      assignee: null,
+      child_tasks: [{
+        ...task('child', 'parent', 'TODO'),
+        assigneeResourceMemberId: 'resource-child',
+        assignee: null,
+      }],
+    });
+
+    expect(normalized).toMatchObject({
+      assignee_resource_member_id: 'resource-unlinked',
+      assignee: undefined,
+    });
+    expect(normalized.child_tasks?.[0]).toMatchObject({
+      assignee_resource_member_id: 'resource-child',
+      assignee: undefined,
+    });
+  });
 });
