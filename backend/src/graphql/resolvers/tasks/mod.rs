@@ -1,8 +1,8 @@
 use async_graphql::{Context, Object, Result, ID};
 
 use crate::graphql::types::{
-    CloneTaskSubtreeInput, CloneTaskSubtreePayload, CreateTaskInput, ReorderTasksInput, Task,
-    UpdateTaskInput, UpdateTaskStatusInput,
+    CloneTaskSubtreeInput, CloneTaskSubtreePayload, CreateTaskInput, DeleteTaskPayload,
+    ReorderTasksInput, Task, UpdateTaskInput, UpdateTaskStatusInput,
 };
 use mutation::update_effort::UpdateTaskEffortInput;
 
@@ -71,7 +71,7 @@ impl TaskMutation {
         mutation::update_effort::update_task_effort(ctx, input).await
     }
 
-    async fn delete_task(&self, ctx: &Context<'_>, task_id: ID) -> Result<bool> {
+    async fn delete_task(&self, ctx: &Context<'_>, task_id: ID) -> Result<DeleteTaskPayload> {
         mutation::delete::delete_task(ctx, task_id).await
     }
 

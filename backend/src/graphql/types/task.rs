@@ -298,6 +298,13 @@ pub struct CloneTaskSubtreePayload {
     pub created_task_ids: Vec<ID>,
 }
 
+#[derive(SimpleObject)]
+#[graphql(rename_fields = "snake_case")]
+pub struct DeleteTaskPayload {
+    pub project_id: Uuid,
+    pub deleted_task_ids: Vec<Uuid>,
+}
+
 #[derive(InputObject)]
 #[graphql(rename_fields = "snake_case")]
 pub struct UpdateTaskStatusInput {

@@ -27,6 +27,8 @@ import {
   updateTaskPriority, 
   updateTaskEffort, 
   updateTaskAssignee,
+  deleteTask,
+  removeTasksFromTree,
   updateTaskDueDate,
   upsertTask,
   fetchProjectTasks
@@ -49,6 +51,7 @@ import { toast } from 'sonner';
 import { useProjectCatalogs } from '@/hooks/useProjectCatalogs';
 import { resolveProjectCatalogLabel } from '@/utils/project-catalog';
 import { filterTaskTree, isTaskStatusVisible } from '@/utils/task-status-visibility';
+import { taskDeletionConfirmationMessage } from '@/utils/task-deletion';
 
 export interface CloneRecoveryState {
   kind: 'committed' | 'unknown' | 'reselect';
@@ -956,9 +959,27 @@ export function TaskListView({
     document.body.removeChild(link);
   }, [tasks, selectedTasks]);
 
-  const handleBulkDelete = useCallback(() => {
-    console.log('Delete tasks:', Array.from(selectedTasks));
-  }, [selectedTasks]);
+  const deleteTaskWithConfirmation = useCallback(async (task: Task, reason: 'delete' | 'reject' = 'delete') => {
+    if (!window.confirm(taskDeletionConfirmationMessage(task, reason))) return false;
+    try {
+      const result = await dispatch(deleteTask({ taskId: task.task_id })).unwrap();
+      setTasks((current) => removeTasksFromTree(current, result.deletedTaskIds));
+      setSelectedTasks((current) => new Set([...current].filter((id) => !result.deletedTaskIds.includes(id))));
+      setSelectedTask((current) => current && result.deletedTaskIds.includes(current.task_id) ? null : current);
+      toast.success('Task deleted.');
+      return true;
+    } catch (error) {
+      alert(`Could not delete task: ${error}`);
+      return false;
+    }
+  }, [dispatch]);
+
+  const handleBulkDelete = useCallback(async () => {
+    for (const taskId of selectedTasks) {
+      const task = findTaskInTree(tasks, taskId);
+      if (task) await deleteTaskWithConfirmation(task);
+    }
+  }, [deleteTaskWithConfirmation, selectedTasks, tasks]);
 
   const toggleTaskSelection = (taskId: string, e: React.ChangeEvent<HTMLInputElement>) => {
     setSelectedTasks(prev => {
@@ -1155,6 +1176,11 @@ export function TaskListView({
   // thunks the inline editor uses; failures throw and stay staged in the grid.
   const handleExcelSave = useCallback(async (edit: StagedEdit) => {
     if (edit.field === 'status') {
+      const task = findTaskInTree(tasks, edit.taskId) ?? excelTasks.find((item) => item.task_id === edit.taskId);
+      if (edit.value === TaskStatuses.REJECTED && task) {
+        if (!await deleteTaskWithConfirmation(task, 'reject')) throw new Error('Task deletion was cancelled or failed.');
+        return;
+      }
       await dispatch(updateTaskStatus({ taskId: edit.taskId, status: edit.value as TaskStatus })).unwrap();
     } else if (edit.field === 'priority') {
       await dispatch(updateTaskPriority({ taskId: edit.taskId, priority: edit.value as Priority })).unwrap();
@@ -1197,7 +1223,7 @@ export function TaskListView({
       dispatch(upsertTask(savedTask));
       updateSingleTaskInState(edit.taskId, savedTask);
     }
-  }, [applyCanonicalAssignment, applyEffortPatch, dispatch, tasks, updateSingleTaskInState, updateTask, updateAssignee, assigneeOptions, memberMappingUnavailable, memberMappingError, saveCatalog]);
+  }, [applyCanonicalAssignment, applyEffortPatch, deleteTaskWithConfirmation, dispatch, excelTasks, tasks, updateSingleTaskInState, updateTask, updateAssignee, assigneeOptions, memberMappingUnavailable, memberMappingError, saveCatalog]);
 
   const handleFilterChange = (newFilters: TaskFilter) => {
     if (setFilters) {
@@ -1242,6 +1268,10 @@ export function TaskListView({
       }
       else if (field === 'status') {
         const status = editValue as TaskStatus;
+        if (status === TaskStatuses.REJECTED) {
+          if (await deleteTaskWithConfirmation(currentTask, 'reject')) handleCancelEditing();
+          return;
+        }
         
         // Lưu lại tasks hiện tại để khôi phục nếu API call thất bại
         const originalTasks = [...tasks];
@@ -1434,6 +1464,7 @@ export function TaskListView({
           <TaskBulkActions 
             selectedCount={selectedTasks.size} 
             onClearSelection={() => setSelectedTasks(new Set())}
+            onDelete={() => void handleBulkDelete()}
           />
         )}
       </div>

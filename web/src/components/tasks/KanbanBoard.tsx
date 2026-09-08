@@ -3,7 +3,6 @@
 import { Task, TaskStatus, TaskStatuses } from '@/types/task';
 import { useEffect, useState, useMemo, useRef, useCallback, MouseEvent as ReactMouseEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useTaskStatusUpdate } from '@/hooks/useTaskStatusUpdate';
 import {
   DragDropProvider,
   Droppable,
@@ -14,7 +13,7 @@ import {
   type DropResult
 } from '@/components/dnd/DragDropProvider';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
-import { updateTaskStatus } from '@/redux/features/tasksSlice';
+import { deleteTask, removeTasksFromTree, updateTaskStatus } from '@/redux/features/tasksSlice';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import { UserInfo } from '@/types/members';
@@ -30,6 +29,7 @@ import {
 } from './kanban-tasks';
 import { getStatusLabel } from '@/constants/task-display-labels';
 import { filterTaskTreeByStatus, isTaskStatusVisible } from '@/utils/task-status-visibility';
+import { taskDeletionConfirmationMessage } from '@/utils/task-deletion';
 
 interface KanbanBoardProps {
   tasks: Task[];
@@ -107,7 +107,6 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const isDragRef = useRef(false);
   const { user } = useAuth();
-  const updateTaskStatusMutation = useTaskStatusUpdate();
   const dispatch = useAppDispatch();
   
   // Thêm refs và state để tính toán chiều cao
@@ -352,6 +351,25 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
     if (newStatus === previousStatus) return;
 
     console.log(`Dragging task ${taskId} from ${previousStatus} to ${newStatus}`);
+
+    if (newStatus === TaskStatuses.REJECTED) {
+      const task = flattenKanbanTasks(clonedTasks).find((item) => item.task.task_id === taskId)?.task;
+      if (!task || !window.confirm(taskDeletionConfirmationMessage(task, 'reject'))) return;
+      dispatch(deleteTask({ taskId }))
+        .unwrap()
+        .then((result) => {
+          setClonedTasks((current) => removeTasksFromTree(current, result.deletedTaskIds));
+          setSelectedTask((current) => current && result.deletedTaskIds.includes(current.task_id) ? null : current);
+          setIsTaskDetailOpen(false);
+          window.dispatchEvent(new CustomEvent('show-notification', {
+            detail: { type: 'success', message: 'Task deleted.' },
+          }));
+        })
+        .catch(() => window.dispatchEvent(new CustomEvent('show-notification', {
+          detail: { type: 'error', message: 'Could not delete task.' },
+        })));
+      return;
+    }
 
     // Optimistically update the matching node without flattening its tree.
     const optimisticTasks = updateKanbanTaskInTree(clonedTasks, taskId, { status: newStatus });

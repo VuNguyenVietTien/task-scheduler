@@ -12,6 +12,7 @@ import {
 } from '@/types/task';
 import { GET_TASK_SUBTASKS } from '@/graphql/queries/tasks';
 import {
+  deleteTask,
   updateTaskStatus,
   updateTaskPriority,
   updateTaskEffort,
@@ -19,6 +20,7 @@ import {
 } from '@/redux/features/tasksSlice';
 import { fetchSubtasks } from '@/redux/features/taskDetailSlice';
 import { UserAvatar } from '@/components/common/UserAvatar';
+import { taskDeletionConfirmationMessage } from '@/utils/task-deletion';
 
 interface TaskDetailSubtasksProps {
   taskId: string;
@@ -316,6 +318,14 @@ export default function TaskDetailSubtasks({ taskId, projectId }: TaskDetailSubt
       if (e) {
       e.preventDefault();
       e.stopPropagation();
+      }
+
+      const subtask = subtasks.find((item) => item.task_id === taskId || item.id === taskId);
+      if (newStatus === TaskStatuses.REJECTED) {
+        if (!subtask || !window.confirm(taskDeletionConfirmationMessage(subtask, 'reject'))) return;
+        const result = await dispatch(deleteTask({ taskId })).unwrap();
+        setSubtasks((current) => current.filter((item) => !result.deletedTaskIds.includes(item.task_id)));
+        return;
       }
 
       // Tạo một bản sao của trạng thái hiện tại để khôi phục nếu cần

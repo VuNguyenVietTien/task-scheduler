@@ -1,7 +1,7 @@
 import { print } from 'graphql';
-import { UPDATE_TASK, UPDATE_TASK_EFFORT, UPDATE_TASK_STATUS } from '@/graphql/mutations/tasks';
+import { DELETE_TASK, UPDATE_TASK, UPDATE_TASK_EFFORT, UPDATE_TASK_STATUS } from '@/graphql/mutations/tasks';
 import { GET_PROJECT_TASKS } from '@/graphql/queries/tasks';
-import tasksReducer, { transformTaskFromAPI, upsertTask, upsertTaskInTree } from '../tasksSlice';
+import tasksReducer, { deleteTask, removeTasksFromTree, transformTaskFromAPI, upsertTask, upsertTaskInTree } from '../tasksSlice';
 import type { Task } from '@/types/task';
 
 const task = (task_id: string, extra: Partial<Task> = {}): Task => ({
@@ -22,6 +22,32 @@ describe('REALTIME-EXCEL task normalization and upsert', () => {
       const source = print(document);
       fields.forEach((field) => expect(source).toContain(field));
     });
+  });
+
+  it('requests all deleted task IDs for recursive Redux removal', () => {
+    const source = print(DELETE_TASK);
+    expect(source).toContain('delete_task(task_id: $taskId)');
+    expect(source).toContain('project_id');
+    expect(source).toContain('deleted_task_ids');
+  });
+
+  it('removes a deleted subtree from the canonical tree immediately', () => {
+    const grandchild = task('grandchild', { parent_task_id: 'child' });
+    const child = task('child', { parent_task_id: 'root', child_tasks: [grandchild] });
+    const root = task('root', { child_tasks: [child] });
+    const sibling = task('sibling');
+    const initial = {
+      tasks: [root, sibling], loading: false, error: null,
+      pagination: { totalItems: 2, totalPages: 1, currentPage: 1, pageSize: 20 }, filters: {},
+    };
+
+    expect(removeTasksFromTree(initial.tasks, ['child', 'grandchild'])).toEqual([task('root', { child_tasks: [] }), sibling]);
+    const state = tasksReducer(initial, deleteTask.fulfilled(
+      { projectId: 'project', deletedTaskIds: ['root', 'child', 'grandchild'] },
+      'request',
+      { taskId: 'root' },
+    ));
+    expect(state.tasks).toEqual([sibling]);
   });
 
   it('normalizes assignment/catalog/children once and replaces a deep task without losing hierarchy', () => {
