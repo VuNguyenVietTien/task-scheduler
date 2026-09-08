@@ -125,6 +125,28 @@ test('successful mutation with failed refetch remains a saved result', async () 
   expect(await screen.findByText('Saved, but the latest list could not be loaded. Retry the refresh.')).toBeInTheDocument();
 });
 
+test('confirms deletion, sends the stable catalog ID, and refreshes catalog tasks', async () => {
+  const onTasksChanged = jest.fn().mockResolvedValue(undefined);
+  const confirm = jest.spyOn(window, 'confirm').mockReturnValue(true);
+  render(<ProjectCatalogSettingsPanel projectId="project-1" canManage onTasksChanged={onTasksChanged} />);
+  fireEvent.click(within(screen.getByTestId('catalog-item-progress-a')).getByRole('button', { name: 'Delete Create' }));
+
+  await waitFor(() => expect(mockMutate).toHaveBeenCalledWith({ variables: { catalog_item_id: 'progress-a' } }));
+  expect(confirm).toHaveBeenCalledWith('Delete Create? Tasks using it will be cleared.');
+  await waitFor(() => expect(onTasksChanged).toHaveBeenCalledTimes(1));
+  expect(screen.getByText('Deleted.')).toBeInTheDocument();
+  confirm.mockRestore();
+});
+
+test('shows the useful GraphQL delete error instead of a generic save error', async () => {
+  jest.spyOn(window, 'confirm').mockReturnValue(true);
+  mockMutate.mockRejectedValueOnce({ graphQLErrors: [{ message: 'catalog item is not available' }] });
+  render(<ProjectCatalogSettingsPanel projectId="project-1" canManage />);
+  fireEvent.click(within(screen.getByTestId('catalog-item-progress-a')).getByRole('button', { name: 'Delete Create' }));
+  expect(await screen.findByText('catalog item is not available')).toBeInTheDocument();
+  jest.restoreAllMocks();
+});
+
 test('reorders with complete current and expected ID vectors', async () => {
   render(<ProjectCatalogSettingsPanel projectId="project-1" canManage />);
   fireEvent.click(within(screen.getByTestId('catalog-item-progress-a')).getByRole('button', { name: 'Move down' }));

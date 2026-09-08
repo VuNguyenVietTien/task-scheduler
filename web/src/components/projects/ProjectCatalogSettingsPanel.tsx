@@ -6,6 +6,7 @@ import { useMutation } from '@apollo/client';
 import { useTranslation } from 'react-i18next';
 import {
   CREATE_PROJECT_CATALOG_ITEMS,
+  DELETE_PROJECT_CATALOG_ITEM,
   REORDER_PROJECT_CATALOG_ITEMS,
   UPDATE_PROJECT_CATALOG_ITEM,
 } from '@/graphql/mutations/catalogs';
@@ -40,10 +41,12 @@ function fixedTranslations(item: ProjectCatalogItem): ProjectCatalogTranslationD
 }
 
 function friendlyError(error: unknown): string {
-  const message = error instanceof Error ? error.message : String(error);
+  const graphQLError = (error as { graphQLErrors?: Array<{ message?: string }> })?.graphQLErrors?.[0]?.message;
+  const message = graphQLError || (error instanceof Error ? error.message : String(error));
   if (/conflict/i.test(message)) return 'This catalog changed. Reload it and try again.';
-  if (/forbidden/i.test(message)) return 'You do not have permission to change this catalog.';
-  return 'The catalog could not be saved. Please try again.';
+  if (/forbidden|must be a manager/i.test(message)) return 'You do not have permission to change this catalog.';
+  if (/network|fetch|offline/i.test(message)) return 'The catalog could not be saved. Please try again.';
+  return message || 'The catalog could not be saved. Please try again.';
 }
 
 async function refreshAfterSave(refetch: () => Promise<unknown>, setNotice: (value: string) => void) {
@@ -91,7 +94,9 @@ function CatalogItemEditor({
   locale,
   canManage,
   busy,
+  deleting,
   onSave,
+  onDelete,
   onMove,
 }: {
   item: ProjectCatalogItem;
@@ -100,7 +105,9 @@ function CatalogItemEditor({
   locale: string;
   canManage: boolean;
   busy: boolean;
+  deleting: boolean;
   onSave: (item: ProjectCatalogItem, values: ProjectCatalogTranslationDraft) => Promise<void>;
+  onDelete: (item: ProjectCatalogItem) => Promise<void>;
   onMove: (index: number, direction: -1 | 1) => Promise<void>;
 }) {
   const [values, setValues] = useState(() => fixedTranslations(item));
@@ -114,6 +121,7 @@ function CatalogItemEditor({
           <div className="flex gap-1">
             <button type="button" aria-label="Move up" disabled={busy || index === 0} onClick={() => void onMove(index, -1)} className="rounded border px-2 py-1 disabled:opacity-40">↑</button>
             <button type="button" aria-label="Move down" disabled={busy || index === count - 1} onClick={() => void onMove(index, 1)} className="rounded border px-2 py-1 disabled:opacity-40">↓</button>
+            <button type="button" aria-label={`Delete ${resolveProjectCatalogLabel(item, locale)}`} disabled={busy} onClick={() => void onDelete(item)} className="rounded border border-red-200 px-2 py-1 text-red-700 disabled:opacity-40">{deleting ? 'Deleting…' : 'Delete'}</button>
           </div>
         )}
       </div>
@@ -129,7 +137,7 @@ function CatalogItemEditor({
   );
 }
 
-function CatalogKindPanel({ projectId, kind, title, locale, canManage }: { projectId: string; kind: ProjectCatalogKind; title: string; locale: string; canManage: boolean }) {
+function CatalogKindPanel({ projectId, kind, title, locale, canManage, onTasksChanged }: { projectId: string; kind: ProjectCatalogKind; title: string; locale: string; canManage: boolean; onTasksChanged?: () => void | Promise<void> }) {
   const { items, loading, error, refetch } = useProjectCatalogs(projectId, kind);
   const orderedItems = useMemo(() => [...items].sort((a, b) => a.display_order - b.display_order || a.catalog_item_id.localeCompare(b.catalog_item_id)), [items]);
   const [paste, setPaste] = useState<ProjectCatalogTranslationDraft>(emptyTranslations);
@@ -137,8 +145,10 @@ function CatalogKindPanel({ projectId, kind, title, locale, canManage }: { proje
   const [nextKey, setNextKey] = useState(0);
   const [notice, setNotice] = useState('');
   const [busy, setBusy] = useState(false);
+  const [deletingItemId, setDeletingItemId] = useState<string | null>(null);
   const [createItems] = useMutation(CREATE_PROJECT_CATALOG_ITEMS);
   const [updateItem] = useMutation(UPDATE_PROJECT_CATALOG_ITEM);
+  const [deleteItem] = useMutation(DELETE_PROJECT_CATALOG_ITEM);
   const [reorderItems] = useMutation(REORDER_PROJECT_CATALOG_ITEMS);
 
   useEffect(() => {
@@ -218,6 +228,27 @@ function CatalogKindPanel({ projectId, kind, title, locale, canManage }: { proje
     }
   };
 
+  const remove = async (item: ProjectCatalogItem) => {
+    if (!window.confirm(`Delete ${resolveProjectCatalogLabel(item, locale)}? Tasks using it will be cleared.`)) return;
+    setBusy(true);
+    setDeletingItemId(item.catalog_item_id);
+    setNotice('');
+    try {
+      await deleteItem({ variables: { catalog_item_id: item.catalog_item_id } });
+      try {
+        await Promise.all([refetch(), Promise.resolve(onTasksChanged?.())]);
+        setNotice('Deleted.');
+      } catch {
+        setNotice('Deleted, but the latest catalog or tasks could not be loaded. Retry the refresh.');
+      }
+    } catch (deleteError) {
+      setNotice(friendlyError(deleteError));
+    } finally {
+      setDeletingItemId(null);
+      setBusy(false);
+    }
+  };
+
   const move = async (index: number, direction: -1 | 1) => {
     const next = [...orderedItems];
     [next[index], next[index + direction]] = [next[index + direction], next[index]];
@@ -244,7 +275,7 @@ function CatalogKindPanel({ projectId, kind, title, locale, canManage }: { proje
       {loading && !items.length && <p role="status" className="mt-2 text-sm text-slate-600">Loading catalog…</p>}
       {error && <div role="alert" className="mt-2 text-sm text-red-700">Could not load this catalog. <button type="button" onClick={() => void refetch()} className="underline">Retry</button></div>}
       {!loading && !error && !orderedItems.length && <p className="mt-2 text-sm text-slate-600">No values configured.</p>}
-      {!!orderedItems.length && <ol className="mt-3 space-y-2">{orderedItems.map((item, index) => <CatalogItemEditor key={item.catalog_item_id} item={item} index={index} count={orderedItems.length} locale={locale} canManage={canManage} busy={busy} onSave={saveLabels} onMove={move} />)}</ol>}
+      {!!orderedItems.length && <ol className="mt-3 space-y-2">{orderedItems.map((item, index) => <CatalogItemEditor key={item.catalog_item_id} item={item} index={index} count={orderedItems.length} locale={locale} canManage={canManage} busy={busy} deleting={deletingItemId === item.catalog_item_id} onSave={saveLabels} onDelete={remove} onMove={move} />)}</ol>}
 
       {canManage && (
         <div className="mt-4 border-t border-slate-200 pt-3">
@@ -283,10 +314,10 @@ function CatalogKindPanel({ projectId, kind, title, locale, canManage }: { proje
   );
 }
 
-export function ProjectCatalogSettingsPanel({ projectId, canManage }: { projectId: string; canManage: boolean }) {
+export function ProjectCatalogSettingsPanel({ projectId, canManage, onTasksChanged }: { projectId: string; canManage: boolean; onTasksChanged?: () => void | Promise<void> }) {
   const { i18n } = useTranslation();
   const locale = i18n.resolvedLanguage || i18n.language || 'en';
-  return <div className="space-y-4"><div><h1 className="text-xl font-semibold text-slate-900">Project settings</h1><p className="text-sm text-slate-600">Configure English, Japanese, and Vietnamese task labels for this project. Missing translations fall back deterministically; IDs remain stable when labels, language, or order change.</p>{!canManage && <p className="mt-1 text-sm text-slate-600">You have read-only access.</p>}</div>{KINDS.map(({ kind, title }) => <CatalogKindPanel key={`${projectId}-${kind}`} projectId={projectId} kind={kind} title={title} locale={locale} canManage={canManage} />)}</div>;
+  return <div className="space-y-4"><div><h1 className="text-xl font-semibold text-slate-900">Project settings</h1><p className="text-sm text-slate-600">Configure English, Japanese, and Vietnamese task labels for this project. Missing translations fall back deterministically; IDs remain stable when labels, language, or order change.</p>{!canManage && <p className="mt-1 text-sm text-slate-600">You have read-only access.</p>}</div>{KINDS.map(({ kind, title }) => <CatalogKindPanel key={`${projectId}-${kind}`} projectId={projectId} kind={kind} title={title} locale={locale} canManage={canManage} onTasksChanged={onTasksChanged} />)}</div>;
 }
 
 export function ProjectCatalogSelect({ projectId, kind, value, legacyLabel, onChange, disabled, label }: { projectId: string | undefined; kind: ProjectCatalogKind; value?: string | null; legacyLabel?: string | null; onChange: (value: string | null) => void; disabled?: boolean; label: string }) {

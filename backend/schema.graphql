@@ -431,6 +431,7 @@ type Mutation {
 	set_task_taxonomy(task_id: ID!, phase_id: ID, category_id: ID): Boolean!
 	create_project_catalog_items(input: CreateProjectCatalogItemsInput!): [ProjectCatalogItem!]!
 	update_project_catalog_item(input: UpdateProjectCatalogItemInput!): ProjectCatalogItem!
+	delete_project_catalog_item(catalog_item_id: ID!): DeleteProjectCatalogItemPayload!
 	reorder_project_catalog_items(input: ReorderProjectCatalogItemsInput!): [ProjectCatalogItem!]!
 	"""
 	Create a resource identity. With no user_id this is a PLACEHOLDER:
@@ -627,6 +628,13 @@ type ProjectCatalogItem {
 	kind: ProjectCatalogKind!
 	display_order: Int!
 	labels: [ProjectCatalogLabel!]!
+}
+
+type DeleteProjectCatalogItemPayload {
+	catalog_item_id: ID!
+	project_id: ID!
+	kind: ProjectCatalogKind!
+	affected_task_ids: [ID!]!
 }
 
 input ProjectCatalogItemDraftInput {

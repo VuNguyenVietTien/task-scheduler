@@ -51,6 +51,15 @@ pub struct ProjectCatalogItem {
     pub labels: Vec<ProjectCatalogLabel>,
 }
 
+#[derive(SimpleObject, Clone, Debug)]
+#[graphql(rename_fields = "snake_case")]
+pub struct DeleteProjectCatalogItemPayload {
+    pub catalog_item_id: ID,
+    pub project_id: ID,
+    pub kind: ProjectCatalogKind,
+    pub affected_task_ids: Vec<ID>,
+}
+
 #[derive(InputObject)]
 #[graphql(rename_fields = "snake_case")]
 pub struct ProjectCatalogLabelInput {
@@ -353,6 +362,82 @@ impl ProjectCatalogMutation {
             .ok_or_else(|| conflict("catalog item changed; refresh before retrying"))?;
         tx.commit().await.map_err(AuthError::Database)?;
         Ok(item)
+    }
+
+    async fn delete_project_catalog_item(
+        &self,
+        ctx: &Context<'_>,
+        catalog_item_id: ID,
+    ) -> Result<DeleteProjectCatalogItemPayload> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let catalog_item_id = parse_id(&catalog_item_id, "catalog_item_id")?;
+        let caller = project_authz::require_user(context)?;
+        let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
+        let project_id: Option<Uuid> = sqlx::query_scalar(
+            "SELECT project_id FROM project_task_catalog_items WHERE catalog_item_id = $1",
+        )
+        .bind(catalog_item_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        let Some(project_id) = project_id else {
+            return Err(bad("catalog item is not available"));
+        };
+        project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+        let kind: Option<String> = sqlx::query_scalar(
+            "SELECT kind FROM project_task_catalog_items \
+             WHERE catalog_item_id = $1 AND project_id = $2 FOR UPDATE",
+        )
+        .bind(catalog_item_id)
+        .bind(project_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        let kind = match kind.as_deref() {
+            Some("PROGRESS_TYPE") => ProjectCatalogKind::ProgressType,
+            Some("CATEGORY") => ProjectCatalogKind::Category,
+            Some("TASK_TYPE") => ProjectCatalogKind::TaskType,
+            _ => return Err(conflict("catalog item changed; refresh before retrying")),
+        };
+        let affected_task_ids: Vec<Uuid> = match kind {
+            ProjectCatalogKind::ProgressType => sqlx::query_scalar(
+                "UPDATE tasks SET progress_catalog_item_id = NULL, progress_type = NULL \
+                 WHERE project_id = $1 AND progress_catalog_item_id = $2 RETURNING task_id",
+            ),
+            ProjectCatalogKind::Category => sqlx::query_scalar(
+                "UPDATE tasks SET category_catalog_item_id = NULL, category = NULL \
+                 WHERE project_id = $1 AND category_catalog_item_id = $2 RETURNING task_id",
+            ),
+            ProjectCatalogKind::TaskType => sqlx::query_scalar(
+                "UPDATE tasks SET task_type_catalog_item_id = NULL, type = NULL \
+                 WHERE project_id = $1 AND task_type_catalog_item_id = $2 RETURNING task_id",
+            ),
+        }
+        .bind(project_id)
+        .bind(catalog_item_id)
+        .fetch_all(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        sqlx::query("DELETE FROM project_task_catalog_labels WHERE catalog_item_id = $1")
+            .bind(catalog_item_id)
+            .execute(&mut *tx)
+            .await
+            .map_err(AuthError::Database)?;
+        sqlx::query(
+            "DELETE FROM project_task_catalog_items WHERE catalog_item_id = $1 AND project_id = $2",
+        )
+        .bind(catalog_item_id)
+        .bind(project_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        tx.commit().await.map_err(AuthError::Database)?;
+        Ok(DeleteProjectCatalogItemPayload {
+            catalog_item_id: catalog_item_id.into(),
+            project_id: project_id.into(),
+            kind,
+            affected_task_ids: affected_task_ids.into_iter().map(Into::into).collect(),
+        })
     }
 
     async fn reorder_project_catalog_items(
