@@ -74,7 +74,7 @@ export const fetchSubtasks = createAsyncThunk(
         return rejectWithValue(response.errors[0].message);
       }
       
-      return response.data.taskSubtasks;
+      return response.data.task_subtasks;
     } catch (error) {
       return rejectWithValue(error instanceof Error ? error.message : 'Lỗi khi tải danh sách công việc con');
     }
@@ -170,7 +170,7 @@ export const searchParentTaskById = createAsyncThunk(
 
 // Hàm chuyển đổi dữ liệu từ API sang định dạng local
 // GET_TASK_BY_ID returns snake_case fields matching the GraphQL schema
-const transformTaskFromAPI = (apiTask: any): Task => {
+export const transformTaskFromAPI = (apiTask: any): Task => {
   // Support both snake_case (from GET_TASK_BY_ID) and camelCase (legacy)
   const taskId = apiTask.task_id || apiTask.taskId;
   return {
@@ -202,7 +202,8 @@ const transformTaskFromAPI = (apiTask: any): Task => {
     type: apiTask.type_ || apiTask.type,
     category: apiTask.category,
     progress_type: apiTask.progress_type || apiTask.progressType,
-    tags: apiTask.tags
+    tags: apiTask.tags,
+    child_tasks: (apiTask.child_tasks ?? apiTask.childTasks)?.map(transformTaskFromAPI)
   };
 };
 
@@ -251,6 +252,7 @@ const taskDetailSlice = createSlice({
     builder.addCase(fetchTaskDetail.fulfilled, (state, action) => {
       state.loadingTask = false;
       state.task = transformTaskFromAPI(action.payload);
+      state.subtasks = state.task.child_tasks?.filter((child) => child.parent_task_id === state.task?.task_id) ?? [];
     });
     builder.addCase(fetchTaskDetail.rejected, (state, action) => {
       state.loadingTask = false;

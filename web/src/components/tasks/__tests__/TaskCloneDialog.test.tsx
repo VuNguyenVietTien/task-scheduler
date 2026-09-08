@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { TaskCloneDialog, type TaskCloneDialogProps } from '../TaskCloneDialog';
 import type { CloneTreeNode } from '@/utils/cloneTask';
 
@@ -35,8 +35,8 @@ describe('TaskCloneDialog', () => {
     const checkboxes = screen.getAllByRole('checkbox');
     expect(checkboxes).toHaveLength(4);
     checkboxes.forEach((checkbox) => expect(checkbox).toBeChecked());
-    expect(screen.getByRole('checkbox', { name: /Root task/ })).toBeDisabled();
-    expect(screen.getByText('Parent is always copied.')).toBeInTheDocument();
+    expect(screen.getByRole('checkbox', { name: /Root task/ })).toBeEnabled();
+    expect(screen.getByText('Uncheck to clone selected children elsewhere.')).toBeInTheDocument();
     expect(screen.getByRole('spinbutton', { name: 'Number of copies' })).toHaveValue(1);
     expect(screen.getByText('1 parent + 3 children = 4 tasks')).toBeInTheDocument();
     const confirm = screen.getByRole('button', { name: 'Create 1 copy (4 tasks)' });
@@ -98,6 +98,42 @@ describe('TaskCloneDialog', () => {
       source_task_id: 'root',
       selected_descendant_ids: ['child-1', 'child-3', 'child-6'],
       quantity: 3,
+    });
+  });
+
+  it('offers exclusive parent/root destinations when the source is unchecked', async () => {
+    const onSubmit = jest.fn();
+    renderDialog({
+      onSubmit,
+      nodes: [
+        ...nodes.map((node) => ({ ...node, project_id: 'project-1' })),
+        { task_id: 'target', project_id: 'project-1', parent_task_id: null, title: 'Target parent' },
+        { task_id: 'other-project', project_id: 'project-2', parent_task_id: null, title: 'Wrong project' },
+      ],
+    });
+
+    fireEvent.click(screen.getByRole('checkbox', { name: /Root task/ }));
+    expect(screen.getByRole('group', { name: 'Destination' })).toBeInTheDocument();
+    expect(screen.getByRole('option', { name: 'Target parent' })).toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Branch task' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('option', { name: 'Wrong project' })).not.toBeInTheDocument();
+
+    fireEvent.change(screen.getByRole('combobox', { name: 'Destination parent' }), { target: { value: 'target' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Create 1 copy (3 tasks)' }));
+    await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith({
+      source_task_id: 'root',
+      selected_descendant_ids: ['branch', 'leaf-a', 'leaf-b'],
+      quantity: 1,
+      destination_parent_task_id: 'target',
+    }));
+
+    fireEvent.click(screen.getByRole('radio', { name: 'Clone without parent' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Create 1 copy (3 tasks)' }));
+    expect(onSubmit).toHaveBeenLastCalledWith({
+      source_task_id: 'root',
+      selected_descendant_ids: ['branch', 'leaf-a', 'leaf-b'],
+      quantity: 1,
+      clone_without_parent: true,
     });
   });
 

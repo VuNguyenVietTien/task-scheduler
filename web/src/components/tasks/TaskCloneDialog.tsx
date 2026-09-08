@@ -8,6 +8,7 @@ import {
   defaultCloneSelection,
   getCloneCheckboxState,
   getClonePreview,
+  getSelectedCloneRootIds,
   parseCloneQuantity,
   updateCloneSelection,
   type CloneTaskSelectionInput,
@@ -51,25 +52,47 @@ export function TaskCloneDialog({
     .join('\u0000');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [quantityValue, setQuantityValue] = useState('1');
+  const [destination, setDestination] = useState<'parent' | 'root'>('parent');
+  const [destinationParentId, setDestinationParentId] = useState('');
   const submitLocked = useRef(false);
 
   useEffect(() => {
     if (!open) return;
     setSelected(defaultCloneSelection(tree));
     setQuantityValue('1');
+    setDestination('parent');
+    setDestinationParentId('');
   }, [open, sourceTaskId, treeKey]);
 
+  const sourceProjectId = nodes.find((node) => node.task_id === sourceTaskId)?.project_id;
+  const sourceTreeIds = new Set(tree.items.map(({ node }) => node.task_id));
+  const eligibleParents = nodes.filter((node) => !node.is_deleted
+    && node.project_id === sourceProjectId
+    && !sourceTreeIds.has(node.task_id));
+  const orphanedRoots = !selected.has(sourceTaskId) ? getSelectedCloneRootIds(tree, selected) : [];
+  const needsDestination = orphanedRoots.length > 0;
   const quantity = parseCloneQuantity(quantityValue);
-  const preview = quantity && tree.items.length ? getClonePreview(selected.size, quantity) : null;
+  const preview = quantity && selected.size
+    ? getClonePreview(selected.size, quantity, needsDestination ? orphanedRoots.length : 1)
+    : null;
   const unavailable = !loading && !loadError && tree.items.length === 0;
-  const disabled = loading || submitting || retrying || unavailable || Boolean(loadError) || requiresRefresh || quantity === null;
+  const destinationMissing = needsDestination && destination === 'parent' && !destinationParentId;
+  const disabled = loading || submitting || retrying || unavailable || Boolean(loadError)
+    || requiresRefresh || quantity === null || selected.size === 0 || destinationMissing;
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (disabled || submitLocked.current || quantity === null) return;
     submitLocked.current = true;
     try {
-      await onSubmit(createCloneSelectionInput(tree, selected, quantity));
+      await onSubmit(createCloneSelectionInput(
+        tree,
+        selected,
+        quantity,
+        needsDestination
+          ? destination === 'parent' ? { parentTaskId: destinationParentId } : { withoutParent: true }
+          : undefined
+      ));
     } catch {
       // Parent owns transport/error messaging; retaining local state enables retry.
     } finally {
@@ -109,7 +132,7 @@ export function TaskCloneDialog({
                     <input
                       type="checkbox"
                       checked={state.checked}
-                      disabled={isRoot || submitting}
+                      disabled={submitting}
                       aria-checked={state.indeterminate ? 'mixed' : state.checked}
                       ref={(element) => {
                         if (element) element.indeterminate = state.indeterminate;
@@ -119,11 +142,37 @@ export function TaskCloneDialog({
                       }}
                     />
                     <span>{node.title}</span>
-                    {isRoot && <span className="text-xs text-slate-500">Parent is always copied.</span>}
+                    {isRoot && <span className="text-xs text-slate-500">Uncheck to clone selected children elsewhere.</span>}
                   </label>
                 );
               })}
             </div>
+          </fieldset>
+        )}
+
+        {needsDestination && (
+          <fieldset className="rounded-lg border border-slate-200 p-3" disabled={submitting}>
+            <legend className="px-1 text-sm font-medium text-slate-800">Destination</legend>
+            <label className="flex items-center gap-2 text-sm">
+              <input type="radio" name="clone-destination" checked={destination === 'parent'} onChange={() => setDestination('parent')} />
+              Clone under an existing parent
+            </label>
+            {destination === 'parent' && (
+              <select
+                aria-label="Destination parent"
+                value={destinationParentId}
+                onChange={(event) => setDestinationParentId(event.target.value)}
+                className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                required
+              >
+                <option value="">Select a parent task</option>
+                {eligibleParents.map((node) => <option key={node.task_id} value={node.task_id}>{node.title}</option>)}
+              </select>
+            )}
+            <label className="mt-2 flex items-center gap-2 text-sm">
+              <input type="radio" name="clone-destination" checked={destination === 'root'} onChange={() => setDestination('root')} />
+              Clone without parent
+            </label>
           </fieldset>
         )}
 
@@ -148,7 +197,9 @@ export function TaskCloneDialog({
             <p id="clone-quantity-error" className="mt-1 text-sm text-red-700" role="alert">{QUANTITY_ERROR}</p>
           ) : preview ? (
             <p id="clone-preview" className="mt-1 text-sm text-slate-600">
-              {preview.parentCount} {preview.parentCount === 1 ? 'parent' : 'parents'} +{' '}
+              {preview.parentCount} {needsDestination
+                ? preview.parentCount === 1 ? 'root' : 'roots'
+                : preview.parentCount === 1 ? 'parent' : 'parents'} +{' '}
               {preview.childCount} {preview.childCount === 1 ? 'child' : 'children'} ={' '}
               {preview.totalCount} {preview.totalCount === 1 ? 'task' : 'tasks'}
             </p>

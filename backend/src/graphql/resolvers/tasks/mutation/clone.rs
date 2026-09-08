@@ -83,6 +83,20 @@ pub async fn clone_task_subtree(
     let source_id = Uuid::parse_str(&input.source_task_id.to_string())
         .map_err(|_| clone_error("BAD_USER_INPUT", "invalid source_task_id"))?;
     let selected_descendants = parse_ids(&input)?;
+    let clone_without_parent = input.clone_without_parent.unwrap_or(false);
+    if clone_without_parent && input.destination_parent_task_id.is_some() {
+        return Err(clone_error("BAD_USER_INPUT", "choose exactly one clone destination"));
+    }
+    let destination_parent_id = input
+        .destination_parent_task_id
+        .as_ref()
+        .map(|id| Uuid::parse_str(&id.to_string()))
+        .transpose()
+        .map_err(|_| clone_error("BAD_USER_INPUT", "invalid destination_parent_task_id"))?;
+    let orphan_mode = clone_without_parent || destination_parent_id.is_some();
+    if orphan_mode && selected_descendants.is_empty() {
+        return Err(clone_error("BAD_USER_INPUT", "select at least one child task"));
+    }
     let mut tx = context
         .db
         .begin()
@@ -152,6 +166,25 @@ pub async fn clone_task_subtree(
     if source_rows.iter().any(|row| row.project_id != project_id) {
         return Err(clone_error("CONFLICT", "source hierarchy is invalid"));
     }
+    if let Some(parent_id) = destination_parent_id {
+        if source_by_id.contains_key(&parent_id) {
+            return Err(clone_error("BAD_USER_INPUT", "destination parent would create a cycle"));
+        }
+        let destination_project: Option<Uuid> = sqlx::query_scalar(
+            "SELECT project_id FROM tasks WHERE task_id = $1 \
+             AND NOT COALESCE(is_deleted, false) FOR KEY SHARE",
+        )
+        .bind(parent_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(|_| clone_error("INTERNAL_SERVER_ERROR", "could not validate destination parent"))?;
+        if destination_project != Some(project_id) {
+            return Err(clone_error(
+                "BAD_USER_INPUT",
+                "destination parent must be an active task in the same project",
+            ));
+        }
+    }
     if let Some(parent_id) = root.parent_task_id {
         if source_by_id.contains_key(&parent_id) {
             return Err(clone_error("CONFLICT", "source hierarchy contains a cycle"));
@@ -200,7 +233,9 @@ pub async fn clone_task_subtree(
     }
 
     let mut selected: HashSet<Uuid> = selected_descendants.iter().copied().collect();
-    selected.insert(source_id);
+    if !orphan_mode {
+        selected.insert(source_id);
+    }
     for descendant_id in &selected_descendants {
         if !source_by_id.contains_key(descendant_id) {
             return Err(clone_error(
@@ -236,6 +271,7 @@ pub async fn clone_task_subtree(
     }
 
     let mut children_of: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+    let mut selected_roots = Vec::new();
     for task_id in &selected {
         if *task_id == source_id {
             continue;
@@ -243,6 +279,10 @@ pub async fn clone_task_subtree(
         let parent_id = source_by_id[task_id]
             .parent_task_id
             .ok_or_else(|| clone_error("CONFLICT", "source hierarchy is invalid"))?;
+        if orphan_mode && parent_id == source_id {
+            selected_roots.push(*task_id);
+            continue;
+        }
         if !selected.contains(&parent_id) {
             return Err(clone_error(
                 "BAD_USER_INPUT",
@@ -257,7 +297,21 @@ pub async fn clone_task_subtree(
             (source.priority_order, source.created_at, source.task_id)
         });
     }
-    let mut source_order = vec![source_id];
+    selected_roots.sort_by_key(|id| {
+        let source = source_by_id[id];
+        (source.priority_order, source.created_at, source.task_id)
+    });
+    if orphan_mode && selected_roots.is_empty() {
+        return Err(clone_error(
+            "BAD_USER_INPUT",
+            "selected child roots must include their ancestors",
+        ));
+    }
+    let mut source_order = if orphan_mode {
+        selected_roots.clone()
+    } else {
+        vec![source_id]
+    };
     let mut next = 0;
     while next < source_order.len() {
         if let Some(children) = children_of.get(&source_order[next]) {
@@ -289,15 +343,25 @@ pub async fn clone_task_subtree(
     let expected_count = (input.quantity as usize)
         .checked_mul(source_order.len())
         .ok_or_else(|| clone_error("INTERNAL_SERVER_ERROR", "clone result is too large"))?;
-    let mut root_task_ids = Vec::with_capacity(input.quantity as usize);
+    let root_count = if orphan_mode { selected_roots.len() } else { 1 };
+    let expected_root_count = (input.quantity as usize)
+        .checked_mul(root_count)
+        .ok_or_else(|| clone_error("INTERNAL_SERVER_ERROR", "clone result is too large"))?;
+    let selected_root_set: HashSet<Uuid> = selected_roots.into_iter().collect();
+    let mut root_task_ids = Vec::with_capacity(expected_root_count);
     let mut created_task_ids = Vec::with_capacity(expected_count);
     for _ in 0..input.quantity {
         let mut id_map = HashMap::with_capacity(source_order.len());
         for task_id in &source_order {
             let source = source_by_id[task_id];
             let cloned_id = Uuid::new_v4();
-            let parent_task_id = if *task_id == source_id {
-                source.parent_task_id
+            let is_copy_root = if orphan_mode {
+                selected_root_set.contains(task_id)
+            } else {
+                *task_id == source_id
+            };
+            let parent_task_id = if is_copy_root {
+                if orphan_mode { destination_parent_id } else { source.parent_task_id }
             } else {
                 let parent = source
                     .parent_task_id
@@ -369,12 +433,12 @@ pub async fn clone_task_subtree(
             }
             id_map.insert(*task_id, cloned_id);
             created_task_ids.push(ID::from(cloned_id));
-            if *task_id == source_id {
+            if is_copy_root {
                 root_task_ids.push(ID::from(cloned_id));
             }
         }
     }
-    if root_task_ids.len() != input.quantity as usize || created_task_ids.len() != expected_count {
+    if root_task_ids.len() != expected_root_count || created_task_ids.len() != expected_count {
         return Err(clone_error(
             "INTERNAL_SERVER_ERROR",
             "clone result mismatch",
