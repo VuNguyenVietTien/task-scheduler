@@ -22,16 +22,17 @@ import Select, { SingleValue, MultiValue, ActionMeta, components } from 'react-s
 import makeAnimated from 'react-select/animated';
 import { TaskDetail } from './TaskDetail';
 import { useAuth } from '@/contexts/AuthContext';
+import {
+  KANBAN_COLUMNS,
+  flattenKanbanTasks,
+  getKanbanStatus,
+  updateKanbanTaskInTree,
+} from './kanban-tasks';
 
 interface KanbanBoardProps {
   tasks: Task[];
   onTasksReorder?: (tasks: Task[]) => void;
   projectId: string;
-}
-
-interface Column {
-  id: TaskStatus;
-  title: string;
 }
 
 interface UserOption {
@@ -75,29 +76,18 @@ const storeValue = <T,>(key: string, value: T): void => {
   }
 };
 
-// Hàm helper để kiểm tra thay đổi giữa hai mảng tasks
+// Compare the complete forest so a descendant update is not discarded as a root-only no-op.
 const areTasksEqual = (tasksA: Task[], tasksB: Task[]): boolean => {
-  if (tasksA.length !== tasksB.length) return false;
-  
-  // Sắp xếp mảng theo task_id để đảm bảo so sánh chính xác
-  const sortedA = [...tasksA].sort((a, b) => a.task_id.localeCompare(b.task_id));
-  const sortedB = [...tasksB].sort((a, b) => a.task_id.localeCompare(b.task_id));
-  
-  // Kiểm tra xem có task nào thay đổi không
-  for (let i = 0; i < sortedA.length; i++) {
-    const taskA = sortedA[i];
-    const taskB = sortedB[i];
-    
-    // So sánh các thuộc tính quan trọng
-    if (taskA.task_id !== taskB.task_id || 
-        taskA.status !== taskB.status || 
-        taskA.priority !== taskB.priority ||
-        (taskA.assignee?.userId !== taskB.assignee?.userId)) {
-      return false;
-    }
-  }
-  
-  return true;
+  const rowsA = flattenKanbanTasks(tasksA);
+  const rowsB = flattenKanbanTasks(tasksB);
+  return rowsA.length === rowsB.length && rowsA.every(({ task, parent }, index) => {
+    const other = rowsB[index];
+    return task.task_id === other.task.task_id &&
+      parent?.task_id === other.parent?.task_id &&
+      task.status === other.task.status &&
+      task.priority === other.task.priority &&
+      task.assignee?.userId === other.task.assignee?.userId;
+  });
 };
 
 export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardProps) {
@@ -115,7 +105,6 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
   const isDragRef = useRef(false);
   const { user } = useAuth();
-  const [filteredTasks, setFilteredTasks] = useState<Task[]>(tasks);
   const updateTaskStatusMutation = useTaskStatusUpdate();
   const dispatch = useAppDispatch();
   
@@ -130,25 +119,28 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
   // Lấy danh sách thành viên từ Redux store
   const { members, loading: membersLoading } = useSelector((state: RootState) => state.members);
   
-  // Tạo danh sách columns mặc định
-  const defaultColumns: Column[] = [
-    { id: TaskStatuses.TODO, title: 'Todo' },
-    { id: TaskStatuses.DOING, title: 'In Progress' },
-    { id: TaskStatuses.PENDING, title: 'Pending' },
-    { id: TaskStatuses.REVIEW, title: 'Review' },
-    { id: TaskStatuses.BLOCKED, title: 'Blocked' },
-    { id: TaskStatuses.DONE, title: 'Done' },
-  ];
-
   // Các columns hiển thị dựa trên selectedStatuses
   const visibleColumns = useMemo(() => {
     if (selectedStatuses.length === 0) {
-      return defaultColumns; // Hiển thị tất cả columns nếu không có lựa chọn
+      return KANBAN_COLUMNS; // Hiển thị tất cả columns nếu không có lựa chọn
     }
-    return defaultColumns.filter(column => 
+    return KANBAN_COLUMNS.filter(column =>
       selectedStatuses.some(status => status.value === column.id)
     );
   }, [selectedStatuses]);
+
+  // Flatten once, then filter rows without losing parent-first order/context.
+  const filteredTasks = useMemo(() => {
+    let result = flattenKanbanTasks(clonedTasks);
+    if (selectedUser && selectedUser.value !== 'all') {
+      result = result.filter(({ task }) => task.assignee?.userId === selectedUser.value);
+    }
+    if (selectedStatuses.length > 0) {
+      const statusValues = selectedStatuses.map(({ value }) => value);
+      result = result.filter(({ task }) => statusValues.includes(getKanbanStatus(task.status)));
+    }
+    return result;
+  }, [clonedTasks, selectedUser, selectedStatuses]);
   
   // Hàm tính toán chiều cao của columns
   const calculateColumnHeight = useCallback(() => {
@@ -236,7 +228,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
   }, [tasks, tasksState, projectId, updateClonedTasks]);
 
   // Tạo danh sách lựa chọn cho Status
-  const statusOptions: StatusOption[] = defaultColumns.map(column => ({
+  const statusOptions: StatusOption[] = KANBAN_COLUMNS.map(column => ({
     value: column.id,
     label: column.title
   }));
@@ -252,26 +244,6 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
     return [{ value: 'all', label: t('common.all') }, ...options];
   }, [members]);
 
-  // Lọc tasks dựa trên user đã chọn và status đã chọn
-  useEffect(() => {
-    let result = [...clonedTasks];
-    
-    // Lọc theo user nếu không phải "Tất cả"
-    if (selectedUser && selectedUser.value !== 'all') {
-      result = result.filter(task => 
-        task.assignee && task.assignee.userId === selectedUser.value
-      );
-    }
-    
-    // Lọc theo statuses nếu có lựa chọn
-    if (selectedStatuses.length > 0) {
-      const statusValues = selectedStatuses.map(status => status.value);
-      result = result.filter(task => statusValues.includes(task.status));
-    }
-    
-    setFilteredTasks(result);
-  }, [clonedTasks, selectedUser, selectedStatuses]);
-
   // Lắng nghe sự kiện khi task status được cập nhật từ nơi khác
   useEffect(() => {
     const handleTaskStatusUpdate = (event: CustomEvent) => {
@@ -280,21 +252,9 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
       
       console.log('Task status updated externally:', { taskId, newStatus });
       
-      setClonedTasks(prevTasks => {
-        const taskToUpdate = prevTasks.find(task => task.task_id === taskId);
-        
-        // Nếu không tìm thấy task hoặc status đã giống rồi, không cần cập nhật
-        if (!taskToUpdate || taskToUpdate.status === newStatus) {
-          return prevTasks;
-        }
-        
-        // Cập nhật tasks với status mới
-        return prevTasks.map(task => 
-          task.task_id === taskId 
-            ? { ...task, status: newStatus } 
-            : task
-        );
-      });
+      setClonedTasks(prevTasks =>
+        updateKanbanTaskInTree(prevTasks, taskId, { status: newStatus })
+      );
     };
 
     // Add event listener
@@ -323,13 +283,11 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
   // Sync modal changes back to kanban state
   const handleTaskDetailUpdate = useCallback((taskId: string, updates: Partial<Task>) => {
     setSelectedTask(prev => prev ? { ...prev, ...updates } : null);
-    setClonedTasks(prev => prev.map(t =>
-      t.task_id === taskId ? { ...t, ...updates } : t
-    ));
+    setClonedTasks(prev => updateKanbanTaskInTree(prev, taskId, updates));
   }, []);
 
   const getTasksByStatus = (status: TaskStatus) => {
-    return filteredTasks.filter(task => task.status === status);
+    return filteredTasks.filter(({ task }) => getKanbanStatus(task.status) === status);
   };
 
   const getStatusColor = (status: TaskStatus) => {
@@ -398,14 +356,9 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
 
     console.log(`Dragging task ${taskId} from ${previousStatus} to ${newStatus}`);
 
-    // Optimistically update UI
-    setClonedTasks(prevTasks => 
-      prevTasks.map(task => 
-        task.task_id === taskId 
-          ? { ...task, status: newStatus } 
-          : task
-      )
-    );
+    // Optimistically update the matching node without flattening its tree.
+    const optimisticTasks = updateKanbanTaskInTree(clonedTasks, taskId, { status: newStatus });
+    setClonedTasks(optimisticTasks);
 
     // Sử dụng Redux dispatch thay vì gọi mutation trực tiếp
     // Điều này đảm bảo thống nhất với cách xử lý trong TaskListView
@@ -414,12 +367,14 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
       status: newStatus
     }))
     .unwrap()
-    .then(() => {
+    .then(({ task }) => {
       console.log('Task status updated successfully via Redux');
-      
+      const confirmedTasks = updateKanbanTaskInTree(optimisticTasks, taskId, task);
+      setClonedTasks(prevTasks => updateKanbanTaskInTree(prevTasks, taskId, task));
+
       // Call onTasksReorder callback if provided
       if (onTasksReorder) {
-        onTasksReorder(clonedTasks);
+        onTasksReorder(confirmedTasks);
       }
       
       // Dispatch một event thông báo cập nhật thành công
@@ -435,12 +390,8 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
       console.error('Failed to update task status:', error);
       
       // Revert UI changes on error
-      setClonedTasks(prevTasks => 
-        prevTasks.map(task => 
-          task.task_id === taskId 
-            ? { ...task, status: previousStatus } 
-            : task
-        )
+      setClonedTasks(prevTasks =>
+        updateKanbanTaskInTree(prevTasks, taskId, { status: previousStatus })
       );
       
       // Show error notification
@@ -622,7 +573,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
                       style={{ overflow: 'visible' }}
                     >
                       <div className="space-y-3 p-2">
-                        {getTasksByStatus(column.id).map((task, index) => (
+                        {getTasksByStatus(column.id).map(({ task, depth, parent }, index) => (
                           <Draggable
                             key={task.task_id}
                             draggableId={task.task_id}
@@ -634,6 +585,9 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
                                 ref={provided.innerRef}
                                 {...provided.draggableProps}
                                 {...provided.dragHandleProps}
+                                data-task-id={task.task_id}
+                                data-task-depth={depth}
+                                data-parent-task-id={parent?.task_id ?? ''}
                                 className={`p-3 rounded-lg border-l-4 bg-white
                                   ${getStatusColor(task.status)}
                                   ${snapshot.isDragging 
@@ -649,6 +603,11 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
                                 onClick={(e) => handleTaskCardClick(e, task)}
                                 onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); handleTaskCardClick(e, task); } }}
                               >
+                                {parent && (
+                                  <div className="mb-1 truncate text-xs text-slate-500" title={parent.title}>
+                                    ↳ {parent.title}
+                                  </div>
+                                )}
                                 <div className="flex items-start justify-between mb-2">
                                   <h4 className="font-medium text-slate-900 truncate flex-1">
                                     {task.title}
