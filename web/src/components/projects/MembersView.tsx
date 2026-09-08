@@ -24,12 +24,13 @@ type ProjectMembersProps = {
 
 /** One canonical member surface. Access is explicit on each resource row;
  * placeholders remain available for capacity, leave, groups and assignments. */
-export function MembersView({ projectId, currentUserRole }: ProjectMembersProps) {
+export function MembersView({ projectId, currentUserRole, refetch }: ProjectMembersProps) {
   const role = String(currentUserRole).toLowerCase();
   return (
     <SchedulingConfigPanel
       projectId={projectId}
       canManage={['manager', 'leader', 'admin'].includes(role)}
+      onMembersChanged={refetch}
     />
   );
 }

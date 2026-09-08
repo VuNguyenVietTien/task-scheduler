@@ -80,6 +80,7 @@ fn sdl_resource_member_reads_and_writes() {
         "resource_member(resource_member_id:",
         "create_resource_member(input:",
         "link_resource_member_user(",
+        "remove_resource_member(project_id:",
         "classify_resource_member(",
     ] {
         assert!(
@@ -90,6 +91,27 @@ fn sdl_resource_member_reads_and_writes() {
     assert!(
         sdl.contains("input CreateResourceMemberInput"),
         "CreateResourceMemberInput missing"
+    );
+}
+
+#[test]
+fn member_removal_uses_canonical_id_and_owner_guard_in_one_transaction() {
+    let source = include_str!("../../src/graphql/resolvers/resource_members/mod.rs");
+    let operation = &source[source.find("async fn remove_resource_member").unwrap()
+        ..source.find("async fn classify_resource_member").unwrap()];
+    for required in [
+        "context.db.begin()",
+        "require_project_write_tx",
+        "SELECT user_id FROM project_members WHERE project_id = $1 AND member_id = $2 FOR UPDATE",
+        "require_access_target_tx",
+        "DELETE FROM project_members WHERE project_id = $1 AND member_id = $2",
+        "tx.commit()",
+    ] {
+        assert!(operation.contains(required), "member removal missing {required}");
+    }
+    assert!(
+        operation.find("require_access_target_tx").unwrap() < operation.find("DELETE FROM project_members").unwrap(),
+        "owner/privileged guard must run before canonical deletion"
     );
 }
 

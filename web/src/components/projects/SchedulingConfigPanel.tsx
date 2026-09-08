@@ -26,6 +26,7 @@ import {
   CREATE_RESOURCE_MEMBER,
   LINK_RESOURCE_MEMBER_BY_EMAIL,
   SET_PROJECT_MEMBER_ACCESS,
+  REMOVE_RESOURCE_MEMBER,
   CAPACITY_SETTINGS_QUERY,
   SET_MEMBER_CAPACITY,
   SET_CAPACITY_DATE_OVERRIDE,
@@ -45,6 +46,7 @@ import {
 interface Props {
   projectId: string;
   canManage: boolean;
+  onMembersChanged?: () => void | Promise<void>;
 }
 
 interface ResourceMemberRow {
@@ -98,12 +100,14 @@ interface CommitmentRow {
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export function SchedulingConfigPanel({ projectId, canManage }: Props) {
+export function SchedulingConfigPanel({ projectId, canManage, onMembersChanged }: Props) {
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [linkTarget, setLinkTarget] = useState<Record<string, string>>({});
   const [memberRefreshError, setMemberRefreshError] = useState<string | null>(null);
   const [memberRefreshing, setMemberRefreshing] = useState(false);
+  const [removingMemberId, setRemovingMemberId] = useState<string | null>(null);
+  const [memberActionMessage, setMemberActionMessage] = useState<{ error: boolean; text: string } | null>(null);
 
   const [capacityDraft, setCapacityDraft] = useState<Record<string, { weekday: string; weekend: string }>>({});
   const [overrideDraft, setOverrideDraft] = useState<Record<string, { date: string; hours: string }>>({});
@@ -185,6 +189,7 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
   const [createMember] = useMutation(CREATE_RESOURCE_MEMBER);
   const [linkMember] = useMutation(LINK_RESOURCE_MEMBER_BY_EMAIL);
   const [setMemberAccess] = useMutation(SET_PROJECT_MEMBER_ACCESS);
+  const [removeMember] = useMutation(REMOVE_RESOURCE_MEMBER);
   const [setCapacity] = useMutation(SET_MEMBER_CAPACITY);
   const [setOverride] = useMutation(SET_CAPACITY_DATE_OVERRIDE);
   const [addDayOff] = useMutation(ADD_DAY_OFF);
@@ -247,6 +252,33 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
       await refreshMembers(true);
     } catch (e) {
       toast.error(`Link failed: ${(e as Error).message}`);
+    }
+  };
+
+  const handleRemoveMember = async (member: ResourceMemberRow) => {
+    if (!window.confirm(`Remove ${member.display_name} from this project?`)) return;
+    setRemovingMemberId(member.member_id);
+    setMemberActionMessage(null);
+    try {
+      const result = await removeMember({ variables: {
+        project_id: projectId,
+        member_id: member.member_id,
+      }});
+      if (!result.data?.remove_resource_member) throw new Error('Member was not removed.');
+      membersQ.updateQuery?.((data: { resource_members?: ResourceMemberRow[] }) => ({
+        ...data,
+        resource_members: (data?.resource_members ?? []).filter((row) => row.member_id !== member.member_id),
+      }));
+      await Promise.all([refreshMembers(true), capacityQ.refetch(), groupsQ.refetch(), onMembersChanged?.()]);
+      const text = `${member.display_name} removed from the project`;
+      setMemberActionMessage({ error: false, text });
+      toast.success(text);
+    } catch (error) {
+      const text = `Remove failed: ${(error as Error).message}`;
+      setMemberActionMessage({ error: true, text });
+      toast.error(text);
+    } finally {
+      setRemovingMemberId(null);
     }
   };
 
@@ -411,6 +443,11 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
             <button type="button" className="ml-2 underline" disabled={memberRefreshing} onClick={() => refreshMembers()}>Retry members</button>
           </div>
         )}
+        {memberActionMessage && (
+          <p role={memberActionMessage.error ? 'alert' : 'status'} className={`mb-2 text-sm ${memberActionMessage.error ? 'text-red-700' : 'text-green-700'}`}>
+            {memberActionMessage.text}
+          </p>
+        )}
         {canManage && (
           <div className="flex flex-wrap gap-2 mb-3">
             <input
@@ -445,6 +482,7 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
               <th>Status</th>
               <th>Access</th>
               {canManage && <th>Link to existing account</th>}
+              {canManage && <th>Action</th>}
             </tr>
           </thead>
           <tbody>
@@ -511,11 +549,24 @@ export function SchedulingConfigPanel({ projectId, canManage }: Props) {
                     )}
                   </td>
                 )}
+                {canManage && (
+                  <td>
+                    <button
+                      type="button"
+                      className="px-2 py-1 text-red-600 border border-red-200 rounded disabled:opacity-50"
+                      onClick={() => handleRemoveMember(m)}
+                      disabled={removingMemberId !== null || memberRefreshing}
+                      aria-label={`Remove ${m.display_name}`}
+                    >
+                      {removingMemberId === m.member_id ? 'Removing…' : 'Remove'}
+                    </button>
+                  </td>
+                )}
               </tr>
             ))}
             {!membersQ.loading && !memberRefreshing && !memberError && resourceMembers.length === 0 && (
               <tr>
-                <td colSpan={4} className="py-2 text-slate-400">
+                <td colSpan={canManage ? 6 : 4} className="py-2 text-slate-400">
                   No resource members yet
                 </td>
               </tr>

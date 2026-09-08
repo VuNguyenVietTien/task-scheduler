@@ -477,6 +477,48 @@ impl ResourceMemberMutation {
         Ok(fetch_member(&context.db, member_id).await?.into())
     }
 
+    /// Remove one canonical project member. Cascading scheduling configuration
+    /// follows DB constraints; assigned members are rejected by the task FK.
+    async fn remove_resource_member(
+        &self,
+        ctx: &Context<'_>,
+        project_id: ID,
+        member_id: ID,
+    ) -> Result<bool> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let caller_id = project_authz::require_user(context)?;
+        let project_id = parse_id(&project_id, "project_id")?;
+        let member_id = parse_id(&member_id, "member_id")?;
+        let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
+        project_authz::require_project_write_tx(&mut tx, caller_id, project_id).await?;
+        let user_id: Option<Option<Uuid>> = sqlx::query_scalar(
+            "SELECT user_id FROM project_members WHERE project_id = $1 AND member_id = $2 FOR UPDATE",
+        )
+        .bind(project_id)
+        .bind(member_id)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?;
+        let Some(user_id) = user_id else {
+            return Err(coded_error("project member not found", "NOT_FOUND"));
+        };
+        if let Some(target) = user_id {
+            project_authz::require_access_target_tx(&mut tx, caller_id, project_id, target).await?;
+        }
+        let removed = sqlx::query(
+            "DELETE FROM project_members WHERE project_id = $1 AND member_id = $2",
+        )
+        .bind(project_id)
+        .bind(member_id)
+        .execute(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?
+        .rows_affected()
+            > 0;
+        tx.commit().await.map_err(AuthError::Database)?;
+        Ok(removed)
+    }
+
     /// Classify a concrete MEMBER by a COMPANY/GROUP of the same project.
     /// Classification only: no assignment/capacity semantics.
     async fn classify_resource_member(

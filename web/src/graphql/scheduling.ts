@@ -68,6 +68,12 @@ export const SET_PROJECT_MEMBER_ACCESS = gql`
   }
 `;
 
+export const REMOVE_RESOURCE_MEMBER = gql`
+  mutation RemoveResourceMember($project_id: ID!, $member_id: ID!) {
+    remove_resource_member(project_id: $project_id, member_id: $member_id)
+  }
+`;
+
 /* ---------------------------------- capacity --------------------------------- */
 
 export const CAPACITY_SETTINGS_QUERY = gql`
