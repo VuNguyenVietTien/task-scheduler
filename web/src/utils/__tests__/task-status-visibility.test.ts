@@ -35,23 +35,34 @@ describe('task status visibility', () => {
     }
   );
 
-  it('keeps required ancestors and prunes unrelated filtered descendants', () => {
-    const tree = [task('done-parent', 'DONE', [
-      task('matching-child', 'TODO'),
-      task('rejected-sibling', 'REJECTED'),
-      task('done-sibling', 'DONE'),
-    ])];
+  it('promotes unfinished descendants when a hidden parent is removed', () => {
+    for (const status of ['REJECTED', 'DONE'] as TaskStatus[]) {
+      const visible = filterTaskTreeByStatus([
+        task(`${status.toLowerCase()}-parent`, status, [task('active-child', 'TODO')]),
+      ]);
 
-    const visible = filterTaskTreeByStatus(tree);
-    expect(ids(visible)).toEqual(['done-parent', 'matching-child']);
-    expect(visible[0].child_tasks?.map((child) => child.task_id)).toEqual(['matching-child']);
+      expect(ids(visible)).toEqual(['active-child']);
+      expect(visible.some(({ task_id }) => task_id.includes('parent'))).toBe(false);
+    }
   });
 
-  it('keeps an active ancestor only as context for an explicitly selected descendant', () => {
+  it('prunes unrelated descendants without retaining a hidden ancestor', () => {
     const visible = filterTaskTreeByStatus([
-      task('active-parent', 'TODO', [task('done-child', 'DONE'), task('todo-sibling', 'TODO')]),
-    ], ['DONE']);
+      task('done-parent', 'DONE', [
+        task('matching-child', 'TODO'),
+        task('rejected-sibling', 'REJECTED'),
+        task('done-sibling', 'DONE'),
+      ]),
+    ]);
 
-    expect(ids(visible)).toEqual(['active-parent', 'done-child']);
+    expect(ids(visible)).toEqual(['matching-child']);
+  });
+
+  it('explicitly selected status shows matching nodes without unrelated ancestor context', () => {
+    const visible = filterTaskTreeByStatus([
+      task('active-parent', 'TODO', [task('rejected-child', 'REJECTED')]),
+    ], ['REJECTED']);
+
+    expect(ids(visible)).toEqual(['rejected-child']);
   });
 });

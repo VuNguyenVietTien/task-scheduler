@@ -23,7 +23,7 @@ export function filterTaskTree(
 ): Task[] {
   return tasks.flatMap((task) => {
     const childTasks = filterTaskTree(task.child_tasks ?? [], matches);
-    if (!matches(task) && childTasks.length === 0) return [];
+    if (!matches(task)) return childTasks;
     return [{ ...task, child_tasks: childTasks }];
   });
 }
