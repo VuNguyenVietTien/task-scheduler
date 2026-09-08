@@ -8,7 +8,7 @@ Updated 2026-09-08. `LIVE` means the matching frontend and backend artifact is o
 | Canonical linked/unlinked project members | single Members UI and assignment selectors | physical `project_members`, compatibility view | member/backend contract suites | LIVE |
 | Gantt User picker includes unlinked members | `Timeline` canonical resource-member filter | existing scheduling member query | 28 focused cases | LIVE |
 | Fixed en/ja/vi project catalogs | Settings three-field editor; shared locale selector | catalog item/label mutations | 19 focused cases plus paste alignment regression | LIVE |
-| Excel cell edit, assignment, copy/paste, effort refresh | `TaskExcelGrid` / `TaskListView` | existing task update mutation | 16 grid + 7 List cases | LIVE from main `d6c25d7` |
+| Excel cell edit, assignment, rectangular copy/paste, fixed widths, effort refresh | `TaskExcelGrid` / `TaskListView` | existing task update mutation | 20 grid + 7 List cases | LIVE from main `d6c25d7` |
 | Rename project | Settings name form, refresh project/sidebar | `update_project` returns authoritative name | 12 combined member/rename frontend cases; backend contract | LIVE |
 | Remove linked/unlinked member | per-row Members action, confirm and refresh | `remove_resource_member(project_id, member_id)` transaction and owner/target guard | 12 frontend cases; Ubuntu contract build | LIVE |
 | Manager catalog/access writes | catalog and member access editors; normalized Manager role | catalog mutations / `set_project_member_access`; owner/self/privileged-target guards retained | focused catalog/auth contracts; live schema introspection | LIVE |

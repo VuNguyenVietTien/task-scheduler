@@ -1,8 +1,10 @@
 # EXCEL-PASTE-WIDTH-0908
 
-Status: Implemented, committed, pushed.
+Status: Integrated on `dev`, committed, pushed, deployed.
 
-Commit: `26541d2`
+Producer commit: `26541d2`
+Integration commits: `7415128`, `e472bbc`
+Author: `xekobanh@gmail.com`
 
 ## Changes
 
@@ -13,8 +15,16 @@ Commit: `26541d2`
 ## Validation
 
 - `git diff --check`: passed.
-- Focused Jest command attempted but dependencies are unavailable in this worktree (`jest` not recognized; no installed web dependencies).
+- `cd web && npx jest --config /tmp/jest-excel.config.js --runInBand src/components/tasks/__tests__/TaskExcelGrid.test.tsx`: **20/20 passed**.
+- `npm ci`: completed; existing Jest config has missing `jest-junit`/`ts-jest`, so the equivalent focused run used a temporary config without changing repository files.
+- Vercel deployment: READY; production HTTP check: 200.
 
 ## Unresolved questions
 
 - None.
+
+## Release verification
+
+- `dev` pushed at `e472bbc5df949c5fe5b72ffae12969de4f15496a`.
+- `main` fast-forwarded to the same SHA.
+- Vercel project: existing `task-scheduler`; deployment URL recorded in release handoff.
