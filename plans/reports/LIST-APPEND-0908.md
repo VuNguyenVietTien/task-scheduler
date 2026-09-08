@@ -33,7 +33,7 @@ Guarded transaction constrained project + parent + three IDs + old value 0; rech
 
 ## Code
 
-Commit `def1bde` (`fix(tasks): append inline subtasks in realtime`):
+Initial source commit `def1bde` (`fix(tasks): append inline subtasks in realtime`); initial report commit `3460c3b` (`docs(tasks): report append repair`):
 
 - Batch inputs reserve consecutive `max(direct sibling priority_order) + 1` values per parent.
 - Each successful canonical response upserts Redux, local nested state, and Apollo flat tree immediately.
@@ -42,7 +42,17 @@ Commit `def1bde` (`fix(tasks): append inline subtasks in realtime`):
 - Partial failure retention/retry, dirty guards, selection/editing/clipboard, and effort rollups retained.
 - No backend, schema, Gantt, locale, clone dialog, or clone utility changes.
 
-Reusable clone integration contract: import `nextSiblingPriorityOrder` and `upsertTaskTreeRow` from `web/src/components/tasks/inline-subtask.ts`; allocate destination-local consecutive tail priorities and merge each canonical response after that destination's complete descendant block. Existing rows remain untouched.
+## Separate clone callback slice
+
+Clone worker commits `58299a7` / `828e7c4` were cherry-picked into this isolated branch only. Callback commit `251883c`:
+
+- Calls `expandCloneSelectionInputs`; never sends dialog-only `destination_parent_task_ids` to GraphQL.
+- Executes destinations sequentially.
+- Checkpoints confirmed root IDs and fixed target orders. Retry skips completed destinations and resumes append normalization without duplicate clones.
+- Refetches canonical rows, sets cloned roots to destination-local tail priorities through the existing update API, updates Redux/local tree, then performs the authoritative tree+Redux refresh.
+- Same append rule covers destination parents, root promotion, and ordinary same-parent clones.
+- Network-unknown outcomes keep the existing fail-closed refresh path.
+- No backend or clone worker file changes in callback commit.
 
 ## Verification
 
@@ -52,8 +62,11 @@ Direct existing dev dependency runner, isolated source/config:
 PASS TaskExcelGrid.test.tsx
 PASS TaskListView.assignment.test.tsx
 PASS inline-subtask.test.ts
-Test Suites: 3 passed, 3 total
-Tests: 47 passed, 47 total
+PASS TaskListView.clone-recovery.test.tsx
+PASS TaskCloneDialog.test.tsx
+PASS cloneTask.test.ts
+Test Suites: 6 passed, 6 total
+Tests: 77 passed, 77 total
 ```
 
 `git diff --check`: passed. Initial isolated `npm test` could not find Jest; no install performed. Direct approved dev runner then passed.
