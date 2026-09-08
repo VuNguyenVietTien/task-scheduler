@@ -9,6 +9,7 @@ import type { Task } from '@/types/task';
 const { client } = require('@/lib/apollo-client');
 const mockUpdateAssignee = jest.fn();
 const mockUpdateTask = jest.fn();
+const mockCreateTask = jest.fn();
 const mockUseQuery = jest.fn();
 let mockLocale = 'en';
 
@@ -53,7 +54,7 @@ jest.mock('../TaskDetail', () => ({ TaskDetail: () => null }));
 jest.mock('@apollo/client', () => ({
   gql: (strings: TemplateStringsArray) => strings.join(''),
   useQuery: (...args: unknown[]) => mockUseQuery(...args),
-  useMutation: () => [jest.fn(), { loading: false }],
+  useMutation: (document: unknown) => [String(document).includes('mutation CreateTask') ? mockCreateTask : jest.fn(), { loading: false }],
 }), { virtual: true });
 
 const membersReducer = (state = { members: [] }) => state;
@@ -62,7 +63,9 @@ const parent: Task = {
   task_id: 'parent', project_id: 'project-1', title: 'Parent task', description: 'keep parent description',
   assignee_resource_member_id: 'linked-member', assignee: { userId: 'linked-user', username: 'Linked Member' },
   progressCatalogItemId: 'progress-create', categoryCatalogItemId: 'category-ui', taskTypeCatalogItemId: 'type-feature',
-  priority_order: 1, status: 'TODO', priority: 'MEDIUM', effort: 8, start_date: '2026-09-09T00:00:00.000Z', created_by: 'owner', child_tasks: [],
+  priority_order: 1, status: 'TODO', priority: 'MEDIUM', effort: 8, progress: 50,
+  start_date: '2026-09-09T00:00:00.000Z', actual_start_date: '2026-09-10T00:00:00.000Z', actual_end_date: '2026-09-11T00:00:00.000Z',
+  tags: ['alpha'], created_by: 'owner', child_tasks: [],
 };
 const catalogItems = [
   { catalog_item_id: 'progress-create', project_id: 'project-1', kind: 'PROGRESS_TYPE', display_order: 0, labels: [{ locale: 'en', name: 'Create' }, { locale: 'ja', name: '作成' }, { locale: 'vi', name: 'Tạo' }] },
@@ -121,6 +124,8 @@ function assignResult(taskId: string, value: unknown) {
 beforeEach(() => {
   jest.clearAllMocks();
   localStorage.clear();
+  mockCreateTask.mockReset();
+  mockUpdateTask.mockReset();
   mockLocale = 'en';
   mockUpdateAssignee.mockImplementation(async (taskId: string, value: unknown) => ({
     ...(taskId === 'parent' ? parent : child), child_tasks: undefined, ...assignResult(taskId, value),
@@ -141,6 +146,34 @@ beforeEach(() => {
 });
 
 describe('TaskListView canonical assignment source wiring', () => {
+  it('creates multiple nested drafts, retains only partial failures, and retries without duplicating successes', async () => {
+    const store = renderList();
+    fireEvent.click(screen.getByRole('button', { name: 'Add subtask to Parent task' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Add another row' }));
+    const parentTitles = screen.getAllByLabelText('Subtask title for parent');
+    fireEvent.change(parentTitles[0], { target: { value: 'Parent child' } });
+    fireEvent.change(parentTitles[1], { target: { value: 'Second parent child' } });
+
+    fireEvent.click(screen.getByRole('button', { name: 'Add subtask to Deep child' }));
+    fireEvent.change(screen.getByLabelText('Subtask title for child'), { target: { value: 'Grandchild' } });
+
+    mockCreateTask
+      .mockResolvedValueOnce({ data: { create_task: { ...child, task_id: 'created-one', parent_task_id: 'parent', title: 'Parent child' } } })
+      .mockResolvedValueOnce({ data: { create_task: { ...child, task_id: 'created-three', parent_task_id: 'parent', title: 'Second parent child' } } })
+      .mockRejectedValueOnce(new Error('temporary failure'));
+    fireEvent.click(screen.getAllByRole('button', { name: 'OK / Create all' })[0]);
+
+    await waitFor(() => expect(screen.queryByLabelText('Subtask title for parent')).not.toBeInTheDocument());
+    expect(screen.getByLabelText('Subtask title for child')).toHaveValue('Grandchild');
+    expect(screen.getByRole('alert')).toHaveTextContent('temporary failure');
+    expect(taskFromStore(store, 'parent')?.child_tasks?.filter((task) => ['created-one', 'created-three'].includes(task.task_id))).toHaveLength(2);
+
+    mockCreateTask.mockResolvedValueOnce({ data: { create_task: { ...child, task_id: 'created-two', parent_task_id: 'child', title: 'Grandchild' } } });
+    fireEvent.click(screen.getByRole('button', { name: 'OK / Create all' }));
+    await waitFor(() => expect(screen.queryByLabelText('Subtask title for child')).not.toBeInTheDocument());
+    expect(mockCreateTask).toHaveBeenCalledTimes(4);
+    expect(taskFromStore(store, 'child')?.child_tasks?.filter((task) => task.task_id === 'created-two')).toHaveLength(1);
+  });
   it('retains a canonical resource assignment when the query result is normalized into Redux', () => {
     const state = tasksReducer(undefined, {
       type: fetchProjectTasks.fulfilled.type,
@@ -171,6 +204,28 @@ describe('TaskListView canonical assignment source wiring', () => {
     expect(mockUpdateAssignee).toHaveBeenLastCalledWith('child', {
       assigneeId: null, assigneeResourceMemberId: 'unlinked-member',
     });
+  });
+
+  it('edits and explicitly clears Progress, Actual dates, and Tags in Normal mode', async () => {
+    const store = renderList();
+    fireEvent.click(screen.getByRole('button', { name: 'Columns' }));
+    for (const label of ['Progress', 'Actual start', 'Actual end', 'Tags']) fireEvent.click(screen.getByLabelText(label));
+
+    for (const [label, field, canonical] of [
+      ['Progress', 'progress', null],
+      ['Actual start', 'actual_start_date', null],
+      ['Actual end', 'actual_end_date', null],
+      ['Tags', 'tags', []],
+    ] as const) {
+      mockUpdateTask.mockResolvedValueOnce({ task_id: 'parent', [field]: canonical });
+      fireEvent.click(screen.getByRole('button', { name: `Edit ${label} Parent task` }));
+      const input = within(screen.getByText('Parent task').closest('tr')!).getByLabelText(label);
+      fireEvent.change(input, { target: { value: '' } });
+      fireEvent.click(input.parentElement!.querySelector('button[title="Lưu"]')!);
+      await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', field === 'tags' ? { tags: [] } : { [field]: field === 'progress' ? null : '' }));
+    }
+
+    expect(taskFromStore(store, 'parent')).toMatchObject({ progress: null, actual_start_date: null, actual_end_date: null, tags: [] });
   });
 
   it('edits and clears canonical Start date in Normal mode from the authoritative result', async () => {

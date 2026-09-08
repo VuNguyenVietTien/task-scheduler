@@ -60,6 +60,8 @@ interface Props {
   active?: boolean;
   onCloneTask?: (taskId: string) => void;
   onDeleteTask?: (task: Task) => void;
+  onAddSubtask?: (parentTaskId: string) => void;
+  renderSubtaskRows?: (parentTaskId: string, colSpan: number, depth: number) => React.ReactNode;
   onDirtyChange?: (dirty: boolean) => void;
   visibleColumns?: readonly TaskListColumnId[];
 }
@@ -163,7 +165,7 @@ export function parseTsv(text: string): string[][] {
     .map((line) => line.split('\t'));
 }
 
-export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOptions = [], assigneeValue, catalogLabel, catalogOptions = {}, catalogValue, active = true, onCloneTask, onDeleteTask, onDirtyChange, visibleColumns }: Props) {
+export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOptions = [], assigneeValue, catalogLabel, catalogOptions = {}, catalogValue, active = true, onCloneTask, onDeleteTask, onAddSubtask, renderSubtaskRows, onDirtyChange, visibleColumns }: Props) {
   const columns = useMemo(() => visibleColumns ? COLUMNS.filter((column) => visibleColumns.includes(column.id)) : COLUMNS, [visibleColumns]);
   const [staged, setStaged] = useState<Map<string, StagedEdit>>(new Map());
   const [anchor, setAnchor] = useState<{ row: number; col: number } | null>(null);
@@ -541,7 +543,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
         <colgroup>
           <col style={{ width: '32px' }} />
           {columns.map((column) => <col key={column.id} style={{ width: column.width }} />)}
-          {(onCloneTask || onDeleteTask) && <col style={{ width: '112px' }} />}
+          {(onCloneTask || onDeleteTask || onAddSubtask) && <col style={{ width: '144px' }} />}
         </colgroup>
         <thead>
           <tr className="bg-slate-50 text-left text-slate-500">
@@ -551,12 +553,13 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                 {c.label}
               </th>
             ))}
-            {(onCloneTask || onDeleteTask) && <th className="border border-slate-200 px-2 py-1">Actions</th>}
+            {(onCloneTask || onDeleteTask || onAddSubtask) && <th className="border border-slate-200 px-2 py-1">Actions</th>}
           </tr>
         </thead>
         <tbody>
           {tasks.map((task, row) => (
-            <tr key={task.task_id}>
+            <React.Fragment key={task.task_id}>
+            <tr>
               <td className="border border-slate-200 px-2 py-1 text-slate-400">{row + 1}</td>
               {columns.map((col, c) => {
                 const selected = inSelection(row, c);
@@ -641,8 +644,11 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                   </td>
                 );
               })}
-              {(onCloneTask || onDeleteTask) && (
+              {(onCloneTask || onDeleteTask || onAddSubtask) && (
                 <td className="border border-slate-200 px-2 py-1 text-center whitespace-nowrap">
+                  {onAddSubtask && (
+                    <button className="mr-1 px-2 py-0.5 border rounded hover:bg-slate-100" onClick={() => onAddSubtask(task.task_id)} aria-label={`Add subtask to ${task.title}`}>+</button>
+                  )}
                   {onCloneTask && (
                     <button
                       className="px-2 py-0.5 border rounded hover:bg-slate-100"
@@ -666,6 +672,8 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                 </td>
               )}
             </tr>
+            {renderSubtaskRows?.(task.task_id, columns.length + 2, (task.excelDepth ?? 0) + 1)}
+            </React.Fragment>
           ))}
           {tasks.length === 0 && (
             <tr>

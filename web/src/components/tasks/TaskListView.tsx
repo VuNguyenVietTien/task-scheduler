@@ -31,6 +31,8 @@ import {
   removeTasksFromTree,
   updateTaskDueDate,
   upsertTask,
+  upsertTaskInTree,
+  transformTaskFromAPI,
   fetchProjectTasks
 } from '@/redux/features/tasksSlice';
 import { useProjectTaxonomies } from '@/hooks/useProjectTaxonomies';
@@ -45,6 +47,7 @@ import { TaskExcelGrid, type ExcelCatalogField, type StagedEdit } from './TaskEx
 import { TaskCloneDialog } from './TaskCloneDialog';
 import { useMutation, useQuery } from '@apollo/client';
 import { CLONE_TASK_SUBTREE } from '@/graphql/mutations';
+import { CREATE_TASK } from '@/graphql/mutations/tasks';
 import { TASK_TREE_ROWS } from '@/graphql/queries/tasks';
 import { RESOURCE_MEMBERS_QUERY } from '@/graphql/scheduling';
 import { toast } from 'sonner';
@@ -53,6 +56,8 @@ import { resolveProjectCatalogLabel } from '@/utils/project-catalog';
 import { filterTaskTree } from '@/utils/task-status-visibility';
 import { filterListTaskTreeByStatus } from '@/utils/task-list-visibility';
 import { taskDeletionConfirmationMessage } from '@/utils/task-deletion';
+import { InlineSubtaskRows } from './InlineSubtaskRows';
+import { buildInlineSubtaskInput, newInlineSubtaskDraft, type InlineSubtaskDraft } from './inline-subtask';
 import {
   DEFAULT_TASK_LIST_COLUMNS,
   TASK_LIST_COLUMN_IDS,
@@ -194,6 +199,9 @@ export function TaskListView({
   const [listMode, setListMode] = useState<'normal' | 'excel'>('normal');
   const [excelOpened, setExcelOpened] = useState(false);
   const [excelDirty, setExcelDirty] = useState(false);
+  const [subtaskDrafts, setSubtaskDrafts] = useState<InlineSubtaskDraft[]>([]);
+  const [subtasksSubmitting, setSubtasksSubmitting] = useState(false);
+  const draftSequence = React.useRef(0);
   // Confirmed patches bridge the independent flat query until it acknowledges them.
   const [assignmentPatches, setAssignmentPatches] = useState<Record<string, Partial<Task>>>({});
   const [excelPatches, setExcelPatches] = useState<Record<string, Partial<Task>>>({});
@@ -211,6 +219,7 @@ export function TaskListView({
   }, [onCloneRecoveryChange]);
   const [cloneRefreshing, setCloneRefreshing] = useState(false);
   const [cloneTaskSubtreeMut, { loading: cloneSubmitting }] = useMutation(CLONE_TASK_SUBTREE);
+  const [createTaskMut] = useMutation(CREATE_TASK);
 
   // ── Increment 1: phase taxonomy (selector + filter + settings) ─────────────
   const taxonomyProjectId = useMemo(
@@ -314,6 +323,26 @@ export function TaskListView({
     if (preferencesLoaded) saveTaskListPreferences(preferenceKey, { filters, columns: visibleColumns });
   }, [filters, preferenceKey, preferencesLoaded, visibleColumns]);
 
+  useEffect(() => {
+    if (!subtaskDrafts.length) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    const onDocumentClick = (event: MouseEvent) => {
+      const link = (event.target as Element | null)?.closest('a[href]') as HTMLAnchorElement | null;
+      if (!link || link.target === '_blank' || window.confirm('Discard unsaved subtask drafts?')) return;
+      event.preventDefault();
+      event.stopPropagation();
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    document.addEventListener('click', onDocumentClick, true);
+    return () => {
+      window.removeEventListener('beforeunload', onBeforeUnload);
+      document.removeEventListener('click', onDocumentClick, true);
+    };
+  }, [subtaskDrafts.length]);
+
   const toggleColumn = useCallback((column: TaskListColumnId) => {
     setVisibleColumns((current) => current.includes(column)
       ? current.length === 1 ? current : current.filter((item) => item !== column)
@@ -354,7 +383,7 @@ export function TaskListView({
         const patch = current[id];
         if (row.task_id !== id) return false;
         return Object.entries(patch).every(([key, value]) => {
-          if (key === 'progressCatalogItemId') return catalogValue(row, 'progress') === value;
+          if (key === 'progressCatalogItemId') return catalogValue(row, 'progressType') === value;
           if (key === 'categoryCatalogItemId') return catalogValue(row, 'category') === value;
           if (key === 'taskTypeCatalogItemId') return catalogValue(row, 'taskType') === value;
           return (row as unknown as Record<string, unknown>)[key] === value;
@@ -433,6 +462,58 @@ export function TaskListView({
       resourceMemberId: member.resource_member_id,
     })).sort((a, b) => a.label.localeCompare(b.label));
   }, [resourceMembersQ.data?.resource_members]);
+
+  const addInlineSubtask = useCallback((parentTaskId: string) => {
+    const id = `subtask-draft-${++draftSequence.current}`;
+    setSubtaskDrafts((current) => [...current, newInlineSubtaskDraft(id, parentTaskId)]);
+    setExpandedTasks((current) => new Set(current).add(parentTaskId));
+  }, []);
+
+  const updateInlineSubtask = useCallback((id: string, updates: Partial<InlineSubtaskDraft>) => {
+    setSubtaskDrafts((current) => current.map((draft) => draft.id === id ? { ...draft, ...updates } : draft));
+  }, []);
+
+  const createInlineSubtasks = useCallback(async () => {
+    if (!taxonomyProjectId || !subtaskDrafts.length || subtasksSubmitting) return;
+    setSubtasksSubmitting(true);
+    const succeeded = new Set<string>();
+    const failures = new Map<string, string>();
+    for (const draft of subtaskDrafts) {
+      try {
+        const input = buildInlineSubtaskInput(draft, taxonomyProjectId, assigneeOptions);
+        const result = await createTaskMut({ variables: { input }, errorPolicy: 'all' });
+        if (result.errors?.length) throw new Error(result.errors.map((error) => error.message).join('; '));
+        const returned = result.data?.create_task;
+        if (!returned?.task_id) throw new Error('Task creation returned no task result.');
+        const created = transformTaskFromAPI(returned) as Task;
+        dispatch(upsertTask(created));
+        setTasks((current) => upsertTaskInTree(current, created));
+        setExpandedTasks((current) => new Set(current).add(draft.parentTaskId));
+        succeeded.add(draft.id);
+      } catch (error) {
+        failures.set(draft.id, error instanceof Error ? error.message : 'Could not create subtask.');
+      }
+    }
+    setSubtaskDrafts((current) => current
+      .filter((draft) => !succeeded.has(draft.id))
+      .map((draft) => ({ ...draft, error: failures.get(draft.id) ?? draft.error })));
+    setSubtasksSubmitting(false);
+  }, [assigneeOptions, createTaskMut, dispatch, subtaskDrafts, subtasksSubmitting, taxonomyProjectId]);
+
+  const renderInlineSubtasks = useCallback((parentTaskId: string, colSpan: number, depth: number) => (
+    <InlineSubtaskRows
+      drafts={subtaskDrafts.filter((draft) => draft.parentTaskId === parentTaskId)}
+      colSpan={colSpan}
+      depth={depth}
+      assignees={assigneeOptions}
+      catalogs={excelCatalogOptions}
+      submitting={subtasksSubmitting}
+      onChange={updateInlineSubtask}
+      onAdd={addInlineSubtask}
+      onRemove={(id) => setSubtaskDrafts((current) => current.filter((draft) => draft.id !== id))}
+      onCreateAll={() => void createInlineSubtasks()}
+    />
+  ), [addInlineSubtask, assigneeOptions, createInlineSubtasks, excelCatalogOptions, subtaskDrafts, subtasksSubmitting, updateInlineSubtask]);
 
   const assigneeOptionForTask = useCallback((task: Task): TaskAssigneeOption | undefined => {
     if (task.assignee_resource_member_id) {
@@ -659,24 +740,25 @@ export function TaskListView({
   const renderSupplementalCells = (task: Task) => {
     const date = (value?: string) => value ? new Date(value).toLocaleDateString() : '-';
     const creator = typeof task.created_by === 'string' ? task.created_by : task.created_by?.username;
-    return <>
-      <td className="px-3 py-4 text-sm text-slate-500">{task.progress ?? '-'}</td>
+    const editable = (field: string, label: string, type: 'date' | 'number' | 'text', value: string, display: React.ReactNode) => (
       <td className="px-3 py-4 text-sm text-slate-500">
-        {editingCell?.taskId === task.task_id && editingCell.field === 'start_date' ? (
+        {editingCell?.taskId === task.task_id && editingCell.field === field ? (
           <div className="flex items-center gap-1">
-            <input type="date" aria-label="Start date" autoFocus value={editValue} onChange={(event) => setEditValue(event.target.value)} onKeyDown={(event) => handleKeyDown(event, task.task_id, 'start_date')} />
-            <button title="Lưu" onClick={(event) => { event.stopPropagation(); void handleSaveEditing(task.task_id, 'start_date'); }}>✓</button>
+            <input type={type} min={type === 'number' ? 0 : undefined} max={field === 'progress' ? 100 : undefined} aria-label={label} autoFocus value={editValue} onChange={(event) => setEditValue(event.target.value)} onKeyDown={(event) => handleKeyDown(event, task.task_id, field)} />
+            <button title="Lưu" onClick={(event) => { event.stopPropagation(); void handleSaveEditing(task.task_id, field); }}>✓</button>
             <button title="Hủy" onClick={(event) => { event.stopPropagation(); handleCancelEditing(); }}>×</button>
           </div>
         ) : (
-          <button aria-label={`Edit Start date ${task.title}`} className="hover:text-blue-600 hover:underline" onClick={(event) => { event.stopPropagation(); handleStartEditing(task.task_id, 'start_date', task.start_date?.slice(0, 10) ?? ''); }}>
-            {date(task.start_date)}
-          </button>
+          <button aria-label={`Edit ${label} ${task.title}`} className="hover:text-blue-600 hover:underline" onClick={(event) => { event.stopPropagation(); handleStartEditing(task.task_id, field, value); }}>{display}</button>
         )}
       </td>
-      <td className="px-3 py-4 text-sm text-slate-500">{date(task.actual_start_date)}</td>
-      <td className="px-3 py-4 text-sm text-slate-500">{date(task.actual_end_date)}</td>
-      <td className="px-3 py-4 text-sm text-slate-500">{task.tags?.join(', ') || '-'}</td>
+    );
+    return <>
+      {editable('progress', 'Progress', 'number', task.progress == null ? '' : String(task.progress), task.progress ?? '-')}
+      {editable('start_date', 'Start date', 'date', task.start_date?.slice(0, 10) ?? '', date(task.start_date))}
+      {editable('actual_start_date', 'Actual start', 'date', task.actual_start_date?.slice(0, 10) ?? '', date(task.actual_start_date))}
+      {editable('actual_end_date', 'Actual end', 'date', task.actual_end_date?.slice(0, 10) ?? '', date(task.actual_end_date))}
+      {editable('tags', 'Tags', 'text', task.tags?.join(', ') ?? '', task.tags?.join(', ') || '-')}
       <td className="px-3 py-4 text-sm text-slate-500">{date(task.created_at)}</td>
       <td className="px-3 py-4 text-sm text-slate-500">{date(task.updated_at)}</td>
       <td className="px-3 py-4 text-sm text-slate-500">{creator || '-'}</td>
@@ -924,6 +1006,7 @@ export function TaskListView({
             )}
           </td>
           <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+            <button type="button" className="text-blue-600 hover:text-blue-800 mr-2" aria-label={`Add subtask to ${childTask.title}`} onClick={(event) => { event.stopPropagation(); addInlineSubtask(childTask.task_id); }}>+</button>
             <button
               className="text-slate-500 hover:text-blue-700 mr-2"
               title="Clone task"
@@ -948,6 +1031,7 @@ export function TaskListView({
           </td>
           {renderSupplementalCells(childTask)}
         </tr>
+        {renderInlineSubtasks(childTask.task_id, 19, level + 1)}
         {renderChildTasks(childTask, level + 1)}
       </React.Fragment>
     ));
@@ -955,7 +1039,7 @@ export function TaskListView({
 
   // Handle task click: left click -> modal, ctrl/middle -> new tab
   const handleTaskClick = useCallback((taskId: string, event?: React.MouseEvent) => {
-    if (excelDirty && !window.confirm('Discard unsaved Excel edits?')) return;
+    if ((excelDirty || subtaskDrafts.length > 0) && !window.confirm('Discard unsaved List edits?')) return;
     const foundTask = findTaskInTree(tasks, taskId);
 
     if (!foundTask) {
@@ -976,7 +1060,7 @@ export function TaskListView({
     router.push(taskUrl);
 
     if (onTaskClick) onTaskClick(taskId);
-  }, [excelDirty, tasks, onTaskClick, router]);
+  }, [excelDirty, subtaskDrafts.length, tasks, onTaskClick, router]);
 
   const changeListMode = useCallback((mode: 'normal' | 'excel') => {
     if (mode !== listMode && excelDirty && !window.confirm('Discard unsaved Excel edits?')) return;
@@ -1429,6 +1513,25 @@ export function TaskListView({
           return;
         }
       }
+      else if (field === 'progress' || field === 'actual_start_date' || field === 'actual_end_date' || field === 'tags') {
+        const updates: Partial<Task> = field === 'progress'
+          ? ({ progress: editValue === '' ? null : Number(editValue) } as Partial<Task>)
+          : field === 'tags'
+            ? { tags: editValue.split(',').map((tag) => tag.trim()).filter(Boolean) }
+            : ({ [field]: editValue } as Partial<Task>);
+        if (field === 'progress' && editValue !== '' && (!Number.isFinite(Number(editValue)) || Number(editValue) < 0 || Number(editValue) > 100)) {
+          alert('Progress must be between 0 and 100.');
+          return;
+        }
+        try {
+          const saved = await updateTask(taskId, updates);
+          dispatch(upsertTask(saved));
+          updateSingleTaskInState(taskId, saved);
+        } catch (error) {
+          alert(`Could not update ${field}: ${error}`);
+          return;
+        }
+      }
       else if (field === 'start_date') {
         try {
           const saved = await updateTask(taskId, { start_date: editValue });
@@ -1632,6 +1735,8 @@ export function TaskListView({
           onSaveEdit={handleExcelSave}
           onCloneTask={handleCloneTask}
           onDeleteTask={(task) => void deleteTaskWithConfirmation(task)}
+          onAddSubtask={addInlineSubtask}
+          renderSubtaskRows={renderInlineSubtasks}
           onDirtyChange={setExcelDirty}
           visibleColumns={visibleColumns}
         />
@@ -1922,6 +2027,7 @@ export function TaskListView({
                       )}
                     </td>
                     <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
+                      <button type="button" className="text-blue-600 hover:text-blue-800 mr-2" aria-label={`Add subtask to ${task.title}`} onClick={(event) => { event.stopPropagation(); addInlineSubtask(task.task_id); }}>+</button>
                       <button
                         className="text-slate-500 hover:text-blue-700 mr-2"
                         title="Clone task"
@@ -1946,6 +2052,7 @@ export function TaskListView({
                     </td>
                     {renderSupplementalCells(task)}
                   </tr>
+                  {renderInlineSubtasks(task.task_id, 19, 1)}
                   {renderChildTasks(task)}
                 </React.Fragment>
               ))
