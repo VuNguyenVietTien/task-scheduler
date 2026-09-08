@@ -9,7 +9,7 @@ No backend, schema, permission, timesheet, `TaskListView.tsx`, or `TaskExcelGrid
 ## Commits
 
 - `920c1b0 fix(tasks): use canonical members in filters`
-- `7cfac1a fix(tasks): retain canonical detail assignees`
+- `c5fe4fd fix(tasks): retain canonical detail assignees`
 
 ## Coverage Matrix
 
