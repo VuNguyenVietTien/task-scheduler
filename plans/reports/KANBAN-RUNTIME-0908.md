@@ -5,6 +5,7 @@ Status: DONE
 ## Source
 - Branch: `codex/kanban-runtime-0908`
 - Implementation commit: `b06681d`
+- Integrated dev commit: `6e06435`
 - Base commit: `e43556a`
 
 ## Root cause
@@ -23,7 +24,9 @@ Command:
 NODE_PATH=<dev web dependencies> jest --config jest.config.js --reporters=default --runInBand src/components/tasks/__tests__/kanban-board-render.test.tsx src/components/tasks/__tests__/kanban-tasks.test.ts src/components/tasks/__tests__/kanban-member-options.test.ts
 ```
 
-Result: 3 suites passed, 7 tests passed, 0 failed.
+Result in isolated worktree: 3 suites passed, 7 tests passed, 0 failed.
+
+Post-integration result in `dev-0908/web` at `6e06435`: 3 suites passed, 7 tests passed, 0 failed in 6.104s.
 
 Also: `git diff --check` passed; no `updateTaskStatusMutation` references remain in `KanbanBoard.tsx`.
 
