@@ -129,3 +129,22 @@ test('partial GraphQL refresh errors are not confirmed member data', async () =>
   await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Member change saved, but refresh failed: access lookup failed'));
   expect(screen.getByRole('button', { name: 'Retry members' })).toBeEnabled();
 });
+
+test.each([null, 'linked-user'])('confirmed remove sends canonical member_id for unlinked or linked row (%s)', async (userId) => {
+  const row = { ...member, user_id: userId };
+  query.mockImplementation((document: string) => ({
+    data: document.includes('query ResourceMembers(') ? { resource_members: [row] } : {},
+    loading: false, error: undefined, refetch,
+    updateQuery: jest.fn(),
+  }));
+  mutate.mockImplementation((document: string) => Promise.resolve({
+    data: document.includes('mutation RemoveResourceMember') ? { remove_resource_member: true } : {},
+  }));
+  jest.spyOn(window, 'confirm').mockReturnValue(true);
+  mount();
+  fireEvent.click(screen.getByRole('button', { name: 'Remove Name Only' }));
+  await waitFor(() => expect(mutate).toHaveBeenCalledWith(expect.stringContaining('mutation RemoveResourceMember'), {
+    variables: { project_id: 'project-1', member_id: 'member-1' },
+  }));
+  await waitFor(() => expect(screen.getByRole('status')).toHaveTextContent('Name Only removed'));
+});

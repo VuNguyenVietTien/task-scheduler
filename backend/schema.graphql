@@ -332,6 +332,7 @@ type Mutation {
 	register(input: RegisterInput!): AuthPayload!
 	login(input: LoginInput!): AuthPayload!
 	create_project(input: CreateProjectInput!): ProjectResponse!
+	update_project(project_id: ID!, name: String!): String!
 	create_comment(input: CreateCommentInput!): CommentResponse!
 	delete_comment(id: ID!): Boolean!
 	update_profile(input: UpdateUserProfileInput!): UserResponse!
@@ -451,6 +452,10 @@ type Mutation {
 	identity. A NULL role revokes access only.
 	"""
 	set_project_member_access(resource_member_id: ID!, role: String): ResourceMemberType!
+	"""
+	Remove a canonical member. Scheduling configuration cascades; assigned members are rejected.
+	"""
+	remove_resource_member(project_id: ID!, member_id: ID!): Boolean!
 	"""
 	Classify a concrete MEMBER by a COMPANY/GROUP of the same project.
 	Classification only: no assignment/capacity semantics.

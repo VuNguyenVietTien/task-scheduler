@@ -61,6 +61,7 @@ fn snake_case_root_operation_names() {
         "create_comment(input:",
         "delete_comment(id:",
         "create_project(input:",
+        "update_project(project_id:",
         "mark_notification_as_read(",
         "mark_all_notifications_as_read:",
         "upload_image(",

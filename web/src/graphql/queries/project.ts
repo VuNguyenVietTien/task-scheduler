@@ -67,6 +67,12 @@ export const GET_PROJECT_BY_ID = gql`
   }
 `;
 
+export const UPDATE_PROJECT_NAME = gql`
+  mutation UpdateProjectName($projectId: ID!, $name: String!) {
+    update_project(project_id: $projectId, name: $name)
+  }
+`;
+
 export const CREATE_PROJECT = gql`
   mutation CreateProject($input: CreateProjectInput!) {
     create_project(input: $input) {

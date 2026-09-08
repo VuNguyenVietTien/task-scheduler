@@ -6,6 +6,7 @@ use uuid::Uuid;
 
 use crate::auth::error::AuthError;
 use crate::graphql::context::Context as GraphQLContext;
+use crate::graphql::resolvers::{coded_error, project_authz};
 use crate::graphql::types::{
     CreateProjectInput, MemberRole, Project, ProjectMember, ProjectPriority, ProjectResponse,
     ProjectStatus, ProjectVisibility, Projects, User,
@@ -337,6 +338,34 @@ pub struct ProjectMutation;
 
 #[Object(rename_fields = "snake_case", rename_args = "snake_case")]
 impl ProjectMutation {
+    async fn update_project(
+        &self,
+        ctx: &Context<'_>,
+        project_id: ID,
+        name: String,
+    ) -> Result<String> {
+        let context = ctx.data::<GraphQLContext>()?;
+        let caller = project_authz::require_user(context)?;
+        let project_id = Uuid::parse_str(project_id.as_str())?;
+        let name = name.trim();
+        if name.is_empty() {
+            return Err(coded_error("project name is required", "BAD_USER_INPUT"));
+        }
+        let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
+        project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+        let updated: String = sqlx::query_scalar(
+            "UPDATE projects SET name = $2, updated_at = now() WHERE project_id = $1 RETURNING name",
+        )
+        .bind(project_id)
+        .bind(name)
+        .fetch_optional(&mut *tx)
+        .await
+        .map_err(AuthError::Database)?
+        .ok_or_else(|| coded_error("project not found", "NOT_FOUND"))?;
+        tx.commit().await.map_err(AuthError::Database)?;
+        Ok(updated)
+    }
+
     async fn create_project(
         &self,
         ctx: &Context<'_>,

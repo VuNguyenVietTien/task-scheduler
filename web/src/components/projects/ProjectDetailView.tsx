@@ -9,6 +9,7 @@ import { MembersView } from '@/components/projects/MembersView';
 import { ProjectReportView } from '@/components/reports/ProjectReportView';
 import { DocumentsTab } from '@/components/projects/DocumentsTab';
 import { ProjectCatalogSettingsPanel } from '@/components/projects/ProjectCatalogSettingsPanel';
+import { ProjectNameSettings } from '@/components/projects/ProjectNameSettings';
 import TimesheetPage from '@/app/projects/[id]/timesheet/page';
 import { useUsers } from '@/hooks/useUsers';
 import { useProject } from '@/hooks/useProject';
@@ -16,6 +17,7 @@ import type { ProjectData } from '@/types/project';
 import type { TaskFilter } from '@/types/task';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { fetchProjectTasks } from '@/redux/features/tasksSlice';
+import { fetchProject } from '@/redux/features/projectSlice';
 import { fetchProjectMembers } from '@/redux/features/membersSlice';
 import { fetchProjectPlans, fetchLatestProjectPlan } from '@/redux/features/plansSlice';
 import { processTasksAndUpdateStore, processTasksBasedOnPlan } from '@/utils/taskScheduler';
@@ -346,13 +348,25 @@ export function ProjectDetailView({ project, initialTab }: ProjectDetailViewProp
               projectId={project.id}
               members={displayedMembers}
               currentUserRole={currentUserRole}
-              refetch={() => { }}
+              refetch={() => Promise.all([
+                dispatch(fetchProjectMembers(project.id)),
+                dispatch(fetchProjectTasks(project.id)),
+                refetchProject(),
+              ]).then(() => undefined)}
             />
           ) : (
             <LoadingState />
           )
         ) : activeView === 'settings' ? (
-          <ProjectCatalogSettingsPanel projectId={project.id} canManage={canManageProject} />
+          <>
+            <ProjectNameSettings
+              projectId={project.id}
+              initialName={projectData?.project?.name ?? project.name}
+              canManage={canManageProject}
+              onRenamed={() => dispatch(fetchProject(project.id)).then(() => undefined)}
+            />
+            <ProjectCatalogSettingsPanel projectId={project.id} canManage={canManageProject} />
+          </>
         ) : activeView === 'report' ? (
           <ProjectReportView projectId={project.id} />
         ) : activeView === 'documents' ? (
