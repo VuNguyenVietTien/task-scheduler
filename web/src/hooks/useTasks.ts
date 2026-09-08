@@ -116,7 +116,7 @@ export const updateTaskApi = async (taskId: string, updates: Partial<Task>) => {
     }
     
     if (updates.effort !== undefined) input.effort = Number(updates.effort);
-    if (updates.progress !== undefined) input.progress = Number(updates.progress);
+    if (updates.progress !== undefined) input.progress = updates.progress === null ? null : Number(updates.progress);
     
     if (updates.start_date !== undefined) {
       input.start_date = updates.start_date ? new Date(updates.start_date).toISOString() : null;

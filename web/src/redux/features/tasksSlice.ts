@@ -387,7 +387,19 @@ export function upsertTaskInTree(tasks: Task[], incoming: Task): Task[] {
     return childTasks === task.child_tasks ? task : { ...task, child_tasks: childTasks };
   });
   const next = replace(tasks);
-  return replaced ? next : [...next, incoming];
+  if (replaced || !incoming.parent_task_id) return replaced ? next : [...next, incoming];
+
+  let inserted = false;
+  const insertBelowParent = (nodes: Task[]): Task[] => nodes.map((task) => {
+    if (task.task_id === incoming.parent_task_id || task.id === incoming.parent_task_id) {
+      inserted = true;
+      return { ...task, child_tasks: [...(task.child_tasks ?? []), incoming] };
+    }
+    if (!task.child_tasks?.length) return task;
+    return { ...task, child_tasks: insertBelowParent(task.child_tasks) };
+  });
+  const nested = insertBelowParent(next);
+  return inserted ? nested : [...next, incoming];
 }
 
 const tasksSlice = createSlice({
