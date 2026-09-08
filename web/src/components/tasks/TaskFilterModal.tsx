@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
-import { TaskFilter, TaskStatus, Priority, TaskStatuses, Priorities, TaskAssignee } from '@/types/task';
+import { TaskFilter, TaskStatus, Priority, TaskStatuses, Priorities } from '@/types/task';
 import { ProjectData } from '@/types/project';
 import { Dialog } from '@/components/ui/Dialog';
 
@@ -16,7 +16,7 @@ interface TaskFilterModalProps {
   onClose: () => void;
   filter: TaskFilter;
   onApply: (filter: TaskFilter) => void;
-  assignees: TaskAssignee[];
+  assignees: Array<{ key: string; label: string; userId?: string }>;
   projects: ProjectData[];
 }
 
@@ -337,14 +337,16 @@ export function TaskFilterModal({
                 <select
                   id="assignee"
                   className="block w-full rounded-lg border-slate-300 border-2 focus:border-blue-500 focus:ring focus:ring-blue-200 py-2"
-                  value={currentFilter.assigneeId || ''}
+                  value={assignees.find((assignee) =>
+                    assignee.key === currentFilter.assigneeId || assignee.userId === currentFilter.assigneeId
+                  )?.key ?? currentFilter.assigneeId ?? ''}
                   onChange={(e) => handleInputChange('assigneeId', e.target.value || undefined)}
                   aria-label="Lọc theo người được giao"
                 >
                   <option value="">Tất cả người dùng</option>
                   {assignees.map((assignee) => (
-                    <option key={assignee.userId} value={assignee.userId}>
-                      {assignee.username}
+                    <option key={assignee.key} value={assignee.key}>
+                      {assignee.label}
                     </option>
                   ))}
                 </select>
