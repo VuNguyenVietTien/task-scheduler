@@ -6,7 +6,7 @@ Updated 2026-09-08. `LIVE` means the matching frontend and backend artifact is o
 |---|---|---|---|---|
 | Gantt tree, discontinuous daily-hour bars, resource matrix | `Timeline` and scheduling components | plan/resource GraphQL | focused Gantt/lifecycle suites | LIVE |
 | Canonical linked/unlinked project members | single Members UI and assignment selectors | physical `project_members`, compatibility view | member/backend contract suites | LIVE |
-| List/Gantt canonical assignee sync, including unlinked members | `TaskDetail` queries assignable resource members; `Timeline` resolves canonical member IDs; authoritative mutation result is upserted into Redux | existing `resource_members` query and shared complete task mutation fragment; no backend change | Gantt modal 2/2 + List assignment 11/11 | READY TO DEPLOY |
+| List/Gantt canonical assignee sync, including unlinked members | `TaskDetail` queries assignable resource members; `Timeline` resolves canonical member IDs; authoritative mutation result is upserted into Redux | existing `resource_members` query and shared complete task mutation fragment; no backend change | Gantt modal 2/2 + List assignment 11/11 | LIVE from d48d888 |
 | Fixed en/ja/vi project catalogs | Settings three-field editor; shared locale selector | catalog item/label mutations | 19 focused cases plus paste alignment regression | LIVE |
 | Excel cell edit, assignment, rectangular copy/paste, fixed widths, effort refresh | `TaskExcelGrid` / `TaskListView` | existing task update mutation | 20 grid + 7 List cases | LIVE from main `d6c25d7` |
 | Rename project | Settings name form, refresh project/sidebar | `update_project` returns authoritative name | 12 combined member/rename frontend cases; backend contract | LIVE |
@@ -25,3 +25,16 @@ Updated 2026-09-08. `LIVE` means the matching frontend and backend artifact is o
 | Hard-delete task subtree | confirmed Delete in detail/List/Excel recursively hard deletes the parent and all descendants after an irreversible confirmation showing the loaded descendant count; Redux removes every returned subtree ID | authorized transaction deletes the locked same-project subtree and returns `project_id` plus `deleted_task_ids` | focused editor/filter/delete suites: 32/32; Ubuntu contract: 33/33 | LIVE |
 
 This table is updated after every fast module release. Known browser-only checks remain in `remaining.md` on `dev`.
+
+## September 8 follow-up delivery
+
+These rows supersede earlier behavior where stated. Vercel reached its deployment rate limit after fbd1957; later revisions are implemented but not production-live.
+
+| Requirement | Frontend | Backend | Unit evidence | Status |
+|---|---|---|---|---|
+| Only Title required on task/subtask creation; optional Start date | Shared NewTaskForm, canonical start_date | Existing nullable create inputs | 22 passed | LIVE fbd1957 |
+| Persist List filters/columns in browser only | Per-project/user localStorage; completed descendants retained below active roots; 17 configurable fields excluding description | No change | 50 focused + final 13-test Start date suite | Implemented 3790856; Vercel rate limited |
+| Normal/Excel Start date and complete mutable column editors | Datepicker/null clearing, authoritative response to Redux; metadata read-only | Existing update task | Covered by List/Grid suites | Implemented through f3b404b; Vercel rate limited |
+| Multiple inline subtasks under parent or child in Normal/Excel | Draft rows, title-only required, partial-failure retry, nested authoritative Redux insertion | Existing create mutation with complete shared task selection | 41 passed | Implemented f3b404b; Vercel rate limited |
+| Gantt strict per-assignee priority sequence | Per-member scheduling cursor; lower tasks cannot backfill before earlier work; final-day unused capacity reusable | No change | 31 passed | Implemented 891e6f5; Vercel rate limited |
+| Main-only Vercel builds and local frontend | task-scheduler root web main-only; duplicate root project disabled; local dev-0908 frontend localhost:3000 | Existing Ubuntu API ready | JSON policy assertions; local HTTP200/backend ready | Local available; Vercel new production pending quota reset |
