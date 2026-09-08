@@ -45,14 +45,28 @@ pub async fn create_task(
     let classifications = project_catalogs::resolve_create_task_catalogs(
         &mut tx,
         project_id,
-        input.progress_catalog_item_id.as_ref().map(|id| Uuid::parse_str(&id.to_string())).transpose()?,
-        input.category_catalog_item_id.as_ref().map(|id| Uuid::parse_str(&id.to_string())).transpose()?,
-        input.task_type_catalog_item_id.as_ref().map(|id| Uuid::parse_str(&id.to_string())).transpose()?,
+        input
+            .progress_catalog_item_id
+            .as_ref()
+            .map(|id| Uuid::parse_str(&id.to_string()))
+            .transpose()?,
+        input
+            .category_catalog_item_id
+            .as_ref()
+            .map(|id| Uuid::parse_str(&id.to_string()))
+            .transpose()?,
+        input
+            .task_type_catalog_item_id
+            .as_ref()
+            .map(|id| Uuid::parse_str(&id.to_string()))
+            .transpose()?,
         project_catalogs::progress_legacy(input.progress_type),
         input.category.clone(),
         input.type_.clone(),
-    ).await?;
-    let legacy_progress_type = project_catalogs::progress_type(classifications.progress_legacy.clone())?;
+    )
+    .await?;
+    let legacy_progress_type =
+        project_catalogs::progress_type(classifications.progress_legacy.clone())?;
     let assignment = project_member_identity::normalize_task_assignment(
         &mut tx,
         project_id,

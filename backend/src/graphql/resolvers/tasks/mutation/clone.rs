@@ -85,7 +85,10 @@ pub async fn clone_task_subtree(
     let selected_descendants = parse_ids(&input)?;
     let clone_without_parent = input.clone_without_parent.unwrap_or(false);
     if clone_without_parent && input.destination_parent_task_id.is_some() {
-        return Err(clone_error("BAD_USER_INPUT", "choose exactly one clone destination"));
+        return Err(clone_error(
+            "BAD_USER_INPUT",
+            "choose exactly one clone destination",
+        ));
     }
     let destination_parent_id = input
         .destination_parent_task_id
@@ -95,7 +98,10 @@ pub async fn clone_task_subtree(
         .map_err(|_| clone_error("BAD_USER_INPUT", "invalid destination_parent_task_id"))?;
     let orphan_mode = clone_without_parent || destination_parent_id.is_some();
     if orphan_mode && selected_descendants.is_empty() {
-        return Err(clone_error("BAD_USER_INPUT", "select at least one child task"));
+        return Err(clone_error(
+            "BAD_USER_INPUT",
+            "select at least one child task",
+        ));
     }
     let mut tx = context
         .db
@@ -168,7 +174,10 @@ pub async fn clone_task_subtree(
     }
     if let Some(parent_id) = destination_parent_id {
         if source_by_id.contains_key(&parent_id) {
-            return Err(clone_error("BAD_USER_INPUT", "destination parent would create a cycle"));
+            return Err(clone_error(
+                "BAD_USER_INPUT",
+                "destination parent would create a cycle",
+            ));
         }
         let destination_project: Option<Uuid> = sqlx::query_scalar(
             "SELECT project_id FROM tasks WHERE task_id = $1 \
@@ -177,7 +186,12 @@ pub async fn clone_task_subtree(
         .bind(parent_id)
         .fetch_optional(&mut *tx)
         .await
-        .map_err(|_| clone_error("INTERNAL_SERVER_ERROR", "could not validate destination parent"))?;
+        .map_err(|_| {
+            clone_error(
+                "INTERNAL_SERVER_ERROR",
+                "could not validate destination parent",
+            )
+        })?;
         if destination_project != Some(project_id) {
             return Err(clone_error(
                 "BAD_USER_INPUT",
@@ -361,7 +375,11 @@ pub async fn clone_task_subtree(
                 *task_id == source_id
             };
             let parent_task_id = if is_copy_root {
-                if orphan_mode { destination_parent_id } else { source.parent_task_id }
+                if orphan_mode {
+                    destination_parent_id
+                } else {
+                    source.parent_task_id
+                }
             } else {
                 let parent = source
                     .parent_task_id

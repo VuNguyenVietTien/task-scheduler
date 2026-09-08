@@ -69,8 +69,10 @@ pub async fn update_task(
             category_legacy: existing.get("category"),
             task_type_legacy: existing.get("type"),
         },
-    ).await?;
-    let legacy_progress_type = project_catalogs::progress_type(classifications.progress_legacy.clone())?;
+    )
+    .await?;
+    let legacy_progress_type =
+        project_catalogs::progress_type(classifications.progress_legacy.clone())?;
 
     let assignment = project_member_identity::normalize_task_assignment(
         &mut tx,

@@ -97,11 +97,13 @@ pub async fn delete_task(
         .execute(&mut *tx)
         .await
         .map_err(AuthError::Database)?;
-    sqlx::query("DELETE FROM notifications WHERE reference_id = ANY($1) AND lower(reference_type) = 'task'")
-        .bind(&deleted_task_ids)
-        .execute(&mut *tx)
-        .await
-        .map_err(AuthError::Database)?;
+    sqlx::query(
+        "DELETE FROM notifications WHERE reference_id = ANY($1) AND lower(reference_type) = 'task'",
+    )
+    .bind(&deleted_task_ids)
+    .execute(&mut *tx)
+    .await
+    .map_err(AuthError::Database)?;
 
     let actually_deleted: Vec<Uuid> = sqlx::query_scalar(
         "DELETE FROM tasks WHERE task_id = ANY($1) AND project_id = $2 RETURNING task_id",
@@ -112,7 +114,9 @@ pub async fn delete_task(
     .await
     .map_err(AuthError::Database)?;
     if actually_deleted.len() != deleted_task_ids.len() {
-        return Err(async_graphql::Error::new("Task hierarchy changed; retry deletion"));
+        return Err(async_graphql::Error::new(
+            "Task hierarchy changed; retry deletion",
+        ));
     }
 
     tx.commit().await.map_err(AuthError::Database)?;

@@ -19,8 +19,8 @@ pub use self::project::{
 
 // Re-export task types
 pub use self::task::{
-    Assignee, CloneTaskSubtreeInput, CloneTaskSubtreePayload, CreateTaskInput, ReorderTasksInput,
-    Task, TaskOrderInput, TaskPriority, TaskProgressType, TaskStatus, UpdateTaskInput,
+    Assignee, CloneTaskSubtreeInput, CloneTaskSubtreePayload, CreateTaskInput, DeleteTaskPayload,
+    ReorderTasksInput, Task, TaskOrderInput, TaskPriority, TaskProgressType, TaskStatus, UpdateTaskInput,
     UpdateTaskStatusInput,
 };
 
