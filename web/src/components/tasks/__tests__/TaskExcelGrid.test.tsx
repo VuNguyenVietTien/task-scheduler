@@ -36,6 +36,11 @@ const task = (id: string, title: string, effort?: number): Task =>
   }) as Task;
 
 const tasks = [task('t1', 'Alpha', 8), task('t2', 'Beta', 4)];
+const catalogOptions = {
+  progress: [{ key: 'progress-create', label: 'Creation' }],
+  category: [{ key: 'category-ui', label: 'UI' }],
+  taskType: [{ key: 'type-feature', label: 'Feature' }],
+};
 
 describe('validateCellValue', () => {
   it('accepts numeric effort with optional h suffix', () => {
@@ -70,7 +75,7 @@ function renderGrid(onSaveEdit = jest.fn(), onCloneTask = jest.fn()) {
     onSaveEdit,
     onCloneTask,
     ...render(
-      <TaskExcelGrid tasks={tasks} onSaveEdit={onSaveEdit} onCloneTask={onCloneTask} />
+      <TaskExcelGrid tasks={tasks} onSaveEdit={onSaveEdit} onCloneTask={onCloneTask} catalogOptions={catalogOptions} />
     ),
   };
 }
@@ -90,7 +95,7 @@ describe('TaskExcelGrid interactions', () => {
     expect(screen.getByTestId('excel-dirty-count').textContent).toBe('2 unsaved');
   });
 
-  it('Enter fill rejects invalid enum and read-only catalog cells before staging', () => {
+  it('Enter fill rejects invalid enum and accepts project catalog labels', () => {
     renderGrid();
     fireEvent.mouseDown(screen.getByTestId('excel-cell-0-1')); // status col
     fireEvent.change(screen.getByTestId('excel-typing-input'), { target: { value: 'WIP' } });
@@ -101,10 +106,10 @@ describe('TaskExcelGrid interactions', () => {
     expect(screen.getByTestId('excel-cell-0-1').textContent).toBe('TODO');
 
     fireEvent.mouseDown(screen.getByTestId('excel-cell-0-6'));
-    fireEvent.change(screen.getByTestId('excel-typing-input'), { target: { value: 'invented catalog' } });
+    fireEvent.change(screen.getByTestId('excel-typing-input'), { target: { value: 'Creation' } });
     fireEvent.keyDown(screen.getByTestId('excel-typing-input'), { key: 'Enter' });
-    expect(screen.getByTestId('excel-errors')).toHaveTextContent('Read-only column');
-    expect(screen.queryByTestId('excel-dirty-count')).not.toBeInTheDocument();
+    expect(screen.getByTestId('excel-cell-0-6')).toHaveTextContent('Creation');
+    expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('1 unsaved');
   });
 
   it('click restores the real keyboard target; Tab commits and advances; Escape discards typing', async () => {
@@ -121,6 +126,37 @@ describe('TaskExcelGrid interactions', () => {
     expect(screen.getByTestId('excel-cell-0-1')).toHaveTextContent('DOING');
     expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('2 unsaved');
     outside.remove();
+  });
+
+  it('opens obvious native number and date editors without saving until bulk Save', async () => {
+    const user = userEvent.setup();
+    const onSaveEdit = jest.fn().mockResolvedValue(undefined);
+    renderGrid(onSaveEdit);
+
+    await user.click(screen.getByTestId('excel-cell-0-3'));
+    const effort = screen.getByRole('spinbutton', { name: 'Excel effort' });
+    fireEvent.change(effort, { target: { value: '6.5' } });
+    expect(onSaveEdit).not.toHaveBeenCalled();
+
+    await user.click(screen.getByTestId('excel-cell-0-4'));
+    fireEvent.change(screen.getByLabelText('Excel due date'), { target: { value: '2026-09-09' } });
+    expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('2 unsaved');
+    expect(onSaveEdit).not.toHaveBeenCalled();
+  });
+
+  it('single-click catalog selector stages its stable ID and supports clearing', async () => {
+    const user = userEvent.setup();
+    const onSaveEdit = jest.fn().mockResolvedValue(undefined);
+    render(<TaskExcelGrid tasks={[tasks[0], { ...tasks[1], progressCatalogItemId: 'progress-create' }]} onSaveEdit={onSaveEdit} catalogOptions={catalogOptions} catalogValue={(task) => task.progressCatalogItemId ?? ''} />);
+
+    await user.click(screen.getByTestId('excel-cell-0-6'));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Excel Progress type' }), 'progress-create');
+    await user.click(screen.getByTestId('excel-cell-1-6'));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Excel Progress type' }), '');
+    expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('2 unsaved');
+    fireEvent.click(screen.getByTestId('excel-save-btn'));
+    await waitFor(() => expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'progress', value: 'progress-create' }));
+    expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't2', field: 'progress', value: '' });
   });
 
   it('single-click Assignee opens canonical member choices and stages the selected unlinked member', async () => {

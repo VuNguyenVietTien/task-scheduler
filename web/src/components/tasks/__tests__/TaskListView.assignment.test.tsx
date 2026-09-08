@@ -7,8 +7,9 @@ import tasksReducer, { fetchProjectTasks } from '../../../redux/features/tasksSl
 import type { Task } from '@/types/task';
 
 const { client } = require('@/lib/apollo-client');
-const updateAssignee = jest.fn();
-const useQuery = jest.fn();
+const mockUpdateAssignee = jest.fn();
+const mockUpdateTask = jest.fn();
+const mockUseQuery = jest.fn();
 let mockLocale = 'en';
 
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
@@ -19,11 +20,11 @@ jest.mock('@/hooks/useTaskFieldMutations', () => ({
   useUpdateTaskPriority: () => ({ updatePriority: jest.fn(), isUpdating: false }),
   useUpdateTaskEffort: () => ({ updateEffort: jest.fn(), isUpdating: false }),
   useUpdateTaskDueDate: () => ({ updateDueDate: jest.fn(), isUpdating: false }),
-  useUpdateTaskAssignee: () => ({ updateAssignee, isUpdating: false }),
+  useUpdateTaskAssignee: () => ({ updateAssignee: mockUpdateAssignee, isUpdating: false }),
 }));
 jest.mock('@/hooks/useTasks', () => ({
   useUpdateTaskPriorityOrder: () => jest.fn(),
-  useUpdateTask: () => ({ updateTask: jest.fn() }),
+  useUpdateTask: () => ({ updateTask: mockUpdateTask }),
 }));
 jest.mock('@/hooks/useProjectTaxonomies', () => ({
   useProjectTaxonomies: () => ({
@@ -43,12 +44,6 @@ jest.mock('@/redux/hooks', () => ({
   useAppDispatch: () => require('react-redux').useDispatch(),
   useAppSelector: (selector: unknown) => require('react-redux').useSelector(selector),
 }), { virtual: true });
-jest.mock('@/redux/features/tasksSlice', () => ({
-  updateTaskLocally: (payload: unknown) => ({ type: 'tasks/updateTaskLocally', payload }),
-  updateTaskStatus: jest.fn(), updateTaskPriority: jest.fn(), updateTaskEffort: jest.fn(),
-  updateTaskAssignee: jest.fn(), updateTaskDueDate: jest.fn(),
-  fetchProjectTasks: jest.fn(),
-}), { virtual: true });
 jest.mock('@/lib/apollo-client', () => ({ client: { query: jest.fn(), mutate: jest.fn() } }));
 jest.mock('@/graphql/mutations', () => ({ CLONE_TASK_SUBTREE: {} }), { virtual: true });
 jest.mock('@/graphql/queries/tasks', () => ({ TASK_TREE_ROWS: {} }), { virtual: true });
@@ -57,7 +52,7 @@ jest.mock('../TaskCloneDialog', () => ({ TaskCloneDialog: () => null }));
 jest.mock('../TaskDetail', () => ({ TaskDetail: () => null }));
 jest.mock('@apollo/client', () => ({
   gql: (strings: TemplateStringsArray) => strings.join(''),
-  useQuery: (...args: unknown[]) => useQuery(...args),
+  useQuery: (...args: unknown[]) => mockUseQuery(...args),
   useMutation: () => [jest.fn(), { loading: false }],
 }), { virtual: true });
 
@@ -126,8 +121,13 @@ function assignResult(taskId: string, value: unknown) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockLocale = 'en';
-  updateAssignee.mockImplementation(async (taskId: string, value: unknown) => assignResult(taskId, value));
-  useQuery.mockImplementation((_document, options: { variables?: { only_assignable?: boolean; kind?: string } }) => (
+  mockUpdateAssignee.mockImplementation(async (taskId: string, value: unknown) => ({
+    ...(taskId === 'parent' ? parent : child), child_tasks: undefined, ...assignResult(taskId, value),
+  }));
+  mockUpdateTask.mockImplementation(async (taskId: string, updates: Partial<Task>) => ({
+    ...(taskId === 'parent' ? parent : child), child_tasks: undefined, ...updates, task_id: taskId,
+  }));
+  mockUseQuery.mockImplementation((_document, options: { variables?: { only_assignable?: boolean; kind?: string } }) => (
     options.variables?.only_assignable
       ? { data: { resource_members: [
         { resource_member_id: 'linked-member', display_name: 'Linked Member', user_id: 'linked-user' },
@@ -154,24 +154,20 @@ describe('TaskListView canonical assignment source wiring', () => {
     const store = renderList();
     const parentRow = screen.getByText('Parent task').closest('tr')!;
 
-    fireEvent.click(within(parentRow).getAllByText('Linked Member')[0]);
-    fireEvent.change(screen.getByRole('combobox', { name: 'Người được giao' }), { target: { value: '' } });
-    fireEvent.click(within(parentRow).getByTitle('Lưu'));
+    fireEvent.change(within(parentRow).getByRole('combobox', { name: 'Người được giao' }), { target: { value: '' } });
 
     await waitFor(() => expect(taskFromStore(store, 'parent')?.assignee_resource_member_id).toBeNull());
     expect(taskFromStore(store, 'parent')?.description).toBe('keep parent description');
 
     fireEvent.click(within(parentRow).getByRole('button', { name: 'Mở rộng task con' }));
     const childRow = screen.getByText('Deep child').closest('tr')!;
-    fireEvent.click(within(childRow).getByText('Chưa gán'));
-    fireEvent.change(screen.getByRole('combobox', { name: 'Người được giao' }), { target: { value: 'resource:unlinked-member' } });
-    fireEvent.click(within(childRow).getByTitle('Lưu'));
+    fireEvent.change(within(childRow).getByRole('combobox', { name: 'Người được giao' }), { target: { value: 'resource:unlinked-member' } });
 
     await waitFor(() => expect(taskFromStore(store, 'child')).toMatchObject({
       assignee_resource_member_id: 'unlinked-member', assignee: undefined,
     }));
     expect(taskFromStore(store, 'child')?.description).toBe('keep child description');
-    expect(updateAssignee).toHaveBeenLastCalledWith('child', {
+    expect(mockUpdateAssignee).toHaveBeenLastCalledWith('child', {
       assigneeId: null, assigneeResourceMemberId: 'unlinked-member',
     });
   });
@@ -215,6 +211,27 @@ describe('TaskListView canonical assignment source wiring', () => {
 
     await waitFor(() => expect(screen.getByTestId('excel-cell-0-3')).toHaveTextContent('14'));
     expect(taskFromStore(store, 'parent')?.effort).toBe(14);
+  });
+
+  it('keeps title editable in Normal mode and upserts the authoritative result', async () => {
+    const store = renderList();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit title Parent task' }));
+    fireEvent.change(screen.getByRole('textbox', { name: 'Task title' }), { target: { value: 'Renamed parent' } });
+    fireEvent.click(screen.getByTitle('Lưu'));
+    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', { title: 'Renamed parent' }));
+    expect(taskFromStore(store, 'parent')).toMatchObject({ title: 'Renamed parent', description: 'keep parent description' });
+  });
+
+  it('saves normal catalog selection and explicit clear from authoritative task results', async () => {
+    const store = renderList();
+    const row = screen.getByText('Parent task').closest('tr')!;
+    fireEvent.change(within(row).getByRole('combobox', { name: 'Progress type' }), { target: { value: '' } });
+    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', { progressCatalogItemId: null }));
+    expect(taskFromStore(store, 'parent')?.progressCatalogItemId).toBeNull();
+
+    fireEvent.change(within(row).getByRole('combobox', { name: 'Category' }), { target: { value: 'category-ui' } });
+    await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', { categoryCatalogItemId: 'category-ui' }));
+    expect(taskFromStore(store, 'parent')?.description).toBe('keep parent description');
   });
 
   it('renders stable catalog IDs as selected-locale labels in normal and Excel views', () => {
