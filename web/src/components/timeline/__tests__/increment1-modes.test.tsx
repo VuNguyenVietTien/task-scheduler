@@ -217,7 +217,7 @@ describe('Increment 1 — Timeline schedule modes', () => {
     expect(row.querySelector('[data-task-id]')).toBeNull();
   });
 
-  it('MASTER_SCHEDULE renders only ordered catalog phase rows, including empty phases', async () => {
+  it('MASTER_SCHEDULE renders one named phase row with left dates and one continuous span', async () => {
     renderTimeline();
 
     await waitFor(() => {
@@ -227,13 +227,15 @@ describe('Increment 1 — Timeline schedule modes', () => {
     fireEvent.click(screen.getByRole('button', { name: /master/i }));
 
     const rows = await screen.findAllByTestId('gantt-name-row');
-    expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringContaining('Creation'),
-      expect.stringContaining('Review'),
-    ]);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toHaveTextContent('Creation');
+    expect(rows[0]).toHaveTextContent('2026-09-02');
+    expect(rows[0]).toHaveTextContent('2026-09-04');
+    expect(screen.getAllByText('Creation')).toHaveLength(1);
     expect(screen.queryByTestId('task-bar-t-root')).not.toBeInTheDocument();
     expect(screen.queryByTestId('task-bar-t-child')).not.toBeInTheDocument();
-    expect(screen.getAllByTestId('master-phase-day-segment').length).toBeGreaterThan(0);
+    expect(screen.getAllByTestId('master-phase-span')).toHaveLength(1);
+    expect(screen.queryByTestId('master-phase-day-segment')).not.toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /wbs/i }));
     expect(await screen.findByTestId('task-bar-t-root')).toBeInTheDocument();

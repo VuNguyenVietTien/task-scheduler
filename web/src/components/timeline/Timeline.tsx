@@ -1565,6 +1565,8 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                       );
                     }
                     const title = row.kind === 'HEADING' ? row.heading.title : row.group.name;
+                    const start = row.kind === 'PHASE' ? row.group.start ?? '—' : '—';
+                    const end = row.kind === 'PHASE' ? row.group.end ?? '—' : '—';
                     return (
                       <div key={row.key} className="absolute left-0 right-0 grid grid-cols-[40px_minmax(0,1fr)_76px_76px] items-center gap-1 px-2 border-b border-slate-100 font-semibold text-xs text-slate-800" style={{ top: `${rowIndex * rowHeight}px`, height: `${rowHeight}px` }} data-testid="gantt-name-row" data-depth={row.kind === 'HEADING' ? row.heading.depth : 0}>
                         {rowHasChildren.get(row.key) ? (
@@ -1579,7 +1581,9 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                             {collapsedRows.has(row.key) ? <ChevronRightIcon className="h-3.5 w-3.5" /> : <ChevronDownIcon className="h-3.5 w-3.5" />}
                           </button>
                         ) : <span />}
-                        <span className="truncate">{title}</span><span>—</span><span>—</span>
+                        <span className="truncate">{title}{row.kind === 'PHASE' && row.group.history_incomplete && (
+                          <span className="ml-1 text-amber-700" data-testid="master-history-incomplete" title="Saved history is incomplete">⚠</span>
+                        )}</span><span>{start}</span><span>{end}</span>
                       </div>
                     );
                   })}
@@ -1715,27 +1719,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                               {row.kind === 'HEADING' ? (
                                 <WbsSourceHeadingRow heading={row.heading} />
                               ) : (
-                                <>
-                                  <PhaseScheduleRow group={row.group} />
-                                  {Object.entries(row.group.hours_per_day)
-                                    .filter(([, hours]) => Number.isFinite(hours) && hours > 0)
-                                    .map(([dateKey, hours]) => {
-                                      const index = days.findIndex((day) => formatDateVN(day) === dateKey);
-                                      return index < 0 ? null : (
-                                        <div
-                                          key={`${row.key}-${dateKey}`}
-                                          data-testid="master-phase-day-segment"
-                                          data-phase-id={row.group.phase_id ?? 'unclassified'}
-                                          data-date={dateKey}
-                                          data-hours={hours}
-                                          className="absolute flex items-center justify-center rounded-sm border border-indigo-200 bg-indigo-100 text-[0.65rem] font-medium text-gray-800"
-                                          style={{ left: `${index * dayWidth + 4}px`, top: '6px', width: `${dayWidth - 8}px`, height: '36px' }}
-                                        >
-                                          {Math.round(hours * 10) / 10}h
-                                        </div>
-                                      );
-                                    })}
-                                </>
+                                <PhaseScheduleRow group={row.group} days={days} dayWidth={dayWidth} />
                               )}
                             </div>
                           );
