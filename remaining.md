@@ -28,3 +28,8 @@ Only optional, non-blocking Chrome feedback remains:
 - CORS fixed and live: localhost:3000 and prjmngr.vercel.app accepted. Chrome dashboard loads real data.
 - Member hard removal fixed and LIVE on Ubuntu image task-scheduler-backend:20260908T0952-53011ef. Assigned tasks become unassigned atomically; task hierarchy and timesheet history retained. Local/public health verified. Report plans/reports/MEMBER-REMOVE-0908.md.
 - User may now retry Remove. No production deletion was performed by PM for testing.
+
+## Burndown local delivery
+- Implemented saved-plan revision selector and task-count planned vs actual curves. Planned completion uses saved endDate; actual completion uses canonical actual_end_date only. Focused initial tests 8/8; baseline repair tests 7/7.
+- Chrome verified r1/r2 selector and legacy allocation-independent parsing. Existing CANON saved revisions contain only one excluded rejected/archived task; 156 current executable tasks are outside those revisions, so empty comparison is correct. Save a plan including current tasks to exercise populated chart; no production plan was created by PM.
+- Ready on localhost; Vercel main deployment still rate limited. Reports PROJECT-BURNDOWN-0908.md and BURNDOWN-BASELINE-0908.md.
