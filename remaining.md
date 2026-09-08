@@ -1,11 +1,11 @@
 # Remaining production feedback
 
-## September 8 local release, pending Vercel
+## September 8 release status
 
 - Implemented: browser-only List filters/columns, completed children retained under active parents, all mutable List columns editable, optional Start date, title-only create forms, multiple inline subtasks with partial-failure retry, strict per-assignee Gantt priority sequencing.
 - Local test frontend is running at http://localhost:3000 from dev-0908/web and uses the existing Ubuntu backend. Launcher PID38200, listener PID45716 intentionally retained for user testing. Stop with `taskkill /PID 38200 /T /F`.
-- Vercel last confirmed production: fbd1957 (title-only create + optional Start date). Later feature commits are NOT production-live because Vercel reports deployment rate limited, retry in 24 hours. User chose to wait; no Ubuntu frontend/domain was provisioned.
-- [ ] After rate-limit reset, deploy latest main and verify Ready. Branch policy now allows main only for task-scheduler (root web) and disables duplicate root project automatic deployments. Older feature branches must pick up this configuration before future pushes.
+- Vercel quota cleared. Production e165c22 confirmed Ready at dpl_HkR7PkKdDeaxFtFL19G4fB1iZHTS with prjmngr.vercel.app alias on September 8, 19:10 ICT. Includes preceding features, canonical member filters, Gantt plan/resource fixes and Kanban runtime repair. Zero-effort follow-up570e1b5 is integrated locally, next production push pending confirmation.
+- [x] Rate limit cleared; production Ready confirmed. Main-only deployment policy remains enabled; duplicate root project automatic deploy disabled.
 - [ ] User test latest features on localhost, including Google sign-in, inline subtask batch failure/retry, optional dates, persisted column choices and Gantt order. Local HTTP/backend readiness verified; authenticated end-to-end mutation was not run.
 - Reports: LIST-PREFERENCES-0908.md, TASK-CREATE-OPTIONAL-0908.md, INLINE-SUBTASK-0908.md, GANTT-PRIORITY-SEQUENCE-0908.md and MAIN-ONLY-LOCAL-0908.md under plans/reports/.
 
@@ -32,4 +32,10 @@ Only optional, non-blocking Chrome feedback remains:
 ## Burndown local delivery
 - Implemented saved-plan revision selector and task-count planned vs actual curves. Planned completion uses saved endDate; actual completion uses canonical actual_end_date only. Focused initial tests 8/8; baseline repair tests 7/7.
 - Chrome verified r1/r2 selector and legacy allocation-independent parsing. Existing CANON saved revisions contain only one excluded rejected/archived task; 156 current executable tasks are outside those revisions, so empty comparison is correct. Save a plan including current tasks to exercise populated chart; no production plan was created by PM.
-- Ready on localhost; Vercel main deployment still rate limited. Reports PROJECT-BURNDOWN-0908.md and BURNDOWN-BASELINE-0908.md.
+- Delivered on localhost and production e165c22. Reports PROJECT-BURNDOWN-0908.md and BURNDOWN-BASELINE-0908.md.
+
+## Gantt and member follow-up
+- Delivered on localhost and main e43556a: descendant effort totals in List/Excel and Gantt, sparse WBS parent bars, continuous Master phase spans, select-on-click/edit-on-double-click Excel cells, status/priority dropdowns and single-cell range paste. Excel focused tests44pass; Gantt61pass plus4targeted lifecycle cases.
+- Canonical member options now cover List filters, Kanban and standalone task detail, including members without linked accounts. Member tests7pass and integrated filter tests7pass. Reports GANTT-PARENT-SUMMARY-0908.md, EXCEL-INTERACTION-0908.md, MEMBER-OPTIONS-0908.md, LIST-MEMBER-FILTER-0908.md.
+- Delivered83be7c1: newest-plan default, explicit no-plan, clear delete, safe legacy hours parsing, simplified capacity colors, rejected/archive phantom allocations removed.39focused+22selected tests passed; existing unrelated R5 reorder assertion still fails on baseline. Follow-up570e1b5 renders assigned zero-effort tasks at explicit start date without resource hours;6focused tests passed, plus original resource-cell test1pass. Post-fix Chrome check temporarily unavailable: Debugger unattached.
+
