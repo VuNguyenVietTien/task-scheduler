@@ -4,13 +4,14 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { CloneTaskSelectionInput, CloneTreeNode } from '@/utils/cloneTask';
 import { useTranslation } from 'react-i18next';
-import { Task, TaskStatus, Priority, TaskFilter, TaskStatuses, EDITABLE_TASK_STATUSES, Priorities, UserBasic } from '@/types/task';
+import { Task, TaskStatus, Priority, TaskFilter, TaskStatuses, EDITABLE_TASK_STATUSES, Priorities } from '@/types/task';
 import { STATUS_LABELS, PRIORITY_LABELS, getStatusLabel, getPriorityLabel } from '@/constants/task-display-labels';
 import { ProjectData } from '@/types/project';
 import { TaskFilterBar } from './TaskFilterBar';
 import { TaskBulkActions } from './TaskBulkActions';
 import { useUpdateTaskPriorityOrder, useUpdateTask } from '@/hooks/useTasks';
 import { TaskFilterModal } from './TaskFilterModal';
+import { buildListFilterAssignees, matchesListAssignee } from './task-list-member-filter';
 import { Pagination } from '@/components/common/Pagination';
 import { TaskDetail } from './TaskDetail';
 import { useAuth } from '@/contexts/AuthContext';
@@ -97,11 +98,6 @@ interface TaskListViewProps {
 interface SortConfig {
   key: keyof Task;
   direction: 'asc' | 'desc';
-}
-
-// Tạo interface TaskAssignee từ UserBasic
-interface TaskAssignee extends UserBasic {
-  // Không cần thêm gì vì UserBasic đã đủ
 }
 
 interface TaskAssigneeOption {
@@ -396,54 +392,18 @@ export function TaskListView({
     });
   }, [taskTreeRowsQ.data, taskTreeRowsQ.loading, taskTreeRowsQ.error, catalogValue]);
 
-  // Memoize assignees and projects
-  const { assignees, projects } = useMemo(() => {
-
-    // Sử dụng members từ Redux store
-    const uniqueAssignees = new Map<string, TaskAssignee>();
-    const uniqueProjects = new Map<string, ProjectData>();
-    
-    // Thêm assignees từ tasks (giữ lại logic cũ)
-    tasks.forEach(task => {
-      if (task.assignee) {
-        uniqueAssignees.set(task.assignee.userId, task.assignee);
-      }
-      
-      if (task.project_id) {
-        const project: ProjectData = {
-          id: task.project_id,
-          name: `Project ${task.project_id}`,
-          description: '',
-          dueDate: '',
-          members: 0,
-          status: 'active'
-        };
-        uniqueProjects.set(task.project_id, project);
-      }
-    });
-    
-    // Thêm tất cả members từ Redux store (nếu có)
-    if (reduxMembers && reduxMembers.length > 0) {
-      reduxMembers.forEach((member) => {
-        if (member.user?.userId) {
-          uniqueAssignees.set(member.user.userId, {
-            userId: member.user.userId,
-            username: member.user.username || member.user.fullName || member.user.email,
-            avatarUrl: member.user.avatarUrl || undefined,
-            role: member.role,
-          });
-        }
-      });
-    }
-    
-    console.log('Redux members:', reduxMembers);
-    console.log('Assignees cho dropdown:', Array.from(uniqueAssignees.values()));
-    
-    return {
-      assignees: Array.from(uniqueAssignees.values()),
-      projects: Array.from(uniqueProjects.values())
-    };
-  }, [tasks, reduxMembers]);
+  const projects = useMemo(() => {
+    const unique = new Map<string, ProjectData>();
+    tasks.forEach((task) => unique.set(task.project_id, {
+      id: task.project_id,
+      name: `Project ${task.project_id}`,
+      description: '',
+      dueDate: '',
+      members: 0,
+      status: 'active',
+    }));
+    return Array.from(unique.values());
+  }, [tasks]);
 
   // Every List option uses the stable canonical resource id, even when the
   // member is linked. That keeps placeholder assignments intact across link.
@@ -462,6 +422,7 @@ export function TaskListView({
       resourceMemberId: member.resource_member_id,
     })).sort((a, b) => a.label.localeCompare(b.label));
   }, [resourceMembersQ.data?.resource_members]);
+  const filterAssigneeOptions = useMemo(() => buildListFilterAssignees(assigneeOptions), [assigneeOptions]);
 
   const addInlineSubtask = useCallback((parentTaskId: string) => {
     const id = `subtask-draft-${++draftSequence.current}`;
@@ -609,7 +570,7 @@ export function TaskListView({
     return filterTaskTree(statusFiltered, (task) => {
       if (query && !task.title.toLowerCase().includes(query) && !task.description?.toLowerCase().includes(query)) return false;
       if (filters.priority && task.priority !== filters.priority) return false;
-      if (filters.assigneeId && task.assignee?.userId !== filters.assigneeId) return false;
+      if (filters.assigneeId && !matchesListAssignee(task, filters.assigneeId, assigneeOptions)) return false;
       if (filters.startDate && task.start_date && new Date(task.start_date) < new Date(filters.startDate)) return false;
       if (filters.endDate && task.due_date && new Date(task.due_date) > new Date(filters.endDate)) return false;
       return !filters.projectId || task.project_id === filters.projectId;
@@ -621,7 +582,7 @@ export function TaskListView({
       const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
       return sortConfig.direction === 'asc' ? comparison : -comparison;
     });
-  }, [tasks, filters, sortConfig]);
+  }, [assigneeOptions, tasks, filters, sortConfig]);
 
   const effortRollups = useMemo(() => taskEffortRollups(tasks), [tasks]);
 
@@ -2056,7 +2017,7 @@ export function TaskListView({
         onClose={() => setIsFilterModalOpen(false)}
         filter={filters}
         onApply={handleFilterChange}
-        assignees={assignees}
+        assignees={filterAssigneeOptions}
         projects={projects}
       />
 
