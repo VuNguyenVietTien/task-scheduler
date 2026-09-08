@@ -1028,24 +1028,30 @@ async fn herdr_flow_end_to_end() {
     );
     for copy in 0..3 {
         let offset = copy * 4;
-        let parent: Option<Uuid> =
-            sqlx::query_scalar("SELECT parent_task_id FROM tasks WHERE task_id = $1")
+        let root: (Option<Uuid>, String) =
+            sqlx::query_as("SELECT parent_task_id, title FROM tasks WHERE task_id = $1")
                 .bind(created[offset])
                 .fetch_one(&pool)
                 .await
                 .unwrap();
-        assert_eq!(parent, Some(t1), "clone root preserves source parent");
+        assert_eq!(root.0, Some(t1), "clone root preserves source parent");
+        assert_eq!(root.1, "api-clone-root", "clone root preserves exact title");
         for child_offset in 1..4 {
-            let parent: Option<Uuid> =
-                sqlx::query_scalar("SELECT parent_task_id FROM tasks WHERE task_id = $1")
+            let child: (Option<Uuid>, String) =
+                sqlx::query_as("SELECT parent_task_id, title FROM tasks WHERE task_id = $1")
                     .bind(created[offset + child_offset])
                     .fetch_one(&pool)
                     .await
                     .unwrap();
             assert_eq!(
-                parent,
+                child.0,
                 Some(created[offset]),
                 "copy {copy} child remaps only to its copy root"
+            );
+            assert_eq!(
+                child.1,
+                format!("api-clone-c{child_offset}"),
+                "copy {copy} child preserves exact title"
             );
         }
         let unlinked: (Option<Uuid>, Option<Uuid>) = sqlx::query_as(
@@ -1085,9 +1091,9 @@ async fn herdr_flow_end_to_end() {
     assert_eq!(copied_root.6, Some(clone_due));
     assert_eq!(copied_root.7.as_deref(), Some("clone-description"));
     assert_eq!(copied_root.8, serde_json::json!(["clone-tag"]));
-    let unchecked_copies: i64 = sqlx::query_scalar("SELECT count(*) FROM tasks WHERE project_id = $1 AND title IN ('api-clone-c4 (copy)', 'api-clone-c5 (copy)', 'api-clone-c6 (copy)')")
+    let unchecked_originals: i64 = sqlx::query_scalar("SELECT count(*) FROM tasks WHERE project_id = $1 AND title IN ('api-clone-c4', 'api-clone-c5', 'api-clone-c6')")
         .bind(p1).fetch_one(&pool).await.unwrap();
-    assert_eq!(unchecked_copies, 0, "unchecked children are never inserted");
+    assert_eq!(unchecked_originals, 3, "unchecked children are never inserted");
 
     // Nested selection maps each selected grandchild to its copied selected parent.
     let r = exec(&pool, Some(owner), format!(

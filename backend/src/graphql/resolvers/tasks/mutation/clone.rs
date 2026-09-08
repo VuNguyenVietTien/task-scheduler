@@ -66,6 +66,10 @@ fn assignment_fields(source: &SourceTask) -> (Field<Uuid>, Field<Uuid>) {
     }
 }
 
+fn cloned_title(source_title: &str) -> &str {
+    source_title
+}
+
 /// Atomically clone one selected active source tree `quantity` times.
 /// Validation, assignment normalization, every insert, and result reconciliation
 /// share this transaction, so a failed copy can never leave a partial tree.
@@ -410,7 +414,7 @@ pub async fn clone_task_subtree(
             .bind(cloned_id)
             .bind(project_id)
             .bind(parent_task_id)
-            .bind(format!("{} (copy)", source.title))
+            .bind(cloned_title(&source.title))
             .bind(&source.description)
             .bind(assignment.and_then(|value| value.user_id))
             .bind(assignment.map(|value| value.resource_member_id))
@@ -470,4 +474,16 @@ pub async fn clone_task_subtree(
         root_task_ids,
         created_task_ids,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::cloned_title;
+
+    #[test]
+    fn cloned_titles_remain_exact() {
+        for title in ["Root", "Nested child", "Already named (copy)", "日本語"] {
+            assert_eq!(cloned_title(title), title);
+        }
+    }
 }
