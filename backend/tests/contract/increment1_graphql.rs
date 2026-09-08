@@ -686,10 +686,10 @@ fn authz_guards_are_wired_into_every_scheduling_resolver() {
     let base = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/graphql/resolvers");
     for (file, write_guard_count, read_guard_count) in [
         ("taxonomies/mod.rs", 5, 1),
-        // Five mounted writes: create, both link variants, explicit access,
-        // and classification. The per-operation assertions below keep this
-        // count from becoming a blind number as APIs evolve.
-        ("resource_members/mod.rs", 5, 2),
+        // Six mounted writes: create, both link variants, explicit access,
+        // removal, and classification. The per-operation assertions below
+        // keep this count from becoming a blind number as APIs evolve.
+        ("resource_members/mod.rs", 6, 2),
         ("schedule_projection/mod.rs", 0, 1),
     ] {
         let src = fs::read_to_string(base.join(file))
@@ -720,6 +720,7 @@ fn authz_guards_are_wired_into_every_scheduling_resolver() {
         "link_resource_member_user",
         "link_resource_member_by_email",
         "set_project_member_access",
+        "remove_resource_member",
         "classify_resource_member",
     ] {
         assert!(
