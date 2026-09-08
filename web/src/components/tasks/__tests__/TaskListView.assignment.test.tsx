@@ -213,13 +213,56 @@ describe('TaskListView canonical assignment source wiring', () => {
     expect(taskFromStore(store, 'parent')?.effort).toBe(14);
   });
 
+  it('clears Excel effort through the backend zero contract and renders it immediately', async () => {
+    client.mutate.mockResolvedValue({ data: { update_task: { task_id: 'parent', effort: 0 } } });
+    const store = renderList();
+    fireEvent.click(screen.getByTestId('mode-excel-btn'));
+    fireEvent.click(screen.getByTestId('excel-cell-0-3'));
+    fireEvent.change(screen.getByRole('spinbutton', { name: 'Excel effort' }), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('excel-save-btn'));
+
+    await waitFor(() => expect(screen.getByTestId('excel-cell-0-3')).toHaveTextContent('0'));
+    expect(taskFromStore(store, 'parent')?.effort).toBe(0);
+    expect(client.mutate).toHaveBeenCalledWith(expect.objectContaining({ variables: { input: { task_id: 'parent', effort: 0 } } }));
+  });
+
+  it('applies an authoritative null to every saved Excel row without a reload', async () => {
+    mockUseQuery.mockImplementation((_document, options: { variables?: { only_assignable?: boolean; kind?: string } }) => (
+      options.variables?.only_assignable
+        ? { data: { resource_members: [] }, loading: false }
+        : options.variables?.kind
+          ? { data: { project_catalog_items: catalogItems.filter((item) => item.kind === options.variables?.kind) }, loading: false, refetch: jest.fn() }
+          : { data: { task_tree_rows: [{ ...parent, due_date: '2026-09-10T00:00:00Z' }, { ...child, due_date: '2026-09-11T00:00:00Z' }] }, loading: false, refetch: jest.fn() }
+    ));
+    client.mutate
+      .mockResolvedValueOnce({ data: { update_task: { task_id: 'parent', due_date: null } } })
+      .mockResolvedValueOnce({ data: { update_task: { task_id: 'child', due_date: null } } });
+    const store = renderList();
+    fireEvent.click(screen.getByTestId('mode-excel-btn'));
+    for (const row of [0, 1]) {
+      fireEvent.mouseDown(screen.getByTestId(`excel-cell-${row}-4`));
+      fireEvent.keyDown(screen.getByTestId('excel-typing-input'), { key: 'Delete' });
+    }
+    fireEvent.click(screen.getByTestId('excel-save-btn'));
+
+    await waitFor(() => expect(screen.queryByTestId('excel-dirty-count')).not.toBeInTheDocument());
+    expect(screen.getByTestId('excel-cell-0-4')).toHaveTextContent('');
+    expect(screen.getByTestId('excel-cell-1-4')).toHaveTextContent('');
+    expect(taskFromStore(store, 'parent')?.due_date).toBeNull();
+    expect(taskFromStore(store, 'child')?.due_date).toBeNull();
+  });
+
   it('keeps title editable in Normal mode and upserts the authoritative result', async () => {
     const store = renderList();
+    fireEvent.click(screen.getByRole('button', { name: 'Mở rộng task con' }));
+    expect(screen.getByText('Deep child')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Edit title Parent task' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Task title' }), { target: { value: 'Renamed parent' } });
     fireEvent.click(screen.getByTitle('Lưu'));
     await waitFor(() => expect(mockUpdateTask).toHaveBeenCalledWith('parent', { title: 'Renamed parent' }));
     expect(taskFromStore(store, 'parent')).toMatchObject({ title: 'Renamed parent', description: 'keep parent description' });
+    expect(taskFromStore(store, 'parent')?.child_tasks).toHaveLength(1);
+    expect(screen.getByText('Deep child')).toBeInTheDocument();
   });
 
   it('saves normal catalog selection and explicit clear from authoritative task results', async () => {

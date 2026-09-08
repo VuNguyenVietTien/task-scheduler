@@ -335,8 +335,10 @@ export const transformTaskFromAPI = (apiTask: any): Partial<Task> => {
     tags: has('tags')
       ? (Array.isArray(apiTask.tags) ? apiTask.tags.filter((t: unknown): t is string => typeof t === 'string') : [])
       : undefined,
-    child_tasks: has('child_tasks')
-      ? (apiTask.child_tasks ?? []).map(transformTaskFromAPI)
+    // Mutation resolvers return null when the relationship was not loaded.
+    // Only an actual array is authoritative; [] still clears known children.
+    child_tasks: Array.isArray(apiTask.child_tasks)
+      ? apiTask.child_tasks.map(transformTaskFromAPI)
       : undefined
   };
 

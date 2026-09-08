@@ -78,6 +78,52 @@ describe('REALTIME-EXCEL task normalization and upsert', () => {
     expect(saved.child_tasks).toEqual([grandchild]);
   });
 
+  it('preserves parent and children omitted by a normal edit response, but applies explicit null values', () => {
+    const child = task('child', { parent_task_id: 'root' });
+    const root = task('root', {
+      parent_task_id: 'group',
+      child_tasks: [child],
+      due_date: '2026-09-09',
+      effort: 8,
+      assignee: { userId: 'user-1', username: 'Ada' },
+      type: 'Feature',
+      category: 'Frontend',
+      progress_type: 'code',
+      progressCatalogItemId: 'progress-1',
+      categoryCatalogItemId: 'category-1',
+      taskTypeCatalogItemId: 'type-1',
+    });
+    const returned = transformTaskFromAPI({
+      task_id: 'root',
+      title: 'edited',
+      child_tasks: null,
+      due_date: null,
+      effort: null,
+      assignee: null,
+      type_: null,
+      category: null,
+      progress_type: null,
+      progress_catalog_item_id: null,
+      category_catalog_item_id: null,
+      task_type_catalog_item_id: null,
+    }) as Task;
+
+    const updated = upsertTaskInTree([root], returned)[0];
+    expect(updated).toMatchObject({ task_id: 'root', title: 'edited', parent_task_id: 'group' });
+    expect(updated.child_tasks).toEqual([child]);
+    expect(updated.due_date).toBeNull();
+    expect(updated.effort).toBeNull();
+    expect(updated.assignee).toBeUndefined();
+    expect(updated).toMatchObject({
+      type: null,
+      category: null,
+      progress_type: null,
+      progressCatalogItemId: null,
+      categoryCatalogItemId: null,
+      taskTypeCatalogItemId: null,
+    });
+  });
+
   it('uses the returned child list without duplicating task nodes or changing order', () => {
     const first = task('first');
     const second = task('second');

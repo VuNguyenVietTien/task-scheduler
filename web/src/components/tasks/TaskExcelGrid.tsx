@@ -104,8 +104,9 @@ export function validateCellValue(
     }
     case 'effort': {
       const cleaned = value.replace(/h$/i, '').trim();
+      if (cleaned === '') return { ok: true, value: '' }; // backend contract: blank saves as 0
       const num = Number(cleaned);
-      if (cleaned === '' || Number.isNaN(num) || num < 0 || num > 24 * 30) {
+      if (Number.isNaN(num) || num < 0 || num > 24 * 30) {
         return { ok: false, message: `Invalid effort "${raw}" (non-negative hours)` };
       }
       return { ok: true, value: String(num) };
@@ -308,6 +309,18 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
       }
     }
   }, [anchor, focusCell, tasks.length]);
+
+  const navigateFromEditor = useCallback((row: number, col: number, key: string) => {
+    const next = {
+      row: Math.max(0, Math.min(tasks.length - 1, row + (key === 'ArrowUp' ? -1 : key === 'ArrowDown' || key === 'Enter' ? 1 : 0))),
+      col: Math.max(0, Math.min(COLUMNS.length - 1, col + (key === 'ArrowLeft' ? -1 : key === 'ArrowRight' ? 1 : 0))),
+    };
+    setAnchor(next);
+    setFocusCell(next);
+    const column = COLUMNS[next.col];
+    setSelectionEditor(column.field === 'effort' || column.field === 'due_date' ? next : null);
+    if (column.field !== 'effort' && column.field !== 'due_date') focusTypingInput();
+  }, [focusTypingInput, tasks.length]);
 
   /** Enter commits the typed value; Tab commits then moves to the next editable cell. */
   const handleGridKeyDown = (e: React.KeyboardEvent) => {
@@ -557,6 +570,13 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                         onChange={(event) => {
                           const error = stageCell(row, c, event.target.value);
                           setErrors(error ? [`Row ${row + 1} ${col.label}: ${error}`] : []);
+                        }}
+                        onKeyDown={(event) => {
+                          if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(event.key)) return;
+                          event.preventDefault();
+                          const error = stageCell(row, c, event.currentTarget.value);
+                          setErrors(error ? [`Row ${row + 1} ${col.label}: ${error}`] : []);
+                          if (!error) navigateFromEditor(row, c, event.key);
                         }}
                         onBlur={() => {
                           setSelectionEditor(null);
