@@ -138,6 +138,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
   const [clonedTasks, setClonedTasks] = useState<Task[]>(tasks);
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [isTaskDetailOpen, setIsTaskDetailOpen] = useState(false);
+  const [updatingTaskId, setUpdatingTaskId] = useState<string | null>(null);
   const isDragRef = useRef(false);
   const { user } = useAuth();
   const dispatch = useAppDispatch();
@@ -389,6 +390,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
     console.log(`Dragging task ${taskId} from ${previousStatus} to ${newStatus}`);
 
     // Optimistically update the matching node without flattening its tree.
+    setUpdatingTaskId(taskId);
     const optimisticTasks = updateKanbanTaskInTree(clonedTasks, taskId, { status: newStatus });
     setClonedTasks(optimisticTasks);
 
@@ -434,7 +436,8 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
         }
       });
       window.dispatchEvent(event);
-    });
+    })
+    .finally(() => setUpdatingTaskId(null));
   };
 
   // Tuỳ chỉnh style cho Select
@@ -610,7 +613,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
                             key={task.task_id}
                             draggableId={task.task_id}
                             index={index}
-                            isDragDisabled={updateTaskStatusMutation.isLoading || task.status === TaskStatuses.REJECTED}
+                            isDragDisabled={updatingTaskId !== null || task.status === TaskStatuses.REJECTED}
                           >
                             {(provided: DraggableProvided, snapshot: DraggableStateSnapshot) => (
                               <div
@@ -626,7 +629,7 @@ export function KanbanBoard({ tasks, onTasksReorder, projectId }: KanbanBoardPro
                                     ? 'shadow-lg ring-2 ring-blue-400 rotate-[1deg]' 
                                     : 'shadow-sm hover:shadow-md'
                                   }
-                                  ${updateTaskStatusMutation.isLoading && updateTaskStatusMutation.variables?.taskId === task.task_id
+                                  ${updatingTaskId === task.task_id
                                     ? 'animate-pulse'
                                     : ''
                                   }
