@@ -199,6 +199,32 @@ describe('TaskExcelGrid interactions', () => {
     expect(screen.getByTestId('excel-dirty-count').textContent).toBe('3 unsaved');
   });
 
+  it('TSV paste maps a 2x3 rectangle from the selected anchor', () => {
+    renderGrid();
+    fireEvent.mouseDown(screen.getByTestId('excel-cell-0-0'));
+    fireEvent(screen.getByTestId('excel-typing-input'), pasteEvent('One\tDOING\tHIGH\r\nTwo\tDONE\tLOW\r\n'));
+
+    expect(screen.getByTestId('excel-cell-0-0')).toHaveTextContent('One');
+    expect(screen.getByTestId('excel-cell-0-1')).toHaveTextContent('DOING');
+    expect(screen.getByTestId('excel-cell-0-2')).toHaveTextContent('HIGH');
+    expect(screen.getByTestId('excel-cell-1-0')).toHaveTextContent('Two');
+    expect(screen.getByTestId('excel-cell-1-1')).toHaveTextContent('DONE');
+    expect(screen.getByTestId('excel-cell-1-2')).toHaveTextContent('LOW');
+    expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('6 unsaved');
+  });
+
+  it('keeps every column width fixed while an editor is open', async () => {
+    const user = userEvent.setup();
+    renderGrid();
+    const table = screen.getByRole('table');
+    expect(table).toHaveStyle({ tableLayout: 'fixed' });
+    const widthsBefore = Array.from(table.querySelectorAll('col')).map((col) => col.getAttribute('style'));
+
+    await user.click(screen.getByTestId('excel-cell-0-3'));
+    expect(screen.getByRole('spinbutton', { name: 'Excel effort' })).toBeInTheDocument();
+    expect(Array.from(table.querySelectorAll('col')).map((col) => col.getAttribute('style'))).toEqual(widthsBefore);
+  });
+
   it('TSV paste rejects invalid cells per-cell and keeps valid ones', () => {
     renderGrid();
     fireEvent.mouseDown(screen.getByTestId('excel-cell-0-1'));

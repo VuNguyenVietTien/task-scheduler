@@ -494,12 +494,17 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
         </button>
       </div>
 
-      <table className="min-w-full text-xs border-collapse select-none">
+      <table className="min-w-full text-xs border-collapse select-none" style={{ tableLayout: 'fixed', width: '100%' }}>
+        <colgroup>
+          <col style={{ width: '32px' }} />
+          {COLUMNS.map((column) => <col key={column.field ?? column.catalogField} style={{ width: column.width }} />)}
+          {onCloneTask && <col style={{ width: '64px' }} />}
+        </colgroup>
         <thead>
           <tr className="bg-slate-50 text-left text-slate-500">
             <th className="w-8 border border-slate-200 px-2 py-1">#</th>
             {COLUMNS.map((c) => (
-              <th key={c.field ?? c.catalogField} className="border border-slate-200 px-2 py-1" style={{ minWidth: c.width }}>
+              <th key={c.field ?? c.catalogField} className="border border-slate-200 px-2 py-1" style={{ width: c.width }}>
                 {c.label}
               </th>
             ))}
