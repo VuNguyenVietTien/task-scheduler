@@ -27,6 +27,7 @@ import {
   LINK_RESOURCE_MEMBER_BY_EMAIL,
   SET_PROJECT_MEMBER_ACCESS,
   REMOVE_RESOURCE_MEMBER,
+  TRANSFER_PROJECT_OWNERSHIP,
   CAPACITY_SETTINGS_QUERY,
   SET_MEMBER_CAPACITY,
   SET_CAPACITY_DATE_OVERRIDE,
@@ -42,10 +43,14 @@ import {
   CREATE_RECURRING_COMMITMENT,
   DELETE_RECURRING_COMMITMENT,
 } from '@/graphql/scheduling';
+import { canRemoveMember, projectRole } from '@/utils/project-permissions';
 
 interface Props {
   projectId: string;
   canManage: boolean;
+  currentUserRole: string;
+  currentUserId?: string;
+  ownerUserId?: string;
   onMembersChanged?: () => void | Promise<void>;
 }
 
@@ -100,7 +105,7 @@ interface CommitmentRow {
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-export function SchedulingConfigPanel({ projectId, canManage, onMembersChanged }: Props) {
+export function SchedulingConfigPanel({ projectId, canManage, currentUserRole, currentUserId, ownerUserId, onMembersChanged }: Props) {
   const [newMemberName, setNewMemberName] = useState('');
   const [newMemberEmail, setNewMemberEmail] = useState('');
   const [linkTarget, setLinkTarget] = useState<Record<string, string>>({});
@@ -190,6 +195,7 @@ export function SchedulingConfigPanel({ projectId, canManage, onMembersChanged }
   const [linkMember] = useMutation(LINK_RESOURCE_MEMBER_BY_EMAIL);
   const [setMemberAccess] = useMutation(SET_PROJECT_MEMBER_ACCESS);
   const [removeMember] = useMutation(REMOVE_RESOURCE_MEMBER);
+  const [transferOwnership] = useMutation(TRANSFER_PROJECT_OWNERSHIP);
   const [setCapacity] = useMutation(SET_MEMBER_CAPACITY);
   const [setOverride] = useMutation(SET_CAPACITY_DATE_OVERRIDE);
   const [addDayOff] = useMutation(ADD_DAY_OFF);
@@ -252,6 +258,26 @@ export function SchedulingConfigPanel({ projectId, canManage, onMembersChanged }
       await refreshMembers(true);
     } catch (e) {
       toast.error(`Link failed: ${(e as Error).message}`);
+    }
+  };
+
+  const handleTransferOwnership = async (member: ResourceMemberRow) => {
+    if (!member.user_id || !window.confirm(`Transfer project ownership to ${member.display_name}?`)) return;
+    setMemberActionMessage(null);
+    try {
+      const result = await transferOwnership({ variables: {
+        project_id: projectId,
+        new_owner_user_id: member.user_id,
+      }});
+      if (!result.data?.transfer_project_ownership) throw new Error('Ownership was not transferred.');
+      const text = `Ownership transferred to ${member.display_name}`;
+      setMemberActionMessage({ error: false, text });
+      toast.success(text);
+      await onMembersChanged?.();
+    } catch (error) {
+      const text = `Transfer failed: ${(error as Error).message}`;
+      setMemberActionMessage({ error: true, text });
+      toast.error(text);
     }
   };
 
@@ -519,8 +545,8 @@ export function SchedulingConfigPanel({ projectId, canManage, onMembersChanged }
                       }}
                     >
                       <option value="">No access</option>
-                      <option value="manager">Manager</option>
-                      <option value="leader">Leader</option>
+                      {projectRole(currentUserRole) === 'manager' && <option value="manager">Manager</option>}
+                      {projectRole(currentUserRole) === 'manager' && <option value="leader">Leader</option>}
                       <option value="member">Member</option>
                       <option value="guest">Guest</option>
                     </select>
@@ -550,16 +576,34 @@ export function SchedulingConfigPanel({ projectId, canManage, onMembersChanged }
                   </td>
                 )}
                 {canManage && (
-                  <td>
-                    <button
-                      type="button"
-                      className="px-2 py-1 text-red-600 border border-red-200 rounded disabled:opacity-50"
-                      onClick={() => handleRemoveMember(m)}
-                      disabled={removingMemberId !== null || memberRefreshing}
-                      aria-label={`Remove ${m.display_name}`}
-                    >
-                      {removingMemberId === m.member_id ? 'Removing…' : 'Remove'}
-                    </button>
+                  <td className="space-x-1">
+                    {canRemoveMember(
+                      currentUserRole,
+                      m.access_role,
+                      m.user_id === currentUserId,
+                      currentUserId === ownerUserId,
+                      m.user_id === ownerUserId,
+                    ) && (
+                      <button
+                        type="button"
+                        className="px-2 py-1 text-red-600 border border-red-200 rounded disabled:opacity-50"
+                        onClick={() => handleRemoveMember(m)}
+                        disabled={removingMemberId !== null || memberRefreshing}
+                        aria-label={`Remove ${m.display_name}`}
+                      >
+                        {removingMemberId === m.member_id ? 'Removing…' : 'Remove'}
+                      </button>
+                    )}
+                    {currentUserId === ownerUserId && m.user_id && m.user_id !== ownerUserId && (
+                      <button
+                        type="button"
+                        className="px-2 py-1 text-blue-600 border border-blue-200 rounded"
+                        onClick={() => handleTransferOwnership(m)}
+                        aria-label={`Transfer ownership to ${m.display_name}`}
+                      >
+                        Transfer ownership
+                      </button>
+                    )}
                   </td>
                 )}
               </tr>

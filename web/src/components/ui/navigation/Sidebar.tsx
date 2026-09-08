@@ -15,6 +15,7 @@ interface ProjectNode {
   name: string;
   icon_url?: string;
   status?: string;
+  user_role?: string;
 }
 
 const Sidebar = () => {

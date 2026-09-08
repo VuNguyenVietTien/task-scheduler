@@ -18,6 +18,15 @@ pub enum MemberRole {
 }
 
 impl MemberRole {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Manager => "manager",
+            Self::Leader => "leader",
+            Self::Member => "member",
+            Self::Guest => "guest",
+        }
+    }
+
     pub fn from_str_case_insensitive(s: &str) -> Option<Self> {
         match s.to_lowercase().as_str() {
             "manager" | "admin" | "owner" => Some(MemberRole::Manager),

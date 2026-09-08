@@ -103,9 +103,17 @@ impl ProjectQuery {
             FROM project_members pm
             INNER JOIN users u ON pm.user_id = u.user_id
             WHERE pm.project_id = $1 AND pm.role IS NOT NULL
+              AND EXISTS (
+                SELECT 1 FROM projects visible
+                LEFT JOIN project_members viewer
+                  ON viewer.project_id = visible.project_id AND viewer.user_id = $2
+                WHERE visible.project_id = $1
+                  AND (visible.owner_id = $2 OR viewer.role::text IN ('manager','leader','member','admin'))
+              )
             "#,
         )
         .bind(project_id)
+        .bind(current_user.user_id()?)
         .fetch_all(pool)
         .await
         .map_err(|e| AuthError::Database(e))?;
@@ -241,6 +249,10 @@ impl ProjectQuery {
             p.visibility,
             p.icon_url,
             COALESCE(pmc.member_count, 0) AS member_count,
+            CASE WHEN p.owner_id = $1 THEN 'manager' ELSE (
+                SELECT role::text FROM project_members current_member
+                WHERE current_member.project_id = p.project_id AND current_member.user_id = $1
+            ) END AS role,
             u.user_id as owner_id,
             u.email as owner_email,
             u.username as owner_name,
@@ -307,6 +319,8 @@ impl ProjectQuery {
                         full_name: row.get::<Option<String>, _>("owner_full_name"),
                         avatar_url: row.get::<Option<String>, _>("owner_avatar_url"),
                     },
+                    user_role: MemberRole::from_database_row(&row)
+                        .expect("authorized project has a valid role"),
                 }
             })
             .collect();
@@ -352,7 +366,7 @@ impl ProjectMutation {
             return Err(coded_error("project name is required", "BAD_USER_INPUT"));
         }
         let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
-        project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+        project_authz::require_project_manager_tx(&mut tx, caller, project_id).await?;
         let updated: String = sqlx::query_scalar(
             "UPDATE projects SET name = $2, updated_at = now() WHERE project_id = $1 RETURNING name",
         )

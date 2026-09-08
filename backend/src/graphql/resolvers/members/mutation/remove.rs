@@ -11,7 +11,7 @@ pub async fn remove_member(ctx: &Context<'_>, project_id: ID, user_id: ID) -> Re
     let caller = project_authz::require_user(context)?;
     let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
     project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
-    project_authz::require_access_target_tx(&mut tx, caller, project_id, user_id).await?;
+    project_authz::require_member_removal_tx(&mut tx, caller, project_id, Some(user_id)).await?;
     // Revoke only access; retain identity, link, task assignment and configuration.
     let result = sqlx::query(
         "UPDATE project_members SET role = NULL, updated_at = now() \

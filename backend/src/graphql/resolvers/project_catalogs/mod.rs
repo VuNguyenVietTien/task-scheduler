@@ -255,7 +255,7 @@ impl ProjectCatalogMutation {
         let labels_by_item = validate_batch(&input.items)?;
         let caller = project_authz::require_user(context)?;
         let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
-        project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+        project_authz::require_project_manager_tx(&mut tx, caller, project_id).await?;
         let next_order: i32 = sqlx::query_scalar(
             "SELECT COALESCE(max(display_order) + 1, 0) FROM project_task_catalog_items \
              WHERE project_id = $1 AND kind = $2",
@@ -320,7 +320,7 @@ impl ProjectCatalogMutation {
             "TASK_TYPE" => ProjectCatalogKind::TaskType,
             _ => return Err(bad("catalog item is not available")),
         };
-        project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+        project_authz::require_project_manager_tx(&mut tx, caller, project_id).await?;
         let locked: Option<Uuid> = sqlx::query_scalar(
             "SELECT catalog_item_id FROM project_task_catalog_items \
              WHERE catalog_item_id = $1 AND project_id = $2 FOR UPDATE",
@@ -383,7 +383,7 @@ impl ProjectCatalogMutation {
         let Some(project_id) = project_id else {
             return Err(bad("catalog item is not available"));
         };
-        project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+        project_authz::require_project_manager_tx(&mut tx, caller, project_id).await?;
         let kind: Option<String> = sqlx::query_scalar(
             "SELECT kind FROM project_task_catalog_items \
              WHERE catalog_item_id = $1 AND project_id = $2 FOR UPDATE",
@@ -459,7 +459,7 @@ impl ProjectCatalogMutation {
             .collect::<Result<_>>()?;
         let caller = project_authz::require_user(context)?;
         let mut tx = context.db.begin().await.map_err(AuthError::Database)?;
-        project_authz::require_project_write_tx(&mut tx, caller, project_id).await?;
+        project_authz::require_project_manager_tx(&mut tx, caller, project_id).await?;
         let current: Vec<Uuid> = sqlx::query_scalar(
             "SELECT catalog_item_id FROM project_task_catalog_items \
              WHERE project_id = $1 AND kind = $2 ORDER BY display_order, catalog_item_id FOR UPDATE",

@@ -1,6 +1,7 @@
 'use client';
 
 import { SchedulingConfigPanel } from './SchedulingConfigPanel';
+import { canAddMembers } from '@/utils/project-permissions';
 
 type Member = {
   role: string;
@@ -19,17 +20,21 @@ type ProjectMembersProps = {
   projectId: string;
   members: Member[];
   currentUserRole: string;
+  currentUserId?: string;
+  ownerUserId?: string;
   refetch: () => void;
 };
 
 /** One canonical member surface. Access is explicit on each resource row;
  * placeholders remain available for capacity, leave, groups and assignments. */
-export function MembersView({ projectId, currentUserRole, refetch }: ProjectMembersProps) {
-  const role = String(currentUserRole).toLowerCase();
+export function MembersView({ projectId, currentUserRole, currentUserId, ownerUserId, refetch }: ProjectMembersProps) {
   return (
     <SchedulingConfigPanel
       projectId={projectId}
-      canManage={['manager', 'leader', 'admin'].includes(role)}
+      canManage={canAddMembers(currentUserRole)}
+      currentUserRole={currentUserRole}
+      currentUserId={currentUserId}
+      ownerUserId={ownerUserId}
       onMembersChanged={refetch}
     />
   );
