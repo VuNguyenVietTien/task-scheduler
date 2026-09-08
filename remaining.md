@@ -1,5 +1,7 @@
 # Remaining production feedback
 
+Frontend List/Excel editors, descendant-aware Kanban, and shared default status visibility are integrated on `dev`; editor 31/31, Kanban/realtime 6/6, and status/Gantt 11/11 focused tests pass. Release evidence: `plans/reports/herdr-pm-260907-gantt-members-resource/RELEASE-FRONTEND-SURFACES-0908.md`.
+
 Realtime/Excel source `a176c59` is integrated as `2d44757`; integration repair `fc5a730` preserves omitted mutation fields while retaining explicit clears. All 5 focused suites / 39 tests pass. Release evidence: `plans/reports/herdr-pm-260907-gantt-members-resource/RELEASE-REALTIME-0908.md`.
 
 Only optional, non-blocking Chrome feedback remains:
