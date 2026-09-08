@@ -1,6 +1,6 @@
 # Production Deployment
 
-Last verified: 2026-09-06 (Asia/Ho_Chi_Minh)
+Last verified: 2026-09-08 (Asia/Bangkok)
 
 ## Topology
 
@@ -19,18 +19,43 @@ Browser
 | --- | --- |
 | Frontend | `https://prjmngr.vercel.app` |
 | Vercel project | `vunguyenviettiens-projects/task-scheduler` |
-| Vercel deployment | `task-scheduler-j2d76y4zf-vunguyenviettiens-projects.vercel.app` (aliased `prjmngr.vercel.app`) |
+| Vercel deployment | `dpl_GjrYjW8BTdF7yNEPqqD1ZuLaY2dF` (`task-scheduler-mhg3tac41-vunguyenviettiens-projects.vercel.app`, aliased `prjmngr.vercel.app`) |
 | Backend API | `https://pm-api.khampha.dpdns.org` |
 | Backend container | `task-scheduler-backend` |
-| Backend image | `task-scheduler-backend:20260906T0645` |
-| Backend release | `/home/azuraith/task-scheduler/releases/20260906T0645` |
+| Backend image | `task-scheduler-backend:20260908T0453-a73fff41` |
+| Backend release | `/home/azuraith/task-scheduler/releases/20260908T0453-a73fff41` |
 | PostgreSQL container | `task_scheduler_postgres` |
 | Cloudflare origin | `http://localhost:8081` |
 
-The previous backend image and release are retained for rollback:
+The immediate rollback container is retained, stopped, with the prior live image/configuration:
 
-- `task-scheduler-backend:20260901T0900`
-- `/home/azuraith/task-scheduler/releases/20260901T0900`
+- `task-scheduler-backend-prev-20260908T0453-a73fff41`
+- `task-scheduler-backend:20260908T0352-db31fcb9`
+
+The older `task-scheduler-backend-prev-20260906T0645` / `task-scheduler-backend:20260901T1235` rollback assets remain retained too.
+
+## Release 20260908T0453-a73fff41 (2026-09-08)
+
+Catalog delete release from source `a73fff41e6070f2fbfed46483faba93ff18bf7ad`, the clean dev integration of `b24b3b92f0d26da70867f48b57ed9aa7bcbcebd8`.
+
+- Immutable image: `task-scheduler-backend:20260908T0453-a73fff41` (`sha256:07186991ed4fffac7c94985dfe2903dd4bb07d223dc819f66f8812949e517bba`).
+- Committed Git archive (`backend` + `web`, LF): SHA-256 `bab3321f1f38362fc4c68cdfb7f36cc8225baf6634a72536e11131243b44d26e`.
+- Backup before replacement: `/home/azuraith/task-scheduler/releases/20260908T0453-a73fff41/backup/db-before-20260908T0453-a73fff41.sql.gz` (32,943 bytes; gzip verified).
+- No migration or production catalog mutation was run. Readiness reports `ready` / `up` / `current`; public GraphQL introspection exposes `delete_project_catalog_item`.
+- Focused checks: frontend catalog Jest 13/13; Ubuntu backend contract 31/31; Ubuntu and Vercel production builds passed.
+- Vercel production deployment `dpl_GjrYjW8BTdF7yNEPqqD1ZuLaY2dF` is READY and aliases `https://prjmngr.vercel.app` (final HTTP 200).
+
+Immediate backend rollback:
+
+```bash
+docker stop task-scheduler-backend && docker rm task-scheduler-backend
+docker rename task-scheduler-backend-prev-20260908T0453-a73fff41 task-scheduler-backend
+docker start task-scheduler-backend
+curl --fail --silent --show-error http://127.0.0.1:8081/health/ready
+curl --fail --silent --show-error https://pm-api.khampha.dpdns.org/health/ready
+```
+
+Database rollback requires a validated restore from the named pre-release backup; do not overwrite the live database in place.
 
 ## Release 20260906T0645 (2026-09-06)
 
@@ -141,11 +166,11 @@ Production E2E data retained for inspection:
 ## Rollback outline
 
 1. Stop and remove only the current `task-scheduler-backend` container.
-2. Start the same container configuration with image `task-scheduler-backend:20260901T0900` and the retained release environment.
+2. Rename and start the retained immediate rollback container `task-scheduler-backend-prev-20260908T0453-a73fff41`.
 3. Confirm local readiness at `http://127.0.0.1:8081/health/ready`.
 4. Confirm public readiness through `pm-api.khampha.dpdns.org`.
 
-Resolve and record the exact container environment/network flags before running a rollback. Do not remove either retained image/release until the new release has remained stable.
+The rollback container retains the prior image, network, mounts, runtime user, and environment. Do not remove it or the pre-release backup until the new release has remained stable.
 
 ## Known non-blocking follow-ups
 
