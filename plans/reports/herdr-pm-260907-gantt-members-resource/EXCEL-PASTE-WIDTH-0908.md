@@ -1,6 +1,8 @@
 # EXCEL-PASTE-WIDTH-0908
 
-Status: Implemented; commit/push pending.
+Status: Implemented, committed, pushed.
+
+Commit: `26541d2`
 
 ## Changes
 
