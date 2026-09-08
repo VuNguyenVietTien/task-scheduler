@@ -27,5 +27,5 @@ Author: `xekobanh@gmail.com`
 
 - `dev` pushed at `e472bbc5df949c5fe5b72ffae12969de4f15496a`.
 - `main` fast-forwarded to the same SHA.
-- Vercel project: existing `task-scheduler`; deployment `dpl_AM418355Nj66SWzhzehTW5LampAt` is READY at `https://task-scheduler-n1sjbh5sa-vunguyenviettiens-projects.vercel.app`.
+- Vercel project: existing `task-scheduler`; deployment `dpl_6X53uNNjM3fPKdYtybJJbw8ctUio` is READY at `https://task-scheduler-114038rin-vunguyenviettiens-projects.vercel.app`.
 - Existing alias `https://prjmngr.vercel.app/`: final HTTP 200.
