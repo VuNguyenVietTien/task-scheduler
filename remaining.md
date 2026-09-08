@@ -1,6 +1,8 @@
 # Remaining production feedback
 
-Excel editing and project member removal/rename implementation are complete. Release verification is tracked in `DEV-RELEASE-FAST.md`; only optional, non-blocking Chrome feedback remains:
+Realtime/Excel source `a176c59` is integrated as `2d44757`; integration repair `fc5a730` preserves omitted mutation fields while retaining explicit clears. All 5 focused suites / 39 tests pass. Release evidence: `plans/reports/herdr-pm-260907-gantt-members-resource/RELEASE-REALTIME-0908.md`.
+
+Only optional, non-blocking Chrome feedback remains:
 
 - [ ] Verify Gantt User filtering with linked/unlinked members, descendant context, clear behavior, and saved-history identity.
 - [ ] Exercise Excel focus recovery, Tab editing, linked/unlinked assignment set/clear, TSV copy/paste, validation errors, and Save/Discard/reload behavior.
