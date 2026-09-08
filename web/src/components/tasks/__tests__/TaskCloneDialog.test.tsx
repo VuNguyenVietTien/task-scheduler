@@ -35,7 +35,7 @@ describe('TaskCloneDialog', () => {
     const checkboxes = screen.getAllByRole('checkbox');
     expect(checkboxes).toHaveLength(4);
     checkboxes.forEach((checkbox) => expect(checkbox).toBeChecked());
-    expect(screen.getByRole('checkbox', { name: /Root task/ })).toBeEnabled();
+    expect(screen.getByRole('checkbox', { name: /Clone parent task: Root task/ })).toBeEnabled();
     expect(screen.getByText('Uncheck to clone selected children elsewhere.')).toBeInTheDocument();
     expect(screen.getByRole('spinbutton', { name: 'Number of copies' })).toHaveValue(1);
     expect(screen.getByText('1 parent + 3 children = 4 tasks')).toBeInTheDocument();
@@ -101,33 +101,37 @@ describe('TaskCloneDialog', () => {
     });
   });
 
-  it('offers exclusive parent/root destinations when the source is unchecked', async () => {
+  it('submits multiple checked destinations in displayed order with quantity per destination', async () => {
     const onSubmit = jest.fn();
     renderDialog({
       onSubmit,
       nodes: [
         ...nodes.map((node) => ({ ...node, project_id: 'project-1' })),
-        { task_id: 'target', project_id: 'project-1', parent_task_id: null, title: 'Target parent' },
+        { task_id: 'target-a', project_id: 'project-1', parent_task_id: null, title: 'Target A' },
+        { task_id: 'target-b', project_id: 'project-1', parent_task_id: null, title: 'Target B' },
         { task_id: 'other-project', project_id: 'project-2', parent_task_id: null, title: 'Wrong project' },
       ],
     });
 
-    fireEvent.click(screen.getByRole('checkbox', { name: /Root task/ }));
+    fireEvent.click(screen.getByRole('checkbox', { name: /Clone parent task: Root task/ }));
     expect(screen.getByRole('group', { name: 'Destination' })).toBeInTheDocument();
-    expect(screen.getByRole('option', { name: 'Target parent' })).toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Branch task' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('option', { name: 'Wrong project' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Create copies' })).toBeDisabled();
+    expect(screen.queryByRole('checkbox', { name: 'Destination parent: Branch task' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('checkbox', { name: 'Destination parent: Wrong project' })).not.toBeInTheDocument();
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Destination parent' }), { target: { value: 'target' } });
-    fireEvent.click(screen.getByRole('button', { name: 'Create 1 copy (3 tasks)' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Destination parent: Target B' }));
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Destination parent: Target A' }));
+    expect(screen.getByRole('spinbutton', { name: 'Number of copies per destination' })).toHaveValue(1);
+    expect(screen.getByText('2 destinations × 1 copy × 3 selected tasks = 6 tasks')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Create 1 copy per destination (6 tasks)' }));
     await waitFor(() => expect(onSubmit).toHaveBeenLastCalledWith({
       source_task_id: 'root',
       selected_descendant_ids: ['branch', 'leaf-a', 'leaf-b'],
       quantity: 1,
-      destination_parent_task_id: 'target',
+      destination_parent_task_ids: ['target-a', 'target-b'],
     }));
 
-    fireEvent.click(screen.getByRole('radio', { name: 'Clone without parent' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Promote selected children to root tasks' }));
     fireEvent.click(screen.getByRole('button', { name: 'Create 1 copy (3 tasks)' }));
     expect(onSubmit).toHaveBeenLastCalledWith({
       source_task_id: 'root',
@@ -176,6 +180,14 @@ describe('TaskCloneDialog', () => {
     expect(screen.getByRole('button', { name: 'Creating…' })).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
     finish();
+  });
+
+  it('cancels without submitting or mutating', () => {
+    const { props } = renderDialog();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(props.onClose).toHaveBeenCalledTimes(1);
+    expect(props.onSubmit).not.toHaveBeenCalled();
   });
 
   it('renders loading and unavailable-source states without enabling confirmation', () => {

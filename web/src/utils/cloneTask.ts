@@ -21,6 +21,7 @@ export interface CloneTaskSelectionInput {
   selected_descendant_ids: string[];
   quantity: number;
   destination_parent_task_id?: string;
+  destination_parent_task_ids?: string[];
   clone_without_parent?: boolean;
 }
 
@@ -142,9 +143,14 @@ export function getSelectedCloneRootIds(tree: CloneTree, selected: ReadonlySet<s
     .map((node) => node.task_id);
 }
 
-export function getClonePreview(selectedCount: number, quantity: number, selectedRootCount = 1): ClonePreview {
-  const parentCount = selectedRootCount * quantity;
-  const childCount = Math.max(0, selectedCount - selectedRootCount) * quantity;
+export function getClonePreview(
+  selectedCount: number,
+  quantity: number,
+  selectedRootCount = 1,
+  destinationCount = 1
+): ClonePreview {
+  const parentCount = selectedRootCount * quantity * destinationCount;
+  const childCount = Math.max(0, selectedCount - selectedRootCount) * quantity * destinationCount;
   return { parentCount, childCount, totalCount: parentCount + childCount };
 }
 
@@ -152,7 +158,7 @@ export function createCloneSelectionInput(
   tree: CloneTree,
   selected: ReadonlySet<string>,
   quantity: number,
-  destination?: { parentTaskId: string } | { withoutParent: true }
+  destination?: { parentTaskId: string } | { parentTaskIds: readonly string[] } | { withoutParent: true }
 ): CloneTaskSelectionInput {
   return {
     source_task_id: tree.sourceTaskId,
@@ -162,6 +168,19 @@ export function createCloneSelectionInput(
     quantity,
     ...(destination && 'parentTaskId' in destination
       ? { destination_parent_task_id: destination.parentTaskId }
-      : destination ? { clone_without_parent: true } : {}),
+      : destination && 'parentTaskIds' in destination
+        ? { destination_parent_task_ids: [...destination.parentTaskIds] }
+        : destination ? { clone_without_parent: true } : {}),
   };
+}
+
+/** Expands the dialog-only ordered destination list into existing backend payloads. */
+export function expandCloneSelectionInputs(input: CloneTaskSelectionInput): CloneTaskSelectionInput[] {
+  const { destination_parent_task_ids: destinationIds, ...legacyInput } = input;
+  return destinationIds
+    ? destinationIds.map((destinationId) => ({
+      ...legacyInput,
+      destination_parent_task_id: destinationId,
+    }))
+    : [legacyInput];
 }

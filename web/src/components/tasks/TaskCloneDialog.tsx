@@ -52,16 +52,16 @@ export function TaskCloneDialog({
     .join('\u0000');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [quantityValue, setQuantityValue] = useState('1');
-  const [destination, setDestination] = useState<'parent' | 'root'>('parent');
-  const [destinationParentId, setDestinationParentId] = useState('');
+  const [destination, setDestination] = useState<'parents' | 'root'>('parents');
+  const [destinationParentIds, setDestinationParentIds] = useState<Set<string>>(new Set());
   const submitLocked = useRef(false);
 
   useEffect(() => {
     if (!open) return;
     setSelected(defaultCloneSelection(tree));
     setQuantityValue('1');
-    setDestination('parent');
-    setDestinationParentId('');
+    setDestination('parents');
+    setDestinationParentIds(new Set());
   }, [open, sourceTaskId, treeKey]);
 
   const sourceProjectId = nodes.find((node) => node.task_id === sourceTaskId)?.project_id;
@@ -71,12 +71,20 @@ export function TaskCloneDialog({
     && !sourceTreeIds.has(node.task_id));
   const orphanedRoots = !selected.has(sourceTaskId) ? getSelectedCloneRootIds(tree, selected) : [];
   const needsDestination = orphanedRoots.length > 0;
+  const orderedDestinationParentIds = eligibleParents
+    .map((node) => node.task_id)
+    .filter((id) => destinationParentIds.has(id));
+  const destinationMissing = needsDestination && destination === 'parents' && orderedDestinationParentIds.length === 0;
   const quantity = parseCloneQuantity(quantityValue);
-  const preview = quantity && selected.size
-    ? getClonePreview(selected.size, quantity, needsDestination ? orphanedRoots.length : 1)
+  const preview = quantity && selected.size && !destinationMissing
+    ? getClonePreview(
+      selected.size,
+      quantity,
+      needsDestination ? orphanedRoots.length : 1,
+      needsDestination && destination === 'parents' ? orderedDestinationParentIds.length : 1
+    )
     : null;
   const unavailable = !loading && !loadError && tree.items.length === 0;
-  const destinationMissing = needsDestination && destination === 'parent' && !destinationParentId;
   const disabled = loading || submitting || retrying || unavailable || Boolean(loadError)
     || requiresRefresh || quantity === null || selected.size === 0 || destinationMissing;
 
@@ -90,7 +98,7 @@ export function TaskCloneDialog({
         selected,
         quantity,
         needsDestination
-          ? destination === 'parent' ? { parentTaskId: destinationParentId } : { withoutParent: true }
+          ? destination === 'parents' ? { parentTaskIds: orderedDestinationParentIds } : { withoutParent: true }
           : undefined
       ));
     } catch {
@@ -141,7 +149,7 @@ export function TaskCloneDialog({
                         setSelected((current) => updateCloneSelection(tree, current, node.task_id, event.target.checked));
                       }}
                     />
-                    <span>{node.title}</span>
+                    <span>{isRoot ? `Clone parent task: ${node.title}` : node.title}</span>
                     {isRoot && <span className="text-xs text-slate-500">Uncheck to clone selected children elsewhere.</span>}
                   </label>
                 );
@@ -154,31 +162,39 @@ export function TaskCloneDialog({
           <fieldset className="rounded-lg border border-slate-200 p-3" disabled={submitting}>
             <legend className="px-1 text-sm font-medium text-slate-800">Destination</legend>
             <label className="flex items-center gap-2 text-sm">
-              <input type="radio" name="clone-destination" checked={destination === 'parent'} onChange={() => setDestination('parent')} />
-              Clone under an existing parent
+              <input type="radio" name="clone-destination" checked={destination === 'parents'} onChange={() => setDestination('parents')} />
+              Clone selected children under parent tasks
             </label>
-            {destination === 'parent' && (
-              <select
-                aria-label="Destination parent"
-                value={destinationParentId}
-                onChange={(event) => setDestinationParentId(event.target.value)}
-                className="mt-2 w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
-                required
-              >
-                <option value="">Select a parent task</option>
-                {eligibleParents.map((node) => <option key={node.task_id} value={node.task_id}>{node.title}</option>)}
-              </select>
+            {destination === 'parents' && (
+              <div className="mt-2 max-h-40 space-y-1 overflow-y-auto rounded-md border border-slate-200 p-2">
+                {eligibleParents.length ? eligibleParents.map((node) => (
+                  <label key={node.task_id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      aria-label={`Destination parent: ${node.title}`}
+                      checked={destinationParentIds.has(node.task_id)}
+                      onChange={(event) => setDestinationParentIds((current) => {
+                        const next = new Set(current);
+                        if (event.target.checked) next.add(node.task_id);
+                        else next.delete(node.task_id);
+                        return next;
+                      })}
+                    />
+                    {node.title}
+                  </label>
+                )) : <p className="text-sm text-slate-500">No eligible parent tasks.</p>}
+              </div>
             )}
             <label className="mt-2 flex items-center gap-2 text-sm">
               <input type="radio" name="clone-destination" checked={destination === 'root'} onChange={() => setDestination('root')} />
-              Clone without parent
+              Promote selected children to root tasks
             </label>
           </fieldset>
         )}
 
         <div>
           <label htmlFor="clone-quantity" className="block text-sm font-medium text-slate-800">
-            Number of copies
+            Number of copies{needsDestination && destination === 'parents' ? ' per destination' : ''}
           </label>
           <input
             id="clone-quantity"
@@ -197,11 +213,17 @@ export function TaskCloneDialog({
             <p id="clone-quantity-error" className="mt-1 text-sm text-red-700" role="alert">{QUANTITY_ERROR}</p>
           ) : preview ? (
             <p id="clone-preview" className="mt-1 text-sm text-slate-600">
-              {preview.parentCount} {needsDestination
-                ? preview.parentCount === 1 ? 'root' : 'roots'
-                : preview.parentCount === 1 ? 'parent' : 'parents'} +{' '}
-              {preview.childCount} {preview.childCount === 1 ? 'child' : 'children'} ={' '}
-              {preview.totalCount} {preview.totalCount === 1 ? 'task' : 'tasks'}
+              {needsDestination && destination === 'parents' ? (
+                <>{orderedDestinationParentIds.length} {orderedDestinationParentIds.length === 1 ? 'destination' : 'destinations'} ×{' '}
+                  {quantity} {quantity === 1 ? 'copy' : 'copies'} × {selected.size} selected tasks ={' '}
+                  {preview.totalCount} {preview.totalCount === 1 ? 'task' : 'tasks'}</>
+              ) : (
+                <>{preview.parentCount} {needsDestination
+                  ? preview.parentCount === 1 ? 'root' : 'roots'
+                  : preview.parentCount === 1 ? 'parent' : 'parents'} +{' '}
+                  {preview.childCount} {preview.childCount === 1 ? 'child' : 'children'} ={' '}
+                  {preview.totalCount} {preview.totalCount === 1 ? 'task' : 'tasks'}</>
+              )}
             </p>
           ) : null}
         </div>
@@ -235,7 +257,7 @@ export function TaskCloneDialog({
             {submitting
               ? 'Creating…'
               : preview
-                ? `Create ${quantity} ${quantity === 1 ? 'copy' : 'copies'} (${preview.totalCount} ${preview.totalCount === 1 ? 'task' : 'tasks'})`
+                ? `Create ${quantity} ${quantity === 1 ? 'copy' : 'copies'}${needsDestination && destination === 'parents' ? ' per destination' : ''} (${preview.totalCount} ${preview.totalCount === 1 ? 'task' : 'tasks'})`
                 : 'Create copies'}
           </button>
         </div>

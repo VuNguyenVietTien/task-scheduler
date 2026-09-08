@@ -2,6 +2,7 @@ import {
   buildCloneTree,
   createCloneSelectionInput,
   defaultCloneSelection,
+  expandCloneSelectionInputs,
   getCloneCheckboxState,
   getClonePreview,
   getSelectedCloneRootIds,
@@ -63,6 +64,43 @@ describe('clone selection helpers', () => {
       source_task_id: 'root', selected_descendant_ids: ['child-1', 'child-3', 'child-6'], quantity: 3,
     });
     expect(getClonePreview(selected.size, 3)).toEqual({ parentCount: 3, childCount: 9, totalCount: 12 });
+  });
+
+  it('expands ordered destinations into legacy payloads with quantity per destination', () => {
+    const tree = buildCloneTree([N('root', null), N('child', 'root')], 'root');
+    const input = createCloneSelectionInput(tree, new Set(['child']), 3, {
+      parentTaskIds: ['target-b', 'target-a'],
+    });
+
+    expect(input).toEqual({
+      source_task_id: 'root',
+      selected_descendant_ids: ['child'],
+      quantity: 3,
+      destination_parent_task_ids: ['target-b', 'target-a'],
+    });
+    expect(expandCloneSelectionInputs(input)).toEqual([
+      {
+        source_task_id: 'root', selected_descendant_ids: ['child'], quantity: 3,
+        destination_parent_task_id: 'target-b',
+      },
+      {
+        source_task_id: 'root', selected_descendant_ids: ['child'], quantity: 3,
+        destination_parent_task_id: 'target-a',
+      },
+    ]);
+    expect(getClonePreview(1, 3, 1, 2)).toEqual({ parentCount: 6, childCount: 0, totalCount: 6 });
+  });
+
+  it('keeps root promotion as one legacy payload when destinations are empty', () => {
+    const tree = buildCloneTree([N('root', null), N('child', 'root')], 'root');
+    const input = createCloneSelectionInput(tree, new Set(['child']), 2, { withoutParent: true });
+
+    expect(expandCloneSelectionInputs(input)).toEqual([{
+      source_task_id: 'root',
+      selected_descendant_ids: ['child'],
+      quantity: 2,
+      clone_without_parent: true,
+    }]);
   });
 
   it.each([['', null], ['0', null], ['-1', null], ['1.5', null], ['NaN', null],
