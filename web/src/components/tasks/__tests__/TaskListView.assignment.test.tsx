@@ -12,6 +12,8 @@ const mockUpdateTask = jest.fn();
 const mockCreateTask = jest.fn();
 const mockUseQuery = jest.fn();
 let mockLocale = 'en';
+let mockCatalogItems: typeof catalogItems;
+let mockTreeRows: Task[];
 
 jest.mock('next/navigation', () => ({ useRouter: () => ({ push: jest.fn() }) }));
 jest.mock('react-i18next', () => ({ useTranslation: () => ({ t: (key: string) => key, i18n: { language: mockLocale, resolvedLanguage: mockLocale } }) }));
@@ -77,12 +79,12 @@ const child: Task = {
   priority_order: 2, status: 'TODO', priority: 'MEDIUM', effort: 4, created_by: 'owner', child_tasks: [],
 };
 
-function makeStore() {
+function makeStore(taskRoots: Task[] = [{ ...parent, child_tasks: [{ ...child }] }]) {
   return configureStore({
     reducer: { tasks: tasksReducer, members: membersReducer },
     preloadedState: {
       tasks: {
-        tasks: [{ ...parent, child_tasks: [{ ...child }] }], loading: false, error: null,
+        tasks: taskRoots, loading: false, error: null,
         pagination: { totalItems: 1, totalPages: 1, currentPage: 1, pageSize: 20 }, filters: {},
       },
       members: { members: [] },
@@ -95,8 +97,8 @@ function TaskSource() {
   return <TaskListView tasks={tasks} />;
 }
 
-function renderList() {
-  const store = makeStore();
+function renderList(taskRoots?: Task[]) {
+  const store = makeStore(taskRoots);
   render(<Provider store={store}><TaskSource /></Provider>);
   return store;
 }
@@ -127,6 +129,8 @@ beforeEach(() => {
   mockCreateTask.mockReset();
   mockUpdateTask.mockReset();
   mockLocale = 'en';
+  mockCatalogItems = catalogItems;
+  mockTreeRows = [{ ...parent }, { ...child }];
   mockUpdateAssignee.mockImplementation(async (taskId: string, value: unknown) => ({
     ...(taskId === 'parent' ? parent : child), child_tasks: undefined, ...assignResult(taskId, value),
   }));
@@ -140,8 +144,8 @@ beforeEach(() => {
         { resource_member_id: 'unlinked-member', display_name: 'Unlinked Member', user_id: null },
       ] }, loading: false }
       : options.variables?.kind
-        ? { data: { project_catalog_items: catalogItems.filter((item) => item.kind === options.variables?.kind) }, loading: false, refetch: jest.fn() }
-        : { data: { task_tree_rows: [{ ...parent }, { ...child }] }, loading: false, refetch: jest.fn() }
+        ? { data: { project_catalog_items: mockCatalogItems.filter((item) => item.kind === options.variables?.kind) }, loading: false, refetch: jest.fn() }
+        : { data: { task_tree_rows: mockTreeRows }, loading: false, refetch: jest.fn() }
   ));
 });
 
@@ -177,6 +181,32 @@ describe('TaskListView canonical assignment source wiring', () => {
     expect(mockCreateTask).toHaveBeenCalledTimes(4);
     expect(taskFromStore(store, 'child')?.child_tasks?.filter((task) => task.task_id === 'created-two')).toHaveLength(1);
   });
+  it('uses catalog display order for the same child grouping in Normal and Excel', () => {
+    const review = { ...child, task_id: 'review-old', title: 'Review old', priority_order: 8, progressCatalogItemId: 'progress-review' };
+    const design = { ...child, task_id: 'design-old', title: 'Design old', priority_order: 2, progressCatalogItemId: 'progress-design' };
+    const designNew = { ...child, task_id: 'design-new', title: 'Design new', priority_order: 12, progressCatalogItemId: 'progress-design' };
+    const unset = { ...child, task_id: 'unset', title: 'Unset progress', priority_order: 1, progressCatalogItemId: undefined };
+    const root = { ...parent, child_tasks: [design, unset, designNew, review] };
+    mockCatalogItems = [
+      ...catalogItems.filter((item) => item.kind !== 'PROGRESS_TYPE'),
+      { ...catalogItems[0], catalog_item_id: 'progress-review', display_order: 0 },
+      { ...catalogItems[0], catalog_item_id: 'progress-design', display_order: 1 },
+    ];
+    mockTreeRows = [{ ...root, child_tasks: undefined }, design, unset, designNew, review];
+
+    renderList([root]);
+    fireEvent.click(screen.getByRole('button', { name: 'Mở rộng task con' }));
+    const normalRows = Array.from(document.querySelectorAll('tbody tr')).map((row) => row.textContent ?? '');
+    expect(['Review old', 'Design old', 'Design new', 'Unset progress'].map((title) =>
+      normalRows.findIndex((row) => row.includes(title))
+    )).toEqual([1, 2, 3, 4]);
+
+    fireEvent.click(screen.getByTestId('mode-excel-btn'));
+    const excelIds = Array.from(document.querySelectorAll('[data-field="title"]'))
+      .map((cell) => cell.getAttribute('data-task-id'));
+    expect(excelIds).toEqual(['parent', 'review-old', 'design-old', 'design-new', 'unset']);
+  });
+
   it('retains a canonical resource assignment when the query result is normalized into Redux', () => {
     const state = tasksReducer(undefined, {
       type: fetchProjectTasks.fulfilled.type,

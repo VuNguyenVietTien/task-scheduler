@@ -57,6 +57,7 @@ import { resolveProjectCatalogLabel } from '@/utils/project-catalog';
 import { filterTaskTree } from '@/utils/task-status-visibility';
 import { filterListTaskTreeByStatus } from '@/utils/task-list-visibility';
 import { taskDeletionConfirmationMessage } from '@/utils/task-deletion';
+import { orderFlatTaskChildrenByProgress, orderNestedTaskChildrenByProgress } from '@/utils/task-progress-order';
 import { InlineSubtaskRows } from './InlineSubtaskRows';
 import { buildInlineSubtaskInput, newInlineSubtaskDraft, nextSiblingPriorityOrder, upsertTaskTreeRow, type InlineSubtaskDraft } from './inline-subtask';
 import {
@@ -283,6 +284,13 @@ export function TaskListView({
       .sort((a, b) => a.display_order - b.display_order || a.catalog_item_id.localeCompare(b.catalog_item_id))
       .map((item) => ({ key: item.catalog_item_id, label: resolveProjectCatalogLabel(item, catalogLocale) }))])
   ), [catalogOptions, catalogLocale]);
+  const progressDisplayOrder = useMemo(() => new Map(
+    progressCatalogItems.map((item) => [item.catalog_item_id, item.display_order])
+  ), [progressCatalogItems]);
+  const progressGroupedTasks = useMemo(
+    () => orderNestedTaskChildrenByProgress(tasks, progressDisplayOrder),
+    [progressDisplayOrder, tasks]
+  );
   const [phaseFilter, setPhaseFilter] = useState<PhaseFilterValue>('ALL');
   const [showPhaseSettings, setShowPhaseSettings] = useState(false);
   
@@ -585,7 +593,7 @@ export function TaskListView({
 
   const displayedTasks = useMemo(() => {
     const query = filters.searchQuery?.toLowerCase();
-    const statusFiltered = filterListTaskTreeByStatus(tasks, filters.status);
+    const statusFiltered = filterListTaskTreeByStatus(progressGroupedTasks, filters.status);
     return filterTaskTree(statusFiltered, (task) => {
       if (query && !task.title.toLowerCase().includes(query) && !task.description?.toLowerCase().includes(query)) return false;
       if (filters.priority && task.priority !== filters.priority) return false;
@@ -601,7 +609,7 @@ export function TaskListView({
       const comparison = aValue < bValue ? -1 : aValue > bValue ? 1 : 0;
       return sortConfig.direction === 'asc' ? comparison : -comparison;
     });
-  }, [assigneeOptions, tasks, filters, sortConfig]);
+  }, [assigneeOptions, progressGroupedTasks, filters, sortConfig]);
 
   const effortRollups = useMemo(() => taskEffortRollups(tasks), [tasks]);
 
@@ -641,9 +649,10 @@ export function TaskListView({
           depths.set(row.task_id, (depths.get(parent) ?? 0) + 1);
         }
       }
-      return rows
+      const projected = rows
         .filter((row) => included.has(row.task_id))
         .map((row) => ({ ...row, ...excelPatches[row.task_id], ...assignmentPatches[row.task_id], excelDepth: depths.get(row.task_id) ?? 0 }));
+      return orderFlatTaskChildrenByProgress(projected, progressDisplayOrder);
     }
 
     const flattened: Array<Task & { excelDepth?: number }> = [];
@@ -655,8 +664,8 @@ export function TaskListView({
       task.child_tasks?.forEach((child) => visit(child, excelDepth + 1));
     };
     displayedTasks.forEach((task) => visit(task, 0));
-    return flattened;
-  }, [displayedTasks, taskTreeRowsQ.data?.task_tree_rows, assignmentPatches, excelPatches]);
+    return orderFlatTaskChildrenByProgress(flattened, progressDisplayOrder);
+  }, [displayedTasks, taskTreeRowsQ.data?.task_tree_rows, assignmentPatches, excelPatches, progressDisplayOrder]);
 
   // Increment 1: gán phase cho task qua set_task_taxonomy (NULL = Unphased)
   const handleSetTaskPhase = useCallback(async (taskId: string, phaseId: string | null) => {
