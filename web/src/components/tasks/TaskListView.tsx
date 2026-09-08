@@ -43,7 +43,7 @@ import {
   type PhaseFilterValue,
 } from '@/components/projects/phase-controls';
 import { PhaseSettingsPanel } from '@/components/projects/PhaseSettingsPanel';
-import { TaskExcelGrid, type ExcelCatalogField, type StagedEdit } from './TaskExcelGrid';
+import { TaskExcelGrid, taskEffortRollups, type ExcelCatalogField, type StagedEdit } from './TaskExcelGrid';
 import { TaskCloneDialog } from './TaskCloneDialog';
 import { useMutation, useQuery } from '@apollo/client';
 import { CLONE_TASK_SUBTREE } from '@/graphql/mutations';
@@ -623,6 +623,8 @@ export function TaskListView({
     });
   }, [tasks, filters, sortConfig]);
 
+  const effortRollups = useMemo(() => taskEffortRollups(tasks), [tasks]);
+
   const hiddenNormalColumnIndexes = useMemo(() => {
     const positions: Array<[TaskListColumnId, number]> = [
       ['title', 2], ['status', 3], ['priority', 4], ['progressType', 5], ['category', 6],
@@ -736,6 +738,42 @@ export function TaskListView({
       </button>
     </div>;
   }
+
+  const renderEffort = (task: Task) => {
+    const rollup = effortRollups.get(task.task_id);
+    if (rollup !== undefined) {
+      return <span data-testid={`task-effort-${task.task_id}`} title="Sum of descendant leaf effort">{rollup}h</span>;
+    }
+    if (editingCell?.taskId === task.task_id && editingCell.field === 'effort') {
+      return <div className="relative flex items-center">
+        <div className="w-20 min-w-20 max-w-20">
+          <input
+            type="number"
+            min="0"
+            step="0.5"
+            value={editValue}
+            onChange={(event) => setEditValue(event.target.value)}
+            className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
+            autoFocus
+            aria-label="Công sức"
+            title="Nhập số giờ công sức"
+            placeholder="Nhập số giờ"
+          />
+        </div>
+        <div className="flex ml-2">
+          <button onClick={(event) => { event.stopPropagation(); void handleSaveEditing(task.task_id, 'effort'); }} className="text-green-600 hover:text-green-800 mr-1" title="Lưu">✓</button>
+          <button onClick={(event) => { event.stopPropagation(); handleCancelEditing(); }} className="text-red-600 hover:text-red-800" title="Hủy">×</button>
+        </div>
+      </div>;
+    }
+    return <span
+      data-testid={`task-effort-${task.task_id}`}
+      className="cursor-pointer hover:text-blue-600 hover:underline"
+      onClick={(event) => { event.stopPropagation(); handleStartEditing(task.task_id, 'effort', task.effort ?? ''); }}
+    >
+      {task.effort != null ? `${task.effort}h` : '-'}
+    </span>;
+  };
 
   const renderSupplementalCells = (task: Task) => {
     const date = (value?: string) => value ? new Date(value).toLocaleDateString() : '-';
@@ -959,51 +997,7 @@ export function TaskListView({
             )}
           </td>
           <td className="px-3 py-4 text-sm text-slate-500">
-            {editingCell?.taskId === childTask.task_id && editingCell?.field === 'effort' ? (
-              <div className="relative flex items-center">
-                <div className="w-20 min-w-20 max-w-20">
-                  <input
-                    type="number"
-                    min="0"
-                    step="0.5"
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
-                    autoFocus
-                    aria-label="Công sức"
-                    title="Nhập số giờ công sức"
-                    placeholder="Nhập số giờ"
-                  />
-                </div>
-                <div className="flex ml-2">
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleSaveEditing(childTask.task_id, 'effort'); }}
-                    className="text-green-600 hover:text-green-800 mr-1" 
-                    title="Lưu"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  </button>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
-                    className="text-red-600 hover:text-red-800" 
-                    title="Hủy"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <span 
-                className="cursor-pointer hover:text-blue-600 hover:underline"
-                onClick={(e) => { e.stopPropagation(); handleStartEditing(childTask.task_id, 'effort', childTask.effort || ''); }}
-              >
-                {childTask.effort ? `${childTask.effort}h` : '-'}
-              </span>
-            )}
+            {renderEffort(childTask)}
           </td>
           <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
             <button type="button" className="text-blue-600 hover:text-blue-800 mr-2" aria-label={`Add subtask to ${childTask.title}`} onClick={(event) => { event.stopPropagation(); addInlineSubtask(childTask.task_id); }}>+</button>
@@ -1980,51 +1974,7 @@ export function TaskListView({
                       )}
                     </td>
                     <td className="px-3 py-4 text-sm text-slate-500">
-                      {editingCell?.taskId === task.task_id && editingCell?.field === 'effort' ? (
-                        <div className="relative flex items-center">
-                          <div className="w-20 min-w-20 max-w-20">
-                            <input
-                              type="number"
-                              min="0"
-                              step="0.5"
-                              value={editValue}
-                              onChange={(e) => setEditValue(e.target.value)}
-                              className="w-full text-sm rounded border-slate-300 focus:ring-blue-500 focus:border-blue-500"
-                              autoFocus
-                              aria-label="Công sức"
-                              title="Nhập số giờ công sức"
-                              placeholder="Nhập số giờ"
-                            />
-                          </div>
-                          <div className="flex ml-2">
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleSaveEditing(task.task_id, 'effort'); }}
-                              className="text-green-600 hover:text-green-800 mr-1" 
-                              title="Lưu"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                              </svg>
-                            </button>
-                            <button 
-                              onClick={(e) => { e.stopPropagation(); handleCancelEditing(); }}
-                              className="text-red-600 hover:text-red-800" 
-                              title="Hủy"
-                            >
-                              <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-                        </div>
-                      ) : (
-                        <span 
-                          className="cursor-pointer hover:text-blue-600 hover:underline"
-                          onClick={(e) => { e.stopPropagation(); handleStartEditing(task.task_id, 'effort', task.effort || ''); }}
-                        >
-                          {task.effort ? `${task.effort}h` : '-'}
-                        </span>
-                      )}
+                      {renderEffort(task)}
                     </td>
                     <td className="relative py-4 pl-3 pr-4 text-right text-sm font-medium sm:pr-6">
                       <button type="button" className="text-blue-600 hover:text-blue-800 mr-2" aria-label={`Add subtask to ${task.title}`} onClick={(event) => { event.stopPropagation(); addInlineSubtask(task.task_id); }}>+</button>

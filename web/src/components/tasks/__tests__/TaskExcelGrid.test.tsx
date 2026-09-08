@@ -20,7 +20,7 @@ function copyEvent(setData: jest.Mock) {
   return ev;
 }
 import '@testing-library/jest-dom';
-import { TaskExcelGrid, validateCellValue, parseTsv } from '../TaskExcelGrid';
+import { TaskExcelGrid, validateCellValue, parseTsv, taskEffortRollups } from '../TaskExcelGrid';
 import type { Task } from '@/types/task';
 
 const task = (id: string, title: string, effort?: number): Task =>
@@ -68,6 +68,17 @@ describe('parseTsv', () => {
       ['a', 'b'],
       ['c', 'd'],
     ]);
+  });
+});
+
+describe('taskEffortRollups', () => {
+  it('sums descendant leaves once and ignores nested parent effort', () => {
+    const leafA = task('leaf-a', 'Leaf A', 3);
+    const leafB = task('leaf-b', 'Leaf B', 4);
+    const branch = { ...task('branch', 'Branch', 50), child_tasks: [leafA] };
+    const root = { ...task('root', 'Root', 100), child_tasks: [branch, leafB] };
+
+    expect(Object.fromEntries(taskEffortRollups([root]))).toEqual({ branch: 3, root: 7 });
   });
 });
 
@@ -129,17 +140,19 @@ describe('TaskExcelGrid interactions', () => {
     outside.remove();
   });
 
-  it('opens obvious native number and date editors without saving until bulk Save', async () => {
+  it('single-click only selects; double-click opens native number and date editors without saving', async () => {
     const user = userEvent.setup();
     const onSaveEdit = jest.fn().mockResolvedValue(undefined);
     renderGrid(onSaveEdit);
 
     await user.click(screen.getByTestId('excel-cell-0-3'));
+    expect(screen.queryByRole('spinbutton', { name: 'Excel effort' })).not.toBeInTheDocument();
+    await user.dblClick(screen.getByTestId('excel-cell-0-3'));
     const effort = screen.getByRole('spinbutton', { name: 'Excel effort' });
     fireEvent.change(effort, { target: { value: '6.5' } });
     expect(onSaveEdit).not.toHaveBeenCalled();
 
-    await user.click(screen.getByTestId('excel-cell-0-4'));
+    await user.dblClick(screen.getByTestId('excel-cell-0-4'));
     fireEvent.change(screen.getByLabelText('Excel due date'), { target: { value: '2026-09-09' } });
     expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('2 unsaved');
     expect(onSaveEdit).not.toHaveBeenCalled();
@@ -150,7 +163,7 @@ describe('TaskExcelGrid interactions', () => {
     const onSaveEdit = jest.fn().mockResolvedValue(undefined);
     renderGrid(onSaveEdit);
 
-    await user.click(screen.getByTestId('excel-cell-0-3'));
+    await user.dblClick(screen.getByTestId('excel-cell-0-3'));
     const firstEffort = screen.getByRole('spinbutton', { name: 'Excel effort' });
     fireEvent.change(firstEffort, { target: { value: '' } });
     fireEvent.keyDown(firstEffort, { key: 'ArrowDown' });
@@ -166,14 +179,16 @@ describe('TaskExcelGrid interactions', () => {
     expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't2', field: 'effort', value: '7' });
   });
 
-  it('single-click catalog selector stages its stable ID and supports clearing', async () => {
+  it('double-click catalog selector stages its stable ID and supports clearing', async () => {
     const user = userEvent.setup();
     const onSaveEdit = jest.fn().mockResolvedValue(undefined);
     render(<TaskExcelGrid tasks={[tasks[0], { ...tasks[1], progressCatalogItemId: 'progress-create' }]} onSaveEdit={onSaveEdit} catalogOptions={catalogOptions} catalogValue={(task) => task.progressCatalogItemId ?? ''} />);
 
     await user.click(screen.getByTestId('excel-cell-0-6'));
+    expect(screen.queryByRole('combobox', { name: 'Excel Progress type' })).not.toBeInTheDocument();
+    await user.dblClick(screen.getByTestId('excel-cell-0-6'));
     await user.selectOptions(screen.getByRole('combobox', { name: 'Excel Progress type' }), 'progress-create');
-    await user.click(screen.getByTestId('excel-cell-1-6'));
+    await user.dblClick(screen.getByTestId('excel-cell-1-6'));
     await user.selectOptions(screen.getByRole('combobox', { name: 'Excel Progress type' }), '');
     expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('2 unsaved');
     fireEvent.click(screen.getByTestId('excel-save-btn'));
@@ -181,7 +196,28 @@ describe('TaskExcelGrid interactions', () => {
     expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't2', field: 'progressType', value: '' });
   });
 
-  it('single-click Assignee opens canonical member choices and stages the selected unlinked member', async () => {
+  it('double-click status and priority dropdowns stage validated values until Save', async () => {
+    const user = userEvent.setup();
+    const onSaveEdit = jest.fn().mockResolvedValue(undefined);
+    renderGrid(onSaveEdit);
+
+    await user.click(screen.getByTestId('excel-cell-0-1'));
+    expect(screen.queryByRole('combobox', { name: 'Excel Status' })).not.toBeInTheDocument();
+    await user.dblClick(screen.getByTestId('excel-cell-0-1'));
+    const status = screen.getByRole('combobox', { name: 'Excel Status' });
+    expect(status).not.toHaveTextContent('REJECTED');
+    await user.selectOptions(status, 'DOING');
+    await user.dblClick(screen.getByTestId('excel-cell-0-2'));
+    await user.selectOptions(screen.getByRole('combobox', { name: 'Excel Priority' }), 'HIGH');
+
+    expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('2 unsaved');
+    expect(onSaveEdit).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('excel-save-btn'));
+    await waitFor(() => expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'status', value: 'DOING' }));
+    expect(onSaveEdit).toHaveBeenCalledWith({ taskId: 't1', field: 'priority', value: 'HIGH' });
+  });
+
+  it('double-click Assignee opens canonical member choices and stages the selected unlinked member', async () => {
     const user = userEvent.setup();
     const onSaveEdit = jest.fn().mockResolvedValue(undefined);
     render(<TaskExcelGrid
@@ -190,7 +226,7 @@ describe('TaskExcelGrid interactions', () => {
       assigneeOptions={[{ key: 'resource:linked', label: 'Linked Member' }, { key: 'resource:unlinked', label: 'Unlinked Member' }]}
     />);
 
-    await user.click(screen.getByTestId('excel-cell-0-5'));
+    await user.dblClick(screen.getByTestId('excel-cell-0-5'));
     const assignee = screen.getByRole('combobox', { name: 'Excel assignee' });
     expect(assignee).toHaveTextContent('Linked Member');
     expect(assignee).toHaveTextContent('Unlinked Member');
@@ -207,6 +243,26 @@ describe('TaskExcelGrid interactions', () => {
     const setData = jest.fn();
     fireEvent(screen.getByTestId('excel-typing-input'), copyEvent(setData));
     expect(setData).toHaveBeenCalledWith('text/plain', 'Alpha\tTODO\tMEDIUM\r\nBeta\tTODO\tMEDIUM');
+  });
+
+  it('broadcasts a single clipboard cell across the selected rectangle', () => {
+    renderGrid();
+    fireEvent.mouseDown(screen.getByTestId('excel-cell-0-1'));
+    fireEvent.mouseOver(screen.getByTestId('excel-cell-1-1'));
+    fireEvent(screen.getByTestId('excel-typing-input'), pasteEvent('doing'));
+
+    expect(screen.getByTestId('excel-cell-0-1')).toHaveTextContent('DOING');
+    expect(screen.getByTestId('excel-cell-1-1')).toHaveTextContent('DOING');
+    expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('2 unsaved');
+  });
+
+  it('reports read-only paste targets without staging or corrupting them', () => {
+    renderGrid();
+    fireEvent.mouseDown(screen.getByTestId('excel-cell-0-14'));
+    fireEvent(screen.getByTestId('excel-typing-input'), pasteEvent('changed'));
+
+    expect(screen.getByTestId('excel-errors')).toHaveTextContent('Created is read-only');
+    expect(screen.queryByTestId('excel-dirty-count')).not.toBeInTheDocument();
   });
 
   it('TSV paste stages a block anchored at the selected cell, clipping overflow', () => {
@@ -242,7 +298,7 @@ describe('TaskExcelGrid interactions', () => {
     expect(table).toHaveStyle({ tableLayout: 'fixed' });
     const widthsBefore = Array.from(table.querySelectorAll('col')).map((col) => col.getAttribute('style'));
 
-    await user.click(screen.getByTestId('excel-cell-0-3'));
+    await user.dblClick(screen.getByTestId('excel-cell-0-3'));
     expect(screen.getByRole('spinbutton', { name: 'Excel effort' })).toBeInTheDocument();
     expect(Array.from(table.querySelectorAll('col')).map((col) => col.getAttribute('style'))).toEqual(widthsBefore);
   });
@@ -328,6 +384,29 @@ describe('TaskExcelGrid interactions', () => {
     expect(screen.getByTestId('excel-dirty-count').textContent).toBe('1 unsaved');
   });
 
+  it('shows parent leaf totals as read-only and updates them from staged child effort', () => {
+    const rows = [
+      { ...task('root', 'Root', 99), parent_task_id: undefined },
+      { ...task('branch', 'Branch', 50), parent_task_id: 'root' },
+      { ...task('leaf-a', 'Leaf A', 3), parent_task_id: 'branch' },
+      { ...task('leaf-b', 'Leaf B', 4), parent_task_id: 'root' },
+    ];
+    render(<TaskExcelGrid tasks={rows} onSaveEdit={jest.fn()} />);
+
+    expect(screen.getByTestId('excel-cell-0-3')).toHaveTextContent('7');
+    expect(screen.getByTestId('excel-cell-1-3')).toHaveTextContent('3');
+    expect(screen.getByTestId('excel-cell-0-3')).toHaveAttribute('aria-readonly', 'true');
+    fireEvent.doubleClick(screen.getByTestId('excel-cell-0-3'));
+    expect(screen.queryByRole('spinbutton', { name: 'Excel effort' })).not.toBeInTheDocument();
+
+    fireEvent.mouseDown(screen.getByTestId('excel-cell-2-3'));
+    fireEvent.change(screen.getByTestId('excel-typing-input'), { target: { value: '8' } });
+    fireEvent.keyDown(screen.getByTestId('excel-typing-input'), { key: 'Enter' });
+    expect(screen.getByTestId('excel-cell-1-3')).toHaveTextContent('8');
+    expect(screen.getByTestId('excel-cell-0-3')).toHaveTextContent('12');
+    expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('1 unsaved');
+  });
+
   it('keeps descendant task ids and stages edits on the descendant row', async () => {
     const child = { ...task('child', 'Child'), excelDepth: 1 };
     const onSaveEdit = jest.fn().mockResolvedValue(undefined);
@@ -365,7 +444,7 @@ describe('TaskExcelGrid interactions', () => {
 
     rerender(<TaskExcelGrid tasks={[{ ...tasks[0], start_date: '2026-09-09' }]} onSaveEdit={onSaveEdit} visibleColumns={['plannedStart']} />);
     expect(screen.getByTestId('excel-dirty-count')).toHaveTextContent('1 unsaved');
-    await userEvent.click(screen.getByTestId('excel-cell-0-0'));
+    await userEvent.dblClick(screen.getByTestId('excel-cell-0-0'));
     fireEvent.change(screen.getByLabelText('Excel start date'), { target: { value: '' } });
     fireEvent.click(screen.getByTestId('excel-save-btn'));
 

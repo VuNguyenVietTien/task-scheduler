@@ -165,6 +165,50 @@ export function parseTsv(text: string): string[][] {
     .map((line) => line.split('\t'));
 }
 
+/** Parent effort is display-only: sum descendant leaves, never parent summaries. */
+export function taskEffortRollups(
+  tasks: readonly Task[],
+  effortFor: (task: Task) => number | undefined = (task) => task.effort
+): Map<string, number> {
+  const byId = new Map<string, Task>();
+  const children = new Map<string, Set<string>>();
+  const expanded = new Set<string>();
+  const collect = (task: Task, nestedParent?: string) => {
+    byId.set(task.task_id, task);
+    const parentId = task.parent_task_id ?? nestedParent;
+    if (parentId) {
+      const ids = children.get(parentId) ?? new Set<string>();
+      ids.add(task.task_id);
+      children.set(parentId, ids);
+    }
+    if (!task.child_tasks?.length || expanded.has(task.task_id)) return;
+    expanded.add(task.task_id);
+    task.child_tasks.forEach((child) => collect(child, task.task_id));
+  };
+  tasks.forEach((task) => collect(task));
+
+  const totals = new Map<string, number>();
+  const memo = new Map<string, number>();
+  const sum = (taskId: string, visiting: Set<string>): number => {
+    if (memo.has(taskId)) return memo.get(taskId)!;
+    if (visiting.has(taskId)) return 0;
+    const childIds = children.get(taskId);
+    if (!childIds?.size) {
+      const effort = byId.has(taskId) ? effortFor(byId.get(taskId)!) : undefined;
+      return typeof effort === 'number' && Number.isFinite(effort) ? effort : 0;
+    }
+    visiting.add(taskId);
+    const total = Array.from(childIds).reduce((value, childId) => value + sum(childId, visiting), 0);
+    visiting.delete(taskId);
+    memo.set(taskId, total);
+    return total;
+  };
+  children.forEach((_childIds, taskId) => {
+    if (byId.has(taskId)) totals.set(taskId, sum(taskId, new Set()));
+  });
+  return totals;
+}
+
 export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOptions = [], assigneeValue, catalogLabel, catalogOptions = {}, catalogValue, active = true, onCloneTask, onDeleteTask, onAddSubtask, renderSubtaskRows, onDirtyChange, visibleColumns }: Props) {
   const columns = useMemo(() => visibleColumns ? COLUMNS.filter((column) => visibleColumns.includes(column.id)) : COLUMNS, [visibleColumns]);
   const [staged, setStaged] = useState<Map<string, StagedEdit>>(new Map());
@@ -181,6 +225,10 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
 
   const keyFor = (taskId: string, field: ExcelEditableField) => `${taskId}:${field}`;
   const focusTypingInput = useCallback(() => typingInputRef.current?.focus({ preventScroll: true }), []);
+  const effortRollups = useMemo(() => taskEffortRollups(tasks, (task) => {
+    const edit = staged.get(keyFor(task.task_id, 'effort'));
+    return edit ? Number(edit.value || 0) : task.effort;
+  }), [staged, tasks]);
 
   useEffect(() => {
     if (active) focusTypingInput();
@@ -221,8 +269,10 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
           return task.status ?? '';
         case 'priority':
           return task.priority ?? '';
-        case 'effort':
-          return task.effort !== undefined && task.effort !== null ? String(task.effort) : '';
+        case 'effort': {
+          const rollup = effortRollups.get(task.task_id);
+          return rollup !== undefined ? String(rollup) : task.effort !== undefined && task.effort !== null ? String(task.effort) : '';
+        }
         case 'progress':
           return task.progress !== undefined && task.progress !== null ? String(task.progress) : '';
         case 'start_date':
@@ -236,7 +286,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
           return assigneeLabel?.(task) ?? task.assignee?.username ?? '';
       }
     },
-    [assigneeLabel, assigneeOptions, catalogLabel, catalogOptions, staged]
+    [assigneeLabel, assigneeOptions, catalogLabel, catalogOptions, effortRollups, staged]
   );
 
   const inSelection = useCallback(
@@ -257,7 +307,9 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
       const task = tasks[row];
       const column = columns[col];
       const field = column?.field ?? column?.catalogField;
-      if (!task || !field) return null;
+      if (!task || !column) return null;
+      if (!field) return `${column.label} is read-only`;
+      if (column.field === 'effort' && effortRollups.has(task.task_id)) return 'Parent effort is a read-only leaf total';
       let value: string;
       if (column.catalogField) {
         const rawValue = raw.trim();
@@ -280,7 +332,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
       });
       return null;
     },
-    [catalogOptions, columns, tasks]
+    [catalogOptions, columns, effortRollups, tasks]
   );
 
   const handleMouseDown = (row: number, col: number) => {
@@ -386,6 +438,11 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
     if (!text) return;
     e.preventDefault();
     const rows = parseTsv(text);
+    const other = focusCell ?? anchor;
+    if (rows.length === 1 && rows[0]?.length === 1 && (other.row !== anchor.row || other.col !== anchor.col)) {
+      stageSelection(rows[0][0]);
+      return;
+    }
     const cellErrors: string[] = [];
     let applied = 0;
     rows.forEach((cells, dr) => {
@@ -563,13 +620,26 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
               <td className="border border-slate-200 px-2 py-1 text-slate-400">{row + 1}</td>
               {columns.map((col, c) => {
                 const selected = inSelection(row, c);
-                const editableField = col.field ?? col.catalogField;
+                const columnField = col.field ?? col.catalogField;
+                const isDerivedEffort = col.field === 'effort' && effortRollups.has(task.task_id);
+                const editableField = isDerivedEffort ? undefined : columnField;
                 const isStaged = Boolean(editableField && staged.has(keyFor(task.task_id, editableField)));
-                const isTypingCell = selected && typing !== '';
+                const isTypingCell = Boolean(editableField && selected && typing !== '');
                 const isSelectionEditor = selectionEditor?.row === row && selectionEditor.col === c;
                 const isNumber = col.field === 'effort' || col.field === 'progress';
                 const isDate = col.field === 'start_date' || col.field === 'due_date' || col.field === 'actual_start_date' || col.field === 'actual_end_date';
+                const isSelect = Boolean(col.catalogField || col.field === 'assignee' || col.field === 'status' || col.field === 'priority');
                 const value = cellValue(task, col);
+                const editorValue = editableField
+                  ? staged.get(keyFor(task.task_id, editableField))?.value
+                    ?? (col.catalogField ? catalogValue?.(task, col.catalogField) : col.field === 'assignee' ? assigneeValue?.(task) : value)
+                    ?? ''
+                  : '';
+                const selectOptions = col.catalogField ? catalogOptions[col.catalogField] ?? []
+                  : col.field === 'assignee' ? assigneeOptions
+                    : col.field === 'status' ? VALID_STATUSES.map((option) => ({ key: option, label: option }))
+                      : col.field === 'priority' ? VALID_PRIORITIES.map((option) => ({ key: option, label: option }))
+                        : [];
                 return (
                   <td
                     key={col.id}
@@ -582,25 +652,24 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                       handleMouseDown(row, c);
                     }}
                     onMouseOver={() => handleMouseOver(row, c)}
-                    onClick={() => {
-                      if (col.field === 'assignee' || isNumber || isDate || col.catalogField) {
-                        setSelectionEditor({ row, col: c });
-                      }
+                    onDoubleClick={() => {
+                      if (editableField) setSelectionEditor({ row, col: c });
                     }}
-                    onDoubleClick={focusTypingInput}
                     data-testid={`excel-cell-${row}-${c}`}
                     data-task-id={task.task_id}
-                    data-field={col.field ?? col.catalogField}
+                    data-field={columnField}
+                    aria-readonly={!editableField}
+                    title={isDerivedEffort ? 'Sum of descendant leaf effort' : undefined}
                   >
-                    {isSelectionEditor && (isNumber || isDate) ? (
+                    {isSelectionEditor && !isSelect ? (
                       <input
-                        type={isNumber ? 'number' : 'date'}
+                        type={isNumber ? 'number' : isDate ? 'date' : 'text'}
                         aria-label={col.field === 'effort' ? 'Excel effort' : col.field === 'due_date' ? 'Excel due date' : `Excel ${col.label.toLowerCase()}`}
                         autoFocus
                         min={isNumber ? 0 : undefined}
                         max={col.field === 'progress' ? 100 : undefined}
                         step={col.field === 'effort' ? 0.5 : undefined}
-                        value={value}
+                        value={editorValue}
                         onMouseDown={(event) => event.stopPropagation()}
                         onPaste={handlePaste}
                         onChange={(event) => {
@@ -608,7 +677,16 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                           setErrors(error ? [`Row ${row + 1} ${col.label}: ${error}`] : []);
                         }}
                         onKeyDown={(event) => {
-                          if (!['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter'].includes(event.key)) return;
+                          if (event.key === 'Escape') {
+                            event.preventDefault();
+                            setSelectionEditor(null);
+                            focusTypingInput();
+                            return;
+                          }
+                          const navigationKeys = isNumber || isDate
+                            ? ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Enter']
+                            : ['Enter'];
+                          if (!navigationKeys.includes(event.key)) return;
                           event.preventDefault();
                           const error = stageCell(row, c, event.currentTarget.value);
                           setErrors(error ? [`Row ${row + 1} ${col.label}: ${error}`] : []);
@@ -624,7 +702,7 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                       <select
                         aria-label={col.field === 'assignee' ? 'Excel assignee' : `Excel ${col.label}`}
                         autoFocus
-                        value={staged.get(keyFor(task.task_id, editableField))?.value ?? (col.catalogField ? catalogValue?.(task, col.catalogField) : assigneeValue?.(task)) ?? ''}
+                        value={editorValue}
                         onMouseDown={(e) => e.stopPropagation()}
                         onChange={(e) => {
                           const error = stageCell(row, c, e.target.value);
@@ -632,9 +710,15 @@ export function TaskExcelGrid({ tasks, onSaveEdit, assigneeLabel, assigneeOption
                           setSelectionEditor(null);
                           focusTypingInput();
                         }}
+                        onKeyDown={(event) => {
+                          if (event.key !== 'Escape') return;
+                          event.preventDefault();
+                          setSelectionEditor(null);
+                          focusTypingInput();
+                        }}
                       >
-                        <option value="">{col.field === 'assignee' ? 'Not assigned' : 'Not set'}</option>
-                        {(col.catalogField ? catalogOptions[col.catalogField] ?? [] : assigneeOptions).map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
+                        {(col.catalogField || col.field === 'assignee') && <option value="">{col.field === 'assignee' ? 'Not assigned' : 'Not set'}</option>}
+                        {selectOptions.map((option) => <option key={option.key} value={option.key}>{option.label}</option>)}
                       </select>
                     ) : isTypingCell ? typing : col.field === 'title' ? (
                       <span style={{ paddingLeft: `${(task.excelDepth ?? 0) * 16}px` }}>
