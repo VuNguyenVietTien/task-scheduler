@@ -46,8 +46,7 @@ jest.mock('../../tasks/TaskDetail', () => ({
     isOpen ? <div data-testid="task-detail-modal" role="dialog" /> : null,
 }));
 
-// Parent with two children; 10h effort on the parent exercises the 8h+2h
-// per-day split (default weekday capacity 8h, weekend 0h).
+// Parent effort is stored but ignored: its two executable children own 6h.
 // 2026-09-07 = Monday, 2026-09-08 = Tuesday.
 const tasks: Task[] = [
   {
@@ -129,8 +128,9 @@ describe('Gantt task-name column — hierarchy & collapse (requirement 1)', () =
     expect(Number(childARow!.dataset.depth)).toBeGreaterThan(Number(rootRow!.dataset.depth));
     expect(Number(childBRow!.dataset.depth)).toBe(1);
 
-    // Only the parent has an expand/collapse toggle.
+    // Only the parent has an expand/collapse toggle and its effort is derived.
     expect(rootRow!.querySelector('[data-testid="gantt-row-toggle"]')).not.toBeNull();
+    expect(rootRow!.querySelector('[data-testid="gantt-summary-effort"]')).toHaveTextContent('6h');
     expect(childARow!.querySelector('[data-testid="gantt-row-toggle"]')).toBeNull();
 
     // Children render below the parent (row order preserved).
@@ -163,21 +163,16 @@ describe('Gantt task-name column — hierarchy & collapse (requirement 1)', () =
 });
 
 describe('Per-day scheduled hours on task bars (requirement 5)', () => {
-  it('effort 10h renders 8h + 2h day segments; zero-hour days are blank', async () => {
+  it('summary renders combined child hours; parent effort and zero-hour days are ignored', async () => {
     renderTimeline();
     await screen.findByTestId('gantt-name-column');
 
     const segments = await screen.findAllByTestId('task-day-segment');
     const rootSegments = segments.filter((s) => s.dataset.taskId === 't-root');
-    // 10h effort starting Monday 2026-09-07 → Mon 8h + Tue 2h
     const hours = rootSegments.map((s) => Number(s.dataset.hours));
-    expect(hours).toContain(8);
-    expect(hours).toContain(2);
-    const total = hours.reduce((a, b) => a + b, 0);
-    expect(total).toBe(10);
-
-    // Segment labels show the per-day hours ("8h", "2h")
-    expect(rootSegments.map((s) => s.textContent)).toEqual(expect.arrayContaining(['8h', '2h']));
+    expect(hours).toEqual([4, 2]);
+    expect(hours.reduce((a, b) => a + b, 0)).toBe(6);
+    expect(rootSegments.map((s) => s.textContent)).toEqual(['4h', '2h']);
 
     // Zero-hour days (weekend default 2026-09-12/13 Sat/Sun) get no segments
     const segmentDates = segments.map((s) => s.dataset.date);
@@ -187,29 +182,24 @@ describe('Per-day scheduled hours on task bars (requirement 5)', () => {
 
   it('renders saved/discontinuous hours only: a leave-like mid-task zero stays empty', async () => {
     renderTimeline({
-      't-root': {
-        start: '2026-09-07',
-        end: '2026-09-10',
-        hoursPerDay: { '2026-09-07': 8, '2026-09-09': 2 },
-      },
+      't-root': { start: '2026-09-08', end: '2026-09-08', hoursPerDay: { '2026-09-08': 99 } },
+      't-child-a': { start: '2026-09-07', end: '2026-09-09', hoursPerDay: { '2026-09-07': 8, '2026-09-09': 2 } },
+      't-child-b': { start: '2026-09-09', end: '2026-09-09', hoursPerDay: { '2026-09-09': 3 } },
     });
     await screen.findByTestId('gantt-name-column');
 
     const rootSegments = (await screen.findAllByTestId('task-day-segment'))
       .filter((segment) => segment.dataset.taskId === 't-root');
     expect(rootSegments.map((segment) => segment.dataset.date)).toEqual(['2026-09-07', '2026-09-09']);
-    expect(rootSegments.map((segment) => segment.textContent)).toEqual(['8h', '2h']);
+    expect(rootSegments.map((segment) => segment.textContent)).toEqual(['8h', '5h']);
+    expect(rootSegments.map((segment) => segment.dataset.date)).not.toContain('2026-09-08');
     expect(screen.queryByTestId('legacy-continuous-task-bar')).not.toBeInTheDocument();
   });
 
   it('keeps weekend gaps and does not fall back when an allocation is empty', async () => {
     renderTimeline({
-      't-root': {
-        start: '2026-09-11',
-        end: '2026-09-14',
-        hoursPerDay: { '2026-09-11': 8, '2026-09-14': 2 },
-      },
-      't-child-a': { start: '2026-09-09', end: '2026-09-09', hoursPerDay: {} },
+      't-child-a': { start: '2026-09-11', end: '2026-09-14', hoursPerDay: { '2026-09-11': 8, '2026-09-14': 2 } },
+      't-child-b': { start: '2026-09-09', end: '2026-09-09', hoursPerDay: {} },
     });
     await screen.findByTestId('gantt-name-column');
 
@@ -218,7 +208,7 @@ describe('Per-day scheduled hours on task bars (requirement 5)', () => {
     expect(rootDates).toEqual(['2026-09-11']);
     expect(rootDates).not.toContain('2026-09-12');
     expect(rootDates).not.toContain('2026-09-13');
-    expect(segments.filter((segment) => segment.dataset.taskId === 't-child-a')).toHaveLength(0);
+    expect(segments.filter((segment) => segment.dataset.taskId === 't-child-b')).toHaveLength(0);
     expect(screen.queryByTestId('legacy-continuous-task-bar')).not.toBeInTheDocument();
   });
 });

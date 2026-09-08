@@ -9,6 +9,7 @@ import { MemberDailyEffortMatrix } from '@/components/timeline/MemberDailyEffort
 import { usePlanLifecycle } from '@/hooks/usePlanLifecycle';
 import {
   buildGanttTaskRows,
+  buildGanttTaskSummaries,
   reorderGanttSiblingTaskIds,
   sortGanttSiblingTaskIds,
 } from '@/utils/ganttRows';
@@ -117,6 +118,7 @@ interface SortableGanttTaskRowProps {
   startLabel: string;
   endLabel: string;
   assigneeName?: string;
+  summaryEffort?: number;
   onToggle: (key: string) => void;
   onTaskClick: (taskId: string) => void;
   draggable: boolean;
@@ -131,6 +133,7 @@ function SortableGanttTaskRow({
   startLabel,
   endLabel,
   assigneeName,
+  summaryEffort,
   onToggle,
   onTaskClick,
   draggable,
@@ -183,10 +186,13 @@ function SortableGanttTaskRow({
         <button
           type="button"
           className="truncate block w-full text-left text-xs text-slate-700"
-          title={row.task.title}
+          title={summaryEffort === undefined ? row.task.title : `${row.task.title} — ${summaryEffort}h`}
           onClick={() => onTaskClick(row.task.task_id)}
         >
           {row.task.title}
+          {summaryEffort !== undefined && (
+            <span className="ml-1 text-slate-500" data-testid="gantt-summary-effort">· {Math.round(summaryEffort * 10) / 10}h</span>
+          )}
         </button>
         {assigneeName && <span className="block truncate text-[0.65rem] text-slate-500">{assigneeName}</span>}
       </div>
@@ -789,25 +795,29 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
       { start: new Date(bar.start), end: new Date(bar.end), hoursPerDay: bar.hoursPerDay },
     ])) as Record<string, TaskAllocation>;
   }, [displayedBarsOverride, taskAllocationResult.allocations]);
+  const taskSummaries = useMemo(() => buildGanttTaskSummaries(
+    selectedPlanTasks,
+    Object.fromEntries(Object.entries(taskAllocations).map(([taskId, allocation]) => [taskId, allocation.hoursPerDay]))
+  ), [selectedPlanTasks, taskAllocations]);
 
   // Master consumes direct selected-plan task allocations only. In particular,
   // snapshot contextTasks remain WBS display metadata and never enter this sum.
   const masterAllocationInputs = useMemo<MasterPhaseAllocation[]>(() => {
     if (selectedSnapshot) {
       const allocationKnown = selectedSnapshot.meta.legacyHoursMissing !== true;
-      return selectedSnapshot.tasks.map((task) => ({
+      return selectedSnapshot.tasks.filter((task) => !taskSummaries.has(task.taskId)).map((task) => ({
         taskId: task.taskId,
         progressCatalogItemId: task.progressCatalogItemId,
         hoursPerDay: taskAllocations[task.taskId]?.hoursPerDay ?? task.hoursPerDay,
         allocationKnown,
       }));
     }
-    return planLifecycleScheduling.tasks.map((task) => ({
+    return planLifecycleScheduling.tasks.filter((task) => !taskSummaries.has(task.task_id || task.id || '')).map((task) => ({
       taskId: task.task_id || task.id || '',
       progressCatalogItemId: (task as { progressCatalogItemId?: string | null }).progressCatalogItemId,
       hoursPerDay: taskAllocations[task.task_id || task.id || '']?.hoursPerDay ?? {},
     }));
-  }, [planLifecycleScheduling.tasks, selectedSnapshot, taskAllocations]);
+  }, [planLifecycleScheduling.tasks, selectedSnapshot, taskAllocations, taskSummaries]);
   const masterRows = useMemo(
     () => progressCatalog.loading || progressCatalog.error
       ? []
@@ -932,7 +942,10 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   // TASK rows reuse the existing TaskBar rendering below; HEADING/PHASE rows
   // are NON-DRAGGABLE display rows never passed to task callbacks.
   const scheduleGridRows = useMemo<ScheduleGridRow[]>(() => {
-    const taskRows = buildGanttTaskRows(visibleTasks);
+    const taskRows = buildGanttTaskRows(visibleTasks.map((task) => {
+      const summary = taskSummaries.get(task.task_id);
+      return summary ? { ...task, effort: summary.effort } : task;
+    }));
     if (scheduleMode === 'WBS_DETAIL') {
       // Source headings own sections; authoritative roots carry their entire
       // subtree into that section, irrespective of projection task depth/order.
@@ -959,7 +972,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
       kind: 'PHASE' as const,
       group,
     }));
-  }, [scheduleMode, projectionWbsRows, masterRows, visibleTasks]);
+  }, [scheduleMode, projectionWbsRows, masterRows, visibleTasks, taskSummaries]);
 
   // ── Requirement 1: parent/child expand/collapse over the grid rows ────────
   // Task depths are relative to their task tree, not source-heading depths.
@@ -1143,7 +1156,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
   const dayWidth = Math.max(80, dimensions.width / days.length);
   const rowHeight = 48;
   const displayedTaskEfforts = useMemo<DisplayedTaskEffort[]>(
-    () => selectedPlanTasks.filter(task => !contextTaskIds.has(task.task_id)).map((task) => ({
+    () => selectedPlanTasks.filter(task => !contextTaskIds.has(task.task_id) && !taskSummaries.has(task.task_id)).map((task) => ({
       unknownSpan: selectedSnapshot?.meta.legacyHoursMissing === true
         ? { start: selectedSnapshot.tasks.find(t => t.taskId === task.task_id)!.startDate, end: selectedSnapshot.tasks.find(t => t.taskId === task.task_id)!.endDate }
         : undefined,
@@ -1153,7 +1166,7 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
       hoursPerDay: taskAllocations[task.task_id]?.hoursPerDay ?? {},
       kind: 'TASK',
     })),
-    [contextTaskIds, selectedSnapshot, selectedPlanTasks, taskAllocations]
+    [contextTaskIds, selectedSnapshot, selectedPlanTasks, taskAllocations, taskSummaries]
   );
 
   // Requirement 3: reallocate tasks by priority when capacity config changes.
@@ -1528,7 +1541,9 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                   {gridRows.map((row, rowIndex) => {
                     if (row.kind === 'TASK') {
                       const allocation = taskAllocations[row.task.task_id];
-                      const bounds = allocation && positiveWorkBounds(allocation.hoursPerDay);
+                      const summary = taskSummaries.get(row.task.task_id);
+                      const hoursPerDay = summary?.hoursPerDay ?? allocation?.hoursPerDay;
+                      const bounds = hoursPerDay && positiveWorkBounds(hoursPerDay);
                       return (
                         <SortableGanttTaskRow
                           key={row.key}
@@ -1537,11 +1552,12 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                           rowHeight={rowHeight}
                           hasChildren={rowHasChildren.get(row.key) ?? false}
                           collapsed={collapsedRows.has(row.key)}
-                          startLabel={bounds?.start ?? (allocation ? 'Unscheduled' : '—')}
-                          endLabel={bounds?.end ?? (allocation ? 'Unscheduled' : '—')}
+                          startLabel={bounds?.start ?? (summary || allocation ? 'Unscheduled' : '—')}
+                          endLabel={bounds?.end ?? (summary || allocation ? 'Unscheduled' : '—')}
                           assigneeName={row.task.assignee_resource_member_id
                             ? memberNames.get(row.task.assignee_resource_member_id)
                             : row.task.assignee?.username}
+                          summaryEffort={summary?.effort}
                           onToggle={toggleRowCollapsed}
                           onTaskClick={(taskId) => handleTaskBarClick(taskId)}
                           draggable={planLifecycle.mode !== 'saved' && draggableTaskIds.has(row.task.task_id)}
@@ -1729,11 +1745,13 @@ export function Timeline({ isLoading = false, onTaskClick, users, barsOverride }
                         // Requirements 3/5/6: capacity-aware allocation with
                         // per-day hour splits when available.
                         const allocation = taskAllocations[task.task_id];
+                        const summary = taskSummaries.get(task.task_id);
+                        const hoursPerDay = summary?.hoursPerDay ?? allocation?.hoursPerDay;
                         // Only explicit positive vector days are clipped to the viewport.
                         // Requirement 5: render per-day hour segments
                         // (effort 10h → “8h” + “2h” cells; zero days blank).
-                        if (allocation) {
-                          const segments = Object.entries(allocation.hoursPerDay)
+                        if (hoursPerDay) {
+                          const segments = Object.entries(hoursPerDay)
                             .filter(([, hours]) => hours > 0)
                             .map(([dateKey, hours]) => {
                               const idx = days.findIndex((d) => formatDateVN(d) === dateKey);
