@@ -137,6 +137,21 @@ describe('computeTaskAllocations viewport-independence (R3/R6)', () => {
     expect(r.allocations.low.hoursPerDay).toEqual({ '2026-09-11': 8 });
   });
 
+  it('continues undated same-member followers from a historical explicit predecessor without a today floor', () => {
+    const productionToday = new Date(2026, 8, 9);
+    const parentTaskId = 'c3058120-7afa-4b43-94c1-085db3dd3ad3';
+    const assignee = 'khoi-pg';
+    const r = computeTaskAllocations([
+      { task_id: '297720c5-1064-49cd-8e57-3dd276ff3997', parent_task_id: parentTaskId, priority_order: 1, assignee_resource_member_id: assignee, start_date: '2026-09-03', effort: 8 },
+      { task_id: 'eb6871ec-efdf-4f9d-89dd-f6bc3e91b48e', parent_task_id: parentTaskId, priority_order: 2, assignee_resource_member_id: assignee, effort: 8 },
+      { task_id: '4b6c94f8-b5a2-4225-ac5a-02b392595889', parent_task_id: parentTaskId, priority_order: 3, assignee_resource_member_id: assignee, effort: 8 },
+    ], makeConfig(), schedulingHorizon(productionToday), productionToday);
+
+    expect(r.allocations['297720c5-1064-49cd-8e57-3dd276ff3997'].hoursPerDay).toEqual({ '2026-09-03': 8 });
+    expect(r.allocations['eb6871ec-efdf-4f9d-89dd-f6bc3e91b48e'].hoursPerDay).toEqual({ '2026-09-04': 8 });
+    expect(r.allocations['4b6c94f8-b5a2-4225-ac5a-02b392595889'].hoursPerDay).toEqual({ '2026-09-07': 8 });
+  });
+
   it('sequences each assignee independently', () => {
     const r = computeTaskAllocations([
       { task_id: 'a-high', priority_order: 1, assignee_user_id: 'a', start_date: '2026-09-10', effort: 8 },

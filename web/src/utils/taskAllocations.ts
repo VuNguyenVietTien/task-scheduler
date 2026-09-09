@@ -129,9 +129,9 @@ export function computeTaskAllocations(
         schedule[dateKey] = Math.max(0, capacity(new Date(y, m - 1, d)) - hours);
       }
     }
-    let start = task.start_date ? new Date(task.start_date) : new Date(today);
-    start.setHours(0, 0, 0, 0);
     const priorEnd = plannedThrough[memberKey];
+    let start = task.start_date ? new Date(task.start_date) : new Date(priorEnd ?? today);
+    start.setHours(0, 0, 0, 0);
     if (priorEnd && priorEnd > start) start = new Date(priorEnd);
     const { endDate, updatedSchedule, hoursPerDay, exhausted } = calculateTaskSchedule(
       start,
