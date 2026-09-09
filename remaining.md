@@ -51,4 +51,7 @@ Only optional, non-blocking Chrome feedback remains:
 - One broader-run inline-draft timing assertion failed, then passed isolated on unchanged current code; recorded rather than hidden. No exhaustive reruns per user preference.
 - Latest frontend changes pushedmain for production deployment; Vercel remains subject to known24h quota. Localhost is ready for user testing.
 
-`n## September 9 scheduling delivery`n- Gantt historical same-assignee followers fixed: Chrome localhost No plan confirmed MST-02-04 Sep3/Sep4/Sep7 after integration and Recalculate. 29/29 focused unit tests passed. Report plans/reports/GANTT-GAP-0909.md. Saved plans remain snapshots; Recalculate creates a fresh draft.`n- Current localhost launcher PID14596, listener PID2468, dev-0908/web. Supersedes earlier process IDs. User test server retained.
+
+## September 9 scheduling delivery
+- Gantt historical same-assignee followers fixed: Chrome localhost No plan confirmed MST-02-04 Sep3/Sep4/Sep7 after integration and Recalculate. 29/29 focused unit tests passed. Report plans/reports/GANTT-GAP-0909.md. Saved plans remain snapshots; Recalculate creates a fresh draft.
+- Current localhost launcher PID14596, listener PID2468, dev-0908/web. Supersedes earlier process IDs. User test server retained.
