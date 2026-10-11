@@ -1,0 +1,24 @@
+{
+  "capturedAt": "2026-09-07T11:05:11+07:00",
+  "hostOS": "Windows 11 Pro",
+  "runtime": {
+    "id": "pi",
+    "kind": "cli",
+    "state": "constrained",
+    "binary": "C:\\Users\\TienVNV\\AppData\\Roaming\\fnm\\node-versions\\v24.16.0\\installation\\pi.cmd",
+    "version": "0.85.1",
+    "authenticatedProviders": ["company-local", "openai-codex"],
+    "models": ["company-local/gpt-oss-120b", "openai-codex/gpt-5.4-mini", "openai-codex/gpt-5.4", "openai-codex/gpt-5.6-terra"],
+    "headless": false,
+    "cwdControl": "pane-cwd plus prompt contract",
+    "approval": "interactive",
+    "toolGating": "granular via --tools",
+    "isolation": "prompt-only for R0; worktree required for R2",
+    "nativeBudget": "--thinking",
+    "externalTimeout": true,
+    "capture": ["Herdr lifecycle", "specialist report"],
+    "resume": "disabled by required --no-session",
+    "evidence": ["pi --version", "pi --help", "pi --no-extensions --list-models", "pi auth check --provider <name> --no-refresh", "herdr live help"],
+    "notes": ["Windows launch must use exact pi.cmd via pane run and live Pi recognition", "No deployment or credentialed access authorized"]
+  }
+}

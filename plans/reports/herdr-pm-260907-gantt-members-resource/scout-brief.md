@@ -1,0 +1,13 @@
+Role: scout
+Task ID: SCOUT
+Route: openai-codex/gpt-5.6-sol | thinking high | producer none
+Outcome: Source-backed map and recommended implementation decomposition for unified project members, Gantt hierarchy and resource matrix, plus verified release path.
+Read: AGENTS.md; docs/README.md, docs/project-overview-pdr.md, docs/code-standards.md, docs/system-architecture.md, docs/development-roadmap.md, docs/deployment.md in order; plans/260907-gantt-members-resource/plan.md; plans/reports/chrome-gantt-members-20260907.md and ack; bounded scout frontend/, backend/, web/, tools/, relevant migration, package and release manifests. Do not read secrets/dotenv/private backups. Discover actual production owners rather than trust stale architecture descriptions.
+Write: only plans/reports/herdr-pm-260907-gantt-members-resource/SCOUT.md. No product, plan or ledger writes.
+Dependencies: browser report and ACK.
+Acceptance: Exact paths and line evidence for Gantt two task columns, hierarchy/drag ordering/filter/plan dates/daily schedule; List assignee read and persistence; both member APIs/tables and references, user linking, auth separation. Recommend safe canonical identity unification preserving all data and contracts; identify migration necessity. Resource matrix must include every project member, unlinked and zero hours, day-by-day actual plan allocations, no parent/child double count, 8h baseline and configured capacity/day off. Identify exact frontend/backend deployment roots/scripts to Vercel and Ubuntu, rollback and DB backup gates, existing tests and narrow commands. Draft implementation ownership/dependencies in report, not authority files. List uncertain points plainly.
+Required skill: C:/Users/TienVNV/.agents/skills/ak-scout/SKILL.md
+Constraints: read/report only; no shell enabled; no secrets, mutations, deployment, commit, network, subagents, or scope expansion. You are not alone in repo; preserve others' edits. Runtime tools read/grep/find/ls/write; write only contracted report.
+Report: C:/Users/TienVNV/Documents/prjmngr/task-scheduler/plans/reports/herdr-pm-260907-gantt-members-resource/SCOUT.md
+Environment: Windows, 2026-09-07 Asia/Bangkok; CWD C:/Users/TienVNV/Documents/prjmngr/task-scheduler; branch codex/wip-handoff-20260906 at 704d5221; AGENTS.md/CLAUDE.md preexisting modifications; pane w1:p16. Plan path above; reports root plans/reports. No --yagni flag. Deadline 15 minutes; partial report required if blocked.
+Before finishing: write report, flush/close, return exact path and concise result. Finish Status: DONE | DONE_WITH_CONCERNS | BLOCKED | NEEDS_CONTEXT.

@@ -1,0 +1,281 @@
+{
+  "at": "2026-09-07T12:45:06.074Z",
+  "root": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928",
+  "files": [
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\actual-catalog-command.json",
+      "bytes": 5357,
+      "sha256": "1b7a428fa693cd23f4e855f252f4d5975a93db73958ecf90b9c3f73725526b25"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\actual-catalog-exit.json",
+      "bytes": 115,
+      "sha256": "e0e9b38d2c363f9c9d0316a32e0739b523f86dab3c0bbb9d9df40f6927417473"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\actual-catalog-final-command.json",
+      "bytes": 5357,
+      "sha256": "76b3c9809bae4a522030c617415bfcc042d1d13e12e8e984abd341bfa238d398"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\actual-catalog-final-exit.json",
+      "bytes": 115,
+      "sha256": "0cdf4f51fc724f713dee9778f576c0d326831792f53b70cb01a8dfc15ec80e97"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\actual-catalog-final-results.json",
+      "bytes": 70465,
+      "sha256": "8eedcb2ef94328b3d3dbaab6317428330e7cc71a32985f2e7f7caf893bb1e93c"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\actual-catalog-final.log",
+      "bytes": 31660,
+      "sha256": "0e32fbc0118423900367dad6b70e51a3c71530696156689d7c67e3e4c586deec"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\actual-catalog-results.json",
+      "bytes": 89797,
+      "sha256": "622ce5514fe3d841564dec0a93d98ca37b5eda6a34f55d5dce40567da7e59073"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\actual-catalog.log",
+      "bytes": 39932,
+      "sha256": "188f2254d99c34731274b48930992b1e07dbc513434998d6bfbe9b7a100378c9"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\adjust-surface-selectors.cjs",
+      "bytes": 694,
+      "sha256": "2fb6252e6d97939a28bf2234338ac30eba41665f48ceb55d0eb413a426eb8f85"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\catalogs-command.json",
+      "bytes": 5671,
+      "sha256": "8583468b164bb5ae0f7c350afb4aa6e94557b3f83664bc76fd6f74a4734423e5"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\catalogs-exit.json",
+      "bytes": 115,
+      "sha256": "2a327bd64566adea29d279666b3dcc729739266543f73af349f5ada493390176"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\catalogs-results.json",
+      "bytes": 8634,
+      "sha256": "9f7c6fb76f5d238fec9a8a88f0b6bd3b151b6a4224932999182301b7e7414385"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\catalogs.log",
+      "bytes": 312,
+      "sha256": "514c4be272892ae9462a7f48fb2fc7bfbfe60b89eff3c73434d31450804bab1e"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\dashboard-parent-command.json",
+      "bytes": 5524,
+      "sha256": "d16c7ec03d0de1c2684d31335f1fb4d238ccece84b8dddb0f70f8d6dd8b99e0d"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\dashboard-parent-exit.json",
+      "bytes": 115,
+      "sha256": "df31ae0105cf5a4a176a6fa37ba1a0fcaaf5ee66ecf860b2c8502d422fb12114"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\dashboard-parent-results.json",
+      "bytes": 9835,
+      "sha256": "f637f3a8bb81b4995da9731fa39a370075f777e17e9865ac899cd8bb4dfffbe7"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\dashboard-parent.log",
+      "bytes": 246,
+      "sha256": "492551543280a9464d0487cba9dc41ed30ebdf7f01af88b46cfd422f9bf6ddb3"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\excel-user-command.json",
+      "bytes": 5356,
+      "sha256": "0da612522832b3ad76488b40e9b8e2416a6de219107ace48825f2c1db8d5c6cb"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\excel-user-exit.json",
+      "bytes": 115,
+      "sha256": "ee1db24a4c9ba9688c1da44b60e7964cda01e51d17591610e52587c69f93eda3"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\excel-user-explicit-command.json",
+      "bytes": 5356,
+      "sha256": "0dd962ee7854f1cc874c6c39da3ad756eb8683cbbd90444294cf4e17a3044b58"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\excel-user-explicit-exit.json",
+      "bytes": 115,
+      "sha256": "ac1577d471ef65556ecc527473c41375dc97bd319619a427112af98692fdd701"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\excel-user-explicit-results.json",
+      "bytes": 1868,
+      "sha256": "0ccf8ce3944edcbd0abb69c02af347c0f3ec6e445da953652cfc60b2af710313"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\excel-user-explicit.log",
+      "bytes": 631,
+      "sha256": "a2be22fac0a0c736e45e311359fd93790c3e67c72534a25e99b94611bba30246"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\excel-user-repro-command.json",
+      "bytes": 5356,
+      "sha256": "136c4a93c733ba8bf8a759da239f6bd8fdc7801dadfc1fcbfaabef246c03da7c"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\excel-user-repro-exit.json",
+      "bytes": 115,
+      "sha256": "0f8d7b05803eebe0e4f22ed009705a8d26351a58dfe360ee63586abdad1e27d1"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\excel-user-repro-results.json",
+      "bytes": 26113,
+      "sha256": "ecd1993d38f8b2a0f76e64e2605520316f41cb9638ebf2410a41dc3a94d662d7"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\excel-user-repro.log",
+      "bytes": 14616,
+      "sha256": "3e831d04f3913a7e19a8b378ec416eaca6b785c21034a986f9f9a4972e7aec1c"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\excel-user-results.json",
+      "bytes": 23976,
+      "sha256": "d230e86cae03f89a755747f3e63ba0ff5cdd16d82519870ab4d346befdf702f8"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\excel-user.log",
+      "bytes": 13009,
+      "sha256": "57f36168e8a68acabdb117f71af9a51e98443ad5645d74690d8fa7fa06b77ef0"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\execute-checks.cjs",
+      "bytes": 1311,
+      "sha256": "9940275ee3fe65f2fd4a5a84f3add066a2cd2014484036dd98fa0186ac0e6465"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\finalize-evidence.cjs",
+      "bytes": 2988,
+      "sha256": "38038f54c01b721b0f65be255a8acd704ca9b690a2f56b1e50b8dbba49698ca6"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\freeze.cjs",
+      "bytes": 1663,
+      "sha256": "254ba7413f6d33cd4a540a090cce1c22ad5a1328826596a79da64e637de77008"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\integration-seams.diff",
+      "bytes": 3301,
+      "sha256": "4a9be679b6201077e301fcf693d144c1da1e9b1747bb25afe1803f2e9932768d"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\master-command.json",
+      "bytes": 5801,
+      "sha256": "691aa2b973aa3c05373bad15e2d0ab1e492576f827b6929f50d563d232c3525e"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\master-exit.json",
+      "bytes": 115,
+      "sha256": "516cfd23c51a5078529821a3713e6850cd8a50a66e19f15b77a10e32fe75de53"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\master-results.json",
+      "bytes": 45854,
+      "sha256": "6da36b6a1305a10fdc53bf20d88f33ea5352a07ac82ced4880f2aa80080ba618"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\master.log",
+      "bytes": 373,
+      "sha256": "64e02452b36d6df9dcdecc41d8a2142c064be8feb251f01407ebc9591c66ec7c"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\retained-build.log",
+      "bytes": 5996,
+      "sha256": "c0bfa40d7ab60412d5b99864473fdbc7a6fd0825fa10023decd4b4dcb0e985c3"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\retained-command.json",
+      "bytes": 5368,
+      "sha256": "ed0329d816b1cd103d3cdc7d602c1977b7c9462e44f4aeb99752eaa0026aa98d"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\retained-current.log",
+      "bytes": 66659,
+      "sha256": "2f7362d160fa31b667a57a0cec434f5c43d296a2ef5a7bfc9af1d4cf43015a6d"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\retained-exit.json",
+      "bytes": 115,
+      "sha256": "8168529bee5e8468d945a387e273709d70de3ce3b69e0a9b7b6c95e29c4f88eb"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\retained-previous.log",
+      "bytes": 68597,
+      "sha256": "1f4fda88a4219ac2144b395636c42c8fc6445bc49b7d3e4ead626c4c0c0767d7"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\retained-results.json",
+      "bytes": 5570,
+      "sha256": "280c5afa59f23882d0450fb3c25d2fcd3a25e51ffabeb7af00daf8a1aad8131d"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\retained.log",
+      "bytes": 243,
+      "sha256": "4665a579fcff4f5bc905823512fae591f414f800aff978bfd2930ee7e4ca4543"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\run-tests.cjs",
+      "bytes": 1225,
+      "sha256": "8f98cf73d3bafc24ccd2779b3fcf4064707ab55acea559432d2147c2b9e250b3"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\source-after.json",
+      "bytes": 257612,
+      "sha256": "694b539e50d7af6ef5cd98cc411c3f7ccccb564c0d54ca176cca34575f64ee81"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\source-before.json",
+      "bytes": 257612,
+      "sha256": "f84c91569d192a01ded2d2e14bcea56cbb82f0fde3e3c10dac1fce1dcb033e6a"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\tests\\actual-catalog-surfaces.test.tsx",
+      "bytes": 9034,
+      "sha256": "a94de200158a487d6e6d636922a0ef7df583c7e4b0de311664febef50ad0f955"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\tests\\excel-user-interaction.test.tsx",
+      "bytes": 2516,
+      "sha256": "f865efe395a477d8f4efebb77c63ae09e642f73bf12300e89c9824356efcf39d"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\tests\\retained-actual-project-boundaries.test.tsx",
+      "bytes": 12751,
+      "sha256": "eb321b0b2acbb676222190a9be52fe7677c1706498f51e98ed9f5390f2db451b"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\type-comparison.json",
+      "bytes": 289,
+      "sha256": "fba9cb01c85e17ac9455c96d240a8d5783cd705af7e08add1588e6bab1644136"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\wbs-command.json",
+      "bytes": 5568,
+      "sha256": "95ae555d8105eaf85fd715155533187e48f5912edd17d8c17e175947f4a869db"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\wbs-exit.json",
+      "bytes": 115,
+      "sha256": "aaa5ad7e7dcb119204a99b8b5c95a879da38c53ccc3915d0f412e6fac772ecdb"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\wbs-results.json",
+      "bytes": 5205,
+      "sha256": "d8a3c1cf7f8a20e1b1d8f48d42c8479e676e9526835de9a47dc07bbf5457b17d"
+    },
+    {
+      "path": "C:\\Users\\TienVNV\\AppData\\Local\\Temp\\catalog-assembled-review-260907-1928\\wbs.log",
+      "bytes": 285,
+      "sha256": "04198f89e65668684df09003065dddb16b220175a58ac2bed0918ea2dc7c62db"
+    }
+  ]
+}

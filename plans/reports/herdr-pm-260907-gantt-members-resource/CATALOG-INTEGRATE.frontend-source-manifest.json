@@ -1,0 +1,156 @@
+{
+    "generated_at":  "2026-09-07T19:17:45.2966586+07:00",
+    "base":  "81fbbc48174621824192367c02e99b4e9fee274c",
+    "files":  [
+                  {
+                      "path":  "web/src/components/projects/__tests__/project-catalog-settings.test.tsx",
+                      "sha256":  "3c4132b44dee474dab878ae34540c9b6d6dd37a024bc06b8f44dbfbfab9b77d0"
+                  },
+                  {
+                      "path":  "web/src/components/projects/ProjectCatalogSettingsPanel.tsx",
+                      "sha256":  "548b4fadc42f980d714e1c59620b8cfc3d97e73af880d27f7e47ce29bba43e81"
+                  },
+                  {
+                      "path":  "web/src/components/projects/ProjectDetailView.tsx",
+                      "sha256":  "080ba1ba2c02f99499d6e3f1265ebe10889a317801e5984edceec15c0b17ec3d"
+                  },
+                  {
+                      "path":  "web/src/components/tasks/__tests__/project-catalog-task-fields.test.ts",
+                      "sha256":  "a3f6dcad2433b5d871381b442d2d0c2fb7bfde03892007b13e72a3467a5ab04b"
+                  },
+                  {
+                      "path":  "web/src/components/tasks/__tests__/project-task-view-recovery.test.tsx",
+                      "sha256":  "8227ec06bd58e231ef936463fc0a12807daa25b3239f41012c943611064a652c"
+                  },
+                  {
+                      "path":  "web/src/components/tasks/NewTaskForm.tsx",
+                      "sha256":  "a25c0b17e443775fa6bcc44fc13d7c6c4cf4fb6f20cba54b7be89c0001a56cbf"
+                  },
+                  {
+                      "path":  "web/src/components/tasks/TaskDetail.tsx",
+                      "sha256":  "c3d2401afb4951943736007f72f9a7daf30603c38e14d2876f046f69c158cf02"
+                  },
+                  {
+                      "path":  "web/src/components/tasks/TaskDetailPage.tsx",
+                      "sha256":  "30491a81dc63db0fd5b1eedad4b11d64b7df5872af80a808db528a9246a84785"
+                  },
+                  {
+                      "path":  "web/src/components/timeline/__tests__/gantt-integration/independent-wiring.test.tsx",
+                      "sha256":  "d0cf6ccfc2943423b126498e53327386c7db376343aaa9359214501c761e1c22"
+                  },
+                  {
+                      "path":  "web/src/components/timeline/__tests__/gantt-integration/section-boundary.test.tsx",
+                      "sha256":  "bbea945b5d3131e333dafe2f9dc281c9f04555e6dda98d5dc312467b43322ab8"
+                  },
+                  {
+                      "path":  "web/src/components/timeline/__tests__/gantt-lifecycle-wiring.test.tsx",
+                      "sha256":  "e0079551ae42e27a7ecc50c8665196d00a19442bfd4f7213ed32f169aa59da5c"
+                  },
+                  {
+                      "path":  "web/src/components/timeline/__tests__/increment1-modes.test.tsx",
+                      "sha256":  "a08d2208dd439a99a18b1b5329a778e262ac03587c39eb89f8e5fbddf0ab7e75"
+                  },
+                  {
+                      "path":  "web/src/components/timeline/PhaseScheduleRow.tsx",
+                      "sha256":  "cb64c782a739676707a188d9b36eaee774ea87dff68859b357c1000efb1df9ca"
+                  },
+                  {
+                      "path":  "web/src/components/timeline/Timeline.tsx",
+                      "sha256":  "b04c601c0400ba76672d259239496f41e5a006f1ed31e33569b769fb29bc46bf"
+                  },
+                  {
+                      "path":  "web/src/components/ui/navigation/sidebar-project-tree-item.tsx",
+                      "sha256":  "1dcbaed2851790310b5c0e3c4db99cdb7274b9d07aef105540c8a15645c5deb4"
+                  },
+                  {
+                      "path":  "web/src/graphql/__tests__/w3-contract.test.ts",
+                      "sha256":  "a5a9731da68195a39af9197e63b7bc1bc72f37bff22b68b169547614b95fb2a3"
+                  },
+                  {
+                      "path":  "web/src/graphql/mutations/catalogs.ts",
+                      "sha256":  "b8b922201df1d4dd0adb9351c07f00a8d77b8d7bac4734386f71caeb277928da"
+                  },
+                  {
+                      "path":  "web/src/graphql/mutations/tasks.ts",
+                      "sha256":  "585e8d56b1b782b2f39cf7d7f9b15fca76d9d16f0634fbc710a6aecc48b3dcfd"
+                  },
+                  {
+                      "path":  "web/src/graphql/queries/catalogs.ts",
+                      "sha256":  "8928c2c4fc119d3a47738ca522d8fa0adc1f50c4896beea1741beb7279e81614"
+                  },
+                  {
+                      "path":  "web/src/graphql/queries/dashboard.ts",
+                      "sha256":  "26a31c47bd70814f3c07df84930dc7b93f1f6c7080ab3974db87f65bea48c409"
+                  },
+                  {
+                      "path":  "web/src/graphql/queries/tasks.ts",
+                      "sha256":  "3ca0d48cd2c156533797298e9bf9f36c926dfc8f3ebbd038b95a4eaf29ec8e8e"
+                  },
+                  {
+                      "path":  "web/src/hooks/__tests__/dashboard-population.test.tsx",
+                      "sha256":  "3f147f81979a84611f83743311cbf6f66148f374220ee2d160a62c565b1d07b3"
+                  },
+                  {
+                      "path":  "web/src/hooks/__tests__/gantt-reorder-integration.test.tsx",
+                      "sha256":  "fb364c457a44493141d2e7e56f88a089d7488bf0122fb1060098fa7b607b58ee"
+                  },
+                  {
+                      "path":  "web/src/hooks/use-dashboard-tasks.ts",
+                      "sha256":  "5ada55fafba7a21808225a093b6447ee0af6bd572bcd6cd5efaa6b9e40060a3c"
+                  },
+                  {
+                      "path":  "web/src/hooks/useProjectCatalogs.ts",
+                      "sha256":  "8d09a843d1c96ae4e69890521e63ed88e8f123c7b491c7b39a5aa97ab2a55cac"
+                  },
+                  {
+                      "path":  "web/src/hooks/useTasks.ts",
+                      "sha256":  "361324f338b4b5efd3e550f51f3fd15d510338929c9443b7988e9ebe4fdc938c"
+                  },
+                  {
+                      "path":  "web/src/lib/scheduling/__tests__/build-master-rows.test.ts",
+                      "sha256":  "cac33dfebd90bf958ab3610eda7f783a92e56808c95b4f694e1b8626175b47ab"
+                  },
+                  {
+                      "path":  "web/src/lib/scheduling/build-master-rows.ts",
+                      "sha256":  "1b670ab714193f19e231ceacfd824444c3ecb5653a247550ecf6d7c767a4aedb"
+                  },
+                  {
+                      "path":  "web/src/redux/features/tasksSlice.ts",
+                      "sha256":  "5c271a0488cc368c97d4186dc81c24e9ea4d16278b2812b22c22c114e5a32a21"
+                  },
+                  {
+                      "path":  "web/src/types/project-catalog.ts",
+                      "sha256":  "4216d4232254359f5a46202840df5d66acb1a854a2ab08cf9a6792863b85c512"
+                  },
+                  {
+                      "path":  "web/src/types/schedule-projection.ts",
+                      "sha256":  "84db74d6d75d589a22e9d88717168818dfccd9ad651fc11d37eeea99056d4ab0"
+                  },
+                  {
+                      "path":  "web/src/types/task.ts",
+                      "sha256":  "5de4afd785dac13727434e4a6305fe010d127ee6b8fdfbad331fd251bf2d8522"
+                  },
+                  {
+                      "path":  "web/src/utils/__tests__/plan-lifecycle.test.ts",
+                      "sha256":  "d93fa2b81c45611a8682e59a0e33e8fad72ba5eff912e72086d82245167d2584"
+                  },
+                  {
+                      "path":  "web/src/utils/__tests__/project-catalog.test.ts",
+                      "sha256":  "6a391518c6fe1b8c1c7d4ba6e10a5ddd396a931f5f302bc3ca657979fe625e0b"
+                  },
+                  {
+                      "path":  "web/src/utils/planLifecycle.ts",
+                      "sha256":  "3ec6395d7bc2988d9673a65f456e2bedd8fa573b099d387e9eca93390acc4e44"
+                  },
+                  {
+                      "path":  "web/src/utils/project-catalog.ts",
+                      "sha256":  "f06e2f2d384da31e42485d76abe19946cadf90f34d8ad9dc4b9be1889bac06d7"
+                  }
+              ],
+    "integration_seams":  [
+                              "Master expected rows aligned with final UI camel catalog ID normalization",
+                              "Gantt local SDL accepts three additive Task catalog IDs",
+                              "Dashboard Map iterator converted through Array.from for current TypeScript target",
+                              "Superseded W3 create fixture now asserts stable catalog ID and no legacy scalar"
+                          ]
+}

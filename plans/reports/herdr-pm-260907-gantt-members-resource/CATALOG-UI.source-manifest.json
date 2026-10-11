@@ -1,0 +1,82 @@
+{
+    "generated_at":  "2026-09-07T18:45:00+07:00",
+    "base":  "049a6c5ddf31de2c373ae69c384bb2e0a14089d7",
+    "files":  [
+                  {
+                      "path":  "web/src/components/ui/navigation/sidebar-project-tree-item.tsx",
+                      "sha256":  "1dcbaed2851790310b5c0e3c4db99cdb7274b9d07aef105540c8a15645c5deb4"
+                  },
+                  {
+                      "path":  "web/src/components/projects/ProjectDetailView.tsx",
+                      "sha256":  "080ba1ba2c02f99499d6e3f1265ebe10889a317801e5984edceec15c0b17ec3d"
+                  },
+                  {
+                      "path":  "web/src/components/projects/ProjectCatalogSettingsPanel.tsx",
+                      "sha256":  "548b4fadc42f980d714e1c59620b8cfc3d97e73af880d27f7e47ce29bba43e81"
+                  },
+                  {
+                      "path":  "web/src/components/projects/__tests__/project-catalog-settings.test.tsx",
+                      "sha256":  "3c4132b44dee474dab878ae34540c9b6d6dd37a024bc06b8f44dbfbfab9b77d0"
+                  },
+                  {
+                      "path":  "web/src/graphql/queries/catalogs.ts",
+                      "sha256":  "8928c2c4fc119d3a47738ca522d8fa0adc1f50c4896beea1741beb7279e81614"
+                  },
+                  {
+                      "path":  "web/src/graphql/mutations/catalogs.ts",
+                      "sha256":  "b8b922201df1d4dd0adb9351c07f00a8d77b8d7bac4734386f71caeb277928da"
+                  },
+                  {
+                      "path":  "web/src/hooks/useProjectCatalogs.ts",
+                      "sha256":  "8d09a843d1c96ae4e69890521e63ed88e8f123c7b491c7b39a5aa97ab2a55cac"
+                  },
+                  {
+                      "path":  "web/src/types/project-catalog.ts",
+                      "sha256":  "4216d4232254359f5a46202840df5d66acb1a854a2ab08cf9a6792863b85c512"
+                  },
+                  {
+                      "path":  "web/src/utils/project-catalog.ts",
+                      "sha256":  "f06e2f2d384da31e42485d76abe19946cadf90f34d8ad9dc4b9be1889bac06d7"
+                  },
+                  {
+                      "path":  "web/src/utils/__tests__/project-catalog.test.ts",
+                      "sha256":  "6a391518c6fe1b8c1c7d4ba6e10a5ddd396a931f5f302bc3ca657979fe625e0b"
+                  },
+                  {
+                      "path":  "web/src/types/task.ts",
+                      "sha256":  "5de4afd785dac13727434e4a6305fe010d127ee6b8fdfbad331fd251bf2d8522"
+                  },
+                  {
+                      "path":  "web/src/redux/features/tasksSlice.ts",
+                      "sha256":  "5c271a0488cc368c97d4186dc81c24e9ea4d16278b2812b22c22c114e5a32a21"
+                  },
+                  {
+                      "path":  "web/src/hooks/useTasks.ts",
+                      "sha256":  "361324f338b4b5efd3e550f51f3fd15d510338929c9443b7988e9ebe4fdc938c"
+                  },
+                  {
+                      "path":  "web/src/graphql/queries/tasks.ts",
+                      "sha256":  "3ca0d48cd2c156533797298e9bf9f36c926dfc8f3ebbd038b95a4eaf29ec8e8e"
+                  },
+                  {
+                      "path":  "web/src/graphql/mutations/tasks.ts",
+                      "sha256":  "585e8d56b1b782b2f39cf7d7f9b15fca76d9d16f0634fbc710a6aecc48b3dcfd"
+                  },
+                  {
+                      "path":  "web/src/components/tasks/TaskDetail.tsx",
+                      "sha256":  "c3d2401afb4951943736007f72f9a7daf30603c38e14d2876f046f69c158cf02"
+                  },
+                  {
+                      "path":  "web/src/components/tasks/TaskDetailPage.tsx",
+                      "sha256":  "30491a81dc63db0fd5b1eedad4b11d64b7df5872af80a808db528a9246a84785"
+                  },
+                  {
+                      "path":  "web/src/components/tasks/NewTaskForm.tsx",
+                      "sha256":  "a25c0b17e443775fa6bcc44fc13d7c6c4cf4fb6f20cba54b7be89c0001a56cbf"
+                  },
+                  {
+                      "path":  "web/src/components/tasks/__tests__/project-catalog-task-fields.test.ts",
+                      "sha256":  "a3f6dcad2433b5d871381b442d2d0c2fb7bfde03892007b13e72a3467a5ab04b"
+                  }
+              ]
+}

@@ -1,0 +1,31 @@
+{
+  "status": "DONE",
+  "base_commit": "f921253538180e7e968b3491f75b830cfd28b6b9",
+  "worktree": "C:/Users/TienVNV/Documents/prjmngr/worktrees/lang-0907",
+  "files": [
+    {
+      "path": "web/src/components/projects/ProjectCatalogSettingsPanel.tsx",
+      "sha256": "90bd105c8b795f806bfaa7937e38ef23859391ac9991b70c6b61c348683865cb"
+    },
+    {
+      "path": "web/src/types/project-catalog.ts",
+      "sha256": "73b56c697062a0260710d25a654f201ad81ec22bb2ab788d4935a72d1d80cee5"
+    },
+    {
+      "path": "web/src/utils/project-catalog.ts",
+      "sha256": "5b635224a0f458097a49f5a1bec1062263c1c919991d18b42ec98b90574b6109"
+    },
+    {
+      "path": "web/src/components/projects/__tests__/project-catalog-settings.test.tsx",
+      "sha256": "3855934a4710858b34c14e42f9299004b3974b885934588fe2cdac7a0536a0e8"
+    },
+    {
+      "path": "web/src/components/projects/__tests__/project-catalog-language.test.tsx",
+      "sha256": "b9f3bcf7d20a14b9d9d362496efb95bb83184cc193ccbcc228a31a107e305087"
+    },
+    {
+      "path": "web/src/utils/__tests__/project-catalog.test.ts",
+      "sha256": "832adafc4089ee901f7de4bd06a2b85cf82c994f863607895b3300a22afdcb30"
+    }
+  ]
+}

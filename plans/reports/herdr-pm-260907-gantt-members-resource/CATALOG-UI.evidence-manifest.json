@@ -1,0 +1,29 @@
+{
+    "generated_at":  "2026-09-07T18:46:00+07:00",
+    "files":  [
+                  {
+                      "path":  "CATALOG-API-CONTRACT.md",
+                      "sha256":  "fc14aa8007fcf94fef8f205c93eb22227924cf8a657f7b10a99380fb04819070"
+                  },
+                  {
+                      "path":  "CATALOG-UI-CONTRACT.md",
+                      "sha256":  "e5da5eadb57b9b8941648f8efc35085e4995fc97fcb579fe2ed773d6247d671d"
+                  },
+                  {
+                      "path":  "CATALOG-UI-focused-tests.log",
+                      "sha256":  "5f0b7773ca6f2d416da087c24c99db369af625d75684abf4c3ac910fe328ded9"
+                  },
+                  {
+                      "path":  "CATALOG-UI-tsc.log",
+                      "sha256":  "17960626f000aec87207b712fe64e1640414b0ff50f04ae09d189953c4e5dd77"
+                  },
+                  {
+                      "path":  "CATALOG-UI.source-manifest.json",
+                      "sha256":  "afff253fdda374f49197bf498f0cc9fdb274d08377d2878b5b78e56e6d7f018a"
+                  },
+                  {
+                      "path":  "CATALOG-UI.prerequisite-manifest.json",
+                      "sha256":  "dcb3fb582b0a8f715fa227853a0c1edcea8ca555128c803fdd466bf1929aaad5"
+                  }
+              ]
+}

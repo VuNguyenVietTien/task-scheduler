@@ -1,0 +1,7 @@
+8d09a843d1c96ae4e69890521e63ed88e8f123c7b491c7b39a5aa97ab2a55cac  web/src/hooks/useProjectCatalogs.ts
+4216d4232254359f5a46202840df5d66acb1a854a2ab08cf9a6792863b85c512  web/src/types/project-catalog.ts
+f06e2f2d384da31e42485d76abe19946cadf90f34d8ad9dc4b9be1889bac06d7  web/src/utils/project-catalog.ts
+8928c2c4fc119d3a47738ca522d8fa0adc1f50c4896beea1741beb7279e81614  web/src/graphql/queries/catalogs.ts
+5de4afd785dac13727434e4a6305fe010d127ee6b8fdfbad331fd251bf2d8522  web/src/types/task.ts
+
+Read-only catalog UI prerequisites copied after released-source SHA-256 verification. Excluded from owned patch; catalog UI final wins.

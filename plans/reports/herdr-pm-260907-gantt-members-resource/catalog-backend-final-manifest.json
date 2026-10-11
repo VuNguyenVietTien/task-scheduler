@@ -1,0 +1,34 @@
+{
+  "status": "FROZEN",
+  "base_commit": "049a6c5ddf31de2c373ae69c384bb2e0a14089d7",
+  "branch": "codex/project-catalog-backend-20260907",
+  "owned_source_sha256_evidence": "/home/azuraith/task-scheduler/rehearsals/gm-20260907/catalog-verification/evidence/final-owned-source-sha256.txt",
+  "hash_interpretation": "source_sha256 values hash exact owned-source bytes copied from the Windows worktree; Cargo.lock records both that raw CRLF filesystem hash and the unchanged canonical LF Git/archive blob hash. No line-ending or dependency change was made.",
+  "cargo_lock": {
+    "owned_source_filesystem_sha256": "e03ba0e6c315f3d7f6c4300838e0609698bd7c80f11ee2196e0a2edd57e6a690",
+    "unchanged_git_blob_sha256": "9d8d849d6dfae3374db07e09ba35ead06ca1564825d9d5481c98e5eecf956bfc"
+  },
+  "owned_source_raw_sha256": {
+    "backend/migrations/20260907000002_project_task_catalogs.sql": "63135ecd312d8dbf1292760775aa6e576b409e17823c942ad382b7475e6946d3",
+    "backend/schema.graphql": "08aaf69d17b79de5f4f286f9b1e9018127e338dcb084c2a565937f13432fa7f9",
+    "backend/src/migration_runner.rs": "b922d7450d06d109a6683c206e15fbd667ed17f33f31dbb2dd7425b132bc365c",
+    "backend/src/graphql/resolvers/mod.rs": "ee26d205152a6d1e837ac272701d531aa456ae3f21e9d769662785b76043e758",
+    "backend/src/graphql/resolvers/project_catalogs/mod.rs": "05359f9b5235436c7502226c08a0854ac39aa12604b48db1d8ea6dbe045dad47",
+    "backend/src/graphql/schema.rs": "2871b59944b41518307adf609a8d93caa1765da8dcb5fc0c7aeaa925cfde0bad",
+    "backend/src/graphql/types/task.rs": "7c7ece0bed690b6acd07282a06242767added5a291d042ba356a1921daae40a8",
+    "backend/src/graphql/resolvers/tasks/mutation/create.rs": "46b63da5ac32c1672a1250422d850851cf6ae5b4076a21a9067264789610b849",
+    "backend/src/graphql/resolvers/tasks/mutation/update.rs": "fa89a903eaabf9997cfda972fb99481e21b9aa9ce1ba5a3f0aa3a2e1388be984",
+    "backend/src/graphql/resolvers/tasks/mutation/clone.rs": "6acec477a6af0081dff06c301512e6625088672bac32139d70b5546018b31a5c",
+    "backend/src/graphql/resolvers/tasks/mutation/reorder.rs": "9e9160a6f28db033180554bbb0800f68a3953ee9dd1e5ae3b6d0cf929af75ccb",
+    "backend/src/graphql/resolvers/tasks/mutation/update_effort.rs": "ea923a2c76cf8a69bba24c17249fabc960b05bd1cddfa0833d73dea50febf1c3",
+    "backend/src/graphql/resolvers/tasks/mutation/update_status.rs": "7ef3ef7e1707ed9fa31cad91ebc8f7373db8a92ff073858178d042b5434f84e7",
+    "backend/src/graphql/resolvers/tasks/query/task.rs": "37801c0b95473a438fe874caab1b7257c6dc79583ca87e21faab3a94a6dfe404",
+    "backend/src/graphql/resolvers/tasks/query/task_subtasks.rs": "a60e9c9624a79b41f0a518ab682baf35f7a94b5ab5b169ae0319cb1c03f30dbe",
+    "backend/src/graphql/resolvers/tasks/query/tasks.rs": "a0012f0e244d7563538a4e81593dda6ed81ed1c6e2366ccfd61737a675d4d7de",
+    "backend/tests/project_catalogs.rs": "2bffd3a86e6de68f5b08932a9ce6fef2831c3e152883558429544b1ddbfe9e58"
+  },
+  "final_owned_db_state": "16|t|t|181|33|33|0|0|0",
+  "final_owned_db_state_evidence": "/home/azuraith/task-scheduler/rehearsals/gm-20260907/catalog-verification/evidence/final-cleanup-state.txt",
+  "tests": { "project_catalogs": "PASS 2/2", "contract": "PASS 29/29", "migration_14_to_16": "PASS" },
+  "remaining": ["full integrated/release build", "independent review", "deployment pending"]
+}
