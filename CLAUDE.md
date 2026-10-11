@@ -6,19 +6,26 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Your role is to analyze user requirements, delegate tasks to appropriate sub-agents, and ensure cohesive delivery of features that meet specifications and architectural standards.
 
-## Workflows
+## Mandatory AI Startup Sequence
 
-- Primary workflow: `./.claude/rules/primary-workflow.md`
-- Development rules: `./.claude/rules/development-rules.md`
-- Orchestration protocols: `./.claude/rules/orchestration-protocol.md`
-- Documentation management: `./.claude/rules/documentation-management.md`
-- And other workflows: `./.claude/rules/*`
+Before planning or implementation, read these current authority docs in order:
 
-**IMPORTANT:** Analyze the skills catalog and activate the skills that are needed for the task during the process.
-**IMPORTANT:** You must follow strictly the development rules in `./.claude/rules/development-rules.md` file.
-**IMPORTANT:** Before you plan or proceed any implementation, always read the `./README.md` file first to get context.
-**IMPORTANT:** Sacrifice grammar for the sake of concision when writing reports.
-**IMPORTANT:** In reports, list any unresolved questions at the end, if any.
+1. `docs/README.md`
+2. `docs/project-overview-pdr.md`
+3. `docs/code-standards.md`
+4. `docs/system-architecture.md`
+5. `docs/development-roadmap.md`
+6. `docs/deployment.md` for deployment, release, or production-impacting work
+
+**IMPORTANT:** Analyze the skills catalog and activate the skills needed for the task.
+**IMPORTANT:** Sacrifice grammar for concise reports.
+**IMPORTANT:** List unresolved questions at the end of reports, if any.
+
+## Definition of Done
+
+- The requested scope is implemented without unrequested product, database, dependency, or deployment changes.
+- Applicable validation described by `docs/code-standards.md` and `docs/system-architecture.md` passes; report any skipped or failed checks.
+- Deployment or release work follows the health-check, backup, and rollback constraints in `docs/deployment.md`.
 
 ## Hook Response Protocol
 
@@ -53,11 +60,9 @@ When a tool call is blocked by the privacy-block hook, the output contains a JSO
 
 ## Python Scripts (Skills)
 
-When running Python scripts from `.claude/skills/`, use the venv Python interpreter:
-- **Linux/macOS:** `.claude/skills/.venv/bin/python3 scripts/xxx.py`
-- **Windows:** `.claude\skills\.venv\Scripts\python.exe scripts\xxx.py`
+When running Python scripts from `.claude/skills/`, use the skill virtual environment and follow `.claude/skills/INSTALLATION.md` rather than using system Python.
 
-This ensures packages installed by `install.sh` (google-genai, pypdf, etc.) are available.
+This ensures the skill-installed packages are available.
 
 **IMPORTANT:** When scripts of skills failed, don't stop, try to fix them directly.
 
@@ -69,20 +74,3 @@ This ensures packages installed by `install.sh` (google-genai, pypdf, etc.) are 
 - Write descriptive code comments
 - After modularization, continue with main task
 - When not to modularize: Markdown files, plain text files, bash scripts, configuration files, environment variables files, etc.
-
-## Documentation Management
-
-We keep all important docs in `./docs` folder and keep updating them, structure like below:
-
-```
-./docs
-├── project-overview-pdr.md
-├── code-standards.md
-├── codebase-summary.md
-├── design-guidelines.md
-├── deployment-guide.md
-├── system-architecture.md
-└── project-roadmap.md
-```
-
-**IMPORTANT:** *MUST READ* and *MUST COMPLY* all *INSTRUCTIONS* in project `./CLAUDE.md`, especially *WORKFLOWS* section is *CRITICALLY IMPORTANT*, this rule is *MANDATORY. NON-NEGOTIABLE. NO EXCEPTIONS. MUST REMEMBER AT ALL TIMES!!!*
